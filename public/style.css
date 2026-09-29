@@ -97,11 +97,21 @@ header.slate{
   letter-spacing:-.01em;line-height:1;
 }
 .wordmark em{color:var(--accent);font-style:normal;padding:0 2px}
+.live-dot{
+  width:11px;height:11px;border-radius:50%;flex:none;
+  background:#ff3fa4;box-shadow:0 0 0 0 rgba(255,63,164,.55);
+  animation:pulse-pink 1.3s ease-in-out infinite;
+}
+@keyframes pulse-pink{
+  0%{opacity:1;box-shadow:0 0 0 0 rgba(255,63,164,.55)}
+  70%{opacity:.35;box-shadow:0 0 0 9px rgba(255,63,164,0)}
+  100%{opacity:1;box-shadow:0 0 0 0 rgba(255,63,164,0)}
+}
 .slate-meta{
   font-family:'JetBrains Mono',monospace;font-size:11px;
   letter-spacing:.22em;color:var(--ink-soft);
   text-transform:uppercase;margin-right:auto;
-  padding-left:18px;border-left:1px solid var(--line-2);
+  padding-left:16px;border-left:1px solid var(--line-2);
 }
 .slate-actions{display:flex;gap:9px}
 .chip-btn{
@@ -219,6 +229,11 @@ summary{cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;let
 /* ---------- Login ---------- */
 .login-scene{max-width:440px;margin:6vh auto 0;background:var(--surface);border:1.5px solid var(--ink);border-radius:4px;padding:38px;box-shadow:var(--shadow)}
 .login-scene .display{font-size:clamp(30px,4vw,44px)}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:46px}
+.pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;line-height:1;padding:6px 8px;opacity:.65;filter:grayscale(.2)}
+.pw-eye:hover{opacity:1}
+.pw-eye.on{opacity:1}
 .login-submit{margin-top:20px}
 .form-note{margin-top:14px}
 .status-title{font-size:24px;margin-bottom:18px}

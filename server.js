@@ -7,7 +7,7 @@ import { generate } from './pipeline.js';
 
 const root=path.dirname(fileURLToPath(import.meta.url)),dataDir=path.join(root,'data');
 async function loadEnv(){try{let raw=await fs.readFile(path.join(root,'.env'),'utf8');for(let line of raw.split(/\r?\n/)){let m=line.match(/^([A-Z_]+)=(.*)$/);if(m&&!process.env[m[1]])process.env[m[1]]=m[2]}}catch{}}
-await loadEnv();if(!process.env.ADMIN_PASSWORD||process.env.ADMIN_PASSWORD.length<12||!process.env.APP_SECRET||process.env.APP_SECRET.length<32){console.error('ADMIN_PASSWORD (12자 이상)와 APP_SECRET (32자 이상)을 .env에 설정하세요.');process.exit(1)}
+await loadEnv();if(!process.env.ADMIN_PASSWORD||process.env.ADMIN_PASSWORD.length<6||!process.env.APP_SECRET||process.env.APP_SECRET.length<32){console.error('ADMIN_PASSWORD (6자 이상)와 APP_SECRET (32자 이상)을 .env에 설정하세요.');process.exit(1)}
 await fs.mkdir(dataDir,{recursive:true});const secret=crypto.createHash('sha256').update(process.env.APP_SECRET).digest(),settingsFile=path.join(dataDir,'settings.enc'),jobs=new Map(),attempts=new Map();let running=false;
 function encrypt(obj){let iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',secret,iv),body=Buffer.concat([cipher.update(JSON.stringify(obj)),cipher.final()]);return Buffer.concat([iv,cipher.getAuthTag(),body]).toString('base64')}
 function decrypt(raw){let b=Buffer.from(raw,'base64'),d=crypto.createDecipheriv('aes-256-gcm',secret,b.subarray(0,12));d.setAuthTag(b.subarray(12,28));return JSON.parse(Buffer.concat([d.update(b.subarray(28)),d.final()]).toString())}

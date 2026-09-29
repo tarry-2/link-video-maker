@@ -18,6 +18,7 @@
     <span class="clap" aria-hidden="true">▚</span>
     <span class="wordmark">Link<em>／</em>Video Maker</span>
   </div>
+  <span class="live-dot" aria-hidden="true"></span>
   <span class="slate-meta">REEL 001 · KOR · MP4</span>
   <div class="slate-actions">
     <button id="theme-toggle" class="chip-btn" type="button" aria-label="라이트·다크 전환" title="라이트·다크 전환">☀</button>
@@ -34,7 +35,10 @@
     <p>서버 설정에 저장한 관리자 비밀번호를 입력하세요.</p>
     <form id="login-form">
       <label for="password">비밀번호</label>
-      <input id="password" type="password" autocomplete="current-password" required>
+      <div class="pw-wrap">
+        <input id="password" type="password" autocomplete="current-password" required>
+        <button type="button" id="pw-toggle" class="pw-eye" aria-label="비밀번호 보기" title="비밀번호 보기">👁</button>
+      </div>
       <button class="btn btn-accent btn-block login-submit">로그인 →</button>
     </form>
     <p id="login-error" class="error" role="alert"></p>
