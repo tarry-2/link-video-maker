@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Link Video Maker — 링크 하나로 MP4까지</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="slate">
+  <div class="brand">
+    <span class="clap" aria-hidden="true">▚</span>
+    <span class="wordmark">Link<em>／</em>Video Maker</span>
+  </div>
+  <span class="slate-meta">REEL 001 · KOR · MP4</span>
+  <div class="slate-actions">
+    <button id="theme-toggle" class="chip-btn" type="button" aria-label="라이트·다크 전환" title="라이트·다크 전환">☀</button>
+    <button id="settings-toggle" class="chip-btn" hidden>API 키</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ===== LOGIN ===== -->
+  <section id="login" class="login-scene">
+    <div class="scene-tag">ACCESS</div>
+    <h1 class="display">관리자<br>로그인</h1>
+    <p>서버 설정에 저장한 관리자 비밀번호를 입력하세요.</p>
+    <form id="login-form">
+      <label for="password">비밀번호</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button class="btn btn-accent btn-block login-submit">로그인 →</button>
+    </form>
+    <p id="login-error" class="error" role="alert"></p>
+  </section>
+
+  <!-- ===== APP ===== -->
+  <div id="app" hidden>
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="scene-tag">Video Studio</div>
+        <h1 class="display">링크를 넣으면<br><span class="hl">영상</span>이 됩니다.</h1>
+        <p>뉴스·상품·교육·여행·블로그 등 공개 페이지를 한국어 대본·나레이션·자막이 담긴 MP4로 만들어 냅니다.</p>
+      </div>
+      <ol class="reel" aria-label="제작 순서">
+        <li><span class="n">01</span> 링크·내용 입력</li>
+        <li><span class="n">02</span> AI 대본·음성·장면 생성</li>
+        <li><span class="n">03</span> MP4 · 대본 · 자막 다운로드</li>
+      </ol>
+    </section>
+
+    <div class="layout">
+      <section class="panel">
+        <form id="generate-form">
+          <label for="urls">콘텐츠 링크</label>
+          <textarea id="urls" rows="3" placeholder="https://example.com/article" aria-describedby="link-help"></textarea>
+          <div id="link-help" class="hint">여러 링크는 줄바꿈으로 구분 · 최대 8개</div>
+
+          <div class="options">
+            <div>
+              <label for="format">화면 비율</label>
+              <select id="format">
+                <option value="short">숏폼 · 세로 9:16</option>
+                <option value="long">롱폼 · 가로 16:9</option>
+              </select>
+            </div>
+            <div>
+              <label for="duration">목표 길이</label>
+              <select id="duration"></select>
+            </div>
+            <div>
+              <label for="style">화면 느낌</label>
+              <select id="style">
+                <option value="real">실사형</option>
+                <option value="anime">애니형</option>
+              </select>
+            </div>
+            <div>
+              <label for="purpose">영상 목적</label>
+              <select id="purpose">
+                <option>정보 설명</option>
+                <option>뉴스·이슈</option>
+                <option>상품·홍보</option>
+                <option>교육·강의</option>
+                <option>여행·지역</option>
+                <option>브랜드 스토리</option>
+              </select>
+            </div>
+            <div>
+              <label for="subtitles">자막</label>
+              <select id="subtitles">
+                <option value="on">자막 넣기 (권장)</option>
+                <option value="off">자막 빼기</option>
+              </select>
+            </div>
+          </div>
+
+          <details>
+            <summary>추가 설정</summary>
+            <div class="extra">
+              <label for="aiClips">AI 동영상 장면 수</label>
+              <select id="aiClips">
+                <option value="0">0개 · 사진에 움직임 효과 (최저 비용)</option>
+                <option value="1">1개 · 첫인상 강화</option>
+                <option value="2">2개 · 주요 장면</option>
+                <option value="4">4개 · 영상감 강화</option>
+              </select>
+              <div id="cost" class="hint"></div>
+              <label for="manual">직접 제공할 내용 (선택)</label>
+              <textarea id="manual" rows="5" placeholder="링크 추출이 막혀 있거나 반드시 포함할 내용이 있다면 적어 주세요."></textarea>
+            </div>
+          </details>
+
+          <button id="generate" class="btn btn-accent btn-lg btn-block" type="submit">AI 영상 만들기</button>
+          <p class="hint form-note">생성 전에 링크의 사실관계와 사용 권한을 확인해 주세요. AI 장면은 실제 촬영 기록이 아닙니다.</p>
+        </form>
+      </section>
+
+      <aside class="panel status-panel">
+        <div class="scene-tag">Production</div>
+        <h2 class="display status-title">제작 상태</h2>
+        <div id="status">
+          <div class="status-icon">▤ STANDBY</div>
+          <p>링크와 형식을 선택하고 생성 버튼을 누르세요.</p>
+        </div>
+        <div id="downloads" hidden>
+          <a id="video-link" class="btn btn-accent btn-block download" href="#">↓ MP4 다운로드</a>
+          <a id="script-link" class="btn btn-quiet btn-block download" href="#">대본 JSON</a>
+          <a id="captions-link" class="btn btn-quiet btn-block download" href="#">자막 SRT</a>
+          <div id="credit-list"></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS ===== -->
+  <section id="settings" class="settings" hidden>
+    <div class="settings-head">
+      <div>
+        <div class="scene-tag">Connections</div>
+        <h1 class="display settings-title">API 키 설정</h1>
+        <p>키는 서버에서 암호화해 저장합니다. 저장한 키의 원문은 화면에 다시 표시하지 않습니다.</p>
+      </div>
+      <button id="back" class="chip-btn">← 영상 만들기</button>
+    </div>
+
+    <div class="key-grid">
+      <article class="key">
+        <div class="key-head"><h2>OpenAI</h2><span id="openai-state">미설정</span></div>
+        <p>링크 내용으로 한국어 대본을 만들고 음성을 생성합니다. 애니형 이미지와 스톡이 없는 실사형 이미지에도 사용합니다. <b>필수</b></p>
+        <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">키 발급 →</a>
+        <label for="openai">새 API 키</label>
+        <input id="openai" type="password" autocomplete="off" placeholder="저장된 키는 표시되지 않습니다">
+      </article>
+      <article class="key">
+        <div class="key-head"><h2>Pexels</h2><span id="pexels-state">미설정</span></div>
+        <p>실사형 장면에 쓸 무료 스톡 사진을 검색합니다. 없으면 OpenAI 이미지 생성으로 대체되어 비용이 늘 수 있습니다. <b>권장</b></p>
+        <a href="https://www.pexels.com/api/" target="_blank" rel="noopener noreferrer">키 발급 →</a>
+        <label for="pexels">새 API 키</label>
+        <input id="pexels" type="password" autocomplete="off" placeholder="저장된 키는 표시되지 않습니다">
+      </article>
+      <article class="key">
+        <div class="key-head"><h2>Google Gemini</h2><span id="gemini-state">미설정</span></div>
+        <p>선택한 핵심 장면에 Veo 3.1 Lite의 8초 AI 영상 클립을 생성합니다. AI 영상 장면 수가 0개면 필요하지 않습니다. <b>선택</b></p>
+        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">키 발급 →</a>
+        <label for="gemini">새 API 키</label>
+        <input id="gemini" type="password" autocomplete="off" placeholder="저장된 키는 표시되지 않습니다">
+      </article>
+    </div>
+
+    <button id="save-keys" class="btn btn-accent">입력한 키 저장</button>
+    <p id="settings-message" role="status"></p>
+
+    <div class="settings-help">
+      <h2>어떻게 조합하면 저렴할까?</h2>
+      <p>OpenAI로 대본·음성을 만들고, 실사형 기본 장면은 Pexels 사진에 카메라 움직임을 적용합니다. Veo는 꼭 필요한 1~2개 장면에만 쓰세요. 720p 8초 클립 1개의 Veo 생성 요금은 약 US$0.40이며 다른 API 비용은 별도입니다.</p>
+    </div>
+  </section>
+
+</main>
+<script src="/app.js" defer></script>
+</body>
+</html>
