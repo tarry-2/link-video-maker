@@ -247,6 +247,15 @@ summary{cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;let
   padding:24px;text-align:center;margin-bottom:16px;
 }
 #downloads{margin-top:18px}
+.preview-wrap{margin-bottom:16px}
+.preview-frame{margin:0 auto 12px;background:#000;overflow:hidden;transition:max-width .25s,border-radius .25s}
+.preview-frame video{display:block;width:100%;height:auto;background:#000}
+.preview-frame.mobile{max-width:250px;border-radius:26px;border:7px solid var(--ink);box-shadow:var(--shadow-sm)}
+.preview-frame.pc{max-width:100%;border-radius:8px;border:2px solid var(--ink);border-top:22px solid var(--ink);position:relative}
+.preview-frame.pc::before{content:"● ● ●";position:absolute;top:-19px;left:10px;font-size:9px;letter-spacing:2px;color:var(--line-2)}
+.preview-tools{display:flex;gap:7px;flex-wrap:wrap;justify-content:center}
+.preview-tools .chip-btn{font-size:11px;padding:7px 11px}
+.preview-tools .chip-btn.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .download{margin-top:10px}
 #credit-list{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);margin-top:18px;line-height:1.7}
 .error{color:var(--error);font-weight:600;margin-top:12px}
