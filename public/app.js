@@ -39,4 +39,5 @@ $('log-big').onclick=()=>{let ml=$('log-modal-list');ml.replaceChildren();logEnt
 $('log-modal-close').onclick=()=>{$('log-modal').hidden=true};
 $('log-modal').onclick=e=>{if(e.target===$('log-modal'))$('log-modal').hidden=true};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
-api('/api/session').then(()=>{show('app');loadSettings()}).catch(()=>show('login'));
+async function attachRunningJob(){try{let c=await api('/api/jobs/current');if(c.id){current=c.id;addLog('🔗 진행 중이던 작업에 연결했어요(다른 기기·새로고침에서도 이어보기)','log-start');if(c.status==='interrupted')showResume(c.id);else{poll=setInterval(()=>progress(current),2000);progress(current)}}}catch{}}
+api('/api/session').then(()=>{show('app');loadSettings();attachRunningJob()}).catch(()=>show('login'));
