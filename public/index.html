@@ -176,14 +176,13 @@
           <div class="status-icon">▤ STANDBY</div>
           <p>링크와 형식을 선택하고 생성 버튼을 누르세요.</p>
         </div>
-      </aside>
-      <div id="log-panel" class="panel" hidden>
-        <div class="log-head"><span class="scene-tag">제작 로그</span><span class="log-actions"><button type="button" id="log-copy" class="chip-btn">복사</button><button type="button" id="log-big" class="chip-btn">⛶ 크게보기</button></span></div>
-        <div id="log-list"></div>
-      </div>
-      <aside class="panel status-panel dl-panel">
-        <div class="scene-tag">Download</div>
-        <div id="downloads" hidden>
+        <div id="log-panel" hidden>
+          <div class="log-head"><span class="scene-tag">제작 로그</span><span class="log-actions"><button type="button" id="log-copy" class="chip-btn">복사</button><button type="button" id="log-big" class="chip-btn">⛶ 크게보기</button></span></div>
+          <div id="log-list"></div>
+        </div>
+        <div id="dl-block" hidden>
+          <div class="scene-tag dl-tag">Download</div>
+          <div id="downloads" hidden>
           <div class="preview-wrap">
             <div class="preview-frame mobile" id="preview-frame">
               <video id="preview-video" controls playsinline preload="metadata"></video>
@@ -199,6 +198,7 @@
           <a id="captions-link" class="btn btn-quiet btn-block download" href="#">자막 SRT</a>
           <a id="script-link" class="btn btn-quiet btn-block download" href="#">대본 JSON</a>
           <div id="credit-list"></div>
+        </div>
         </div>
       </aside>
     </div>

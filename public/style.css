@@ -289,7 +289,9 @@ summary{cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;let
 .log-row.log-fail .log-m{color:var(--error);font-weight:600}
 .log-row.log-start .log-m{color:var(--accent);font-weight:600}
 .log-actions{display:flex;gap:7px}
-@media(min-width:901px){#log-panel,.dl-panel{grid-column:2}}
+#log-panel{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}
+#dl-block{margin-top:20px;border-top:1px solid var(--line);padding-top:16px}
+.dl-tag{margin-bottom:14px}
 #log-modal{position:fixed;inset:0;z-index:50;background:color-mix(in srgb,var(--ink) 55%,transparent);display:flex;align-items:center;justify-content:center;padding:24px}
 #log-modal[hidden]{display:none}
 .log-modal-box{background:var(--surface);border:1.5px solid var(--ink);border-radius:6px;box-shadow:var(--shadow);width:min(900px,100%);max-height:85vh;display:flex;flex-direction:column;padding:22px}
