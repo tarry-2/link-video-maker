@@ -176,6 +176,13 @@
           <div class="status-icon">▤ STANDBY</div>
           <p>링크와 형식을 선택하고 생성 버튼을 누르세요.</p>
         </div>
+      </aside>
+      <div id="log-panel" class="panel" hidden>
+        <div class="log-head"><span class="scene-tag">제작 로그</span><span class="log-actions"><button type="button" id="log-copy" class="chip-btn">복사</button><button type="button" id="log-big" class="chip-btn">⛶ 크게보기</button></span></div>
+        <div id="log-list"></div>
+      </div>
+      <aside class="panel status-panel dl-panel">
+        <div class="scene-tag">Download</div>
         <div id="downloads" hidden>
           <div class="preview-wrap">
             <div class="preview-frame mobile" id="preview-frame">
@@ -246,6 +253,19 @@
       <p>OpenAI로 대본·음성을 만들고, 실사형 기본 장면은 Pexels 사진에 카메라 움직임을 적용합니다. Veo는 꼭 필요한 1~2개 장면에만 쓰세요. 720p 8초 클립 1개의 Veo 생성 요금은 약 US$0.40이며 다른 API 비용은 별도입니다.</p>
     </div>
   </section>
+
+  <div id="log-modal" hidden>
+    <div class="log-modal-box">
+      <div class="log-modal-head">
+        <span class="scene-tag">제작 로그 (전체)</span>
+        <span class="log-actions">
+          <button type="button" id="log-modal-copy" class="chip-btn">복사</button>
+          <button type="button" id="log-modal-close" class="chip-btn">✕ 닫기</button>
+        </span>
+      </div>
+      <div id="log-modal-list"></div>
+    </div>
+  </div>
 
 </main>
 <script src="/app.js" defer></script>

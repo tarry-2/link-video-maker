@@ -279,6 +279,22 @@ summary{cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;let
 .settings-help p{max-width:860px}
 #settings-message{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ok);min-height:18px;margin-top:14px}
 #status p{margin:0}
+.log-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+#log-list{max-height:300px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;background:var(--field-bg);border:1px solid var(--line-2);border-radius:4px;padding:12px 14px}
+.log-row{display:flex;gap:9px;padding:2px 0;border-bottom:1px dashed color-mix(in srgb,var(--line-2) 50%,transparent)}
+.log-row:last-child{border-bottom:none}
+.log-t{color:var(--ink-soft);flex:none}
+.log-m{color:var(--ink)}
+.log-row.log-done .log-m{color:var(--ok);font-weight:600}
+.log-row.log-fail .log-m{color:var(--error);font-weight:600}
+.log-row.log-start .log-m{color:var(--accent);font-weight:600}
+.log-actions{display:flex;gap:7px}
+@media(min-width:901px){#log-panel,.dl-panel{grid-column:2}}
+#log-modal{position:fixed;inset:0;z-index:50;background:color-mix(in srgb,var(--ink) 55%,transparent);display:flex;align-items:center;justify-content:center;padding:24px}
+#log-modal[hidden]{display:none}
+.log-modal-box{background:var(--surface);border:1.5px solid var(--ink);border-radius:6px;box-shadow:var(--shadow);width:min(900px,100%);max-height:85vh;display:flex;flex-direction:column;padding:22px}
+.log-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+#log-modal-list{flex:1;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.8;background:var(--field-bg);border:1px solid var(--line-2);border-radius:4px;padding:16px 18px}
 
 /* ---------- Entrance motion ---------- */
 @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
