@@ -32,7 +32,7 @@ function splitCap(text,chunkChars){text=assEsc(text);if(!text)return [];let part
 // align(글자별 타이밍)으로 자막 조각의 실제 시작/끝 시간을 찾는다. 조각의 첫 글자~끝 글자 매칭.
 function chunkTiming(chunk,align,searchFrom){let plain=chunk.replace(/\\N/g,'').replace(/\s/g,'');if(!align||!plain)return null;let idx=searchFrom||0,matched=[],pi=0;for(let i=idx;i<align.length&&pi<plain.length;i++){let ac=align[i].ch;if(/\s/.test(ac))continue;if(ac===plain[pi]){matched.push(align[i]);pi++;}}if(matched.length<Math.max(1,Math.floor(plain.length*0.5)))return null;return {start:matched[0].start,end:matched[matched.length-1].end,lastIdx:align.indexOf(matched[matched.length-1])}}
 // 단어별 하이라이트(karaoke) 텍스트 생성: align 타이밍에 맞춰 각 글자가 순서대로 노랗게 켜진다.
-function karaokeText(chunk,cs,align){let display=wrapCap(chunk,999,3);// 줄바꿈만 반영
+function karaokeText(chunk,cs,align,lineChars){let display=wrapCap(chunk,lineChars||11,4);// 화면 폭에 맞게 여러 줄로 줄바꿈(안 잘리게)
 let out='',ai=0,alignSorted=align.filter(a=>a.start>=cs-0.05);
 for(let ch of display){if(ch==='\\'){out+='\\';continue;}if(ch==='N'&&out.endsWith('\\')){out+='N';continue;}
  if(/\s/.test(ch)){out+=ch;continue;}
@@ -40,13 +40,18 @@ for(let ch of display){if(ch==='\\'){out+='\\';continue;}if(ch==='N'&&out.endsWi
  let a=alignSorted[ai];let durCs=a?Math.max(4,Math.round((a.end-a.start)*100)):8;ai++;
  out+=`{\\kf${durCs}}${ch}`;}
 return out;}
-function buildAss(w,h,long,hook,times){let hookLen=(hook||'').length;let hk=Math.max(30,Math.min(long?46:44,Math.floor((w*0.86)/Math.max(1,hookLen)*1.9)));let cap=long?46:50,ml=Math.round(w*0.06),total=times.length?times[times.length-1][1]:0;let maxChars=long?24:13,chunk=long?46:26;
+function buildAss(w,h,long,hook,times){let cap=long?42:46,ml=Math.round(w*0.06),total=times.length?times[times.length-1][1]:0;
+// ★한 줄 최대 글자수 = 사용가능폭 / 글자폭. 한글 글자폭 ≈ 폰트크기의 1.02배. 안전계수 0.9로 절대 안 넘치게.
+let usable=w-ml*2,lineChars=Math.max(6,Math.floor(usable/(cap*1.02)*0.9));
+// 후킹도 같은 방식으로 한 줄에 맞게 폰트 자동 축소(넘치면 줄임)
+let hk=Math.max(28,Math.min(long?42:46,Math.floor(usable/Math.max(1,(hook||'').length)/1.02)));
+let chunk=lineChars*2;// 자막 한 조각 = 최대 2줄 분량
 // 단어별 하이라이트: 기본색=흰색, SecondaryColour(아직 안 부른 글자)=반투명흰색, karaoke가 지나가며 흰→노랑 강조. 큰 볼드+두꺼운 외곽선.
 let head=`[Script Info]\nScriptType: v4.00+\nPlayResX: ${w}\nPlayResY: ${h}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,${SUB_FONT},${cap},&H0033E6FF,&H00FFFFFF,&H00101010,&H00000000,1,0,0,0,100,100,0,0,1,4,1.5,2,${ml},${ml},${long?70:150},1\nStyle: Plain,${SUB_FONT},${cap},&H00FFFFFF,&H00FFFFFF,&H00101010,&H00000000,1,0,0,0,100,100,0,0,1,4,1.5,2,${ml},${ml},${long?70:150},1\nStyle: Hook,${SUB_FONT},${hk},&H00FFFFFF,&H00FFFFFF,&H002A56C0,&H002A56C0,1,0,0,0,100,100,1,0,3,14,0,8,${ml},${ml},${Math.round(h*0.06)},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
 let ev='';if(hook)ev+=`Dialogue: 0,0:00:00.00,${assTime(total)},Hook,,0,0,0,,${assEsc(hook)}\n`;
 for(let t of times){let [s,e,c,align]=t;let chunks=splitCap(c,chunk);
- if(align&&align.length){let cursor=0;for(let k=0;k<chunks.length;k++){let tm=chunkTiming(chunks[k],align,cursor);let cs=tm?tm.start:s+(e-s)*k/chunks.length,ce=tm?Math.max(tm.end,tm.start+0.4):s+(e-s)*(k+1)/chunks.length;if(tm)cursor=tm.lastIdx+1;let localAlign=align.filter(a=>a.start>=cs-0.02&&a.end<=ce+0.3);ev+=`Dialogue: 0,${assTime(cs)},${assTime(ce+0.05)},Cap,,0,0,0,,${karaokeText(chunks[k],cs,localAlign)}\n`;}}
- else{let dur=e-s,per=dur/chunks.length;for(let k=0;k<chunks.length;k++){let cs=s+per*k,ce=(k===chunks.length-1)?e:s+per*(k+1);ev+=`Dialogue: 0,${assTime(cs)},${assTime(ce)},Plain,,0,0,0,,${wrapCap(chunks[k],maxChars,3)}\n`}}}
+ if(align&&align.length){let cursor=0;for(let k=0;k<chunks.length;k++){let tm=chunkTiming(chunks[k],align,cursor);let cs=tm?tm.start:s+(e-s)*k/chunks.length,ce=tm?Math.max(tm.end,tm.start+0.4):s+(e-s)*(k+1)/chunks.length;if(tm)cursor=tm.lastIdx+1;let localAlign=align.filter(a=>a.start>=cs-0.02&&a.end<=ce+0.3);ev+=`Dialogue: 0,${assTime(cs)},${assTime(ce+0.05)},Cap,,0,0,0,,${karaokeText(chunks[k],cs,localAlign,lineChars)}\n`;}}
+ else{let dur=e-s,per=dur/chunks.length;for(let k=0;k<chunks.length;k++){let cs=s+per*k,ce=(k===chunks.length-1)?e:s+per*(k+1);ev+=`Dialogue: 0,${assTime(cs)},${assTime(ce)},Plain,,0,0,0,,${wrapCap(chunks[k],lineChars,3)}\n`}}}
 return head+ev}
 function outroAss(w,h){let sz=Math.round(h*0.055);return `[Script Info]\nScriptType: v4.00+\nPlayResX: ${w}\nPlayResY: ${h}\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Br,${SUB_FONT},${sz},&H00E9F3FB,&H00E9F3FB,&H002A56C0,&H00000000,1,0,0,0,100,100,3,0,1,0,0,5,0,0,0,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:03.00,Br,,0,0,0,,by TARRY\n`}
 async function retrieve(urls,manual,report){let blocks=[];for(let i=0;i<urls.length;i++){let u=new URL(urls[i]);if(!['http:','https:'].includes(u.protocol)||!u.hostname.includes('.')||u.username||u.password)throw Error('올바른 공개 웹페이지 링크를 입력하세요.');report('자료 수집',`${i+1}/${urls.length} 링크 읽는 중`);try{let r=await fetch('https://r.jina.ai/'+u.href,{headers:{Accept:'text/plain'},signal:AbortSignal.timeout(35000)});if(!r.ok)throw Error();let body=(await r.text()).replace(/^URL Source:.*$|^Markdown Content:.*$/gm,'').slice(0,12000);if(body.length<100)throw Error();blocks.push(`[출처 ${u.hostname}: ${u.href}]\n${body}`)}catch{blocks.push(`[출처 ${u.hostname}: ${u.href}] 자동으로 내용을 읽지 못했습니다.`)}}if(manual)blocks.push('[사용자 제공 설명]\n'+manual.slice(0,20000));if(blocks.every(x=>x.includes('읽지 못했습니다.')))throw Error('링크 내용을 읽지 못했습니다. 직접 내용을 입력해 주세요.');return blocks.join('\n\n').slice(0,40000)}
