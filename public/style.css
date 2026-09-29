@@ -262,6 +262,9 @@ summary{cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;let
 .key-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .key-head span{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;color:var(--ink-soft)}
 .key-head span.on{color:var(--ok)}
+.reveal-btn{margin-top:10px;align-self:flex-start;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.04em;background:transparent;border:1.5px solid var(--line-2);color:var(--ink);border-radius:999px;padding:7px 13px;transition:border-color .2s}
+.reveal-btn:hover{border-color:var(--accent)}
+.revealed{display:block;margin-top:9px;font-family:'JetBrains Mono',monospace;font-size:12px;word-break:break-all;background:var(--field-bg);border:1px dashed var(--line-2);border-radius:3px;padding:9px 11px;color:var(--ink)}
 .settings-help{border-top:1px solid var(--line);margin-top:28px;padding-top:20px}
 .settings-help h2{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin:0 0 10px}
 .settings-help p{max-width:860px}
