@@ -113,6 +113,7 @@ header.slate{
   text-transform:uppercase;margin-right:auto;
   padding-left:16px;border-left:1px solid var(--line-2);
 }
+.app-version{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:var(--accent);background:var(--accent-soft);border:1px solid var(--line-2);border-radius:999px;padding:4px 10px}
 .slate-actions{display:flex;gap:9px}
 .chip-btn{
   font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.06em;
