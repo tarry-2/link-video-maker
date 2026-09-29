@@ -2,9 +2,20 @@
 
 뉴스·블로그·상품·여행 등 공개 웹페이지 URL을 입력하면 한국어 대본, 음성, 장면, 자막이 있는 MP4를 생성하는 단일 사용자 서버 앱입니다.
 
+## 화면·옵션
+
+- **테마**: 헤더 버튼으로 라이트(웜 아이보리)/다크(웜 에스프레소)를 전환합니다. 선택은 브라우저에 저장됩니다.
+- **영상 길이 기준**(리서치 반영):
+  - 숏폼(세로 9:16): 15 / **30(표준)** / 45 / 60초 — Shorts·TikTok·Reels 스위트스팟 및 뉴스 숏 단위
+  - 롱폼(가로 16:9): 2 / **3(표준)** / 5 / 8분 — 뉴스 리포트 2~3분, 설명형 5분대, 8분=심층
+- **자막**: 넣기/빼기를 옵션에서 고릅니다. 넣으면 영상에 한글 자막을 새기고, 어느 경우든 자막 SRT를 따로 내려받을 수 있습니다.
+
 ## 시작
 
 1. Node.js 20 이상과 FFmpeg를 설치합니다. 한글 폰트(Noto Sans CJK 권장)를 설치합니다.
+   - **영상에 자막을 새기려면 자막(libass)이 포함된 FFmpeg가 필요합니다.** 자막 기능이 없는 FFmpeg에서도 MP4는 생성되지만 자막은 영상에 새겨지지 않고 SRT로만 제공됩니다.
+   - macOS(Homebrew): `brew install ffmpeg-full` 후 `.env`에 `FFMPEG_PATH=/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`, `FFPROBE_PATH=/opt/homebrew/opt/ffmpeg-full/bin/ffprobe`를 지정합니다. 기존 시스템 FFmpeg는 건드리지 않습니다.
+   - Docker(`docker compose up`)는 자막 지원 FFmpeg와 한글 폰트가 기본 포함됩니다.
 2. `.env.example`을 `.env`로 복사하고 `ADMIN_PASSWORD`와 `APP_SECRET`을 설정합니다. `APP_SECRET`은 `openssl rand -hex 32`로 만들 수 있습니다.
 3. `npm start`를 실행하고 `http://localhost:3000`을 엽니다. 또는 `docker compose up -d --build`로 실행합니다.
 4. 관리자 비밀번호로 로그인해 설정에서 OpenAI, Pexels, Gemini 키를 저장합니다.
