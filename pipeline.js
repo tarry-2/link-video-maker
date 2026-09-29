@@ -43,12 +43,14 @@ return out;}
 function buildAss(w,h,long,hook,times){let cap=long?42:46,ml=Math.round(w*0.06),total=times.length?times[times.length-1][1]:0;
 // ★한 줄 최대 글자수 = 사용가능폭 / 글자폭. 한글 글자폭 ≈ 폰트크기의 1.02배. 안전계수 0.9로 절대 안 넘치게.
 let usable=w-ml*2,lineChars=Math.max(6,Math.floor(usable/(cap*1.02)*0.9));
-// 후킹도 같은 방식으로 한 줄에 맞게 폰트 자동 축소(넘치면 줄임)
-let hk=Math.max(28,Math.min(long?42:46,Math.floor(usable/Math.max(1,(hook||'').length)/1.02)));
+// ★후킹 = 스크롤 멈추는 첫인상. 리서치(2026): 크고 굵게, 색블록+두꺼운 외곽선, 길면 폰트 유지한 채 여러 줄로.
+let hk=long?Math.round(h*0.075):Math.round(w*0.085);// 세로 약 61px, 가로 약 54px = 자막보다 훨씬 큼
+let hookLineChars=Math.max(6,Math.floor(usable/(hk*1.02)));// 후킹 한 줄 글자수(폰트 큰 채로 줄바꿈)
+let hookWrapped=wrapCap(hook||'',hookLineChars,3);
 let chunk=lineChars*2;// 자막 한 조각 = 최대 2줄 분량
 // 단어별 하이라이트: 기본색=흰색, SecondaryColour(아직 안 부른 글자)=반투명흰색, karaoke가 지나가며 흰→노랑 강조. 큰 볼드+두꺼운 외곽선.
-let head=`[Script Info]\nScriptType: v4.00+\nPlayResX: ${w}\nPlayResY: ${h}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,${SUB_FONT},${cap},&H0033E6FF,&H00FFFFFF,&H00101010,&H00000000,1,0,0,0,100,100,0,0,1,4,1.5,2,${ml},${ml},${long?70:150},1\nStyle: Plain,${SUB_FONT},${cap},&H00FFFFFF,&H00FFFFFF,&H00101010,&H00000000,1,0,0,0,100,100,0,0,1,4,1.5,2,${ml},${ml},${long?70:150},1\nStyle: Hook,${SUB_FONT},${hk},&H00FFFFFF,&H00FFFFFF,&H002A56C0,&H002A56C0,1,0,0,0,100,100,1,0,3,14,0,8,${ml},${ml},${Math.round(h*0.06)},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
-let ev='';if(hook)ev+=`Dialogue: 0,0:00:00.00,${assTime(total)},Hook,,0,0,0,,${assEsc(hook)}\n`;
+let head=`[Script Info]\nScriptType: v4.00+\nPlayResX: ${w}\nPlayResY: ${h}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Cap,${SUB_FONT},${cap},&H0033E6FF,&H00FFFFFF,&H00101010,&H00000000,1,0,0,0,100,100,0,0,1,4,1.5,2,${ml},${ml},${long?70:150},1\nStyle: Plain,${SUB_FONT},${cap},&H00FFFFFF,&H00FFFFFF,&H00101010,&H00000000,1,0,0,0,100,100,0,0,1,4,1.5,2,${ml},${ml},${long?70:150},1\nStyle: Hook,${SUB_FONT},${hk},&H00FFFFFF,&H00FFFFFF,&H001A1A1A,&H00202CB8,1,0,0,0,100,100,1,0,3,${Math.round(hk*0.14)},0,8,${Math.round(ml*0.7)},${Math.round(ml*0.7)},${Math.round(h*0.05)},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
+let ev='';if(hook)ev+=`Dialogue: 0,0:00:00.00,${assTime(total)},Hook,,0,0,0,,${hookWrapped}\n`;
 for(let t of times){let [s,e,c,align]=t;let chunks=splitCap(c,chunk);
  if(align&&align.length){let cursor=0;for(let k=0;k<chunks.length;k++){let tm=chunkTiming(chunks[k],align,cursor);let cs=tm?tm.start:s+(e-s)*k/chunks.length,ce=tm?Math.max(tm.end,tm.start+0.4):s+(e-s)*(k+1)/chunks.length;if(tm)cursor=tm.lastIdx+1;let localAlign=align.filter(a=>a.start>=cs-0.02&&a.end<=ce+0.3);ev+=`Dialogue: 0,${assTime(cs)},${assTime(ce+0.05)},Cap,,0,0,0,,${karaokeText(chunks[k],cs,localAlign,lineChars)}\n`;}}
  else{let dur=e-s,per=dur/chunks.length;for(let k=0;k<chunks.length;k++){let cs=s+per*k,ce=(k===chunks.length-1)?e:s+per*(k+1);ev+=`Dialogue: 0,${assTime(cs)},${assTime(ce)},Plain,,0,0,0,,${wrapCap(chunks[k],lineChars,3)}\n`}}}
