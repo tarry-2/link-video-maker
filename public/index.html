@@ -88,8 +88,8 @@
             <div>
               <label for="style">화면 느낌</label>
               <select id="style">
-                <option value="real">실사형</option>
-                <option value="anime">애니형</option>
+                <option value="photo">실사 · AI생성 (권장)</option>
+                <option value="anime">애니 · AI생성</option>
               </select>
             </div>
             <div>
@@ -174,8 +174,9 @@
             </div>
           </div>
           <a id="video-link" class="btn btn-accent btn-block download" href="#">↓ MP4 다운로드</a>
-          <a id="script-link" class="btn btn-quiet btn-block download" href="#">대본 JSON</a>
+          <a id="facts-link" class="btn btn-quiet btn-block download" href="#">📄 팩트·대본 TXT</a>
           <a id="captions-link" class="btn btn-quiet btn-block download" href="#">자막 SRT</a>
+          <a id="script-link" class="btn btn-quiet btn-block download" href="#">대본 JSON</a>
           <div id="credit-list"></div>
         </div>
       </aside>
@@ -204,13 +205,13 @@
         <code class="revealed" id="openai-reveal" hidden></code>
       </article>
       <article class="key">
-        <div class="key-head"><h2>Pexels</h2><span id="pexels-state">미설정</span></div>
-        <p>실사형 장면에 쓸 무료 스톡 사진을 검색합니다. 없으면 OpenAI 이미지 생성으로 대체되어 비용이 늘 수 있습니다. <b>권장</b></p>
-        <a href="https://www.pexels.com/api/" target="_blank" rel="noopener noreferrer">키 발급 →</a>
-        <label for="pexels">새 API 키</label>
-        <input id="pexels" type="password" autocomplete="off" placeholder="저장된 키는 표시되지 않습니다">
-        <button type="button" class="reveal-btn" data-key="pexels">👁 저장된 키 보기</button>
-        <code class="revealed" id="pexels-reveal" hidden></code>
+        <div class="key-head"><h2>ElevenLabs 음성</h2><span id="elevenlabs-state">미설정</span></div>
+        <p>사람처럼 자연스러운 한국어 나레이션을 만듭니다. 넣으면 OpenAI 목소리 대신 이걸 씁니다. 무료 체험(월 10분) 있음. <b>목소리 고급</b></p>
+        <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener noreferrer">키 발급 →</a>
+        <label for="elevenlabs">새 API 키</label>
+        <input id="elevenlabs" type="password" autocomplete="off" placeholder="저장된 키는 표시되지 않습니다">
+        <button type="button" class="reveal-btn" data-key="elevenlabs">👁 저장된 키 보기</button>
+        <code class="revealed" id="elevenlabs-reveal" hidden></code>
       </article>
       <article class="key">
         <div class="key-head"><h2>Google Gemini</h2><span id="gemini-state">미설정</span></div>
