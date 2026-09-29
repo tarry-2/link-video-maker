@@ -333,3 +333,6 @@ summary{cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:12px;let
   .log-modal-head .chip-btn{padding:11px 14px;font-size:14px}
   .preview-frame.mobile{max-width:210px}
 }
+
+.voice-prev-row{display:flex;align-items:center;gap:10px;margin:2px 0 8px}
+.voice-prev-state{font-size:.82rem;opacity:.72}
