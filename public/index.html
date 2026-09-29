@@ -113,24 +113,31 @@
             <div>
               <label for="voice">목소리</label>
               <select id="voice">
-                <optgroup label="남성">
-                  <option value="onyx">오닉스 · 묵직한 남성</option>
-                  <option value="echo">에코 · 차분한 남성</option>
-                  <option value="ash">애쉬 · 선명한 남성</option>
-                  <option value="ballad">밸러드 · 감성 남성</option>
-                  <option value="verse">버스 · 부드러운 남성</option>
+                <optgroup label="뉴스·기자">
+                  <option value="anchor_f" selected>여성 앵커·기자</option>
+                  <option value="anchor_m">남성 앵커·기자</option>
                 </optgroup>
-                <optgroup label="여성">
-                  <option value="coral" selected>코랄 · 따뜻한 여성 (기본)</option>
-                  <option value="nova">노바 · 밝은 여성</option>
-                  <option value="shimmer">시머 · 부드러운 여성</option>
-                  <option value="sage">세이지 · 차분한 여성</option>
+                <optgroup label="전문가·선생님">
+                  <option value="expert_m">남성 전문가</option>
+                  <option value="expert_f">여성 전문가</option>
+                  <option value="teacher_f">여성 선생님</option>
+                  <option value="teacher_m">남성 선생님</option>
                 </optgroup>
-                <optgroup label="중성·기타">
-                  <option value="alloy">알로이 · 담백·중성</option>
-                  <option value="fable">페이블 · 이야기꾼</option>
+                <optgroup label="일반 인물">
+                  <option value="woman30">30대 여성</option>
+                  <option value="man30">30대 남성</option>
+                  <option value="young_f">20대 여성 · 발랄</option>
+                  <option value="young_m">20대 남성</option>
+                  <option value="warm_f">따뜻한 여성 · 내레이션</option>
+                  <option value="deep_m">묵직한 중년 남성</option>
+                </optgroup>
+                <optgroup label="이야기·특수">
+                  <option value="child">아이 목소리</option>
+                  <option value="grandpa">할아버지 · 옛이야기</option>
+                  <option value="story_f">이야기꾼 여성 · 동화</option>
                 </optgroup>
               </select>
+              <div class="hint">👤 다양한 목소리는 ElevenLabs 키를 넣어야 제대로 나옵니다 (없으면 기본 목소리로 대체).</div>
             </div>
           </div>
 
