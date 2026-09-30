@@ -58,7 +58,14 @@ function serveFile(res: http.ServerResponse, file: string, type: string) {
       res.writeHead(404);
       res.end('not found');
     } else {
-      res.writeHead(200, {'Content-Type': type});
+      // HTML/JS/CSS는 배포마다 바뀌므로 항상 최신을 받게 강제(브라우저가 옛 파일 붙잡는 문제 방지).
+      // v1의 서비스워커(network-first)가 하던 "항상 최신" 역할을 서버가 직접 헤더로 강제한다.
+      res.writeHead(200, {
+        'Content-Type': type,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      });
       res.end(buf);
     }
   });
