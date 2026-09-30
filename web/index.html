@@ -19,7 +19,10 @@
     </div>
 
     <header class="topbar">
-      <div class="wordmark">On<span>Video</span></div>
+      <div style="display:flex; align-items:center; gap:8px">
+        <div class="wordmark">On<span>Video</span></div>
+        <span class="ver-badge"><span class="live-dot"></span><span id="ver">v–</span></span>
+      </div>
       <div style="display:flex; gap:8px; align-items:center">
         <button id="theme-btn" class="ghost-btn small" title="밝게/어둡게">🌙</button>
         <button id="settings-btn" class="ghost-btn">⚙ 키 설정</button>
@@ -87,14 +90,24 @@
           </div>
         </div>
 
-        <div class="row" id="advanced-row">
+        <div class="row">
+          <div class="col">
+            <label class="field-label">이미지 스타일 <span class="hint">— 자동 모드만</span></label>
+            <select id="image-style" class="input">
+              <option value="real" selected>📷 실사 (사진 같은)</option>
+              <option value="anime">🎨 애니 (귀여운 일러스트)</option>
+            </select>
+          </div>
           <div class="col">
             <label class="field-label">이미지 화질 <span class="hint">— 자동 모드만</span></label>
             <select id="quality" class="input">
               <option value="fast">빠르게 (테스트용)</option>
-              <option value="high" selected>고퀄 실사 (판매·업로드용)</option>
+              <option value="high" selected>고퀄 (판매·업로드용)</option>
             </select>
           </div>
+        </div>
+
+        <div class="row" id="advanced-row">
           <div class="col">
             <label class="field-label">움직이는 AI 영상 <span class="hint">— 유료, 신중히</span></label>
             <select id="aiClips" class="input">

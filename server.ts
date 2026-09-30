@@ -86,6 +86,12 @@ const server = http.createServer(async (req, res) => {
   const u = new URL(req.url || '/', `http://localhost:${PORT}`);
   const p = u.pathname;
 
+  // ── 버전(재배포 확인용) ──
+  if (p === '/api/version') {
+    let v = '?';
+    try { v = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || '?'; } catch {}
+    return json(res, 200, {version: v});
+  }
   // ── 로그인 상태 확인 ──
   if (p === '/api/auth') return json(res, 200, {required: !!ADMIN_PASSWORD, ok: authed(req)});
   // ── 로그인 ──
@@ -249,6 +255,7 @@ const server = http.createServer(async (req, res) => {
           presetId: b.presetId || undefined,
           voice: b.voice || undefined,
           quality: b.quality === 'fast' ? 'fast' : 'high',
+          imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real',
           aiClips: Number(b.aiClips) || 0,
           log: (m) => job.logs.push(m),
         });

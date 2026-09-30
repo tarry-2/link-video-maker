@@ -284,6 +284,9 @@ $('theme-btn')?.addEventListener('click', () => {
   applyTheme(next);
 });
 
+// ── 버전 배지(재배포 확인용) ──
+fetch('/api/version').then(r => r.json()).then(d => { const v = $('ver'); if (v) v.textContent = 'v' + (d.version || '?'); }).catch(() => {});
+
 // ── 예상 비용 표시 토글(키설정 모달 안 체크박스) ──
 // 강의 화면엔 비용이 안 보이게 기본 OFF. 관리자가 키설정에서 켜면 표시.
 function setDev(on) {

@@ -14,6 +14,7 @@ export const createSchema = z.object({
   duration: z.number().int().min(15).max(180),
   voice: text(60).default(''), presetId: text(80).default(''),
   quality: z.enum(['fast', 'high']).default('high'),
+  imageStyle: z.enum(['real', 'anime']).default('real'),
   music: z.boolean().default(false),
   product: productSchema.nullable().default(null),
   rates: ratesSchema.default({draft: null, image: null, voice: null, music: null}),
@@ -58,7 +59,7 @@ export function assertTokens(value: string, product: Product | null) {
 }
 export function signatures(p: Project, s: Scene) {
   return {
-    image: fingerprint([p.input.mode, p.input.quality, p.subject, s.visualPrompt, p.sources[s.imageIndex ?? 0], s.imageVersion || 0]),
+    image: fingerprint([p.input.mode, p.input.quality, p.input.imageStyle, p.subject, s.visualPrompt, p.sources[s.imageIndex ?? 0], s.imageVersion || 0]),
     voice: fingerprint([resolveProduct(s.narration, p.input.product), p.input.voice, p.input.presetId, s.voiceVersion || 0]),
   };
 }

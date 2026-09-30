@@ -44,6 +44,13 @@ body {
   position: sticky; top: 0; background: var(--topbar-bg); backdrop-filter: blur(10px); z-index: 10;
 }
 .wordmark { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+.ver-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--card2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; font-family: "SF Mono", Menlo, monospace; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff4d8d; box-shadow: 0 0 0 0 rgba(255,77,141,0.6); animation: livePulse 1.4s ease-out infinite; }
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 rgba(255,77,141,0.6); opacity: 1; }
+  70% { box-shadow: 0 0 0 7px rgba(255,77,141,0); opacity: 0.7; }
+  100% { box-shadow: 0 0 0 0 rgba(255,77,141,0); opacity: 1; }
+}
 .wordmark span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
 .eyebrow { font-size: 12px; letter-spacing: 3px; color: var(--teal); font-weight: 700; margin-bottom: 12px; }

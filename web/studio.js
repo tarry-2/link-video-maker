@@ -195,6 +195,7 @@
       const product = el('product-lock').checked ? Object.fromEntries(['name','price','benefit','url'].map(k => [k, el('product-' + k).value.trim()])) : null;
       const p = await api('/api/studio', {mode, url:el('url').value.trim(), images, keywords:el('keywords').value.trim(), facts:el('facts').value.trim(),
         duration:Number(el('duration').value), voice:el('voice').value, presetId:selectedPreset || '', quality:el('quality').value,
+        imageStyle:el('image-style') ? el('image-style').value : 'real',
         music:el('studio-music').checked, product, rates:rates()});
       render(p); schedule(); await loadHistory();
       el('studio-editor').scrollIntoView({behavior:'smooth'}); message('대본 작성이 시작됐습니다. 작업 내역에서 다시 열 수 있습니다.');

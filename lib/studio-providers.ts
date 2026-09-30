@@ -31,7 +31,7 @@ export const studioProviders: StudioDependencies = {
   async image(p, s, file, log) {
     const k = pipelineKeys();
     if (!k.replicate) throw new Error('키 설정에서 Replicate 키를 저장하세요.');
-    await generateImageFlux(k.replicate, `${p.subject}. ${s.visualPrompt}`, file, log, p.input.quality);
+    await generateImageFlux(k.replicate, `${p.subject}. ${s.visualPrompt}`, file, log, p.input.quality, p.input.imageStyle);
   },
   async voice(p, s, file) {
     const k = pipelineKeys();

@@ -1,11 +1,18 @@
 // 이미지 생성 — Flux(Replicate). ★9:16 네이티브(aspect_ratio) → 짤림 없음. no-text 강화.
 import {writeFile} from 'node:fs/promises';
 
-// 현실성 강화 + 사람 절제(얼굴/군중 지양, 사물·장소·현장 중심).
-const STYLE =
+export type ImageStyle = 'real' | 'anime';
+
+// 실사: 현실성 강화 + 사람 절제(얼굴/군중 지양, 사물·장소·현장 중심).
+const REAL_STYLE =
   ', ultra-realistic photograph, shot on DSLR, sharp focus, high detail, 8k, professional photography, authentic real-world scene, natural available light, photojournalism, 35mm, realistic skin and textures, natural depth of field, subtle cinematic color grade, indistinguishable from a real photo, no illustration, no CGI, no 3D render, no AI look';
-const NO_PEOPLE =
+const REAL_NO_PEOPLE =
   ', avoid people, no crowds, no close-up faces, no portraits — focus on objects, places, environments and meaningful details; if a person is unavoidable show only hands, silhouette or back view, small in frame';
+// 애니: 귀여운 일러스트/웹툰 톤(파스텔·부드러운 셀셰이딩). 캐릭터/마스코트 허용.
+const ANIME_STYLE =
+  ', charming 2D anime illustration, soft cel shading, clean crisp linework, vibrant pastel color palette, modern Korean webtoon and Studio Ghibli inspired, wholesome and cute, expressive, warm soft lighting, high quality digital art, no photorealism, no 3D render';
+const ANIME_PEOPLE =
+  ', cute characters and mascots are welcome, appealing and friendly';
 const NEG_TEXT =
   ', absolutely no text, no letters, no words, no numbers, no captions, no charts, no tables, no documents, no price tags, no signage, no watermark';
 
@@ -15,12 +22,13 @@ export async function generateImageFlux(
   outPath: string,
   log?: (m: string) => void,
   quality: 'fast' | 'high' = 'high',
+  style: ImageStyle = 'real',
 ): Promise<void> {
   // 일시적 네트워크 오류(fetch failed 등)에 최대 3회 재시도 — placeholder로 새는 것 방지.
   let lastErr: any;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await fluxOnce(key, prompt, outPath, log, quality);
+      return await fluxOnce(key, prompt, outPath, log, quality, style);
     } catch (e: any) {
       lastErr = e;
       log?.(`[이미지] 생성 실패(${e.message}) — 재시도 ${attempt}/3`);
@@ -36,19 +44,21 @@ async function fluxOnce(
   outPath: string,
   log?: (m: string) => void,
   quality: 'fast' | 'high' = 'high',
+  style: ImageStyle = 'real',
 ): Promise<void> {
   const high = quality !== 'fast';
   const model = high ? 'flux-dev' : 'flux-schnell';
+  const styleStr = style === 'anime' ? ANIME_STYLE + ANIME_PEOPLE : REAL_STYLE + REAL_NO_PEOPLE;
   const input: Record<string, unknown> = {
-    prompt: prompt + STYLE + NO_PEOPLE + NEG_TEXT,
+    prompt: prompt + styleStr + NEG_TEXT,
     aspect_ratio: '9:16', // ★세로 쇼츠 네이티브
     num_outputs: 1,
     output_format: 'jpg',
     output_quality: high ? 95 : 90,
   };
   if (high) {
-    // flux-dev 실사 품질 파라미터
-    input.guidance = 3; // 프롬프트 충실도(3=실사 밸런스)
+    // flux-dev 품질 파라미터(실사=guidance 낮게 밸런스, 애니=조금 높여 스타일 강조)
+    input.guidance = style === 'anime' ? 3.5 : 3;
     input.num_inference_steps = 32; // 스텝↑=디테일↑
   }
   const body = {input};
