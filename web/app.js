@@ -228,12 +228,23 @@ $('settings-btn').onclick = async () => {
 };
 $('settings-close').onclick = () => $('settings-modal').classList.add('hidden');
 $('save-keys').onclick = async () => {
+  // 1) 단가를 localStorage에 저장(studio.js가 onvideo-unit-rates에서 읽어씀)
+  const rateStore = {};
+  ['draft', 'image', 'voice', 'music'].forEach((k) => {
+    const el = $('rate-' + k);
+    const v = el && el.value.trim();
+    rateStore[k] = v === '' || v == null ? null : Number(v);
+  });
+  try { localStorage.setItem('onvideo-unit-rates', JSON.stringify(rateStore)); } catch {}
+
+  // 2) 새로 입력한 키만 서버에 저장(비운 칸은 기존 유지)
   const body = {};
   document.querySelectorAll('#key-fields input').forEach((i) => {
     if (i.value.trim()) body[i.dataset.key] = i.value.trim();
   });
-  if (!Object.keys(body).length) { $('settings-msg').textContent = '입력한 키가 없습니다.'; return; }
-  await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (Object.keys(body).length) {
+    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  }
   $('settings-msg').textContent = '저장했습니다.';
   setTimeout(() => $('settings-modal').classList.add('hidden'), 800);
 };

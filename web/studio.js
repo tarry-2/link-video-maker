@@ -57,7 +57,7 @@
     const r = JSON.parse(localStorage.getItem('onvideo-unit-rates') || '{}');
     Object.keys(labels).forEach(k => { if (Number.isFinite(r[k]) && r[k] >= 0) el('rate-' + k).value = r[k]; });
   } catch {}
-  document.querySelectorAll('.studio-options input, #duration, #quality').forEach(i => i.addEventListener('input', updateEstimate));
+  document.querySelectorAll('.studio-options input, #rate-section input, #duration, #quality').forEach(i => i.addEventListener('input', updateEstimate));
   ['tab-auto', 'tab-manual'].forEach(id => el(id).addEventListener('click', updateEstimate));
   el('product-lock').onchange = () => el('product-fields').classList.toggle('hidden', !el('product-lock').checked);
   // The existing pipeline does not implement AI clips. Do not estimate or charge for that option.
