@@ -1,0 +1,44 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import {spawn} from 'node:child_process';
+import {Studio, type StudioDependencies} from '../lib/studio';
+
+test('HTTP authentication, draft edits, private assets and video range requests', async t => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'onvideo-http-'));
+  const unused=async()=>{throw new Error('Paid provider must not be invoked in this test');};
+  const deps:StudioDependencies={plan:async()=>({title:'HTTP fixture',subject:'',musicPrompt:'',scenes:[{narration:'검증 대본',hookTop:'제목',hookAccent:'',accentColor:'#FFE24B',visualPrompt:'image'}]}),image:unused,voice:unused,music:unused,render:unused};
+  const store=new Studio(path.join(root,'studio'),deps);
+  let p=store.create({mode:'auto',url:'https://example.com',duration:15});
+  const project=await store.settled(p.id);
+  project.output='fixture.mp4';project.outputRevision=project.revision;
+  fs.writeFileSync(path.join(store.directory(p.id),'fixture.mp4'),'0123456789');
+  fs.writeFileSync(path.join(store.directory(p.id),'project.json'),JSON.stringify(project));
+  const port=42000+Math.floor(Math.random()*10000);
+  const child=spawn(process.execPath,['--import','tsx','server.ts'],{cwd:process.cwd(),env:{...process.env,PORT:String(port),ADMIN_PASSWORD:'http-test-only',APP_SECRET:'http-test-secret',STUDIO_DATA_DIR:root},stdio:['ignore','pipe','pipe']});
+  t.after(async()=>{child.kill('SIGTERM');await new Promise(r=>child.once('close',r));fs.rmSync(root,{recursive:true,force:true});});
+  await new Promise<void>((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('Server start timeout')),10000);
+    child.stdout.on('data',d=>{if(String(d).includes('http://localhost:')){clearTimeout(timer);resolve();}});
+    child.once('error',e=>{clearTimeout(timer);reject(e);});
+    child.once('exit',code=>{if(code){clearTimeout(timer);reject(new Error('Server failed: '+code));}});
+  });
+  const base=`http://127.0.0.1:${port}`;
+  assert.equal((await fetch(base+'/api/studio')).status,401);
+  assert.equal((await fetch(base+`/api/studio/${p.id}/assets/fixture.mp4`)).status,401);
+  const login=await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:'http-test-only'})});
+  assert.equal(login.status,200);
+  const cookie=login.headers.get('set-cookie')!.split(';')[0];
+  const headers={cookie,'Content-Type':'application/json'};
+  const rows=await (await fetch(base+'/api/studio',{headers})).json();assert.equal(rows[0].id,p.id);
+  const file=await fetch(base+`/api/studio/${p.id}/assets/fixture.mp4`,{headers:{...headers,range:'bytes=2-5'}});
+  assert.equal(file.status,206);assert.equal(file.headers.get('content-range'),'bytes 2-5/10');assert.equal(await file.text(),'2345');
+  assert.equal((await fetch(base+`/api/studio/${p.id}/assets/project.json`,{headers})).status,404);
+  assert.equal((await fetch(base+`/api/studio/${p.id}/assets/fixture.mp4`,{headers:{...headers,range:'bytes=999-'}})).status,416);
+  const edit={revision:project.revision,title:'HTTP 수정 확인',musicPrompt:'',scenes:project.scenes};
+  assert.equal((await fetch(base+`/api/studio/${p.id}`,{method:'PUT',headers,body:JSON.stringify(edit)})).status,200);
+  assert.equal((await fetch(base+`/api/studio/${p.id}`,{method:'PUT',headers,body:JSON.stringify(edit)})).status,409);
+  assert.equal((await fetch(base+`/api/studio/${p.id}`,{method:'PUT',headers:{...headers,origin:'https://other.example'},body:JSON.stringify(edit)})).status,403);
+});

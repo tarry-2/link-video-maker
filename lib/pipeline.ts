@@ -12,7 +12,7 @@ import type {SceneData} from '../src/Scene';
 
 const FPS = 30;
 
-async function fetchSource(urls: string[], log: (m: string) => void): Promise<string> {
+export async function fetchSource(urls: string[], log: (m: string) => void): Promise<string> {
   const blocks: string[] = [];
   for (const u of urls) {
     try {

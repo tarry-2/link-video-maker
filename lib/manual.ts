@@ -38,7 +38,7 @@ export type ManualOpts = {
   log?: (m: string) => void;
 };
 
-type ManualScene = {
+export type ManualScene = {
   imageIndex: number; // 몇 번째 입력 이미지를 쓸지(선별 결과)
   narration: string;
   hookTop: string;
@@ -54,14 +54,15 @@ async function toGeminiImage(p: string): Promise<GeminiImage> {
   return {mimeType, dataB64: buf.toString('base64')};
 }
 
-export async function makeVideoManual(
+export async function generateManualDraft(
   keys: PipelineKeys,
   opts: ManualOpts,
-): Promise<{out: string; title: string; imageDir: string}> {
+  workspace?: string,
+) {
   const log = opts.log || (() => {});
   const id = randomUUID().slice(0, 8);
   const pubRel = `jobs/${id}`;
-  const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
+  const abs = (rel: string) => workspace ? path.join(workspace, path.basename(rel)) : path.join(process.cwd(), 'public', rel);
   await mkdir(abs(pubRel), {recursive: true});
 
   const preset = opts.presetId ? getPreset(opts.presetId) : undefined;
@@ -146,10 +147,19 @@ JSON만 출력:
   for (const s of plan.scenes) s.narration = normalizeEnding(s.narration);
   const totalChars = plan.scenes.reduce((a, s) => a + (s.narration || '').length, 0);
   log(`[수동] "${plan.title}" · ${plan.scenes.length}장면 구성 · 목표 ${perScene}자/장면 · 실제 총 ${totalChars}자(평균 ${Math.round(totalChars / plan.scenes.length)}자/장면)`);
-  if (process.env.DRY_SCRIPT) {
-    log(`[DRY] 대본만 생성하고 종료(렌더 생략). 예상 길이 ≈ ${(totalChars / 6.0).toFixed(1)}초`);
-    return {out: '', title: plan.title, imageDir: abs(pubRel)};
-  }
+  return {plan, sources};
+}
+
+export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Promise<{out: string; title: string; imageDir: string}> {
+  const log = opts.log || (() => {});
+  const id = randomUUID().slice(0, 8);
+  const pubRel = `jobs/${id}`;
+  const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
+  await mkdir(abs(pubRel), {recursive: true});
+  const preset = opts.presetId ? getPreset(opts.presetId) : undefined;
+  const {plan, sources} = await generateManualDraft(keys, opts);
+  const totalChars = plan.scenes.reduce((n, s) => n + s.narration.length, 0);
+  if (process.env.DRY_SCRIPT) return {out: '', title: plan.title, imageDir: abs(pubRel)};
 
   const voiceKey = opts.voice || preset?.voice || 'adam';
   const voiceId = VOICES[voiceKey]?.id || VOICES.adam.id;

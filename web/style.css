@@ -114,6 +114,34 @@ select.input { appearance: none; cursor: pointer; }
 /* 숨김 상태는 뒤에 선언된 .modal 등의 display보다 항상 우선한다. */
 .hidden { display: none !important; }
 
+/* 관리자(dev) 전용 — 단가·예상비용은 기본 숨김, 로고 7클릭+코드로 해제 시에만 표시(강의 화면 노출 방지). */
+.dev-only { display: none; }
+[data-dev="on"] .dev-only { display: block; }
+
+/* 목소리 포트폴리오 */
+.portfolio { margin: 8px 0 20px; }
+.portfolio-head { margin-bottom: 16px; }
+.pf-title { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
+.pf-sub { color: var(--muted); font-size: 14px; }
+.pf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.pf-card {
+  margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  overflow: hidden; display: flex; flex-direction: column; transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+}
+.pf-card:hover { transform: translateY(-4px); border-color: var(--teal); box-shadow: 0 12px 28px rgba(0,0,0,0.18); }
+.pf-video { width: 100%; aspect-ratio: 9/16; object-fit: cover; background: #000; display: block; }
+.pf-card figcaption { padding: 14px 16px 18px; }
+.pf-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; color: #fff; }
+.pf-badge.issue { background: linear-gradient(135deg, #7c5cff, #b6ff3c); }
+.pf-badge.info { background: var(--grad); }
+.pf-badge.sell { background: linear-gradient(135deg, #ff8a5c, #7c5cff); }
+.pf-card h3 { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
+.pf-voice-note { font-size: 13px; color: var(--text); margin-bottom: 8px; line-height: 1.45; }
+.pf-clip { font-size: 12px; color: var(--muted); }
+@media (max-width: 640px) {
+  .pf-grid { grid-template-columns: 1fr; }
+}
+
 /* 탭 */
 .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
 .tab {
@@ -144,4 +172,34 @@ textarea.input { resize: vertical; font-family: inherit; }
 @media (max-width: 600px) {
   .hero { font-size: 30px; }
   .row { flex-direction: column; }
+}
+
+/* 대본 검토와 장면별 편집 */
+.studio-options { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 18px; }
+summary { cursor: pointer; font-weight: 700; }
+.rate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; font-size: 13px; }
+.cost-box { padding: 14px; margin: 18px 0 8px; background: #14302c; color: #c6f5e9; border-radius: 12px; font-size: 13px; }
+.cost-box small { display: block; margin-top: 6px; }
+.history-item { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; background: none; color: var(--text); border: 0; border-bottom: 1px solid var(--line); text-align: left; cursor: pointer; }
+.history-item small { display: block; color: var(--muted); margin-top: 4px; }
+.badge { font-size: 12px; background: var(--card2); padding: 5px 9px; border-radius: 12px; white-space: nowrap; }
+.scene-editor { border-top: 1px solid var(--line); padding: 22px 0; margin-top: 16px; }
+.scene-editor h3 { margin-bottom: 12px; }
+.scene-layout { display: grid; grid-template-columns: 120px minmax(0,1fr); gap: 16px; }
+.scene-preview { width: 120px; height: 180px; object-fit: contain; background: #100d0a; border-radius: 10px; }
+.scene-preview.placeholder { display: flex; align-items: center; text-align: center; color: var(--muted); padding: 12px; font-size: 12px; }
+.scene-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.scene-editor audio { width: 100%; margin-top: 12px; }
+.product-summary { background: var(--card2); padding: 16px; border-radius: 12px; overflow-wrap: anywhere; }
+.product-summary small { color: var(--muted); }
+.studio-result { margin: 24px 0; }
+.studio-result h3 { margin-bottom: 14px; }
+#studio-editor { scroll-margin-top: 85px; }
+#studio-editor details { margin-top: 24px; }
+.error { color: #ff9385; }
+button:disabled { cursor: not-allowed; opacity: 0.5; }
+@media (max-width: 600px) {
+  .scene-layout { grid-template-columns: 1fr; }
+  .scene-preview { width: 100%; height: 180px; }
+  .card { padding: 20px; }
 }

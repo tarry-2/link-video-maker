@@ -22,6 +22,8 @@ loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight
 
 export const sceneSchema = z.object({
   image: z.string(),
+  voiceSrc: z.string().optional(),
+  product: z.object({name: z.string(), price: z.string(), benefit: z.string(), url: z.string()}).optional(),
   video: z.string().optional(), // 배경 영상 클립(있으면 이미지 대신 사용)
   hookTop: z.string(),
   hookAccent: z.string(),
@@ -43,6 +45,8 @@ const outline = (px: number) =>
 
 export const Scene: React.FC<SceneData> = ({
   image,
+  voiceSrc,
+  product,
   video,
   hookTop,
   hookAccent,
@@ -85,6 +89,7 @@ export const Scene: React.FC<SceneData> = ({
 
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>
+      {voiceSrc ? <Audio src={staticFile(voiceSrc)} /> : null}
       {/* (나레이션은 Video 전체에 통짜로 깔림 — 여기선 재생 안 함) */}
 
       {/* 효과음(공짜 청각 임팩트): 첫 장면=임팩트, 나머지=전환 whoosh. 장면 시작에 짧게. */}
@@ -194,7 +199,7 @@ export const Scene: React.FC<SceneData> = ({
       <div
         style={{
           position: 'absolute',
-          bottom: comment ? 360 : 170,
+          bottom: product || comment ? 360 : 170,
           width: '100%',
           display: 'flex',
           flexWrap: 'wrap',
@@ -225,6 +230,15 @@ export const Scene: React.FC<SceneData> = ({
           );
         })}
       </div>
+
+      {product ? (
+        <div style={{position: 'absolute', bottom: 45, left: 65, right: 65, padding: '18px 24px', borderRadius: 18,
+          background: 'rgba(10,10,12,0.92)', color: '#fff', fontFamily: notoFont, lineHeight: 1.35, overflowWrap: 'anywhere'}}>
+          <div style={{fontSize: 36, fontWeight: 700}}>{product.name} {product.price}</div>
+          {product.benefit ? <div style={{fontSize: 28, color: '#4FE0D0'}}>{product.benefit}</div> : null}
+          {product.url ? <div style={{fontSize: 22, marginTop: 6}}>{product.url}</div> : null}
+        </div>
+      ) : null}
 
       {/* 이지컷식 댓글 템플릿(옵션) */}
       {comment ? (

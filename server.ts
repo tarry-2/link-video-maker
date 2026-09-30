@@ -1,5 +1,6 @@
 // OnVideo 웹 서버 — 브라우저에서 링크→카테고리→영상 생성. 단일 사용자 로컬 앱.
 import http from 'node:http';
+import {handleStudio} from './lib/studio-http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -125,14 +126,28 @@ const server = http.createServer(async (req, res) => {
       }
     });
   }
+  if (p === '/studio.js')
+    return serveFile(res, path.join(ROOT, 'web', 'studio.js'), 'text/javascript; charset=utf-8');
   if (p === '/app.js')
     return serveFile(res, path.join(ROOT, 'web', 'app.js'), 'text/javascript; charset=utf-8');
   if (p === '/style.css')
     return serveFile(res, path.join(ROOT, 'web', 'style.css'), 'text/css; charset=utf-8');
+  // 목소리 포트폴리오 샘플 영상(공개, 로그인 전에도 /voices에서 재생)
+  if (p.startsWith('/portfolio/')) {
+    const name = path.basename(p); // path traversal 방지
+    if (!/^[\w.-]+\.mp4$/.test(name)) { res.writeHead(404); return res.end('not found'); }
+    const file = path.join(ROOT, 'public', 'portfolio', name);
+    return fs.readFile(file, (err, buf) => {
+      if (err) { res.writeHead(404); res.end('not found'); }
+      else { res.writeHead(200, {'Content-Type': 'video/mp4', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400'}); res.end(buf); }
+    });
+  }
 
   // ── 이 아래 모든 /api 는 로그인 필요(비번 설정 시) ──
   if (p.startsWith('/api/') && !authed(req))
     return json(res, 401, {error: '로그인이 필요합니다.'});
+
+  if (await handleStudio(req, res, p)) return;
 
   // ── 카테고리 목록 ──
   if (p === '/api/categories')

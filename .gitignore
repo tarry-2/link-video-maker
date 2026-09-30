@@ -11,3 +11,6 @@ run-manual.ts
 run-city.ts
 data/
 *.zip
+
+# Local dependency symlink
+node_modules

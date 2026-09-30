@@ -7,8 +7,19 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node", "react"],
-    "lib": ["ESNext", "DOM"]
+    "types": [
+      "node",
+      "react"
+    ],
+    "lib": [
+      "ESNext",
+      "DOM"
+    ]
   },
-  "include": ["src", "lib"]
+  "include": [
+    "src",
+    "lib",
+    "server.ts",
+    "tests"
+  ]
 }

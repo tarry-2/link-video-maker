@@ -3,6 +3,7 @@
 import {bundle} from '@remotion/bundler';
 import {selectComposition, renderMedia} from '@remotion/renderer';
 import path from 'node:path';
+import {rm} from 'node:fs/promises';
 import type {SceneData} from '../src/Scene';
 
 let cachedServeUrl: string | null = null;
@@ -23,8 +24,12 @@ export async function renderVideo(
   log?: (m: string) => void,
   bgmSrc?: string,
   voiceSrc?: string,
+  publicDir?: string,
 ): Promise<void> {
-  const serveUrl = await getServeUrl(log);
+  const serveUrl = publicDir
+    ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
+    : await getServeUrl(log);
+  try {
   const inputProps = {scenes, transitionFrames, bgmSrc, voiceSrc};
   const composition = await selectComposition({
     serveUrl,
@@ -48,4 +53,7 @@ export async function renderVideo(
     },
   });
   log?.(`[렌더] 완료 → ${outPath}`);
+  } finally {
+    if (publicDir) await rm(serveUrl, {recursive: true, force: true});
+  }
 }
