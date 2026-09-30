@@ -2,6 +2,30 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createSchema, editSchema, estimate, signatures, resolveProduct, assertTokens, type Project, type Scene, type Media} from './studio-model';
+import {getPreset} from './presets';
+import {VOICES} from './tts';
+
+// 제작 시작 시 테리가 고른 설정을 사람이 읽을 수 있게 로그로 남긴다(처음부터 끝까지 전 절차 추적용).
+function settingsLines(p: Project): string[] {
+  const inp = p.input;
+  const modeLabel = inp.mode === 'auto' ? '링크로 자동' : inp.mode === 'topic' ? '주제 추천' : '내 이미지로';
+  const source = inp.mode === 'auto' ? inp.url : inp.mode === 'topic' ? inp.topic : `업로드 이미지 ${p.sources.length}장${inp.keywords ? ` · 키워드 "${inp.keywords}"` : ''}`;
+  const preset = getPreset(inp.presetId);
+  const voiceKey = inp.voice || preset?.voice || 'adam';
+  const voiceLabel = VOICES[voiceKey]?.label || voiceKey;
+  return [
+    '[설정] ───────── 제작 설정 ─────────',
+    `[설정] 모드: ${modeLabel}`,
+    `[설정] 소재: ${String(source).slice(0, 120) || '(없음)'}`,
+    `[설정] 카테고리: ${preset ? `${preset.emoji} ${preset.label}` : '자동/없음'}`,
+    `[설정] 길이: ${inp.duration}초`,
+    `[설정] 목소리: ${voiceLabel}${inp.voice ? '' : ' (카테고리 추천)'}`,
+    `[설정] 이미지: ${inp.quality === 'high' ? '고퀄' : '빠르게'} · ${inp.imageStyle === 'anime' ? '애니' : '실사'}`,
+    `[설정] 배경음악: ${inp.music ? 'ON' : 'OFF'}`,
+    inp.product ? `[설정] 상품 고정: ${inp.product.name}` : '[설정] 상품 고정: 없음',
+    '[설정] ────────────────────────────',
+  ];
+}
 
 export type StudioDependencies = {
   plan: (p: Project, directory: string, log: (s: string) => void) => Promise<{title: string; subject: string; musicPrompt: string; scenes: unknown[]}>;
@@ -47,7 +71,7 @@ export class Studio {
   }
   summary(p: Project) {
     return {id: p.id, title: p.title, status: p.status, phase: p.phase, updatedAt: p.updatedAt,
-      revision: p.revision, error: p.error, sceneCount: p.scenes.length, output: p.output};
+      revision: p.revision, error: p.error, sceneCount: p.scenes.length, output: p.output, startedAt: p.startedAt};
   }
   view(id: string) {
     const p = this.get(id);
@@ -77,6 +101,7 @@ export class Studio {
     this.active = p.id;
     p.status = phase === '대본 작성' ? 'planning' : 'running';
     p.phase = phase; p.error = undefined;
+    p.startedAt = new Date().toISOString(); // 경과시간 타이머 기준
     this.save(p);
     const log = (s: string) => { p.logs.push(s.slice(0, 500)); p.logs = p.logs.slice(-150); this.save(p); };
     const pending = Promise.resolve().then(() => task(log)).catch((e: Error) => {
@@ -110,6 +135,8 @@ export class Studio {
   }
   private plan(p: Project) {
     return this.start(p, '대본 작성', async log => {
+      settingsLines(p).forEach(log);
+      log('[대본] 소재를 읽고 기승전결 대본을 만드는 중…');
       const draft = await this.deps.plan(p, this.directory(p.id), log);
       const valid = editSchema.parse({...draft, revision: p.revision});
       p.title = valid.title; p.subject = String(draft.subject || '').slice(0, 300); p.musicPrompt = valid.musicPrompt;
@@ -186,9 +213,13 @@ export class Studio {
     if (!p.scenes.length) return this.plan(p);
     this.validateScenes(p, p.scenes);
     return this.start(p, '제작', async log => {
+      settingsLines(p).forEach(log);
+      log(`[제작] 최종 제작 시작 — 장면 ${p.scenes.length}개의 이미지·음성 준비 후 배경음악·영상 합성으로 진행합니다.`);
       for (let i = 0; i < p.scenes.length; i++) {
+        log(`[진행] 장면 ${i + 1}/${p.scenes.length} 준비`);
         await this.media(p, i, 'image', log); await this.media(p, i, 'voice', log);
       }
+      log('[진행] 모든 장면 소재 준비 완료.');
       if (p.input.music && !p.bgm) {
         p.phase = '배경음악'; this.save(p);
         const file = `music-${randomUUID()}.mp3`;

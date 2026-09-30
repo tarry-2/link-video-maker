@@ -7,7 +7,40 @@
   const storeText = text => Object.entries(productLabels).reduce((s, [k, label]) => s.split('[' + label + ']').join('{{product.' + k + '}}'), text);
   const stateNames = {planning:'대본 작성 중', draft:'검토 가능', running:'제작 중', failed:'재시작 필요', completed:'완성'};
   let current = null, dirty = false, timer = null, loading = false;
+  let elapsedTimer = null, prevRender = {id: null, status: null};
   const active = p => p && ['planning', 'running'].includes(p.status);
+
+  // ── 진행 표시 헬퍼(경과시간·에너지바·완성 폭죽) ──
+  const fmtDur = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+  // 전체 진행률(대본6% → 소재 10~70% → 배경음악 72% → 렌더 75~99% → 완성 100%)
+  function progressOf(p) {
+    if (p.status === 'completed') return 100;
+    if (p.status === 'planning') return 6;
+    if (p.status !== 'running') return null;
+    const total = p.scenes.length || 1;
+    const done = p.scenes.filter(s => s.image && s.voice).length;
+    let pct = 10 + (done / total) * 60;
+    if (/배경음악/.test(p.phase)) pct = Math.max(pct, 72);
+    const rlog = [...p.logs].reverse().find(l => /\[렌더\][^0-9]*(\d+)%/.test(l));
+    if (/합성|렌더/.test(p.phase) || rlog) { const n = rlog ? Number(rlog.match(/(\d+)%/)[1]) : 0; pct = 75 + n * 0.24; }
+    return Math.max(1, Math.min(99, Math.round(pct)));
+  }
+  // 경과시간 1초마다 갱신(재귀 setTimeout — setInterval 겹침 금지)
+  function tickElapsed() {
+    clearTimeout(elapsedTimer);
+    const node = el('job-elapsed');
+    if (!node || !current) return;
+    const started = current.startedAt ? new Date(current.startedAt).getTime() : null;
+    if (active(current) && started) { node.textContent = '⏱ ' + fmtDur(Date.now() - started); elapsedTimer = setTimeout(tickElapsed, 1000); }
+    else if (current.status === 'completed' && started) node.textContent = '⏱ ' + fmtDur(new Date(current.updatedAt).getTime() - started) + ' 만에 완성';
+    else node.textContent = '';
+  }
+  function celebrate() {
+    const c = document.createElement('div'); c.className = 'confetti';
+    const colors = ['#17b5a4', '#7c5cff', '#ff4d8d', '#FFE24B', '#ff8a5c', '#4fe0d0'];
+    for (let i = 0; i < 90; i++) { const bit = document.createElement('i'); bit.style.left = Math.random() * 100 + '%'; bit.style.background = colors[i % colors.length]; bit.style.animationDelay = (Math.random() * 0.5).toFixed(2) + 's'; bit.style.animationDuration = (2.2 + Math.random() * 1.3).toFixed(2) + 's'; c.appendChild(bit); }
+    document.body.appendChild(c); setTimeout(() => c.remove(), 4200);
+  }
   const asset = (p, file) => `/api/studio/${p.id}/assets/${encodeURIComponent(file)}`;
   const devMode = () => document.documentElement.getAttribute('data-dev') === 'on';
   function regenerationCost(p, s, kind) {
@@ -77,10 +110,22 @@
   async function loadHistory() {
     const rows = await api('/api/studio');
     el('studio-history').innerHTML = rows.length ? rows.map(p => `<button class="history-item" data-project="${p.id}"><span><strong>${escape(p.title)}</strong><small>${escape(new Date(p.updatedAt).toLocaleString('ko-KR'))}</small></span><span class="badge ${p.status === 'failed' ? 'error' : ''}">${stateNames[p.status]}</span></button>`).join('') : '<p class="mini-state">첫 대본을 만들어보세요.</p>';
+    return rows;
   }
+  const loadHistoryRows = loadHistory;
   const report = e => message(e.message || String(e), true);
   el('history-refresh').onclick = () => loadHistory().catch(report);
-  document.addEventListener('onvideo-auth-ready', () => loadHistory().catch(report));
+  // 탭 나갔다 들어와도 진행 상태가 초기화되지 않게 — 진행 중 작업을 자동으로 다시 연다.
+  document.addEventListener('onvideo-auth-ready', async () => {
+    try {
+      const rows = await loadHistoryRows();
+      if (current) return; // 이미 열려 있으면 유지
+      const act = rows.find(r => ['planning', 'running'].includes(r.status));
+      const lastId = localStorage.getItem('onvideo-open');
+      const target = act || (lastId ? rows.find(r => r.id === lastId) : null);
+      if (target) await open(target.id);
+    } catch (e) { report(e); }
+  });
   el('studio-history').onclick = async e => {
     const button = e.target.closest('[data-project]');
     if (!button) return;
@@ -89,12 +134,18 @@
   };
   function render(p) {
     current = p; dirty = false;
+    // 완성으로 막 전환된 순간에만 폭죽(작업 내역에서 옛 완성본을 열 땐 안 터짐)
+    if (p.status === 'completed' && prevRender.id === p.id && prevRender.status && prevRender.status !== 'completed') celebrate();
+    prevRender = {id: p.id, status: p.status};
+    const prog = progressOf(p);
     el('log').textContent = p.logs.join('\n');
     const busy = active(p), disabled = busy ? 'disabled' : '';
     el('studio-editor').classList.remove('hidden');
     el('studio-editor').innerHTML = `
       <div class="modal-head"><h2>대본 검토 · 장면 편집</h2><span class="badge">${stateNames[p.status]}</span></div>
-      <p class="mini-state">${escape(p.phase)}</p><p id="editor-message" class="mini-state" role="status"></p>
+      <div class="job-status"><span class="job-phase">${escape(p.phase || '')}</span><span id="job-elapsed" class="job-elapsed"></span></div>
+      ${prog !== null ? `<div class="energy"><div class="energy-fill${busy ? ' anim' : ''}" style="width:${prog}%"></div></div><p class="energy-label">${prog}%${busy ? ' 진행 중…' : p.status === 'completed' ? ' 완성! 🎉' : ''}</p>` : ''}
+      <p id="editor-message" class="mini-state" role="status"></p>
       ${p.error ? `<p class="error" role="alert">${escape(p.error)}</p>` : ''}
       ${p.input.product ? `<div class="product-summary"><strong>고정된 상품 정보</strong><p>${escape(p.input.product.name)} · ${escape(p.input.product.price)}</p><p>${escape(p.input.product.benefit)}</p><p>${escape(p.input.product.url)}</p><small>상품 정보는 이 작업에서 변경되지 않습니다. 대본의 [상품명], [가격], [혜택]은 위 값으로 읽힙니다. 직접 쓰는 문구의 사실관계는 확인해주세요.</small></div>` : ''}
       ${p.scenes.length ? `<label class="field-label" for="edit-title">영상 제목</label><input id="edit-title" class="input" maxlength="120" value="${escape(p.title)}" ${disabled} />
@@ -122,6 +173,7 @@
       ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><a class="ghost-btn" href="${asset(p, p.output)}" download="${escape(p.title.replace(/[\\/:*?"<>|]/g, '_'))}.mp4">영상 다운로드</a></div>` : ''}
       <details ${busy || p.status === 'failed' ? 'open' : ''}><summary>제작 로그</summary><div class="scene-actions"><button class="ghost-btn" data-action="copy-log">로그 복사</button><button class="ghost-btn" data-action="expand-log">크게 보기</button></div><pre class="log">${escape(p.logs.join('\n'))}</pre></details>`;
     el('generate').disabled = busy;
+    tickElapsed();
   }
   function schedule() {
     clearTimeout(timer);
@@ -137,6 +189,7 @@
   }
   async function open(id) {
     clearTimeout(timer);
+    try { localStorage.setItem('onvideo-open', id); } catch {}
     render(await api('/api/studio/' + id)); schedule();
     el('studio-editor').scrollIntoView({behavior:'smooth', block:'start'});
   }
@@ -197,6 +250,7 @@
         duration:Number(el('duration').value), voice:el('voice').value, presetId:selectedPreset || '', quality:el('quality').value,
         imageStyle:el('image-style') ? el('image-style').value : 'real',
         music:el('studio-music').checked, product, rates:rates()});
+      try { localStorage.setItem('onvideo-open', p.id); } catch {}
       render(p); schedule(); await loadHistory();
       el('studio-editor').scrollIntoView({behavior:'smooth'}); message('대본 작성이 시작됐습니다. 작업 내역에서 다시 열 수 있습니다.');
     } catch (e) { report(e); }
