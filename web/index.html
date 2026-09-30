@@ -20,7 +20,10 @@
 
     <header class="topbar">
       <div class="wordmark">On<span>Video</span></div>
-      <button id="settings-btn" class="ghost-btn">⚙ 키 설정</button>
+      <div style="display:flex; gap:8px; align-items:center">
+        <button id="theme-btn" class="ghost-btn small" title="밝게/어둡게">🌙</button>
+        <button id="settings-btn" class="ghost-btn">⚙ 키 설정</button>
+      </div>
     </header>
 
     <main id="main" class="wrap">
@@ -106,7 +109,13 @@
       </div>
 
       <section id="progress-block" class="card hidden">
-        <h3 class="block-title">제작 진행</h3>
+        <div class="log-head">
+          <h3 class="block-title">제작 진행</h3>
+          <div class="log-actions">
+            <button id="log-copy" class="ghost-btn small">📋 복사</button>
+            <button id="log-expand" class="ghost-btn small">🔍 크게보기</button>
+          </div>
+        </div>
         <div id="log" class="log"></div>
       </section>
 
@@ -130,6 +139,20 @@
         <div id="key-fields"></div>
         <button id="save-keys" class="primary-btn">저장</button>
         <p id="settings-msg" class="mini-state"></p>
+      </div>
+    </div>
+
+    <!-- 로그 크게보기 모달 -->
+    <div id="log-modal" class="modal hidden">
+      <div class="modal-box big">
+        <div class="modal-head">
+          <h2>제작 로그</h2>
+          <div style="display:flex; gap:8px; align-items:center">
+            <button id="log-modal-copy" class="ghost-btn small">📋 복사</button>
+            <button id="log-modal-close" class="ghost-btn">✕</button>
+          </div>
+        </div>
+        <div id="log-big" class="log log-big"></div>
       </div>
     </div>
 

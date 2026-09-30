@@ -258,6 +258,48 @@ $('login-btn').onclick = async () => {
 };
 $('login-pw')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('login-btn').click(); });
 
+// ── 다크/라이트 토글 (기본 라이트) ──
+function applyTheme(t) {
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  const btn = $('theme-btn');
+  if (btn) btn.textContent = t === 'dark' ? '☀️' : '🌙';
+}
+applyTheme(localStorage.getItem('lvm-theme') || 'light');
+$('theme-btn')?.addEventListener('click', () => {
+  const next = (localStorage.getItem('lvm-theme') || 'light') === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('lvm-theme', next);
+  applyTheme(next);
+});
+
+// ── 로그 복사 / 크게보기 ──
+function flashCopied(btn) {
+  const orig = btn.textContent;
+  btn.textContent = '✓ 복사됨';
+  setTimeout(() => { btn.textContent = orig; }, 1200);
+}
+async function copyLog(btn) {
+  const text = $('log')?.innerText || '';
+  try { await navigator.clipboard.writeText(text); flashCopied(btn); }
+  catch { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); flashCopied(btn); }
+}
+$('log-copy')?.addEventListener('click', (e) => copyLog(e.currentTarget));
+$('log-modal-copy')?.addEventListener('click', (e) => copyLog(e.currentTarget));
+let logMirror = null;
+$('log-expand')?.addEventListener('click', () => {
+  const big = $('log-big'), src = $('log');
+  if (big && src) big.innerHTML = src.innerHTML;
+  $('log-modal').classList.remove('hidden');
+  // 제작 중이면 실시간 미러링(기존 로그 로직은 안 건드림)
+  logMirror = setInterval(() => { if (big && src) { big.innerHTML = src.innerHTML; big.scrollTop = big.scrollHeight; } }, 500);
+});
+function closeLogModal() {
+  $('log-modal').classList.add('hidden');
+  if (logMirror) { clearInterval(logMirror); logMirror = null; }
+}
+$('log-modal-close')?.addEventListener('click', closeLogModal);
+$('log-modal')?.addEventListener('click', (e) => { if (e.target === $('log-modal')) closeLogModal(); });
+
 // 부트스트랩: 로그인 상태 확인 후, 인증된 경우에만 카테고리·목소리 로드(비로그인 시 401→throw 방지).
 (async () => {
   const needLogin = await checkAuth();

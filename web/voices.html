@@ -29,7 +29,10 @@
   <body>
     <header class="topbar">
       <div class="wordmark">On<span>Video</span></div>
-      <a href="/" class="back-link">← 영상 만들기</a>
+      <div style="display:flex; gap:8px; align-items:center">
+        <button id="theme-btn" class="ghost-btn small" title="밝게/어둡게">🌙</button>
+        <a href="/" class="back-link">← 영상 만들기</a>
+      </div>
     </header>
 
     <main class="wrap">
@@ -42,6 +45,17 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
+      // 다크/라이트 토글 (index와 lvm-theme 공유, 기본 라이트)
+      function applyTheme(t) {
+        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        else document.documentElement.removeAttribute('data-theme');
+        const b = $('theme-btn'); if (b) b.textContent = t === 'dark' ? '☀️' : '🌙';
+      }
+      applyTheme(localStorage.getItem('lvm-theme') || 'light');
+      $('theme-btn')?.addEventListener('click', () => {
+        const next = (localStorage.getItem('lvm-theme') || 'light') === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('lvm-theme', next); applyTheme(next);
+      });
       const USE_LABEL = {
         issue: { t: '📰 이슈·미스터리·경고', d: '무게감과 긴장감으로 몰입시켜야 할 때' },
         info: { t: '💡 정보·건강·상식', d: '차분하고 신뢰가는 설명이 필요할 때' },

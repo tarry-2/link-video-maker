@@ -190,15 +190,20 @@ const server = http.createServer(async (req, res) => {
     const k = pipelineKeys();
     if (!k.elevenlabs) return json(res, 400, {error: 'ElevenLabs 키를 저장하세요.'});
     fs.mkdirSync(SAMPLE_DIR, {recursive: true});
-    const file = path.join(SAMPLE_DIR, `${voice}.mp3`);
+    // 목소리 용도(issue/info/sell/heal)에 맞는 샘플 대본 — 그 목소리의 성격이 드러나게.
+    const PREVIEW_TEXT: Record<string, string> = {
+      issue: '한때 북적이던 이 거리가, 지금은 텅 비어버렸습니다. 대체 무슨 일이 있었던 걸까요?',
+      info: '하루 한 잔의 물, 별거 아닌 것 같죠? 그런데 우리 몸을 이렇게나 바꿔놓습니다.',
+      sell: '이 가격, 실화인가요? 한 번 써보면 왜 다들 재구매하는지 바로 아실 거예요!',
+      heal: '노릇하게 익어가는 소리, 고소하게 퍼지는 냄새. 오늘 하루도, 참 수고 많으셨어요.',
+    };
+    const use0 = VOICES[voice].use?.[0] || 'info';
+    const previewText = PREVIEW_TEXT[use0] || PREVIEW_TEXT.info;
+    // 파일명에 용도 포함 → 옛 캐시(모두 같은 문구) 무효화 + 용도별 캐시 분리.
+    const file = path.join(SAMPLE_DIR, `${voice}_${use0}.mp3`);
     if (!fs.existsSync(file)) {
       try {
-        await ttsEleven(
-          k.elevenlabs,
-          '한때 북적이던 이 거리가, 지금은 텅 비어버렸습니다. 대체 무슨 일이 있었던 걸까요?',
-          file,
-          VOICES[voice].id,
-        );
+        await ttsEleven(k.elevenlabs, previewText, file, VOICES[voice].id);
       } catch (e: any) {
         return json(res, 502, {error: '미리듣기 생성 실패: ' + e.message});
       }
