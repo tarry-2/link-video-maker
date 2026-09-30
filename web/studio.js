@@ -44,13 +44,23 @@
     const n = Number(el('duration').value);
     const count = n <= 30 ? 4 : n <= 60 ? 6 : Math.min(10, Math.ceil(n / 12));
     const r = rates();
-    const quantities = {draft:1, image:mode === 'manual' ? 0 : count, voice:n * 5.6 / 1000, music:el('studio-music').checked ? n / 60 : 0};
-    let subtotal = 0; const missing = [];
+    const chars = Math.round(n * 5.6); // 대본 예상 글자수
+    const quantities = {draft:1, image:mode === 'manual' ? 0 : count, voice:chars / 1000, music:el('studio-music').checked ? n / 60 : 0};
+    const qtyLabel = {draft:'1회', image:`${count}장`, voice:`${chars.toLocaleString('ko-KR')}자`, music:`${(n/60).toFixed(1)}분`};
+    let subtotal = 0; const lines = []; const missing = [];
     for (const [k, qty] of Object.entries(quantities)) {
-      if (!qty) continue;
-      if (r[k] === null) missing.push(k); else subtotal += r[k] * qty;
+      if (!qty) continue; // 배경음악 OFF 등 수량 0은 제외
+      if (r[k] === null) { missing.push(labels[k]); continue; }
+      const amt = Math.round(r[k] * qty);
+      subtotal += amt;
+      lines.push(`${labels[k]} ${r[k].toLocaleString('ko-KR')}원×${qtyLabel[k]} = ${amt.toLocaleString('ko-KR')}원`);
     }
-    el('create-estimate').textContent = `전체 제작 예상: ${priceText({subtotal:Math.ceil(subtotal), missing, complete:!missing.length})}. 약 ${count}장면 기준 · 서버 비용 별도.`;
+    let html = `<b>예상 비용 약 ${Math.ceil(subtotal).toLocaleString('ko-KR')}원</b>`;
+    if (lines.length) html += `<br><small>${lines.join('<br>')}</small>`;
+    if (missing.length) html += `<br><small>· ${missing.join('·')} 단가 미입력(미산정)</small>`;
+    if (!el('studio-music').checked) html += `<br><small>· 배경음악 미포함(옵션 꺼짐)</small>`;
+    html += `<br><small>약 ${count}장면 기준 · 서버 비용·재시도 별도</small>`;
+    el('create-estimate').innerHTML = html;
     try { localStorage.setItem('onvideo-unit-rates', JSON.stringify(r)); } catch {}
   }
   try {
