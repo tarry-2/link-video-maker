@@ -9,6 +9,8 @@ import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
 import {PRESETS} from './lib/presets';
 import {VOICES, ttsEleven} from './lib/tts';
+import {geminiGenerate} from './lib/gemini';
+import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -154,6 +156,30 @@ const server = http.createServer(async (req, res) => {
     return json(res, 401, {error: '로그인이 필요합니다.'});
 
   if (await handleStudio(req, res, p)) return;
+
+  // ── 주제 추천(링크·이미지 없이): 카테고리별로 요즘 잘 되는 주제 후보 ──
+  if (p === '/api/topics' && req.method === 'GET') {
+    const presetId = u.searchParams.get('preset') || '';
+    const preset = PRESETS.find((x) => x.id === presetId);
+    const k = pipelineKeys();
+    if (!k.gemini.length && !k.openai) return json(res, 400, {error: '키 설정에서 Gemini 또는 OpenAI 키를 저장하세요.'});
+    const cat = preset ? `${preset.group}/${preset.label}` : '전 분야';
+    const prompt = `너는 한국 유튜브 쇼츠·릴스 트렌드 전문가다. "${cat}" 분야에서 지금 조회수가 잘 나오고 사람들이 좋아하고 저장·공유하는 쇼츠 "주제" 8개를 제안하라.
+각 주제는 클릭하고 싶은 구체적이고 호기심을 자극하는 한 줄 제목(한국어)으로. 뻔하고 일반적인 것 금지, 구체적 숫자·반전·꿀팁 위주. 정치·종교·자극·혐오 제외.
+JSON만 출력: {"topics":[{"title":"...","why":"왜 잘 되는지 8자 이내"}]}`;
+    try {
+      let raw = '';
+      if (k.gemini.length) {
+        try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 1024, temperature: 1.1}); } catch {}
+      }
+      if (!raw && k.openai) raw = await openaiJson(k.openai, prompt, 1024);
+      const m = raw.match(/\{[\s\S]*\}/);
+      const data = m ? JSON.parse(m[0]) : {topics: []};
+      return json(res, 200, {topics: Array.isArray(data.topics) ? data.topics.slice(0, 8) : []});
+    } catch (e: any) {
+      return json(res, 502, {error: '주제 추천 실패: ' + e.message});
+    }
+  }
 
   // ── 카테고리 목록 ──
   if (p === '/api/categories')

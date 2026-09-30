@@ -8,7 +8,8 @@ export const productSchema = z.object({
   name: text(60).min(1), price: text(40), benefit: text(100), url: text(200),
 }).refine(p => !p.url || /^https?:\/\/[^\s]+$/.test(p.url), '구매 주소는 http 또는 https로 입력하세요.');
 export const createSchema = z.object({
-  mode: z.enum(['auto', 'manual']), url: text(2000).default(''),
+  mode: z.enum(['auto', 'manual', 'topic']), url: text(2000).default(''),
+  topic: text(500).default(''),
   images: z.array(text(15_000_000)).max(20).default([]),
   keywords: text(1000).default(''), facts: text(4000).default(''),
   duration: z.number().int().min(15).max(180),
@@ -23,6 +24,8 @@ export const createSchema = z.object({
     ctx.addIssue({code: 'custom', message: 'http 또는 https 링크를 입력하세요.'});
   if (v.mode === 'manual' && !v.images.length)
     ctx.addIssue({code: 'custom', message: '이미지를 최소 1장 넣어주세요.'});
+  if (v.mode === 'topic' && !v.topic.trim())
+    ctx.addIssue({code: 'custom', message: '주제를 선택하거나 입력하세요.'});
   if (v.product && v.mode !== 'manual')
     ctx.addIssue({code: 'custom', message: '상품 정보 고정은 원본 사진을 쓰는 내 이미지 모드에서 사용하세요.'});
 });

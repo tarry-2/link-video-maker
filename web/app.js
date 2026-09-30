@@ -1,18 +1,49 @@
 const $ = (id) => document.getElementById(id);
+
+// 이미지·영상 롱프레스/우클릭 메뉴(공유·저장) 차단
+document.addEventListener('contextmenu', (e) => {
+  if (e.target && /^(IMG|VIDEO)$/.test(e.target.tagName)) e.preventDefault();
+});
+
 let selectedPreset = null;
-let mode = 'auto'; // auto | manual
+let mode = 'auto'; // auto | topic | manual
 let uploadedImages = []; // dataURL 배열
 
 // ── 탭 전환 ──
 $('tab-auto').onclick = () => setMode('auto');
+$('tab-topic').onclick = () => setMode('topic');
 $('tab-manual').onclick = () => setMode('manual');
 function setMode(m) {
   mode = m;
   $('tab-auto').classList.toggle('active', m === 'auto');
+  $('tab-topic').classList.toggle('active', m === 'topic');
   $('tab-manual').classList.toggle('active', m === 'manual');
   $('pane-auto').classList.toggle('hidden', m !== 'auto');
+  $('pane-topic').classList.toggle('hidden', m !== 'topic');
   $('pane-manual').classList.toggle('hidden', m !== 'manual');
 }
+
+// ── 주제 추천(링크·이미지 없이) ──
+$('topic-fetch')?.addEventListener('click', async () => {
+  const st = $('topic-state'), list = $('topic-list');
+  st.textContent = '요즘 잘 되는 주제 찾는 중…';
+  list.innerHTML = '';
+  try {
+    const r = await fetch('/api/topics?preset=' + encodeURIComponent(selectedPreset || ''));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    if (!d.topics || !d.topics.length) { st.textContent = '추천 결과가 없어요. 다시 시도해 주세요.'; return; }
+    st.textContent = '마음에 드는 주제를 누르세요 (다시 누르면 새 주제).';
+    list.innerHTML = d.topics.map((t) =>
+      `<button class="topic-item" type="button" data-title="${(t.title || '').replace(/"/g, '&quot;')}">${t.title || ''}${t.why ? `<span class="topic-why">${t.why}</span>` : ''}</button>`
+    ).join('');
+    list.querySelectorAll('.topic-item').forEach((b) => b.addEventListener('click', () => {
+      list.querySelectorAll('.topic-item').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+      $('topic-input').value = b.dataset.title;
+    }));
+  } catch (e) { st.textContent = e.message; }
+});
 
 // ── 이미지 업로드 ──
 $('images').onchange = async (e) => {

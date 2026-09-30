@@ -32,6 +32,12 @@
 }
 body { transition: background 0.25s, color 0.25s; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* 이미지·영상 롱프레스(꾹 눌러 공유/저장) 메뉴 차단 */
+img, video, .pf-video, .scene-preview, .result-video {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 body {
   background: var(--bg);
   color: var(--text);
@@ -124,6 +130,17 @@ select.input { appearance: none; cursor: pointer; }
 /* 관리자(dev) 전용 — 단가·예상비용은 기본 숨김, 로고 7클릭+코드로 해제 시에만 표시(강의 화면 노출 방지). */
 .dev-only { display: none; }
 [data-dev="on"] .dev-only { display: block; }
+
+/* 주제 추천 */
+.topic-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.topic-item {
+  text-align: left; background: var(--card2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 12px; padding: 12px 14px; font-size: 14px; cursor: pointer; transition: all 0.15s;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 600;
+}
+.topic-item:hover { border-color: var(--teal); }
+.topic-item.active { background: var(--grad); border-color: transparent; color: #fff; }
+.topic-why { font-size: 11px; font-weight: 700; opacity: 0.7; white-space: nowrap; }
 
 /* 목소리 포트폴리오 */
 .portfolio { margin: 8px 0 20px; }

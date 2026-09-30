@@ -85,6 +85,8 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
+      // 이미지·영상 롱프레스/우클릭 메뉴(공유·저장) 차단
+      document.addEventListener('contextmenu', (e) => { if (e.target && /^(IMG|VIDEO)$/.test(e.target.tagName)) e.preventDefault(); });
       // 다크/라이트 토글 (index와 lvm-theme 공유, 기본 라이트)
       function applyTheme(t) {
         if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');

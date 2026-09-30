@@ -68,7 +68,7 @@
     Object.keys(labels).forEach(k => { if (Number.isFinite(r[k]) && r[k] >= 0) el('rate-' + k).value = r[k]; });
   } catch {}
   document.querySelectorAll('.studio-options input, #rate-section input, #duration, #quality').forEach(i => i.addEventListener('input', updateEstimate));
-  ['tab-auto', 'tab-manual'].forEach(id => el(id).addEventListener('click', updateEstimate));
+  ['tab-auto', 'tab-topic', 'tab-manual'].forEach(id => el(id) && el(id).addEventListener('click', updateEstimate));
   el('product-lock').onchange = () => el('product-fields').classList.toggle('hidden', !el('product-lock').checked);
   // The existing pipeline does not implement AI clips. Do not estimate or charge for that option.
   el('aiClips').value = '0'; el('aiClips').disabled = true;
@@ -193,7 +193,7 @@
         }
       }
       const product = el('product-lock').checked ? Object.fromEntries(['name','price','benefit','url'].map(k => [k, el('product-' + k).value.trim()])) : null;
-      const p = await api('/api/studio', {mode, url:el('url').value.trim(), images, keywords:el('keywords').value.trim(), facts:el('facts').value.trim(),
+      const p = await api('/api/studio', {mode, url:el('url').value.trim(), topic:el('topic-input') ? el('topic-input').value.trim() : '', images, keywords:el('keywords').value.trim(), facts:el('facts').value.trim(),
         duration:Number(el('duration').value), voice:el('voice').value, presetId:selectedPreset || '', quality:el('quality').value,
         imageStyle:el('image-style') ? el('image-style').value : 'real',
         music:el('studio-music').checked, product, rates:rates()});

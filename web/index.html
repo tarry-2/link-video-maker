@@ -36,6 +36,7 @@
 
       <div class="tabs">
         <button id="tab-auto" class="tab active" type="button">🔗 링크로 자동</button>
+        <button id="tab-topic" class="tab" type="button">💡 주제 추천</button>
         <button id="tab-manual" class="tab" type="button">🖼 내 이미지로</button>
       </div>
 
@@ -44,6 +45,16 @@
         <div id="pane-auto">
           <label class="field-label">1. 링크</label>
           <input id="url" class="input" placeholder="https:// 기사·블로그·레시피 주소를 붙여넣으세요" />
+        </div>
+
+        <!-- 주제 추천 모드: 링크·이미지 없이 -->
+        <div id="pane-topic" class="hidden">
+          <label class="field-label">1. 주제 추천 <span class="hint">— 아래 카테고리를 먼저 고르면 그 분야 인기 주제를 추천해요</span></label>
+          <button id="topic-fetch" class="ghost-btn" type="button">✨ 요즘 잘 되는 주제 추천받기</button>
+          <p id="topic-state" class="mini-state"></p>
+          <div id="topic-list" class="topic-list"></div>
+          <label class="field-label" style="margin-top:12px">직접 주제 입력 <span class="hint">(선택)</span></label>
+          <input id="topic-input" class="input" placeholder="예: 하루 5분 스트레칭으로 목 통증 없애는 법" />
         </div>
 
         <!-- 수동 모드: 이미지 + 키워드 -->

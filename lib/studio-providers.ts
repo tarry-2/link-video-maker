@@ -24,7 +24,10 @@ export const studioProviders: StudioDependencies = {
       }, dir);
       return {...plan, subject: '', musicPrompt: plan.musicPrompt || '', scenes: plan.scenes.map(s => ({...s, visualPrompt: ''}))};
     }
-    const source = await fetchSource([p.input.url], log);
+    // 주제 추천 모드: 링크 없이 선택한 주제로 대본 창작
+    const source = p.input.mode === 'topic'
+      ? `아래 주제로 사람들이 끝까지 볼 만한 쇼츠 영상 대본을 창작하라. 사실에 기반하되 흥미롭게.\n주제: ${p.input.topic}`
+      : await fetchSource([p.input.url], log);
     return generateStoryboard(k.gemini, source, {duration: p.input.duration, openaiKey: k.openai,
       preset: getPreset(p.input.presetId), log});
   },
