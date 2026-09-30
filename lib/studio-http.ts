@@ -69,6 +69,8 @@ export async function handleStudio(req: IncomingMessage, res: ServerResponse, pa
     } else if (/^scenes\/\d+\/(image|voice)$/.test(action) && req.method === 'POST') {
       const [, index, kind] = action.split('/'); const b = await read(req);
       json(res, 202, studio.regenerate(id, Number(index), kind as 'image' | 'voice', b.revision));
+    } else if (action === 'portfolio' && req.method === 'POST') {
+      json(res, 200, studio.addToPortfolio(id));
     } else throw new StudioError('지원하지 않는 요청입니다.', 404);
   } catch (e) {
     if (e instanceof ZodError) json(res, 400, {error: '입력값을 확인하세요: ' + e.issues.map(i => `${i.path.join('.')} ${i.message}`).join(', ').slice(0, 500)});

@@ -193,7 +193,7 @@
         <button class="ghost-btn" data-action="save" ${disabled}>대본 수정 저장</button>
         <button class="primary-btn" data-action="render" ${disabled}>${p.status === 'failed' ? '완료된 단계부터 이어서 재시작' : '2. 검토한 대본으로 최종 제작'}</button>
         <p class="mini-state">나레이션 수정은 해당 장면 음성을 다시 생성합니다. 상단 문구·색상만 바꾸면 음성을 재사용합니다. 장면별 음성은 이어지는 억양이 달라질 수 있습니다.</p>` : !busy ? '<button class="primary-btn" data-action="render">대본 작성 재시작</button>' : ''}
-      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><button class="primary-btn" data-action="download">⬇ 영상 다운로드</button><p class="mini-state">앱에서 안 열리면 위 영상을 꾹 눌러 "동영상 저장"을 쓰세요.</p></div>` : ''}
+      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><button class="primary-btn" data-action="download">⬇ 영상 다운로드</button><button class="ghost-btn" data-action="add-portfolio">🎬 포트폴리오에 추가</button><p class="mini-state">앱에서 안 열리면 위 영상을 꾹 눌러 "동영상 저장"을 쓰세요. 포트폴리오는 완성 시 자동 등록되며, 필요하면 위 버튼으로 다시 넣을 수 있어요.</p></div>` : ''}
       <details ${busy || p.status === 'failed' ? 'open' : ''}><summary>제작 로그</summary><div class="scene-actions"><button class="ghost-btn" data-action="copy-log">로그 복사</button><button class="ghost-btn" data-action="expand-log">크게 보기</button></div><pre class="log">${escape(p.logs.join('\n'))}</pre></details>`;
     el('generate').disabled = busy;
     tickElapsed();
@@ -241,6 +241,14 @@
     if (button.dataset.action === 'copy-log') { copyLog(button); return; }
     if (button.dataset.action === 'expand-log') { el('log-expand').click(); return; }
     if (button.dataset.action === 'download') { downloadVideo(button); return; }
+    if (button.dataset.action === 'add-portfolio') {
+      try {
+        await api(`/api/studio/${current.id}/portfolio`, {});
+        button.textContent = '✓ 포트폴리오에 추가됨'; button.disabled = true;
+        message('포트폴리오에 추가했습니다. 목소리 페이지에서 확인하세요.');
+      } catch (err) { report(err); }
+      return;
+    }
     if (loading || active(current)) return;
     loading = true;
     try {

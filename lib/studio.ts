@@ -257,6 +257,24 @@ export class Studio {
       }
     });
   }
+  // 이미 완성된 작업을 포트폴리오에 수동 등록(자동 등록 전 완성작·재렌더 없이).
+  addToPortfolio(id: string) {
+    const p = this.get(id);
+    if (p.status !== 'completed' || !p.output) throw new StudioError('완성된 영상만 포트폴리오에 추가할 수 있습니다.');
+    const preset = getPreset(p.input.presetId);
+    const voiceKey = p.input.voice || preset?.voice || 'adam';
+    const v = VOICES[voiceKey];
+    addPortfolio({
+      projectId: p.id,
+      title: p.title,
+      output: p.output,
+      voice: v?.label || voiceKey,
+      category: preset ? `${preset.emoji} ${preset.label}` : '영상',
+      goal: (v?.use?.[0] as any) || 'info',
+      createdAt: new Date().toISOString(),
+    });
+    return {ok: true};
+  }
   asset(id: string, name: string) {
     const p = this.get(id);
     const allowed = [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output];
