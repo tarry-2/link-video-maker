@@ -84,7 +84,8 @@ select.input { appearance: none; cursor: pointer; }
 .result-title { font-size: 18px; font-weight: 700; margin-bottom: 14px; }
 .result-video { width: 100%; max-width: 340px; display: block; margin: 0 auto 16px; border-radius: 14px; }
 
-.hidden { display: none; }
+/* 숨김 상태는 뒤에 선언된 .modal 등의 display보다 항상 우선한다. */
+.hidden { display: none !important; }
 
 /* 탭 */
 .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
