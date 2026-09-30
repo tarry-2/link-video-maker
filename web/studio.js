@@ -25,15 +25,38 @@
     if (/합성|렌더/.test(p.phase) || rlog) { const n = rlog ? Number(rlog.match(/(\d+)%/)[1]) : 0; pct = 75 + n * 0.24; }
     return Math.max(1, Math.min(99, Math.round(pct)));
   }
+  // 경과시간 텍스트(렌더 시 즉시 채움 → 항상 보이게). started 없으면 빈 문자열.
+  function elapsedText(p) {
+    const started = p?.startedAt ? new Date(p.startedAt).getTime() : null;
+    if (!started) return '';
+    if (['planning', 'running'].includes(p.status)) return '⏱ ' + fmtDur(Date.now() - started);
+    if (p.status === 'completed') return '⏱ ' + fmtDur(new Date(p.updatedAt).getTime() - started) + ' 만에 완성';
+    return '';
+  }
   // 경과시간 1초마다 갱신(재귀 setTimeout — setInterval 겹침 금지)
   function tickElapsed() {
     clearTimeout(elapsedTimer);
     const node = el('job-elapsed');
     if (!node || !current) return;
-    const started = current.startedAt ? new Date(current.startedAt).getTime() : null;
-    if (active(current) && started) { node.textContent = '⏱ ' + fmtDur(Date.now() - started); elapsedTimer = setTimeout(tickElapsed, 1000); }
-    else if (current.status === 'completed' && started) node.textContent = '⏱ ' + fmtDur(new Date(current.updatedAt).getTime() - started) + ' 만에 완성';
-    else node.textContent = '';
+    node.textContent = elapsedText(current);
+    if (active(current) && current.startedAt) elapsedTimer = setTimeout(tickElapsed, 1000);
+  }
+  // 완성 영상 다운로드 — PWA(앱)에선 <a download>가 막히므로 blob으로 강제 저장.
+  async function downloadVideo(btn) {
+    if (!current?.output) return;
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = '⬇ 내려받는 중…';
+    try {
+      const r = await fetch(asset(current, current.output), {cache: 'no-store'});
+      if (!r.ok) throw new Error('다운로드 실패');
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement('a');
+      a.href = url; a.download = (current.title || 'onvideo').replace(/[\\/:*?"<>|]/g, '_') + '.mp4';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      btn.textContent = '✓ 저장됨';
+    } catch (e) {
+      report(e); btn.textContent = '⬇ 영상 다운로드';
+    } finally { btn.disabled = false; setTimeout(() => { if (btn.textContent === '✓ 저장됨') btn.textContent = orig; }, 1500); }
   }
   function celebrate() {
     const c = document.createElement('div'); c.className = 'confetti';
@@ -143,7 +166,7 @@
     el('studio-editor').classList.remove('hidden');
     el('studio-editor').innerHTML = `
       <div class="modal-head"><h2>대본 검토 · 장면 편집</h2><span class="badge">${stateNames[p.status]}</span></div>
-      <div class="job-status"><span class="job-phase">${escape(p.phase || '')}</span><span id="job-elapsed" class="job-elapsed"></span></div>
+      <div class="job-status"><span class="job-phase">${escape(p.phase || '')}</span><span id="job-elapsed" class="job-elapsed">${elapsedText(p)}</span></div>
       ${prog !== null ? `<div class="energy"><div class="energy-fill${busy ? ' anim' : ''}" style="width:${prog}%"></div></div><p class="energy-label">${prog}%${busy ? ' 진행 중…' : p.status === 'completed' ? ' 완성! 🎉' : ''}</p>` : ''}
       <p id="editor-message" class="mini-state" role="status"></p>
       ${p.error ? `<p class="error" role="alert">${escape(p.error)}</p>` : ''}
@@ -170,10 +193,13 @@
         <button class="ghost-btn" data-action="save" ${disabled}>대본 수정 저장</button>
         <button class="primary-btn" data-action="render" ${disabled}>${p.status === 'failed' ? '완료된 단계부터 이어서 재시작' : '2. 검토한 대본으로 최종 제작'}</button>
         <p class="mini-state">나레이션 수정은 해당 장면 음성을 다시 생성합니다. 상단 문구·색상만 바꾸면 음성을 재사용합니다. 장면별 음성은 이어지는 억양이 달라질 수 있습니다.</p>` : !busy ? '<button class="primary-btn" data-action="render">대본 작성 재시작</button>' : ''}
-      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><a class="ghost-btn" href="${asset(p, p.output)}" download="${escape(p.title.replace(/[\\/:*?"<>|]/g, '_'))}.mp4">영상 다운로드</a></div>` : ''}
+      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><button class="primary-btn" data-action="download">⬇ 영상 다운로드</button><p class="mini-state">앱에서 안 열리면 위 영상을 꾹 눌러 "동영상 저장"을 쓰세요.</p></div>` : ''}
       <details ${busy || p.status === 'failed' ? 'open' : ''}><summary>제작 로그</summary><div class="scene-actions"><button class="ghost-btn" data-action="copy-log">로그 복사</button><button class="ghost-btn" data-action="expand-log">크게 보기</button></div><pre class="log">${escape(p.logs.join('\n'))}</pre></details>`;
     el('generate').disabled = busy;
     tickElapsed();
+    // 로그를 항상 최신(맨 아래)으로 스크롤 — 상단 고정 문제 해결.
+    const logEl = el('studio-editor').querySelector('.log');
+    if (logEl) logEl.scrollTop = logEl.scrollHeight;
   }
   function schedule() {
     clearTimeout(timer);
@@ -214,6 +240,7 @@
     if (!button) return;
     if (button.dataset.action === 'copy-log') { copyLog(button); return; }
     if (button.dataset.action === 'expand-log') { el('log-expand').click(); return; }
+    if (button.dataset.action === 'download') { downloadVideo(button); return; }
     if (loading || active(current)) return;
     loading = true;
     try {
