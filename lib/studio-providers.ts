@@ -34,7 +34,9 @@ export const studioProviders: StudioDependencies = {
   async image(p, s, file, log) {
     const k = pipelineKeys();
     if (!k.replicate) throw new Error('키 설정에서 Replicate 키를 저장하세요.');
-    await generateImageFlux(k.replicate, `${p.subject}. ${s.visualPrompt}`, file, log, p.input.quality, p.input.imageStyle);
+    // ★화면비: 롱폼(≥90초)=가로 16:9 이미지 / 쇼츠=세로 9:16 (render·plan과 동일 기준).
+    const landscape = p.input.duration >= 90;
+    await generateImageFlux(k.replicate, `${p.subject}. ${s.visualPrompt}`, file, log, p.input.quality, p.input.imageStyle, landscape);
   },
   async voice(p, s, file) {
     const k = pipelineKeys();
@@ -68,7 +70,9 @@ export const studioProviders: StudioDependencies = {
         accentColor: s.accentColor, words: s.voice!.words || [], durationInFrames: s.voice!.frames!,
         motion: i, punch: i === 0, product: p.input.product || undefined,
       }));
-      await renderVideo(scenes, 0, output, log, p.bgm ? `${prefix}/${p.bgm.file}` : undefined, undefined, publicDir);
+      // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16 (자동·수동 모드와 동일 기준).
+      const orientation: 'portrait' | 'landscape' = p.input.duration >= 90 ? 'landscape' : 'portrait';
+      await renderVideo(scenes, 0, output, log, p.bgm ? `${prefix}/${p.bgm.file}` : undefined, undefined, publicDir, orientation);
     } finally { await fs.rm(publicDir, {recursive: true, force: true}); }
   },
 };
