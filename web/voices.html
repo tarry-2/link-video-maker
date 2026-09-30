@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OnVideo — 목소리 듣고 고르기</title>
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+      .voice-groups { display: flex; flex-direction: column; gap: 26px; }
+      .vg-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+      .vg-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+      .vcard {
+        background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+        padding: 16px 18px; display: flex; align-items: center; gap: 14px; margin-bottom: 10px;
+      }
+      .vcard .play {
+        width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; border: none; cursor: pointer;
+        background: var(--grad); color: #fff; font-size: 20px;
+      }
+      .vcard .play.loading { opacity: 0.5; }
+      .vcard .vmeta { flex: 1; }
+      .vcard .vname { font-weight: 800; font-size: 15px; }
+      .vcard .vgender { font-size: 11px; color: var(--muted); font-weight: 600; margin-left: 6px; }
+      .vcard .vtip { font-size: 12.5px; color: var(--teal); margin-top: 4px; }
+      .vcard.playing { border-color: var(--teal); }
+      .back-link { color: var(--accent); text-decoration: none; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wordmark">On<span>Video</span></div>
+      <a href="/" class="back-link">← 영상 만들기</a>
+    </header>
+
+    <main class="wrap">
+      <p class="eyebrow">VOICE GUIDE</p>
+      <h1 class="hero">목소리 듣고 고르기</h1>
+      <p class="sub">재생 버튼을 눌러 직접 들어보세요. 콘텐츠에 맞는 목소리를 쓰면 시청 시간이 확 늘어납니다.</p>
+
+      <div id="groups" class="voice-groups"></div>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const USE_LABEL = {
+        issue: { t: '📰 이슈·미스터리·경고', d: '무게감과 긴장감으로 몰입시켜야 할 때' },
+        info: { t: '💡 정보·건강·상식', d: '차분하고 신뢰가는 설명이 필요할 때' },
+        sell: { t: '🛍️ 판매·리뷰·홍보', d: '밝고 에너지 있게 구매를 자극할 때' },
+        heal: { t: '🌿 힐링·음식·여행', d: '따뜻하고 감성적인 분위기가 필요할 때' },
+      };
+      let curAudio = null, curCard = null;
+
+      async function load() {
+        const d = await (await fetch('/api/categories')).json();
+        const groups = {};
+        for (const v of d.voices) {
+          // 첫 용도를 대표 그룹으로
+          const g = v.use[0];
+          (groups[g] = groups[g] || []).push(v);
+        }
+        const wrap = $('groups');
+        wrap.innerHTML = '';
+        for (const key of ['issue', 'info', 'sell', 'heal']) {
+          if (!groups[key]) continue;
+          const box = document.createElement('div');
+          box.innerHTML = `<div class="vg-title">${USE_LABEL[key].t}</div><div class="vg-desc">${USE_LABEL[key].d}</div>`;
+          for (const v of groups[key]) {
+            const card = document.createElement('div');
+            card.className = 'vcard';
+            card.innerHTML = `
+              <button class="play" data-voice="${v.id}">▶</button>
+              <div class="vmeta">
+                <div><span class="vname">${v.label}</span><span class="vgender">${v.gender}</span></div>
+                <div class="vtip">${v.tip}</div>
+              </div>`;
+            box.appendChild(card);
+          }
+          wrap.appendChild(box);
+        }
+        document.querySelectorAll('.play').forEach((btn) => (btn.onclick = () => play(btn)));
+      }
+
+      async function play(btn) {
+        const voice = btn.dataset.voice;
+        const card = btn.closest('.vcard');
+        if (curAudio) { curAudio.pause(); curAudio = null; }
+        if (curCard) curCard.classList.remove('playing');
+        btn.classList.add('loading');
+        btn.textContent = '…';
+        try {
+          const r = await fetch('/api/voice-preview?voice=' + encodeURIComponent(voice));
+          if (!r.ok) throw new Error((await r.json()).error || '실패');
+          const url = URL.createObjectURL(await r.blob());
+          curAudio = new Audio(url);
+          curCard = card;
+          card.classList.add('playing');
+          curAudio.onended = () => { card.classList.remove('playing'); btn.textContent = '▶'; };
+          await curAudio.play();
+          btn.textContent = '❚❚';
+        } catch (e) {
+          alert(e.message);
+          btn.textContent = '▶';
+        }
+        btn.classList.remove('loading');
+      }
+      load();
+    </script>
+  </body>
+</html>

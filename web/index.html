@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OnVideo — 링크 하나로 영상</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <!-- 로그인 오버레이(비번 설정 시) -->
+    <div id="login-overlay" class="modal hidden">
+      <div class="modal-box" style="max-width: 380px; text-align: center">
+        <div class="wordmark" style="justify-content: center; margin-bottom: 8px">On<span>Video</span></div>
+        <p class="sub small">비밀번호를 입력하세요</p>
+        <input id="login-pw" class="input" type="password" placeholder="비밀번호" />
+        <button id="login-btn" class="primary-btn">로그인</button>
+        <p id="login-err" class="mini-state"></p>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div class="wordmark">On<span>Video</span></div>
+      <button id="settings-btn" class="ghost-btn">⚙ 키 설정</button>
+    </header>
+
+    <main id="main" class="wrap">
+      <p class="eyebrow">LINK → VIDEO</p>
+      <h1 class="hero">링크 하나로<br />이지컷급 쇼츠를 만드세요</h1>
+      <p class="sub">뉴스·블로그·레시피 링크를 넣으면 대본·이미지·음성·자막·배경음악까지 자동으로.</p>
+
+      <div class="tabs">
+        <button id="tab-auto" class="tab active" type="button">🔗 링크로 자동</button>
+        <button id="tab-manual" class="tab" type="button">🖼 내 이미지로</button>
+      </div>
+
+      <div class="card">
+        <!-- 자동 모드: 링크 -->
+        <div id="pane-auto">
+          <label class="field-label">1. 링크</label>
+          <input id="url" class="input" placeholder="https:// 기사·블로그·레시피 주소를 붙여넣으세요" />
+        </div>
+
+        <!-- 수동 모드: 이미지 + 키워드 -->
+        <div id="pane-manual" class="hidden">
+          <label class="field-label">1. 이미지 <span class="hint">— 최대 20장, AI가 좋은 것만 골라 써요</span></label>
+          <input id="images" class="input" type="file" accept="image/*" multiple />
+          <div id="thumbs" class="thumbs"></div>
+          <label class="field-label">영상 클립 <span class="hint">— 선택, 넣으면 배경 영상으로 활용</span></label>
+          <input id="videos" class="input" type="file" accept="video/*" multiple />
+          <div id="vthumbs" class="mini-state"></div>
+          <label class="field-label">필수 키워드/문구 <span class="hint">(후킹·자막에 꼭 들어감)</span></label>
+          <input id="keywords" class="input" placeholder="예: 제주도, 인생사진 명소" />
+          <label class="field-label">담을 내용/팩트 <span class="hint">(선택)</span></label>
+          <textarea id="facts" class="input" rows="3" placeholder="영상에 담고 싶은 내용을 적어주세요"></textarea>
+        </div>
+
+        <label class="field-label">2. 카테고리 <span class="hint">— 고르면 톤·이미지·목소리·배경음악이 자동으로 맞춰져요</span></label>
+        <div id="categories" class="cat-groups"></div>
+
+        <div class="row">
+          <div class="col">
+            <label class="field-label">3. 길이</label>
+            <select id="duration" class="input">
+              <optgroup label="쇼츠">
+                <option value="15">15초 · 짧게</option>
+                <option value="30" selected>30초 · 표준</option>
+                <option value="45">45초</option>
+                <option value="60">60초</option>
+              </optgroup>
+              <optgroup label="롱폼">
+                <option value="90">90초</option>
+                <option value="120">2분</option>
+                <option value="180">3분</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="col">
+            <label class="field-label">4. 목소리 <span class="hint">(비우면 카테고리 추천)</span> <a href="/voices" target="_blank" style="color:var(--teal);font-size:12px;text-decoration:none;float:right">🎙 다 들어보기 →</a></label>
+            <div class="voice-row">
+              <select id="voice" class="input"></select>
+              <button id="voice-preview" class="ghost-btn small" type="button">▶ 듣기</button>
+            </div>
+            <div id="voice-state" class="mini-state"></div>
+          </div>
+        </div>
+
+        <div class="row" id="advanced-row">
+          <div class="col">
+            <label class="field-label">이미지 화질 <span class="hint">— 자동 모드만</span></label>
+            <select id="quality" class="input">
+              <option value="fast">빠르게·저렴 (테스트용, 장당 4원)</option>
+              <option value="high" selected>고퀄 실사 (판매·업로드용, 장당 35원)</option>
+            </select>
+          </div>
+          <div class="col">
+            <label class="field-label">움직이는 AI 영상 <span class="hint">— 유료, 신중히</span></label>
+            <select id="aiClips" class="input">
+              <option value="0" selected>안 씀 (이미지+줌, 무료)</option>
+              <option value="1">첫 장면만 (약 550원)</option>
+              <option value="2">2개 장면 (약 1,100원)</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="generate" class="primary-btn">🎬 영상 만들기</button>
+      </div>
+
+      <section id="progress-block" class="card hidden">
+        <h3 class="block-title">제작 진행</h3>
+        <div id="log" class="log"></div>
+      </section>
+
+      <section id="result-block" class="card hidden">
+        <h3 class="block-title">완성 🎉</h3>
+        <p id="result-title" class="result-title"></p>
+        <video id="result-video" class="result-video" controls></video>
+        <a id="download" class="primary-btn" download>⬇ 다운로드</a>
+        <p class="mini-state">바탕화면 "온비디오 날짜" 폴더에도 자동 저장됐어요.</p>
+      </section>
+    </main>
+
+    <!-- 키 설정 모달 -->
+    <div id="settings-modal" class="modal hidden">
+      <div class="modal-box">
+        <div class="modal-head">
+          <h2>키 설정</h2>
+          <button id="settings-close" class="ghost-btn">✕</button>
+        </div>
+        <p class="sub small">키는 로컬 .env.local에 저장됩니다. 저장된 키는 마스킹되어 표시돼요.</p>
+        <div id="key-fields"></div>
+        <button id="save-keys" class="primary-btn">저장</button>
+        <p id="settings-msg" class="mini-state"></p>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,4 +1,13 @@
-node_modules/
+.env.local
 .env
+out/
+node_modules/
+# 런타임 생성물(배포에 불필요)
+public/jobs/
+public/uploads/
+public/voice-samples/
+# 개발용 캘리브레이션 러너(로컬 전용)
+run-manual.ts
+run-city.ts
 data/
 *.zip

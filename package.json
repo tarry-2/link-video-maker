@@ -1,1 +1,32 @@
-{"name":"link-video-maker","version":"1.4.1","private":true,"type":"module","scripts":{"start":"node server.js","test":"node --test"},"engines":{"node":">=20"}}
+{
+  "name": "onvideo-remotion",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "web": "tsx server.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@remotion/bundler": "^4.0.530",
+    "@remotion/cli": "^4.0.530",
+    "@remotion/fonts": "^4.0.530",
+    "@remotion/google-fonts": "^4.0.530",
+    "@remotion/renderer": "^4.0.530",
+    "@remotion/transitions": "^4.0.530",
+    "@remotion/zod-types": "^4.0.530",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "remotion": "^4.0.530",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}
