@@ -102,6 +102,22 @@ const server = http.createServer(async (req, res) => {
   // ── 정적 ──
   if (p === '/' || p === '/index.html')
     return serveFile(res, path.join(ROOT, 'web', 'index.html'), 'text/html; charset=utf-8');
+  // 자폭 SW — 옛 v1 PWA 캐시 제거용. 항상 최신을 받도록 no-store.
+  if (p === '/sw.js') {
+    return fs.readFile(path.join(ROOT, 'web', 'sw.js'), (err, buf) => {
+      if (err) {
+        res.writeHead(404);
+        res.end('not found');
+      } else {
+        res.writeHead(200, {
+          'Content-Type': 'text/javascript; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Service-Worker-Allowed': '/',
+        });
+        res.end(buf);
+      }
+    });
+  }
   if (p === '/app.js')
     return serveFile(res, path.join(ROOT, 'web', 'app.js'), 'text/javascript; charset=utf-8');
   if (p === '/style.css')
