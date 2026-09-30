@@ -103,7 +103,13 @@ export class Studio {
     p.phase = phase; p.error = undefined;
     p.startedAt = new Date().toISOString(); // 경과시간 타이머 기준
     this.save(p);
-    const log = (s: string) => { p.logs.push(s.slice(0, 500)); p.logs = p.logs.slice(-150); this.save(p); };
+    // 각 로그 줄 앞에 실시간 현재 시각(한국시간 HH:MM:SS) → 작업 단계별 소요 시간을 알 수 있게.
+    const log = (s: string) => {
+      const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
+      p.logs.push(`[${t}] ${s}`.slice(0, 500));
+      p.logs = p.logs.slice(-150);
+      this.save(p);
+    };
     const pending = Promise.resolve().then(() => task(log)).catch((e: Error) => {
       p.status = 'failed'; p.error = e.message.slice(0, 500); log('[실패] ' + p.error);
     }).finally(() => { this.active = null; this.tasks.delete(p.id); this.save(p); });
