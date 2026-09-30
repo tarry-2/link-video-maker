@@ -79,6 +79,23 @@ function resolveVideo(id: string): {kind: 'mine' | 'sample'; file: string; title
   return {kind: 'mine', file, title: proj.title, narrations, durSec};
 }
 
+// ── studio project.json의 유튜브 링크 read/write ──
+// ★배지 버그 방지: 제작 화면에서 바로 올리면 포트폴리오 등록 순서와 어긋나 setPortfolioYouTube가
+//   조용히 실패할 수 있다. project.json에도 링크를 남기고, 포트폴리오 노출 시 보강해 어느 경로든 배지가 뜨게.
+function saveProjectYouTube(projectId: string, url: string) {
+  try {
+    const pj = path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json');
+    const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+    proj.youtubeUrl = url;
+    fs.writeFileSync(pj, JSON.stringify(proj));
+  } catch {}
+}
+function readProjectYouTube(projectId: string): string {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).youtubeUrl || '';
+  } catch { return ''; }
+}
+
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
 type Job = {id: string; logs: string[]; done: boolean; file?: string; title?: string; error?: string};
 const jobs = new Map<string, Job>();
@@ -204,7 +221,8 @@ const server = http.createServer(async (req, res) => {
       category: it.category,
       goal: it.goal,
       createdAt: it.createdAt,
-      youtubeUrl: it.youtubeUrl || '',
+      // ★배지: portfolio.json에 링크 없으면 project.json에서 보강(제작 화면서 바로 올린 경우도 배지 뜨게).
+      youtubeUrl: it.youtubeUrl || readProjectYouTube(it.projectId),
       orientation: it.orientation || 'portrait', // 레거시(없음)=세로 폴백
       video: `/portfolio-item/${it.projectId}.mp4`,
     }));
@@ -298,7 +316,7 @@ const server = http.createServer(async (req, res) => {
         privacy: privacy as any,
       });
       try {
-        if (src.kind === 'mine') setPortfolioYouTube(id, r.url);
+        if (src.kind === 'mine') { setPortfolioYouTube(id, r.url); saveProjectYouTube(id, r.url); }
         else setSampleYouTube(path.basename(id.slice('sample:'.length)), r.url);
       } catch {}
       return json(res, 200, r);
@@ -344,7 +362,12 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 잘 되는지 8자 이내"}
       if (!raw && k.openai) raw = await openaiJson(k.openai, prompt, 1024);
       const m = raw.match(/\{[\s\S]*\}/);
       const data = m ? JSON.parse(m[0]) : {topics: []};
-      return json(res, 200, {topics: Array.isArray(data.topics) ? data.topics.slice(0, 8) : []});
+      // ★마크다운 별표(**강조**·*·리스트마커) 제거 — LLM이 넣은 별표가 화면에 그대로 노출되던 문제.
+      const clean = (s: any) => String(s || '').replace(/\*+/g, '').replace(/^\s*[-#>]+\s*/, '').replace(/`/g, '').trim();
+      const topics = (Array.isArray(data.topics) ? data.topics : []).slice(0, 8)
+        .map((t: any) => ({title: clean(t.title), why: clean(t.why)}))
+        .filter((t: any) => t.title);
+      return json(res, 200, {topics});
     } catch (e: any) {
       return json(res, 502, {error: '주제 추천 실패: ' + e.message});
     }
