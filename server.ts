@@ -12,7 +12,7 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
-import {listPortfolio, removePortfolio} from './lib/portfolio';
+import {listPortfolio, removePortfolio, setPortfolioYouTube} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -171,6 +171,7 @@ const server = http.createServer(async (req, res) => {
       category: it.category,
       goal: it.goal,
       createdAt: it.createdAt,
+      youtubeUrl: it.youtubeUrl || '',
       video: `/portfolio-item/${it.projectId}.mp4`,
     }));
     return json(res, 200, {items});
@@ -255,6 +256,7 @@ const server = http.createServer(async (req, res) => {
         tags: Array.isArray(b.tags) ? b.tags.map((x: any) => String(x)).slice(0, 15) : [],
         privacy: privacy as any,
       });
+      try { setPortfolioYouTube(id, r.url); } catch {} // 포트폴리오에 링크 기록(있으면)
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
   }

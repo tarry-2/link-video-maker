@@ -14,7 +14,15 @@ export type PortfolioItem = {
   category: string; // 카테고리 라벨(예: "💊 건강/의학")
   goal: 'issue' | 'info' | 'sell' | 'heal'; // 뱃지 색상 분류
   createdAt: string;
+  youtubeUrl?: string; // 유튜브 업로드 완료 시 링크
 };
+
+// 특정 항목에 유튜브 링크 기록(업로드 완료 후).
+export function setPortfolioYouTube(projectId: string, youtubeUrl: string) {
+  const items = listPortfolio();
+  const it = items.find((x) => x.projectId === projectId);
+  if (it) { it.youtubeUrl = youtubeUrl; save(items); }
+}
 
 export function listPortfolio(): PortfolioItem[] {
   try {
