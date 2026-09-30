@@ -24,6 +24,19 @@
       .vcard .vtip { font-size: 12.5px; color: var(--teal); margin-top: 4px; }
       .vcard.playing { border-color: var(--teal); }
       .back-link { color: var(--accent); text-decoration: none; font-size: 14px; }
+      /* 내가 만든 영상 — 관리용 컴팩트 그리드(영상 많아져도 한눈에). PC 다열, 모바일 2열. */
+      .mypf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
+      .mypf-grid .pf-card h3 { font-size: 14px; }
+      .mypf-grid .pf-card figcaption { padding: 12px 12px 14px; }
+      .pf-del { margin-top: 10px; background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+      .pf-del:hover { border-color: #ff6b5e; color: #ff6b5e; }
+      .mypf-count { font-weight: 700; color: var(--teal); }
+      @media (max-width: 640px) {
+        .mypf-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .mypf-grid .pf-card figcaption { padding: 10px; }
+        .mypf-grid .pf-card h3 { font-size: 13px; }
+        .mypf-grid .pf-voice-note, .mypf-grid .pf-clip { font-size: 11px; }
+      }
     </style>
   </head>
   <body>
@@ -42,6 +55,16 @@
       <p class="eyebrow">VOICE GUIDE</p>
       <h1 class="hero">목소리 듣고 고르기</h1>
       <p class="sub">재생 버튼을 눌러 직접 들어보세요. 콘텐츠에 맞는 목소리를 쓰면 시청 시간이 확 늘어납니다.</p>
+
+      <!-- 내가 만든 영상(완성 시 자동 등록) -->
+      <section class="portfolio" id="my-videos" hidden>
+        <div class="portfolio-head">
+          <h2 class="pf-title">🎬 내가 만든 영상 <span id="mypf-count" class="mypf-count"></span></h2>
+          <p class="pf-sub">완성한 영상이 여기에 자동으로 쌓입니다. 최신순으로 정렬돼요.</p>
+        </div>
+        <div id="mypf-grid" class="mypf-grid"></div>
+        <div style="text-align:center; margin-top:18px"><button id="mypf-more" class="ghost-btn" hidden>더 보기</button></div>
+      </section>
 
       <section class="portfolio">
         <div class="portfolio-head">
@@ -179,6 +202,55 @@
         btn.classList.remove('loading');
       }
       load();
+
+      // ── 내가 만든 영상(자동 포트폴리오) ──
+      const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const BADGE = { issue:'📰', info:'💡', sell:'🛍️', heal:'🌿' };
+      let myItems = [], myShown = 0, canDelete = false;
+      const PAGE = 9;
+      async function loadMyVideos() {
+        try {
+          const a = await (await fetch('/api/auth')).json();
+          canDelete = !a.required || a.ok; // 로그인(또는 비번 미설정) 시에만 삭제 버튼
+          const d = await (await fetch('/api/portfolio')).json();
+          myItems = Array.isArray(d.items) ? d.items : [];
+        } catch { myItems = []; }
+        const sec = $('my-videos');
+        if (!myItems.length) { sec.hidden = true; return; }
+        sec.hidden = false;
+        $('mypf-count').textContent = `(총 ${myItems.length}개)`;
+        myShown = 0; $('mypf-grid').innerHTML = ''; showMore();
+      }
+      function showMore() {
+        const grid = $('mypf-grid');
+        for (const it of myItems.slice(myShown, myShown + PAGE)) {
+          const fig = document.createElement('figure');
+          fig.className = 'pf-card';
+          fig.innerHTML = `
+            <video class="pf-video" src="${it.video}" controls playsinline preload="metadata"></video>
+            <figcaption>
+              <span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span>
+              <h3>${esc(it.title)}</h3>
+              <p class="pf-voice-note">🎙 ${esc(it.voice)}</p>
+              <p class="pf-clip">${esc(new Date(it.createdAt).toLocaleString('ko-KR'))}</p>
+              ${canDelete ? `<button class="pf-del" data-id="${esc(it.projectId)}">🗑 삭제</button>` : ''}
+            </figcaption>`;
+          grid.appendChild(fig);
+        }
+        myShown += Math.min(PAGE, myItems.length - myShown);
+        $('mypf-more').hidden = myShown >= myItems.length;
+      }
+      $('mypf-more').onclick = showMore;
+      $('mypf-grid').onclick = async e => {
+        const b = e.target.closest('.pf-del');
+        if (!b) return;
+        if (!confirm('이 영상을 포트폴리오에서 삭제할까요? (원본 작업은 남아 있어요)')) return;
+        try {
+          const r = await fetch('/api/portfolio/' + encodeURIComponent(b.dataset.id), { method: 'DELETE' });
+          if (r.ok) loadMyVideos();
+        } catch {}
+      };
+      loadMyVideos();
     </script>
   </body>
 </html>

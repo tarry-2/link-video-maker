@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {createSchema, editSchema, estimate, signatures, resolveProduct, assertTokens, type Project, type Scene, type Media} from './studio-model';
 import {getPreset} from './presets';
 import {VOICES} from './tts';
+import {addPortfolio} from './portfolio';
 
 // 제작 시작 시 테리가 고른 설정을 사람이 읽을 수 있게 로그로 남긴다(처음부터 끝까지 전 절차 추적용).
 function settingsLines(p: Project): string[] {
@@ -236,6 +237,24 @@ export class Studio {
       const output = `video-${p.revision}-${randomUUID()}.mp4`;
       await this.deps.render(p, this.directory(id), path.join(this.directory(id), output), log);
       p.output = output; p.outputRevision = p.revision; p.status = 'completed'; p.phase = '완성'; log('[완료] 영상을 다운로드할 수 있습니다.');
+      // ★완성 영상을 포트폴리오에 자동 등록(기존 양식대로 voices.html에 카드로 표시).
+      try {
+        const preset = getPreset(p.input.presetId);
+        const voiceKey = p.input.voice || preset?.voice || 'adam';
+        const v = VOICES[voiceKey];
+        addPortfolio({
+          projectId: p.id,
+          title: p.title,
+          output,
+          voice: v?.label || voiceKey,
+          category: preset ? `${preset.emoji} ${preset.label}` : '영상',
+          goal: (v?.use?.[0] as any) || 'info', // 뱃지 색상(issue/info/sell/heal)
+          createdAt: new Date().toISOString(),
+        });
+        log('[완료] 포트폴리오에 자동 등록됐습니다.');
+      } catch (e: any) {
+        log('[안내] 포트폴리오 등록은 건너뜀: ' + (e?.message || e));
+      }
     });
   }
   asset(id: string, name: string) {

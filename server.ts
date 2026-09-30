@@ -12,9 +12,11 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
+import {listPortfolio, removePortfolio} from './lib/portfolio';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
+const STUDIO_DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(ROOT, 'data');
 const OUT_DIR = path.join(ROOT, 'out');
 const SAMPLE_DIR = path.join(ROOT, 'public', 'voice-samples');
 
@@ -151,9 +153,52 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  // ── 자동 포트폴리오: 목록(공개, voices.html이 로드) ──
+  if (p === '/api/portfolio' && req.method === 'GET') {
+    const items = listPortfolio().map((it) => ({
+      projectId: it.projectId,
+      title: it.title,
+      voice: it.voice,
+      category: it.category,
+      goal: it.goal,
+      createdAt: it.createdAt,
+      video: `/portfolio-item/${it.projectId}.mp4`,
+    }));
+    return json(res, 200, {items});
+  }
+  // ── 자동 포트폴리오: 완성 영상 공개 서빙(로그인 없이 /voices에서 재생, Range 지원) ──
+  if (p.startsWith('/portfolio-item/')) {
+    const m = p.match(/^\/portfolio-item\/([0-9a-f-]{36})\.mp4$/);
+    if (!m) { res.writeHead(404); return res.end('not found'); }
+    const item = listPortfolio().find((x) => x.projectId === m[1]);
+    // 포트폴리오에 등록된 작업의 output만 서빙(목록에 없으면 비공개).
+    if (!item || item.output !== path.basename(item.output)) { res.writeHead(404); return res.end('not found'); }
+    const file = path.join(STUDIO_DATA_DIR, 'studio', m[1], item.output);
+    if (!fs.existsSync(file)) { res.writeHead(404); return res.end('not found'); }
+    const size = fs.statSync(file).size;
+    const range = req.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
+    if (range) {
+      const start = range[1] ? Number(range[1]) : 0;
+      const end = range[2] ? Number(range[2]) : size - 1;
+      if (start > end || start >= size) { res.writeHead(416, {'Content-Range': `bytes */${size}`}); return res.end(); }
+      res.writeHead(206, {'Content-Type': 'video/mp4', 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1});
+      return fs.createReadStream(file, {start, end}).pipe(res);
+    }
+    res.writeHead(200, {'Content-Type': 'video/mp4', 'Content-Length': size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=3600'});
+    return fs.createReadStream(file).pipe(res);
+  }
+
   // ── 이 아래 모든 /api 는 로그인 필요(비번 설정 시) ──
   if (p.startsWith('/api/') && !authed(req))
     return json(res, 401, {error: '로그인이 필요합니다.'});
+
+  // ── 포트폴리오 삭제(관리, 로그인 필요) ──
+  if (p.startsWith('/api/portfolio/') && req.method === 'DELETE') {
+    const id = p.slice('/api/portfolio/'.length);
+    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '잘못된 요청'});
+    removePortfolio(id);
+    return json(res, 200, {ok: true});
+  }
 
   if (await handleStudio(req, res, p)) return;
 
