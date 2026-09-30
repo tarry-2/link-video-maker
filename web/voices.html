@@ -54,7 +54,7 @@
       .pf-thumb-card h3 { font-size: 13px; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
       /* 큰 미리보기 스테이지 */
       .pf-stage { display: flex; gap: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 18px; }
-      .pf-stage-video { width: 42%; max-width: 300px; aspect-ratio: 9/16; border-radius: 12px; background: #000; flex-shrink: 0; }
+      .pf-stage-video { width: 42%; max-width: 300px; aspect-ratio: 9/16; border-radius: 12px; background: #000; flex-shrink: 0; object-fit: cover; }
       .pf-stage-video.land { width: 60%; max-width: 520px; aspect-ratio: 16/9; } /* 롱폼=가로 큰 미리보기 */
       .pf-stage-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
       .pf-stage-meta select { margin-bottom: 14px; }
@@ -236,6 +236,9 @@
             <div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}</div>
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${esc(it.title)}</h3></figcaption>`;
           grid.appendChild(fig);
+          // 썸네일 박스 비율도 실제 영상 비율 우선(저장된 orientation 틀려도 정확히 표시).
+          const tv = fig.querySelector('.pf-thumb video'), tbox = fig.querySelector('.pf-thumb');
+          tv.addEventListener('loadedmetadata', () => { if (tv.videoWidth && tv.videoHeight) tbox.classList.toggle('land', tv.videoWidth > tv.videoHeight); });
         }
         myShown = Math.min(myShown + PAGE, myItems.length);
         $('mypf-more').hidden = myShown >= myItems.length;
@@ -245,7 +248,9 @@
         const it = myItems[idx]; if (!it) return;
         curIdx = idx;
         const v = $('pf-stage-video'); v.src = it.video;
-        v.classList.toggle('land', it.orientation === 'landscape');
+        // 박스 비율 = 실제 영상 비율 우선(저장된 orientation이 틀려도 레터박스 안 생기게).
+        v.classList.toggle('land', it.orientation === 'landscape'); // 로드 전 초기 폴백
+        v.onloadedmetadata = () => { if (v.videoWidth && v.videoHeight) v.classList.toggle('land', v.videoWidth > v.videoHeight); };
         $('pf-select').value = idx;
         $('pf-stage-info').innerHTML = `
           <span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span>
@@ -279,14 +284,14 @@
       // ── 영상 크게 보기(라이트박스 모달) — 우상단 ✕ · 배경 클릭 · ESC로 닫기 ──
       function openVideoModal(it) {
         if (!it) return;
-        const land = it.orientation === 'landscape';
+        const land = it.orientation === 'landscape'; // 폭 힌트용 초기값(실제 비율은 video가 유지)
         let box = $('video-modal');
         if (!box) { box = document.createElement('div'); box.id = 'video-modal'; box.className = 'modal'; document.body.appendChild(box); }
         box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60';
         box.innerHTML = `
           <button data-vm="close" aria-label="닫기" style="position:absolute;top:16px;right:18px;width:46px;height:46px;border-radius:50%;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:24px;font-weight:700;cursor:pointer;line-height:1;z-index:2">✕</button>
-          <div style="width:100%;max-width:${land ? '1100px' : '440px'};max-height:90vh;display:flex;flex-direction:column;align-items:center;gap:12px">
-            <video src="${it.video}" controls autoplay playsinline style="width:100%;max-height:82vh;aspect-ratio:${land ? '16/9' : '9/16'};background:#000;border-radius:14px;object-fit:contain"></video>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:12px;max-width:94vw">
+            <video src="${it.video}" controls autoplay playsinline style="max-width:min(94vw, ${land ? '1100px' : '440px'});max-height:82vh;background:#000;border-radius:14px"></video>
             <p style="color:#fff;font-weight:700;font-size:15px;text-align:center;margin:0;opacity:.95">${esc(it.title || '')}</p>
           </div>`;
         const close = () => { const v = box.querySelector('video'); if (v) v.pause(); box.remove(); document.removeEventListener('keydown', onKey); };
