@@ -260,7 +260,9 @@ $('settings-btn').onclick = async () => {
       <input class="input" data-key="${m.k}" placeholder="새 키 입력(비우면 유지)" style="margin-top:6px" />
     </div>`).join('');
   $('settings-msg').textContent = '';
+  if ($('yt-msg')) $('yt-msg').textContent = '';
   $('settings-modal').classList.remove('hidden');
+  refreshYtStatus();
   // 저장된 키 상태는 뒤에서 채운다(실패해도 입력엔 영향 없음).
   try {
     const reveal = await (await fetch('/api/settings/reveal')).json();
@@ -276,6 +278,37 @@ $('settings-btn').onclick = async () => {
   }
 };
 $('settings-close').onclick = () => $('settings-modal').classList.add('hidden');
+
+// ── 유튜브 연결 ──
+async function refreshYtStatus() {
+  try {
+    const s = await (await fetch('/api/youtube/status')).json();
+    const st = $('yt-status');
+    if (s.connected) st.innerHTML = `<span style="color:var(--teal)">● 연결됨${s.channelTitle ? ' · ' + s.channelTitle : ''}</span>`;
+    else if (s.hasClient) st.innerHTML = '<span style="color:#e0a030">ID/Secret 저장됨 — 계정 연결 필요</span>';
+    else st.textContent = '미연결';
+    $('yt-connect').disabled = !s.hasClient;
+  } catch {}
+}
+$('yt-save-config')?.addEventListener('click', async () => {
+  const clientId = $('yt-client-id').value.trim();
+  const clientSecret = $('yt-client-secret').value.trim();
+  if (!clientId && !clientSecret) { $('yt-msg').textContent = 'ID/Secret을 입력하세요.'; return; }
+  await fetch('/api/youtube/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, clientSecret }) });
+  $('yt-msg').textContent = '저장했습니다. 이제 "유튜브 계정 연결"을 누르세요.';
+  $('yt-client-id').value = ''; $('yt-client-secret').value = '';
+  refreshYtStatus();
+});
+$('yt-connect')?.addEventListener('click', async () => {
+  $('yt-msg').textContent = '구글 동의 창을 여는 중…';
+  try {
+    const d = await (await fetch('/api/youtube/auth')).json();
+    if (!d.url) throw new Error(d.error || '연결 URL 실패');
+    window.open(d.url, '_blank');
+    $('yt-msg').textContent = '새 창에서 구글 로그인·허용 후, 이 창으로 돌아와 상태를 새로고침하세요.';
+    setTimeout(refreshYtStatus, 4000);
+  } catch (e) { $('yt-msg').textContent = e.message; }
+});
 $('save-keys').onclick = async () => {
   // 1) 단가를 localStorage에 저장(studio.js가 onvideo-unit-rates에서 읽어씀)
   const rateStore = {};

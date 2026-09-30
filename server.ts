@@ -13,6 +13,7 @@ import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio} from './lib/portfolio';
+import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -188,9 +189,82 @@ const server = http.createServer(async (req, res) => {
     return fs.createReadStream(file).pipe(res);
   }
 
+  // ── 유튜브 OAuth 콜백(공개: 구글이 로그인 쿠키 없이 여기로 리다이렉트) ──
+  // redirect_uri는 항상 이 경로로 고정 → 구글 콘솔에도 이 주소를 등록한다.
+  if (p === '/api/youtube/callback' && req.method === 'GET') {
+    const code = u.searchParams.get('code') || '';
+    const err = u.searchParams.get('error') || '';
+    const redirectUri = `${u.protocol}//${req.headers.host}/api/youtube/callback`;
+    const done = (msg: string, ok: boolean) =>
+      res.end(`<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#231e18;color:#efe9e0;text-align:center;padding:60px"><h2>${ok ? '✅ 유튜브 연결 완료' : '❌ 연결 실패'}</h2><p>${msg}</p><p><a style="color:#4fe0d0" href="/">← 돌아가기</a> (이 창은 닫아도 됩니다)</p></body>`);
+    res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+    if (err) return done('구글에서 취소됨: ' + err, false);
+    if (!code) return done('인증 코드가 없습니다.', false);
+    try { await exchangeCode(code, redirectUri); return done('이제 완성 영상을 유튜브에 올릴 수 있어요.', true); }
+    catch (e: any) { return done(e.message, false); }
+  }
+
   // ── 이 아래 모든 /api 는 로그인 필요(비번 설정 시) ──
   if (p.startsWith('/api/') && !authed(req))
     return json(res, 401, {error: '로그인이 필요합니다.'});
+
+  // ── 유튜브: 연결 상태 ──
+  if (p === '/api/youtube/status' && req.method === 'GET')
+    return json(res, 200, youtubeStatus());
+  // ── 유튜브: Client ID/Secret 저장 ──
+  if (p === '/api/youtube/config' && req.method === 'POST') {
+    const b = await readBody(req);
+    saveYouTube({
+      clientId: String(b.clientId || '').trim() || undefined,
+      clientSecret: String(b.clientSecret || '').trim() || undefined,
+    });
+    return json(res, 200, {ok: true});
+  }
+  // ── 유튜브: 구글 동의 URL 발급(팝업으로 열게) ──
+  if (p === '/api/youtube/auth' && req.method === 'GET') {
+    try {
+      const redirectUri = `${u.protocol}//${req.headers.host}/api/youtube/callback`;
+      return json(res, 200, {url: authUrl(redirectUri)});
+    } catch (e: any) { return json(res, 400, {error: e.message}); }
+  }
+  // ── 유튜브: 완성 영상 업로드 ──
+  if (p.startsWith('/api/youtube/upload/') && req.method === 'POST') {
+    const id = p.slice('/api/youtube/upload/'.length);
+    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '잘못된 요청'});
+    const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
+    const pjPath = path.join(dir, 'project.json');
+    if (!fs.existsSync(pjPath)) return json(res, 404, {error: '작업을 찾을 수 없습니다.'});
+    const proj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
+    if (proj.status !== 'completed' || !proj.output) return json(res, 400, {error: '완성된 영상만 업로드할 수 있습니다.'});
+    const file = path.join(dir, proj.output);
+    if (proj.output !== path.basename(proj.output) || !fs.existsSync(file)) return json(res, 404, {error: '영상 파일이 없습니다.'});
+    const b = await readBody(req);
+    const privacy = ['public', 'unlisted', 'private'].includes(b.privacy) ? b.privacy : 'public';
+    try {
+      const r = await uploadVideo(file, {
+        title: String(b.title || proj.title).slice(0, 100),
+        description: String(b.description || '').slice(0, 4900),
+        tags: Array.isArray(b.tags) ? b.tags.map((x: any) => String(x)).slice(0, 15) : [],
+        privacy: privacy as any,
+      });
+      return json(res, 200, r);
+    } catch (e: any) { return json(res, 502, {error: e.message}); }
+  }
+  // ── 유튜브: 메타(제목·설명·태그) 자동 생성 ──
+  if (p.startsWith('/api/youtube/meta/') && req.method === 'GET') {
+    const id = p.slice('/api/youtube/meta/'.length);
+    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '잘못된 요청'});
+    const pjPath = path.join(STUDIO_DATA_DIR, 'studio', id, 'project.json');
+    if (!fs.existsSync(pjPath)) return json(res, 404, {error: '작업을 찾을 수 없습니다.'});
+    const proj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
+    const k = pipelineKeys();
+    const narrations = (proj.scenes || []).map((s: any) => s.narration || '');
+    const durSec = (proj.scenes || []).reduce((n: number, s: any) => n + (s.voice?.frames || 0), 0) / 30 || proj.input?.duration || 30;
+    try {
+      const meta = await generateMeta({gemini: k.gemini, openai: k.openai}, proj.title, narrations, durSec);
+      return json(res, 200, meta);
+    } catch (e: any) { return json(res, 502, {error: '메타 생성 실패: ' + e.message}); }
+  }
 
   // ── 포트폴리오 삭제(관리, 로그인 필요) ──
   if (p.startsWith('/api/portfolio/') && req.method === 'DELETE') {

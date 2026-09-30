@@ -58,6 +58,61 @@
       report(e); btn.textContent = '⬇ 영상 다운로드';
     } finally { btn.disabled = false; setTimeout(() => { if (btn.textContent === '✓ 저장됨') btn.textContent = orig; }, 1500); }
   }
+  // 유튜브 올리기 — 연결 확인 → Gemini 메타 자동생성 → 확인/수정 → 업로드.
+  async function openYouTube(btn) {
+    if (!current?.output) return;
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = '📺 준비 중…';
+    try {
+      const st = await (await fetch('/api/youtube/status')).json();
+      if (!st.connected) {
+        message('먼저 ⚙ 키 설정에서 유튜브 계정을 연결하세요.', true);
+        btn.disabled = false; btn.textContent = orig; return;
+      }
+      btn.textContent = '📺 제목·설명 만드는 중…';
+      const meta = await api('/api/youtube/meta/' + current.id, undefined); // GET
+      openYtModal(meta, st.channelTitle);
+    } catch (e) { report(e); }
+    finally { btn.disabled = false; btn.textContent = orig; }
+  }
+  function openYtModal(meta, channel) {
+    let box = el('yt-modal');
+    if (!box) {
+      box = document.createElement('div'); box.id = 'yt-modal'; box.className = 'modal hidden';
+      document.body.appendChild(box);
+    }
+    box.innerHTML = `<div class="modal-box">
+      <div class="modal-head"><h2>📺 유튜브 올리기</h2><button class="ghost-btn" data-yt="close">✕</button></div>
+      <p class="sub small">${channel ? '채널: <b>' + escape(channel) + '</b> · ' : ''}제목·설명은 수정할 수 있어요.</p>
+      <label class="field-label">제목<input id="yt-title" class="input" maxlength="100" value="${escape(meta.title || '')}" /></label>
+      <label class="field-label">설명<textarea id="yt-desc" class="input" rows="6" maxlength="4900">${escape(meta.description || '')}</textarea></label>
+      <label class="field-label">태그(쉼표로 구분)<input id="yt-tags" class="input" value="${escape((meta.tags || []).join(', '))}" /></label>
+      <label class="field-label">공개 범위<select id="yt-privacy" class="input">
+        <option value="public" selected>바로 공개</option>
+        <option value="unlisted">미등록(링크만)</option>
+        <option value="private">비공개</option>
+      </select></label>
+      <button class="primary-btn" data-yt="upload">유튜브에 올리기</button>
+      <p id="yt-up-msg" class="mini-state"></p>
+    </div>`;
+    box.classList.remove('hidden');
+    box.onclick = async e => {
+      const act = e.target.closest('[data-yt]')?.dataset.yt;
+      if (act === 'close' || e.target === box) { box.classList.add('hidden'); return; }
+      if (act === 'upload') {
+        const up = e.target; up.disabled = true; up.textContent = '올리는 중… (잠시 걸려요)';
+        el('yt-up-msg').textContent = '';
+        try {
+          const r = await api('/api/youtube/upload/' + current.id, {
+            title: el('yt-title').value, description: el('yt-desc').value,
+            tags: el('yt-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+            privacy: el('yt-privacy').value,
+          });
+          el('yt-up-msg').innerHTML = `✅ 업로드 완료! <a href="${r.url}" target="_blank" style="color:var(--teal)">${r.url}</a>`;
+          up.textContent = '완료 🎉';
+        } catch (err) { el('yt-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '유튜브에 올리기'; }
+      }
+    };
+  }
   function celebrate() {
     const c = document.createElement('div'); c.className = 'confetti';
     const colors = ['#17b5a4', '#7c5cff', '#ff4d8d', '#FFE24B', '#ff8a5c', '#4fe0d0'];
@@ -193,7 +248,7 @@
         <button class="ghost-btn" data-action="save" ${disabled}>대본 수정 저장</button>
         <button class="primary-btn" data-action="render" ${disabled}>${p.status === 'failed' ? '완료된 단계부터 이어서 재시작' : '2. 검토한 대본으로 최종 제작'}</button>
         <p class="mini-state">나레이션 수정은 해당 장면 음성을 다시 생성합니다. 상단 문구·색상만 바꾸면 음성을 재사용합니다. 장면별 음성은 이어지는 억양이 달라질 수 있습니다.</p>` : !busy ? '<button class="primary-btn" data-action="render">대본 작성 재시작</button>' : ''}
-      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><button class="primary-btn" data-action="download">⬇ 영상 다운로드</button><button class="ghost-btn" data-action="add-portfolio">🎬 포트폴리오에 추가</button><p class="mini-state">앱에서 안 열리면 위 영상을 꾹 눌러 "동영상 저장"을 쓰세요. 포트폴리오는 완성 시 자동 등록되며, 필요하면 위 버튼으로 다시 넣을 수 있어요.</p></div>` : ''}
+      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><button class="primary-btn" data-action="download">⬇ 영상 다운로드</button><button class="ghost-btn" data-action="add-portfolio">🎬 포트폴리오에 추가</button><button class="ghost-btn" data-action="youtube">📺 유튜브 올리기</button><p class="mini-state">앱에서 안 열리면 위 영상을 꾹 눌러 "동영상 저장"을 쓰세요. 포트폴리오는 완성 시 자동 등록되며, 필요하면 위 버튼으로 다시 넣을 수 있어요.</p></div>` : ''}
       <details ${busy || p.status === 'failed' ? 'open' : ''}><summary>제작 로그</summary><div class="scene-actions"><button class="ghost-btn" data-action="copy-log">로그 복사</button><button class="ghost-btn" data-action="expand-log">크게 보기</button></div><pre class="log">${escape(p.logs.join('\n'))}</pre></details>`;
     el('generate').disabled = busy;
     tickElapsed();
@@ -249,6 +304,7 @@
       } catch (err) { report(err); }
       return;
     }
+    if (button.dataset.action === 'youtube') { openYouTube(button); return; }
     if (loading || active(current)) return;
     loading = true;
     try {

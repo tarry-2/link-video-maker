@@ -220,6 +220,24 @@
           <label class="field-label" style="margin-top:10px"><input type="checkbox" id="cost-visible" /> 생성 화면에 예상 비용 표시</label>
         </div>
 
+        <div id="youtube-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
+          <h3 class="field-label">📺 유튜브 연결 <span id="yt-status" class="hint"></span></h3>
+          <p class="hint">완성 영상을 유튜브에 바로 올리려면 한 번만 연결하세요. (Google Cloud에서 발급한 클라이언트 ID/Secret 필요 — 연결 방법은 담당자에게 문의)</p>
+          <div class="key-field">
+            <label>Google Client ID</label>
+            <input id="yt-client-id" class="input" placeholder="새로 입력(비우면 유지)" />
+          </div>
+          <div class="key-field">
+            <label>Google Client Secret</label>
+            <input id="yt-client-secret" class="input" placeholder="새로 입력(비우면 유지)" />
+          </div>
+          <div class="voice-row">
+            <button id="yt-save-config" class="ghost-btn small" type="button">ID/Secret 저장</button>
+            <button id="yt-connect" class="ghost-btn small" type="button">🔗 유튜브 계정 연결</button>
+          </div>
+          <p id="yt-msg" class="mini-state"></p>
+        </div>
+
         <button id="save-keys" class="primary-btn">저장</button>
         <p id="settings-msg" class="mini-state"></p>
       </div>
