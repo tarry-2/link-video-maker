@@ -4,7 +4,7 @@
   "description": "링크를 넣으면 한국어 대본·나레이션·자막 MP4를 자동 생성합니다.",
   "start_url": "/",
   "scope": "/",
-  "display": "standalone",
+  "display": "minimal-ui",
   "orientation": "any",
   "background_color": "#231e18",
   "theme_color": "#c0562a",
