@@ -516,3 +516,6 @@ $('reset-form')?.addEventListener('click', () => {
   const needLogin = await checkAuth();
   if (!needLogin) loadCategories();
 })();
+
+// PWA 서비스워커 등록(앱 설치 가능하게) — 예전 그대로 복원.
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});

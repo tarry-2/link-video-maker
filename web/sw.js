@@ -1,29 +1,16 @@
-// 자폭(self-destructing) 서비스워커.
-// v1 시절 설치된 PWA가 /sw.js로 옛 자산(app.js·index.html)을 캐시해 계속 서빙하던 문제 해결용.
-// 브라우저가 옛 SW를 이 스크립트로 교체 → 모든 캐시 삭제 + 스스로 unregister + 열린 창 새로고침.
-self.addEventListener('install', () => self.skipWaiting());
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      try {
-        const names = await caches.keys();
-        await Promise.all(names.map((n) => caches.delete(n)));
-      } catch (e) {}
-      try {
-        await self.registration.unregister();
-      } catch (e) {}
-      try {
-        const clients = await self.clients.matchAll({type: 'window'});
-        for (const client of clients) {
-          try {
-            client.navigate(client.url);
-          } catch (e) {}
-        }
-      } catch (e) {}
-    })(),
+// OnVideo service worker — 설치 가능(PWA)용 최소 캐시. API/영상은 항상 네트워크.
+// ★network-first: 온라인이면 항상 최신을 받고 캐시에 갱신 → 옛 자산 고착 없음. 오프라인이면 캐시 폴백.
+const CACHE = 'onvideo-v3';
+const ASSETS = ['/', '/index.html', '/voices', '/style.css', '/app.js', '/favicon.svg', '/icon-192.png', '/icon-512.png', '/manifest.json'];
+self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
+self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  // GET만, API·영상(포트폴리오/결과)은 캐시 안 함(항상 네트워크).
+  if (e.request.method !== 'GET' || url.pathname.startsWith('/api/') || url.pathname.startsWith('/portfolio')) return;
+  e.respondWith(
+    fetch(e.request)
+      .then((r) => { if (r.ok && url.origin === location.origin) { const cp = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, cp)); } return r; })
+      .catch(() => caches.match(e.request).then((m) => m || caches.match('/'))),
   );
 });
-
-// 아무것도 캐시하지 않는다 — 항상 네트워크로 통과.
-self.addEventListener('fetch', () => {});

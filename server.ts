@@ -152,7 +152,7 @@ const server = http.createServer(async (req, res) => {
   // ── 정적 ──
   if (p === '/' || p === '/index.html')
     return serveFile(res, path.join(ROOT, 'web', 'index.html'), 'text/html; charset=utf-8');
-  // 자폭 SW — 옛 v1 PWA 캐시 제거용. 항상 최신을 받도록 no-store.
+  // 서비스워커(PWA) — 항상 최신을 받도록 no-store(옛 SW 고착 방지).
   if (p === '/sw.js') {
     return fs.readFile(path.join(ROOT, 'web', 'sw.js'), (err, buf) => {
       if (err) {
@@ -174,6 +174,15 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'web', 'app.js'), 'text/javascript; charset=utf-8');
   if (p === '/style.css')
     return serveFile(res, path.join(ROOT, 'web', 'style.css'), 'text/css; charset=utf-8');
+  // ── PWA 자산(앱 설치) — manifest·아이콘·파비콘. web/에 복원됨. ──
+  if (p === '/manifest.json')
+    return serveFile(res, path.join(ROOT, 'web', 'manifest.json'), 'application/manifest+json; charset=utf-8');
+  if (p === '/icon-192.png')
+    return serveFile(res, path.join(ROOT, 'web', 'icon-192.png'), 'image/png');
+  if (p === '/icon-512.png')
+    return serveFile(res, path.join(ROOT, 'web', 'icon-512.png'), 'image/png');
+  if (p === '/favicon.svg')
+    return serveFile(res, path.join(ROOT, 'web', 'favicon.svg'), 'image/svg+xml; charset=utf-8');
   // 목소리 포트폴리오 샘플 영상(공개, 로그인 전에도 /voices에서 재생)
   if (p.startsWith('/portfolio/')) {
     const name = path.basename(p); // path traversal 방지

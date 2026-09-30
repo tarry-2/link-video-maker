@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OnVideo — 링크 하나로 영상</title>
+    <!-- PWA(앱 설치) — 예전 그대로 복원 -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#c0562a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="OnVideo" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
@@ -82,16 +90,16 @@
           <div class="col">
             <label class="field-label">3. 길이</label>
             <select id="duration" class="input">
-              <optgroup label="쇼츠">
-                <option value="15">15초 · 짧게</option>
-                <option value="30" selected>30초 · 표준</option>
-                <option value="45">45초</option>
-                <option value="60">60초</option>
+              <optgroup label="쇼츠 (세로 9:16)">
+                <option value="15">15초 · 짧게 · 세로</option>
+                <option value="30" selected>30초 · 표준 · 세로</option>
+                <option value="45">45초 · 세로</option>
+                <option value="60">60초 · 세로</option>
               </optgroup>
-              <optgroup label="롱폼">
-                <option value="90">90초</option>
-                <option value="120">2분</option>
-                <option value="180">3분</option>
+              <optgroup label="롱폼 (가로 16:9)">
+                <option value="90">90초 · 가로</option>
+                <option value="120">2분 · 가로</option>
+                <option value="180">3분 · 가로</option>
               </optgroup>
             </select>
             <p id="format-note" class="mini-state">쇼츠 = 세로 9:16 · 롱폼 = 가로 16:9 (유튜브 기준 자동)</p>

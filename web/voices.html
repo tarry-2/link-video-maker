@@ -4,7 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OnVideo — 목소리 듣고 고르기</title>
+    <!-- PWA(앱 설치) — 예전 그대로 복원 -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#c0562a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="OnVideo" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/style.css" />
+    <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
     <style>
       .voice-groups { display: flex; flex-direction: column; gap: 26px; }
       .vg-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
@@ -246,6 +254,7 @@
           ${it.createdAt ? `<p class="pf-clip">${esc(new Date(it.createdAt).toLocaleString('ko-KR'))}</p>` : '<p class="pf-clip">샘플 영상</p>'}
           ${it.youtubeUrl ? `<a class="pf-yt-link" href="${esc(it.youtubeUrl)}" target="_blank">▶ 유튜브에서 보기</a>` : ''}
           <div class="pf-actions">
+            <button class="pf-zoom">🔍 크게 보기</button>
             <button class="pf-yt" data-id="${esc(it.id)}">📺 유튜브 올리기</button>
             <a class="pf-dl" href="${it.video}" download="${esc(it.title)}.mp4">⬇ 다운로드</a>
             ${canDelete && it.kind === 'mine' ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}
@@ -259,12 +268,32 @@
         const card = e.target.closest('.pf-thumb-card');
         if (card) selectVideo(Number(card.dataset.idx), true);
       };
-      // 큰 미리보기 액션(유튜브/삭제) 위임
+      // 큰 미리보기 액션(크게보기/유튜브/삭제) 위임
       $('pf-stage-info').onclick = e => {
+        if (e.target.closest('.pf-zoom')) { openVideoModal(myItems[curIdx]); return; }
         const yt = e.target.closest('.pf-yt'); if (yt) { uploadToYouTube(yt); return; }
         const del = e.target.closest('.pf-del');
         if (del) { if (confirm('이 영상을 포트폴리오에서 삭제할까요? (원본 작업은 남아 있어요)')) fetch('/api/portfolio/' + encodeURIComponent(del.dataset.id), { method: 'DELETE' }).then(r => { if (r.ok) loadMyVideos(Math.max(0, curIdx - 1)); }); }
       };
+
+      // ── 영상 크게 보기(라이트박스 모달) — 우상단 ✕ · 배경 클릭 · ESC로 닫기 ──
+      function openVideoModal(it) {
+        if (!it) return;
+        const land = it.orientation === 'landscape';
+        let box = $('video-modal');
+        if (!box) { box = document.createElement('div'); box.id = 'video-modal'; box.className = 'modal'; document.body.appendChild(box); }
+        box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60';
+        box.innerHTML = `
+          <button data-vm="close" aria-label="닫기" style="position:absolute;top:16px;right:18px;width:46px;height:46px;border-radius:50%;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:24px;font-weight:700;cursor:pointer;line-height:1;z-index:2">✕</button>
+          <div style="width:100%;max-width:${land ? '1100px' : '440px'};max-height:90vh;display:flex;flex-direction:column;align-items:center;gap:12px">
+            <video src="${it.video}" controls autoplay playsinline style="width:100%;max-height:82vh;aspect-ratio:${land ? '16/9' : '9/16'};background:#000;border-radius:14px;object-fit:contain"></video>
+            <p style="color:#fff;font-weight:700;font-size:15px;text-align:center;margin:0;opacity:.95">${esc(it.title || '')}</p>
+          </div>`;
+        const close = () => { const v = box.querySelector('video'); if (v) v.pause(); box.remove(); document.removeEventListener('keydown', onKey); };
+        const onKey = ev => { if (ev.key === 'Escape') close(); };
+        box.onclick = ev => { if (ev.target === box || ev.target.closest('[data-vm="close"]')) close(); };
+        document.addEventListener('keydown', onKey);
+      }
 
       // ── 유튜브 올리기 ──
       async function uploadToYouTube(btn) {
