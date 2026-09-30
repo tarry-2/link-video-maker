@@ -239,8 +239,22 @@ function showResult(file, title) {
   $('result-video').src = src;
   $('download').href = src;
   $('download').setAttribute('download', (title || 'onvideo') + '.mp4');
+  syncFormat();
   $('result-block').scrollIntoView({ behavior: 'smooth' });
 }
+
+// ── 화면비 UI 동기화: 쇼츠(<90초)=세로 9:16 / 롱폼(≥90초)=가로 16:9 ──
+//   미리보기 프레임·배지·결과영상의 비율을 길이 선택에 맞춰 바꾼다(.land 클래스=가로).
+function syncFormat() {
+  const dur = Number($('duration')?.value || 30);
+  const land = dur >= 90;
+  const badge = $('ph-badge'); if (badge) badge.textContent = 'MP4 · ' + (land ? '16:9' : '9:16');
+  const frame = $('ph-frame'); if (frame) frame.classList.toggle('land', land);
+  const rv = $('result-video'); if (rv) rv.classList.toggle('land', land);
+}
+$('duration')?.addEventListener('change', syncFormat);
+$('duration')?.addEventListener('input', syncFormat);
+syncFormat();
 
 // ── 키 설정 모달 ──
 const KEY_META = [

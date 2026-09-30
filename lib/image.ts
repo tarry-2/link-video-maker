@@ -23,12 +23,13 @@ export async function generateImageFlux(
   log?: (m: string) => void,
   quality: 'fast' | 'high' = 'high',
   style: ImageStyle = 'real',
+  landscape = false,
 ): Promise<void> {
   // 일시적 네트워크 오류(fetch failed 등)에 최대 3회 재시도 — placeholder로 새는 것 방지.
   let lastErr: any;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await fluxOnce(key, prompt, outPath, log, quality, style);
+      return await fluxOnce(key, prompt, outPath, log, quality, style, landscape);
     } catch (e: any) {
       lastErr = e;
       log?.(`[이미지] 생성 실패(${e.message}) — 재시도 ${attempt}/3`);
@@ -45,13 +46,14 @@ async function fluxOnce(
   log?: (m: string) => void,
   quality: 'fast' | 'high' = 'high',
   style: ImageStyle = 'real',
+  landscape = false,
 ): Promise<void> {
   const high = quality !== 'fast';
   const model = high ? 'flux-dev' : 'flux-schnell';
   const styleStr = style === 'anime' ? ANIME_STYLE + ANIME_PEOPLE : REAL_STYLE + REAL_NO_PEOPLE;
   const input: Record<string, unknown> = {
     prompt: prompt + styleStr + NEG_TEXT,
-    aspect_ratio: '9:16', // ★세로 쇼츠 네이티브
+    aspect_ratio: landscape ? '16:9' : '9:16', // ★롱폼=가로 16:9 / 쇼츠=세로 9:16 네이티브
     num_outputs: 1,
     output_format: 'jpg',
     output_quality: high ? 95 : 90,
@@ -101,5 +103,5 @@ async function fluxOnce(
   const img = await fetch(url);
   if (!img.ok) throw new Error('Flux 이미지 다운로드 실패');
   await writeFile(outPath, Buffer.from(await img.arrayBuffer()));
-  log?.(`[이미지] Flux 9:16 생성 완료`);
+  log?.(`[이미지] Flux ${landscape ? '16:9' : '9:16'} 생성 완료`);
 }

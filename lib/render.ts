@@ -53,12 +53,14 @@ export async function renderVideo(
   bgmSrc?: string,
   voiceSrc?: string,
   publicDir?: string,
+  orientation: 'portrait' | 'landscape' = 'portrait',
 ): Promise<void> {
   const serveUrl = publicDir
     ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
     : await getServeUrl(log);
   try {
-  const inputProps = {scenes, transitionFrames, bgmSrc, voiceSrc};
+  // ★orientation을 inputProps로 넘기면 Root.tsx calculateMetadata가 세로/가로 해상도를 정한다.
+  const inputProps = {scenes, transitionFrames, bgmSrc, voiceSrc, orientation};
   const composition = await selectComposition({
     serveUrl,
     id: 'Video',

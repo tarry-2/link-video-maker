@@ -57,7 +57,26 @@ export const Scene: React.FC<SceneData> = ({
   comment,
 }) => {
   const frame = useCurrentFrame();
-  const {fps, durationInFrames} = useVideoConfig();
+  const {fps, durationInFrames, width, height} = useVideoConfig();
+  // ★세로(9:16)·가로(16:9) 레이아웃 분기. land=가로. 세로 값은 기존 그대로(무회귀), 가로만 튜닝 상수.
+  const land = width > height;
+  const L = land
+    ? {
+        // 가로 1920×1080 — 세로 여백이 좁아 폰트·좌표를 줄이고 좌우 여백은 넓게.
+        imgW: '94%', imgH: '88%',
+        hookTop: 44, hookPad: '0 100px', fsHookTop: 60, fsHookAccent: 72,
+        subBottom: 54, subBottomOverlay: 290, subPad: '0 140px', subGap: '10px 18px', fsSub: 44,
+        prodBottom: 40, prodSide: 90, fsProdName: 32, fsProdBenefit: 26, fsProdUrl: 20,
+        cmtBottom: 90, cmtSide: 90, cmtAvatar: 64, fsCmtName: 30, fsCmtText: 32, fsCmtLikes: 26,
+      }
+    : {
+        // 세로 1080×1920 — 기존 값 그대로.
+        imgW: '92%', imgH: 900,
+        hookTop: 110, hookPad: '0 70px', fsHookTop: 88, fsHookAccent: 104,
+        subBottom: 170, subBottomOverlay: 360, subPad: '0 70px', subGap: '14px 20px', fsSub: 62,
+        prodBottom: 45, prodSide: 65, fsProdName: 36, fsProdBenefit: 28, fsProdUrl: 22,
+        cmtBottom: 140, cmtSide: 60, cmtAvatar: 76, fsCmtName: 34, fsCmtText: 38, fsCmtLikes: 30,
+      };
 
   const hookIn = spring({frame, fps, config: {damping: 16, mass: 0.6}});
   const hookY = interpolate(hookIn, [0, 1], [40, 0]);
@@ -129,8 +148,8 @@ export const Scene: React.FC<SceneData> = ({
       <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center'}}>
         <div
           style={{
-            width: '92%',
-            height: 900,
+            width: L.imgW,
+            height: L.imgH,
             borderRadius: 28,
             overflow: 'hidden',
             boxShadow: '0 30px 80px rgba(0,0,0,0.55)',
@@ -159,10 +178,10 @@ export const Scene: React.FC<SceneData> = ({
       <div
         style={{
           position: 'absolute',
-          top: 110,
+          top: L.hookTop,
           width: '100%',
           textAlign: 'center',
-          padding: '0 70px',
+          padding: L.hookPad,
           boxSizing: 'border-box',
           transform: `translateY(${hookY}px)`,
           opacity: hookIn,
@@ -171,7 +190,7 @@ export const Scene: React.FC<SceneData> = ({
         <div
           style={{
             fontFamily: blackFont,
-            fontSize: 88,
+            fontSize: L.fsHookTop,
             lineHeight: 1.12,
             color: '#fff',
             textShadow: outline(5),
@@ -183,7 +202,7 @@ export const Scene: React.FC<SceneData> = ({
         <div
           style={{
             fontFamily: blackFont,
-            fontSize: 104,
+            fontSize: L.fsHookAccent,
             lineHeight: 1.12,
             color: accentColor,
             textShadow: outline(6),
@@ -199,14 +218,14 @@ export const Scene: React.FC<SceneData> = ({
       <div
         style={{
           position: 'absolute',
-          bottom: product || comment ? 360 : 170,
+          bottom: product || comment ? L.subBottomOverlay : L.subBottom,
           width: '100%',
           display: 'flex',
           flexWrap: 'wrap',
           justifyContent: 'center',
           alignItems: 'center',
-          gap: '14px 20px',
-          padding: '0 70px',
+          gap: L.subGap,
+          padding: L.subPad,
           boxSizing: 'border-box',
         }}
       >
@@ -218,7 +237,7 @@ export const Scene: React.FC<SceneData> = ({
               style={{
                 fontFamily: notoFont,
                 fontWeight: 800,
-                fontSize: 62,
+                fontSize: L.fsSub,
                 color: active ? accentColor : '#fff',
                 textShadow: outline(active ? 5 : 4),
                 transform: active ? 'scale(1.14)' : 'scale(1)',
@@ -232,11 +251,11 @@ export const Scene: React.FC<SceneData> = ({
       </div>
 
       {product ? (
-        <div style={{position: 'absolute', bottom: 45, left: 65, right: 65, padding: '18px 24px', borderRadius: 18,
+        <div style={{position: 'absolute', bottom: L.prodBottom, left: L.prodSide, right: L.prodSide, padding: '18px 24px', borderRadius: 18,
           background: 'rgba(10,10,12,0.92)', color: '#fff', fontFamily: notoFont, lineHeight: 1.35, overflowWrap: 'anywhere'}}>
-          <div style={{fontSize: 36, fontWeight: 700}}>{product.name} {product.price}</div>
-          {product.benefit ? <div style={{fontSize: 28, color: '#4FE0D0'}}>{product.benefit}</div> : null}
-          {product.url ? <div style={{fontSize: 22, marginTop: 6}}>{product.url}</div> : null}
+          <div style={{fontSize: L.fsProdName, fontWeight: 700}}>{product.name} {product.price}</div>
+          {product.benefit ? <div style={{fontSize: L.fsProdBenefit, color: '#4FE0D0'}}>{product.benefit}</div> : null}
+          {product.url ? <div style={{fontSize: L.fsProdUrl, marginTop: 6}}>{product.url}</div> : null}
         </div>
       ) : null}
 
@@ -245,9 +264,9 @@ export const Scene: React.FC<SceneData> = ({
         <div
           style={{
             position: 'absolute',
-            bottom: 140,
-            left: 60,
-            right: 60,
+            bottom: L.cmtBottom,
+            left: L.cmtSide,
+            right: L.cmtSide,
             background: 'rgba(20,20,22,0.92)',
             borderRadius: 24,
             padding: '28px 32px',
@@ -259,8 +278,8 @@ export const Scene: React.FC<SceneData> = ({
         >
           <div
             style={{
-              width: 76,
-              height: 76,
+              width: L.cmtAvatar,
+              height: L.cmtAvatar,
               borderRadius: '50%',
               background: 'linear-gradient(135deg,#4FE0D0,#7C5CFF)',
               flexShrink: 0,
@@ -269,7 +288,7 @@ export const Scene: React.FC<SceneData> = ({
               justifyContent: 'center',
               fontFamily: notoFont,
               fontWeight: 800,
-              fontSize: 34,
+              fontSize: L.fsCmtName,
               color: '#fff',
             }}
           >
@@ -280,7 +299,7 @@ export const Scene: React.FC<SceneData> = ({
               style={{
                 fontFamily: notoFont,
                 fontWeight: 800,
-                fontSize: 34,
+                fontSize: L.fsCmtName,
                 color: '#fff',
                 marginBottom: 6,
               }}
@@ -291,7 +310,7 @@ export const Scene: React.FC<SceneData> = ({
               style={{
                 fontFamily: notoFont,
                 fontWeight: 500,
-                fontSize: 38,
+                fontSize: L.fsCmtText,
                 color: '#e8e8ea',
                 lineHeight: 1.25,
               }}
@@ -302,7 +321,7 @@ export const Scene: React.FC<SceneData> = ({
               style={{
                 fontFamily: notoFont,
                 fontWeight: 600,
-                fontSize: 30,
+                fontSize: L.fsCmtLikes,
                 color: '#9a9aa2',
                 marginTop: 10,
               }}

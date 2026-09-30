@@ -79,6 +79,8 @@ body {
   background: var(--card2); border: 1px dashed var(--line);
   display: flex; align-items: center; justify-content: center; position: relative;
 }
+/* 롱폼(가로 16:9) 미리보기·결과 — .land 클래스로 전환 */
+.ph-frame.land { aspect-ratio: 16 / 9; max-width: 340px; }
 .ph-emoji { font-size: 52px; opacity: 0.45; }
 .ph-badge {
   position: absolute; top: 12px; left: 12px; font-size: 11px; font-weight: 700;
@@ -161,6 +163,8 @@ select.input { appearance: none; cursor: pointer; }
 .log .fail { color: #ff6b5e; }
 .result-title { font-size: 18px; font-weight: 700; margin-bottom: 14px; }
 .result-video { width: 100%; max-width: 340px; display: block; margin: 0 auto 16px; border-radius: 14px; }
+/* 롱폼(가로 16:9) 결과 영상 — 세로보다 넓게 */
+.result-video.land { max-width: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #000; }
 
 /* 숨김 상태는 뒤에 선언된 .modal 등의 display보다 항상 우선한다. */
 .hidden { display: none !important; }

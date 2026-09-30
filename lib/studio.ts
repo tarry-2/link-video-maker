@@ -250,6 +250,7 @@ export class Studio {
           category: preset ? `${preset.emoji} ${preset.label}` : '영상',
           goal: (v?.use?.[0] as any) || 'info', // 뱃지 색상(issue/info/sell/heal)
           createdAt: new Date().toISOString(),
+          orientation: p.input.duration >= 90 ? 'landscape' : 'portrait', // ★롱폼=가로
         });
         log('[완료] 포트폴리오에 자동 등록됐습니다.');
       } catch (e: any) {
@@ -272,6 +273,7 @@ export class Studio {
       category: preset ? `${preset.emoji} ${preset.label}` : '영상',
       goal: (v?.use?.[0] as any) || 'info',
       createdAt: new Date().toISOString(),
+      orientation: p.input.duration >= 90 ? 'landscape' : 'portrait', // ★롱폼=가로
     });
     return {ok: true};
   }

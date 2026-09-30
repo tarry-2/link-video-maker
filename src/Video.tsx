@@ -11,6 +11,10 @@ export const videoSchema = z.object({
   transitionFrames: z.number(),
   bgmSrc: z.string().optional(), // 자동 생성된 배경음악(public 상대경로)
   voiceSrc: z.string().optional(), // ★통짜 나레이션(전체에 한 번, 자연스러운 억양)
+  // ★화면비: 쇼츠=세로(portrait 1080×1920) / 롱폼=가로(landscape 1920×1080).
+  //   Root.tsx의 calculateMetadata가 이 값으로 Composition width/height를 정한다.
+  //   Scene.tsx는 useVideoConfig()의 width/height로 세로·가로 레이아웃을 분기한다.
+  orientation: z.enum(['portrait', 'landscape']).optional(),
 });
 
 export type VideoData = z.infer<typeof videoSchema>;

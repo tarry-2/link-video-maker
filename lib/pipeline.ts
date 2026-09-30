@@ -62,6 +62,9 @@ export async function makeVideo(
   opts: PipelineOpts,
 ): Promise<{out: string; title: string; imageDir: string}> {
   const log = opts.log || (() => {});
+  // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16. UI "롱폼" optgroup(90/120/180)과 일치.
+  const landscape = opts.duration >= 90;
+  const orientation: 'portrait' | 'landscape' = landscape ? 'landscape' : 'portrait';
   const id = randomUUID().slice(0, 8);
   const pubRel = `jobs/${id}`;
   const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
@@ -107,10 +110,10 @@ export async function makeVideo(
       ? `${sb.subject}. ${s.visualPrompt}. (main subject must be ${sb.subject})`
       : s.visualPrompt;
     try {
-      await generateImageFlux(keys.replicate, vp, abs(imgRel), log, opts.quality || 'high', opts.imageStyle || 'real');
+      await generateImageFlux(keys.replicate, vp, abs(imgRel), log, opts.quality || 'high', opts.imageStyle || 'real', landscape);
     } catch (e: any) {
       log(`[장면 ${i + 1}] ⚠️ 이미지 생성 실패(${e.message}) → 임시 placeholder`);
-      const r = await fetch(`https://picsum.photos/seed/ov${id}${i}/1080/1920`);
+      const r = await fetch(`https://picsum.photos/seed/ov${id}${i}/${landscape ? '1920/1080' : '1080/1920'}`);
       await writeFile(abs(imgRel), Buffer.from(await r.arrayBuffer()));
     }
 
@@ -150,7 +153,7 @@ export async function makeVideo(
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `${id}.mp4`);
   await mkdir(path.join(process.cwd(), 'out'), {recursive: true});
-  await renderVideo(scenes, transitionFrames, out, log, bgmSrc, voiceRel);
+  await renderVideo(scenes, transitionFrames, out, log, bgmSrc, voiceRel, undefined, orientation);
   log(`[완료] ${out}`);
   return {out, title: sb.title, imageDir: abs(pubRel)};
 }

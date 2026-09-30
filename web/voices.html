@@ -25,7 +25,7 @@
       .vcard.playing { border-color: var(--teal); }
       .back-link { color: var(--accent); text-decoration: none; font-size: 14px; }
       /* 내가 만든 영상 — 관리용 컴팩트 그리드(영상 많아져도 한눈에). PC 다열, 모바일 2열. */
-      .mypf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; }
+      .mypf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; align-items: start; } /* 가로·세로 카드 섞여도 위 정렬(빈공간 방지) */
       .mypf-grid .pf-card h3 { font-size: 14px; }
       .mypf-grid .pf-card figcaption { padding: 12px 12px 14px; }
       .pf-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
@@ -38,6 +38,7 @@
       /* 컴팩트 썸네일 카드 — 세로로 안 길어지게 */
       .pf-thumb-card { cursor: pointer; }
       .pf-thumb { position: relative; aspect-ratio: 9/16; background: #000; border-radius: 12px 12px 0 0; overflow: hidden; }
+      .pf-thumb.land { aspect-ratio: 16/9; } /* 롱폼=가로 썸네일 */
       .pf-thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
       .pf-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); opacity: .92; }
       .pf-yt-badge { position: absolute; top: 8px; right: 8px; background: #ff0000; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
@@ -46,6 +47,7 @@
       /* 큰 미리보기 스테이지 */
       .pf-stage { display: flex; gap: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 18px; }
       .pf-stage-video { width: 42%; max-width: 300px; aspect-ratio: 9/16; border-radius: 12px; background: #000; flex-shrink: 0; }
+      .pf-stage-video.land { width: 60%; max-width: 520px; aspect-ratio: 16/9; } /* 롱폼=가로 큰 미리보기 */
       .pf-stage-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
       .pf-stage-meta select { margin-bottom: 14px; }
       .pf-stage-title { font-size: 18px; font-weight: 800; margin: 8px 0; }
@@ -55,6 +57,7 @@
       @media (max-width: 640px) {
         .pf-stage { flex-direction: column; padding: 14px; }
         .pf-stage-video { width: 100%; max-width: 220px; margin: 0 auto; }
+        .pf-stage-video.land { max-width: 100%; } /* 모바일 가로 미리보기는 꽉 차게 */
         .pf-stage-meta { text-align: center; }
         .pf-stage-meta .pf-actions { justify-content: center; }
       }
@@ -222,7 +225,7 @@
           fig.className = 'pf-card pf-thumb-card';
           fig.dataset.idx = i;
           fig.innerHTML = `
-            <div class="pf-thumb"><video src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}</div>
+            <div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}</div>
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${esc(it.title)}</h3></figcaption>`;
           grid.appendChild(fig);
         }
@@ -234,6 +237,7 @@
         const it = myItems[idx]; if (!it) return;
         curIdx = idx;
         const v = $('pf-stage-video'); v.src = it.video;
+        v.classList.toggle('land', it.orientation === 'landscape');
         $('pf-select').value = idx;
         $('pf-stage-info').innerHTML = `
           <span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span>

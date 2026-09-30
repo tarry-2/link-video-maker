@@ -88,7 +88,13 @@ export const RemotionRoot: React.FC = () => {
         );
         const overlap =
           props.transitionFrames * Math.max(0, props.scenes.length - 1);
-        return {durationInFrames: total - overlap};
+        // ★화면비: 롱폼=가로(1920×1080) / 그 외=세로(1080×1920). orientation 미지정=세로(무회귀).
+        const landscape = props.orientation === 'landscape';
+        return {
+          durationInFrames: total - overlap,
+          width: landscape ? 1920 : 1080,
+          height: landscape ? 1080 : 1920,
+        };
       }}
     />
   );

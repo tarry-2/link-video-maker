@@ -15,6 +15,7 @@ export type PortfolioItem = {
   goal: 'issue' | 'info' | 'sell' | 'heal'; // 뱃지 색상 분류
   createdAt: string;
   youtubeUrl?: string; // 유튜브 업로드 완료 시 링크
+  orientation?: 'portrait' | 'landscape'; // 화면비(롱폼=landscape). 없으면 세로 폴백(레거시).
 };
 
 // 특정 항목에 유튜브 링크 기록(업로드 완료 후).
@@ -64,7 +65,7 @@ export function removePortfolio(projectId: string) {
 }
 
 // 기본 샘플(데모) 영상 — public/portfolio/에 고정 존재. 포트폴리오 목록에 항상 포함(삭제 불가).
-export type SampleItem = {file: string; title: string; voice: string; category: string; goal: 'issue' | 'info' | 'sell' | 'heal'};
+export type SampleItem = {file: string; title: string; voice: string; category: string; goal: 'issue' | 'info' | 'sell' | 'heal'; orientation?: 'portrait' | 'landscape'};
 export const SAMPLES: SampleItem[] = [
   {file: 'gulbi-luna.mp4', title: '영광 법성포 굴비 (온종일팜)', voice: 'Luna · 다정 여성', category: '🛍️ 판매·음식', goal: 'sell'},
   {file: 'city-shin.mp4', title: '사라진 도시, 인구 절벽의 미래', voice: 'Shin · 깊고 묵직', category: '📰 이슈·미스터리', goal: 'issue'},

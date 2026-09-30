@@ -196,6 +196,7 @@ const server = http.createServer(async (req, res) => {
       goal: it.goal,
       createdAt: it.createdAt,
       youtubeUrl: it.youtubeUrl || '',
+      orientation: it.orientation || 'portrait', // 레거시(없음)=세로 폴백
       video: `/portfolio-item/${it.projectId}.mp4`,
     }));
     const sampleYt = loadSampleYouTube();
@@ -208,6 +209,7 @@ const server = http.createServer(async (req, res) => {
       goal: s.goal,
       createdAt: '',
       youtubeUrl: sampleYt[s.file] || '',
+      orientation: s.orientation || 'portrait', // 샘플은 전부 세로(9:16)
       video: `/portfolio/${s.file}`,
     }));
     return json(res, 200, {items: [...mine, ...samples]});

@@ -89,7 +89,8 @@ export async function generateManualDraft(
   const perScene = Math.round((opts.duration * 5.6) / n); // ★실측보정 5.6: dry-run 3회로 목표40초에 중심 맞춤(v4 통짜 rate 6.0자/초). "약 N자"만 지시(문장수 지시 금지=폭주). Gemini가 ±25% 널뛰어도 평균은 목표에 근접.
   const isSell = preset?.goal === 'sell';
 
-  const prompt = `너는 한국 유튜브 쇼츠 대본 작가다. 아래에 사용자가 직접 올린 이미지 ${imgs.length}장이 순서대로 첨부돼 있다(0번부터). 이 이미지들을 직접 보고 분석해서, 가장 좋은 이미지들만 골라 '기승전결이 있는' 세로 쇼츠를 구성하라.
+  const land = opts.duration >= 90;
+  const prompt = `너는 한국 유튜브 ${land ? '롱폼(가로 16:9)' : '쇼츠(세로 9:16)'} 대본 작가다. 아래에 사용자가 직접 올린 이미지 ${imgs.length}장이 순서대로 첨부돼 있다(0번부터). 이 이미지들을 직접 보고 분석해서, 가장 좋은 이미지들만 골라 '기승전결이 있는' ${land ? '가로 롱폼' : '세로 쇼츠'}를 구성하라.
 
 ${preset ? `[카테고리] ${preset.label} — 톤: ${preset.toneGuide}` : ''}
 ${opts.keywords ? `[반드시 포함할 키워드/문구] ${opts.keywords} — 후킹이나 자막에 자연스럽게 꼭 넣어라.` : ''}
@@ -226,7 +227,9 @@ export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Pro
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `${id}.mp4`);
   await mkdir(path.join(process.cwd(), 'out'), {recursive: true});
-  await renderVideo(scenes, transitionFrames, out, log, bgmSrc, voiceRel);
+  // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16(자동 모드와 동일 기준).
+  const orientation: 'portrait' | 'landscape' = opts.duration >= 90 ? 'landscape' : 'portrait';
+  await renderVideo(scenes, transitionFrames, out, log, bgmSrc, voiceRel, undefined, orientation);
   log(`[완료] ${out}`);
   return {out, title: plan.title, imageDir: abs(pubRel)};
 }

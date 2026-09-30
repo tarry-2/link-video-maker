@@ -43,7 +43,10 @@ export async function generateStoryboard(
   },
 ): Promise<Storyboard> {
   const duration = opts.duration;
-  const format = duration > 90 ? '롱폼' : '쇼츠';
+  // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16. UI "롱폼" optgroup(90/120/180)과 일치(오프바이원 수정).
+  const landscape = duration >= 90;
+  const format = landscape ? '롱폼' : '쇼츠';
+  const orient = landscape ? '가로(16:9, wide)' : '세로(9:16)';
   const n =
     duration <= 30 ? 4 : duration <= 60 ? 6 : Math.min(10, Math.ceil(duration / 12));
   const perScene = Math.round((duration * 5.6) / n); // ★실측보정 5.6: dry-run으로 목표길이에 중심 맞춤(v4 통짜 rate 6.0자/초). "약 N자"만 지시(문장수 지시 금지=폭주). Gemini가 ±25% 널뛰어도 평균은 목표에 근접.
@@ -77,7 +80,7 @@ export async function generateStoryboard(
 
   const catLine = preset ? `[카테고리] ${preset.label} (${preset.group})` : '';
 
-  const prompt = `너는 조회수 높은 한국 유튜브 채널의 대본 작가다. 아래 자료로 '한 편의 영화처럼 기승전결이 있어 끝까지 보게 되는' 한국어 세로 ${format} 대본을 JSON으로 쓴다.
+  const prompt = `너는 조회수 높은 한국 유튜브 채널의 대본 작가다. 아래 자료로 '한 편의 영화처럼 기승전결이 있어 끝까지 보게 되는' 한국어 ${orient} ${format} 대본을 JSON으로 쓴다.
 
 ${catLine}
 [화법·톤] ${toneGuide}
@@ -95,7 +98,7 @@ ${catLine}
 - hookTop: 상단 후킹 첫 줄(흰색, 맥락/셋업). 공백 포함 12자 이내.
 - hookAccent: 상단 후킹 둘째 줄(강조색, 펀치라인). 10자 이내. 임팩트 있게.
 - accentColor: 이 장면 강조색 hex 하나. 장면마다 다르게 골라라(${preset ? preset.accentColors.join(', ') : PALETTE}) — 내용 분위기에 맞게.
-- visualPrompt: 이미지 생성용 영어 프롬프트. 9:16 세로. ${preset ? `이 카테고리의 비주얼 느낌: "${preset.imageStyle}".` : '"실제 취재 보도사진 리얼리즘"(자연광·실제 질감).'} 나레이션의 핵심 사물·장소·상황을 구체적으로.
+- visualPrompt: 이미지 생성용 영어 프롬프트. ${landscape ? '16:9 landscape wide shot(가로 와이드 구도: 풍경·전경·넓은 현장을 담되 핵심 피사체는 중앙~좌우 3분할점에)' : '9:16 세로'}. ${preset ? `이 카테고리의 비주얼 느낌: "${preset.imageStyle}".` : '"실제 취재 보도사진 리얼리즘"(자연광·실제 질감).'} 나레이션의 핵심 사물·장소·상황을 구체적으로.
   ★★핵심 소재 일관성(매우 중요): 모든 장면의 visualPrompt는 반드시 위 [핵심 소재 subject]와 같은 대상을 보여줘야 한다. 예를 들어 주제가 '간장계란볶음밥'이면 모든 장면이 볶음밥이어야 하고, 절대 파스타·면·다른 음식으로 바뀌면 안 된다. 각 visualPrompt 안에 subject를 영어로 명시적으로 포함시켜라.
   ★사람(특히 얼굴·군중)은 절제하고 사물·장소·현장·상징물 위주. 사람이 꼭 필요하면 손·뒷모습·실루엣만 작게. ★글자·문서·표가 주요 피사체인 장면 금지. no text.
 - comment(선택): 4~6개 장면 중 딱 1개 장면에만, 이지컷식 가짜 시청자 댓글 {"user":"한국이름","text":"공감/놀람 한마디","likes":"4.2천"}.
