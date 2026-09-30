@@ -210,19 +210,51 @@ $('generate').onclick = async () => {
     return;
   }
 
-  // SSE 진행로그
+  // SSE 진행로그 — 화면 내렸다 와도 이어지게 재연결 지원.
+  attachProgress(id, true);
+};
+
+// ── 진행 로그 SSE(재연결 가능) — 화면 내림/백그라운드로 끊겨도 복귀 시 자동 이어짐 ──
+//   제작은 서버에서 계속 돌고, /api/progress는 재접속 시 그동안의 로그를 처음부터 다시 준다.
+let curJobId = null, curES = null, reconnTries = 0;
+function attachProgress(id, freshLog) {
+  curJobId = id;
+  try { localStorage.setItem('onvideo-genjob', id); } catch {}
+  if (curES) { try { curES.close(); } catch {} curES = null; }
+  if (freshLog && $('log')) $('log').textContent = ''; // 재연결 시 서버가 전체 재전송하므로 중복 방지
+  $('progress-block').classList.remove('hidden');
+  $('generate').disabled = true;
   const es = new EventSource('/api/progress?id=' + id);
+  curES = es;
   es.onmessage = (ev) => {
+    reconnTries = 0;
     const m = JSON.parse(ev.data);
     if (m.log) addLog(m.log, m.log.includes('[완료]') ? 'done' : m.log.includes('[실패]') ? 'fail' : '');
     if (m.done) {
-      es.close();
+      es.close(); curES = null; curJobId = null;
+      try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
       if (m.file) showResult(m.file, m.title);
     }
   };
-  es.onerror = () => { es.close(); $('generate').disabled = false; };
-};
+  es.onerror = () => {
+    es.close(); if (curES === es) curES = null;
+    if (curJobId === id && reconnTries < 6) {
+      reconnTries++;
+      setTimeout(() => { if (curJobId === id && !curES) attachProgress(id, true); }, 2500);
+    } else if (curJobId === id) {
+      // 서버에 작업이 없음(재시작 등) — 조용히 종료
+      curJobId = null; try { localStorage.removeItem('onvideo-genjob'); } catch {}
+      $('generate').disabled = false;
+    }
+  };
+}
+// 화면 복귀 시 끊겼던 연결 재개
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && curJobId && !curES) { reconnTries = 0; attachProgress(curJobId, true); }
+});
+// 페이지 다시 열었을 때 진행 중이던 작업 자동 복원
+try { const j = localStorage.getItem('onvideo-genjob'); if (j) attachProgress(j, true); } catch {}
 
 function addLog(text, cls) {
   const line = document.createElement('div');

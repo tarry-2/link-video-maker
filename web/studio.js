@@ -274,6 +274,18 @@
     render(await api('/api/studio/' + id)); schedule();
     el('studio-editor').scrollIntoView({behavior:'smooth', block:'start'});
   }
+  // ★화면 내렸다(백그라운드) 돌아와도 안 멈추게 — 모바일은 백그라운드에서 폴링 타이머를 정지시킨다.
+  //   제작은 서버에서 계속 돌므로, 복귀하는 즉시 최신 상태를 다시 받아 이어붙이고 폴링을 재개한다.
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || !active(current)) return;
+    clearTimeout(timer);
+    try {
+      const id = current.id;
+      const p = await api('/api/studio/' + id);
+      if (current?.id === id) { render(p); if (!active(p)) await loadHistory(); }
+    } catch (e) { report(e); }
+    schedule();
+  });
   el('studio-editor').addEventListener('input', () => {
     dirty = true;
     const status = el('edit-state');
