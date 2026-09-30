@@ -21,9 +21,28 @@ function setMode(m) {
   $('pane-auto').classList.toggle('hidden', m !== 'auto');
   $('pane-topic').classList.toggle('hidden', m !== 'topic');
   $('pane-manual').classList.toggle('hidden', m !== 'manual');
+  saveFormState();
 }
 
 // ── 주제 추천(링크·이미지 없이) ──
+// 추천 결과 렌더(저장된 상태 복원에도 재사용). selected=이전에 고른 주제 제목.
+function renderTopics(topics, selected) {
+  const list = $('topic-list');
+  window.__topics = topics || [];
+  list.innerHTML = (topics || []).map((t) =>
+    `<button class="topic-item" type="button" data-title="${(t.title || '').replace(/"/g, '&quot;')}">${t.title || ''}${t.why ? `<span class="topic-why">${t.why}</span>` : ''}</button>`
+  ).join('');
+  list.querySelectorAll('.topic-item').forEach((b) => b.addEventListener('click', () => {
+    list.querySelectorAll('.topic-item').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    $('topic-input').value = b.dataset.title;
+    saveFormState();
+  }));
+  if (selected) {
+    const sel = [...list.querySelectorAll('.topic-item')].find((b) => b.dataset.title === selected);
+    if (sel) sel.classList.add('active');
+  }
+}
 $('topic-fetch')?.addEventListener('click', async () => {
   const st = $('topic-state'), list = $('topic-list');
   st.textContent = '요즘 잘 되는 주제 찾는 중…';
@@ -34,14 +53,8 @@ $('topic-fetch')?.addEventListener('click', async () => {
     if (!r.ok) throw new Error(d.error || '실패');
     if (!d.topics || !d.topics.length) { st.textContent = '추천 결과가 없어요. 다시 시도해 주세요.'; return; }
     st.textContent = '마음에 드는 주제를 누르세요 (다시 누르면 새 주제).';
-    list.innerHTML = d.topics.map((t) =>
-      `<button class="topic-item" type="button" data-title="${(t.title || '').replace(/"/g, '&quot;')}">${t.title || ''}${t.why ? `<span class="topic-why">${t.why}</span>` : ''}</button>`
-    ).join('');
-    list.querySelectorAll('.topic-item').forEach((b) => b.addEventListener('click', () => {
-      list.querySelectorAll('.topic-item').forEach((x) => x.classList.remove('active'));
-      b.classList.add('active');
-      $('topic-input').value = b.dataset.title;
-    }));
+    renderTopics(d.topics);
+    saveFormState();
   } catch (e) { st.textContent = e.message; }
 });
 
@@ -61,6 +74,7 @@ $('images').onchange = async (e) => {
     img.src = durl;
     $('thumbs').appendChild(img);
   }
+  saveFormState();
 };
 
 // ── 카테고리 · 목소리 로드 ──
@@ -88,6 +102,7 @@ async function loadCategories() {
   $('voice').onchange = () => {
     const v = (window.__voices || []).find((x) => x.id === $('voice').value);
     $('voice-state').textContent = v ? v.tip : '';
+    saveFormState();
   };
 
   // 카테고리 그룹별 칩
@@ -105,17 +120,20 @@ async function loadCategories() {
       const b = document.createElement('button');
       b.className = 'chip';
       b.type = 'button';
+      b.dataset.preset = p.id;
       b.textContent = `${p.emoji} ${p.label}`;
       b.onclick = () => {
         document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
         b.classList.add('active');
         selectedPreset = p.id;
+        saveFormState();
       };
       chips.appendChild(b);
     }
     box.appendChild(chips);
     wrap.appendChild(box);
   }
+  restoreFormState(); // 카테고리·목소리가 채워진 뒤 저장된 입력 복원
 }
 
 // ── 목소리 미리듣기 ──
@@ -357,6 +375,94 @@ function closeLogModal() {
 }
 $('log-modal-close')?.addEventListener('click', closeLogModal);
 $('log-modal')?.addEventListener('click', (e) => { if (e.target === $('log-modal')) closeLogModal(); });
+
+// ── 입력 폼 상태 영속(탭 이동·새로고침에도 유지, '초기화' 전까지 삭제 안 됨) ──
+// 업로드한 사진 파일은 브라우저 보안상 복원 불가 → 텍스트/선택값만 저장.
+const FORM_KEY = 'onvideo-form';
+function saveFormState() {
+  try {
+    const activeTopic = document.querySelector('.topic-item.active');
+    const s = {
+      mode, selectedPreset,
+      url: $('url')?.value || '',
+      topicInput: $('topic-input')?.value || '',
+      topics: window.__topics || [],
+      selectedTopic: activeTopic ? activeTopic.dataset.title : '',
+      duration: $('duration')?.value,
+      voice: $('voice')?.value || '',
+      imageStyle: $('image-style')?.value,
+      quality: $('quality')?.value,
+      keywords: $('keywords')?.value || '',
+      facts: $('facts')?.value || '',
+      music: $('studio-music')?.checked || false,
+      productLock: $('product-lock')?.checked || false,
+      product: ['name', 'price', 'benefit', 'url'].reduce((o, k) => { o[k] = $('product-' + k)?.value || ''; return o; }, {}),
+    };
+    localStorage.setItem(FORM_KEY, JSON.stringify(s));
+  } catch {}
+}
+// setMode는 saveFormState를 호출하므로, 복원/리셋 땐 저장을 안 하는 조용한 버전을 쓴다.
+function setModeSilent(m) {
+  mode = m;
+  $('tab-auto').classList.toggle('active', m === 'auto');
+  $('tab-topic').classList.toggle('active', m === 'topic');
+  $('tab-manual').classList.toggle('active', m === 'manual');
+  $('pane-auto').classList.toggle('hidden', m !== 'auto');
+  $('pane-topic').classList.toggle('hidden', m !== 'topic');
+  $('pane-manual').classList.toggle('hidden', m !== 'manual');
+}
+function restoreFormState() {
+  let s; try { s = JSON.parse(localStorage.getItem(FORM_KEY) || 'null'); } catch {}
+  if (!s) return;
+  if (s.mode) setModeSilent(s.mode);
+  if (s.url != null) $('url').value = s.url;
+  if (s.topicInput != null) $('topic-input').value = s.topicInput;
+  if (Array.isArray(s.topics) && s.topics.length) renderTopics(s.topics, s.selectedTopic);
+  if (s.duration) $('duration').value = s.duration;
+  if (s.voice != null && $('voice')) $('voice').value = s.voice;
+  if (s.imageStyle && $('image-style')) $('image-style').value = s.imageStyle;
+  if (s.quality && $('quality')) $('quality').value = s.quality;
+  if (s.keywords != null) $('keywords').value = s.keywords;
+  if (s.facts != null) $('facts').value = s.facts;
+  if ($('studio-music')) $('studio-music').checked = !!s.music;
+  if ($('product-lock')) { $('product-lock').checked = !!s.productLock; $('product-fields').classList.toggle('hidden', !s.productLock); }
+  if (s.product) ['name', 'price', 'benefit', 'url'].forEach((k) => { if ($('product-' + k)) $('product-' + k).value = s.product[k] || ''; });
+  if (s.selectedPreset) {
+    selectedPreset = s.selectedPreset;
+    const chip = document.querySelector('.chip[data-preset="' + s.selectedPreset + '"]');
+    if (chip) { document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active')); chip.classList.add('active'); }
+  }
+  const v = (window.__voices || []).find((x) => x.id === ($('voice')?.value));
+  if (v) $('voice-state').textContent = v.tip;
+  $('duration')?.dispatchEvent(new Event('input')); // studio.js 예상비용 갱신
+}
+function resetForm() {
+  if ($('url')) $('url').value = '';
+  if ($('topic-input')) $('topic-input').value = '';
+  if ($('topic-list')) $('topic-list').innerHTML = ''; window.__topics = [];
+  if ($('topic-state')) $('topic-state').textContent = '';
+  if ($('keywords')) $('keywords').value = '';
+  if ($('facts')) $('facts').value = '';
+  if ($('duration')) $('duration').value = '30';
+  if ($('image-style')) $('image-style').value = 'real';
+  if ($('quality')) $('quality').value = 'high';
+  if ($('studio-music')) $('studio-music').checked = false;
+  if ($('product-lock')) { $('product-lock').checked = false; $('product-fields').classList.add('hidden'); }
+  ['name', 'price', 'benefit', 'url'].forEach((k) => { if ($('product-' + k)) $('product-' + k).value = ''; });
+  selectedPreset = null; document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
+  if ($('voice')) $('voice').value = ''; if ($('voice-state')) $('voice-state').textContent = '';
+  uploadedImages = []; if ($('thumbs')) $('thumbs').innerHTML = ''; if ($('images')) $('images').value = '';
+  setModeSilent('auto');
+  $('duration')?.dispatchEvent(new Event('input'));
+}
+$('reset-form')?.addEventListener('click', () => {
+  if (!confirm('입력한 내용을 모두 지울까요? (제작 중이거나 완성된 작업엔 영향 없어요)')) return;
+  localStorage.removeItem(FORM_KEY);
+  resetForm();
+});
+['url', 'topic-input', 'duration', 'quality', 'image-style', 'keywords', 'facts', 'product-name', 'product-price', 'product-benefit', 'product-url']
+  .forEach((id) => { const e = $(id); if (e) e.addEventListener('input', saveFormState); });
+['studio-music', 'product-lock'].forEach((id) => { const e = $(id); if (e) e.addEventListener('change', saveFormState); });
 
 // 부트스트랩: 로그인 상태 확인 후, 인증된 경우에만 카테고리·목소리 로드(비로그인 시 401→throw 방지).
 (async () => {
