@@ -34,7 +34,10 @@ $('images').onchange = async (e) => {
 
 // ── 카테고리 · 목소리 로드 ──
 async function loadCategories() {
-  const d = await (await fetch('/api/categories')).json();
+  const res = await fetch('/api/categories');
+  if (!res.ok) return; // 비로그인(401) 등 — 로그인 후 재호출된다.
+  const d = await res.json();
+  if (!Array.isArray(d.voices) || !Array.isArray(d.presets)) return;
 
   // 목소리 셀렉트 — 용도 그룹으로(optgroup). 카테고리 고르면 자동 추천이 기본.
   window.__voices = d.voices;
@@ -235,11 +238,13 @@ $('save-keys').onclick = async () => {
 };
 
 // ── 로그인 ──
+// 로그인되지 않았으면 true(로그인 필요), 로그인/불필요면 false 반환.
 async function checkAuth() {
   try {
     const a = await (await fetch('/api/auth')).json();
-    if (a.required && !a.ok) $('login-overlay').classList.remove('hidden');
+    if (a.required && !a.ok) { $('login-overlay').classList.remove('hidden'); return true; }
   } catch {}
+  return false;
 }
 $('login-btn').onclick = async () => {
   const pw = $('login-pw').value;
@@ -248,10 +253,13 @@ $('login-btn').onclick = async () => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password: pw }),
   });
-  if (r.ok) { $('login-overlay').classList.add('hidden'); }
+  if (r.ok) { $('login-overlay').classList.add('hidden'); loadCategories(); }
   else $('login-err').textContent = '비밀번호를 확인하세요.';
 };
 $('login-pw')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('login-btn').click(); });
 
-checkAuth();
-loadCategories();
+// 부트스트랩: 로그인 상태 확인 후, 인증된 경우에만 카테고리·목소리 로드(비로그인 시 401→throw 방지).
+(async () => {
+  const needLogin = await checkAuth();
+  if (!needLogin) loadCategories();
+})();
