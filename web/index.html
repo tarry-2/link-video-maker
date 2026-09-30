@@ -29,11 +29,15 @@
       </div>
     </header>
 
-    <main id="main" class="wrap">
-      <p class="eyebrow">LINK → VIDEO</p>
-      <h1 class="hero">링크 하나로<br />이지컷급 쇼츠를 만드세요</h1>
-      <p class="sub">뉴스·블로그·레시피 링크를 넣으면 대본·이미지·음성·자막·배경음악까지 자동으로.</p>
+    <main id="main" class="wrap wide">
+      <div class="page-head">
+        <p class="eyebrow">LINK → VIDEO</p>
+        <h1 class="hero">링크 하나로<br />이지컷급 쇼츠를 만드세요</h1>
+        <p class="sub">뉴스·블로그·레시피 링크를 넣으면 대본·이미지·음성·자막·배경음악까지 자동으로.</p>
+      </div>
 
+      <div class="app-grid">
+        <div class="app-left">
       <div class="tabs">
         <button id="tab-auto" class="tab active" type="button">🔗 링크로 자동</button>
         <button id="tab-topic" class="tab" type="button">💡 주제 추천</button>
@@ -146,13 +150,10 @@
         <p class="mini-state">대본을 확인한 후 이미지·음성 제작을 시작합니다. 대본 작성에도 API 비용이 발생할 수 있습니다.</p>
         <p id="studio-message" class="mini-state" role="status"></p>
       </div>
+        </div><!-- /.app-left -->
 
-      <section id="studio-editor" class="card hidden" aria-label="대본 편집"></section>
-      <section class="card" aria-label="작업 내역">
-        <div class="modal-head"><h2 class="block-title">작업 내역</h2><button id="history-refresh" class="ghost-btn">새로고침</button></div>
-        <p class="hint">새 편집 기능으로 만든 작업이 저장됩니다. 실패한 작업은 열어서 이어서 재시작할 수 있습니다.</p>
-        <div id="studio-history" aria-live="polite">로그인 후 작업 내역을 불러옵니다.</div>
-      </section>
+        <div class="app-right">
+          <section id="studio-editor" class="card hidden" aria-label="대본 편집"></section>
 
       <section id="progress-block" class="card hidden">
         <div class="log-head">
@@ -171,6 +172,28 @@
         <video id="result-video" class="result-video" controls></video>
         <a id="download" class="primary-btn" download>⬇ 다운로드</a>
         <p class="mini-state">바탕화면 "온비디오 날짜" 폴더에도 자동 저장됐어요.</p>
+      </section>
+
+          <section id="preview-hint" class="card preview-hint">
+            <div class="ph-frame">
+              <span class="ph-badge">MP4 · 9:16</span>
+              <span class="ph-emoji">🎬</span>
+            </div>
+            <h3 class="block-title">여기에서 영상이 만들어져요</h3>
+            <p class="hint">왼쪽에서 링크·주제·이미지를 넣고 <b>「1. 대본 먼저 만들기」</b>를 누르면, 이 자리에서 순서대로 진행돼요.</p>
+            <ul class="ph-list">
+              <li>① 대본을 먼저 확인하고 다듬기</li>
+              <li>② 이미지·음성·자막·배경음악 자동 제작</li>
+              <li>③ 완성되면 바로 미리보기 + 다운로드</li>
+            </ul>
+          </section>
+        </div><!-- /.app-right -->
+      </div><!-- /.app-grid -->
+
+      <section class="card" aria-label="작업 내역">
+        <div class="modal-head"><h2 class="block-title">작업 내역</h2><button id="history-refresh" class="ghost-btn">새로고침</button></div>
+        <p class="hint">새 편집 기능으로 만든 작업이 저장됩니다. 실패한 작업은 열어서 이어서 재시작할 수 있습니다.</p>
+        <div id="studio-history" aria-live="polite">로그인 후 작업 내역을 불러옵니다.</div>
       </section>
     </main>
 

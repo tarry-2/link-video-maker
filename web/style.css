@@ -59,6 +59,44 @@ body {
 }
 .wordmark span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
+
+/* PC = 화면 꽉 차는 와이드 2단(입력 | 미리보기·진행·결과). 모바일은 1단 복귀. */
+.wrap.wide { max-width: 1280px; padding: 36px 32px 80px; }
+.wrap.wide .page-head { max-width: 780px; }
+.app-grid {
+  display: grid; grid-template-columns: minmax(400px, 460px) minmax(0, 1fr);
+  gap: 28px; align-items: start;
+}
+.app-left { min-width: 0; }
+.app-right { min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+.app-right > section { margin-bottom: 0; }
+
+/* 미리보기 안내 패널 — 결과/진행/편집기 중 하나라도 뜨면 자동 숨김 */
+.preview-hint { text-align: center; }
+.app-right:has(> section:not(.hidden):not(#preview-hint)) #preview-hint { display: none; }
+.ph-frame {
+  aspect-ratio: 9 / 16; max-width: 210px; margin: 4px auto 20px; border-radius: 18px;
+  background: var(--card2); border: 1px dashed var(--line);
+  display: flex; align-items: center; justify-content: center; position: relative;
+}
+.ph-emoji { font-size: 52px; opacity: 0.45; }
+.ph-badge {
+  position: absolute; top: 12px; left: 12px; font-size: 11px; font-weight: 700;
+  color: var(--muted); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px 10px; font-family: "SF Mono", Menlo, monospace;
+}
+.ph-list {
+  list-style: none; text-align: left; max-width: 340px; margin: 16px auto 0;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.ph-list li { padding: 11px 14px; background: var(--card2); border-radius: 10px; color: var(--muted); font-size: 13px; }
+
+@media (max-width: 960px) {
+  .wrap.wide { max-width: 760px; padding: 40px 20px 80px; }
+  .app-grid { grid-template-columns: 1fr; gap: 0; }
+  .app-right { gap: 0; }
+  .app-right > section { margin-bottom: 22px; }
+}
 .eyebrow { font-size: 12px; letter-spacing: 3px; color: var(--teal); font-weight: 700; margin-bottom: 12px; }
 .hero { font-size: 40px; font-weight: 800; letter-spacing: -1px; line-height: 1.18; margin-bottom: 14px; }
 .sub { color: var(--muted); font-size: 16px; margin-bottom: 28px; }
