@@ -1,0 +1,1344 @@
+diff --git a/.gitignore b/.gitignore
+index 383704f..0fa7839 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -11,3 +11,6 @@ run-manual.ts
+ run-city.ts
+ data/
+ *.zip
++
++# Local dependency symlink
++node_modules
+diff --git a/lib/manual.ts b/lib/manual.ts
+index 4e30ee2..9a5c01b 100644
+--- a/lib/manual.ts
++++ b/lib/manual.ts
+@@ -38,7 +38,7 @@ export type ManualOpts = {
+   log?: (m: string) => void;
+ };
+ 
+-type ManualScene = {
++export type ManualScene = {
+   imageIndex: number; // 몇 번째 입력 이미지를 쓸지(선별 결과)
+   narration: string;
+   hookTop: string;
+@@ -54,14 +54,15 @@ async function toGeminiImage(p: string): Promise<GeminiImage> {
+   return {mimeType, dataB64: buf.toString('base64')};
+ }
+ 
+-export async function makeVideoManual(
++export async function generateManualDraft(
+   keys: PipelineKeys,
+   opts: ManualOpts,
+-): Promise<{out: string; title: string; imageDir: string}> {
++  workspace?: string,
++) {
+   const log = opts.log || (() => {});
+   const id = randomUUID().slice(0, 8);
+   const pubRel = `jobs/${id}`;
+-  const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
++  const abs = (rel: string) => workspace ? path.join(workspace, path.basename(rel)) : path.join(process.cwd(), 'public', rel);
+   await mkdir(abs(pubRel), {recursive: true});
+ 
+   const preset = opts.presetId ? getPreset(opts.presetId) : undefined;
+@@ -146,10 +147,19 @@ JSON만 출력:
+   for (const s of plan.scenes) s.narration = normalizeEnding(s.narration);
+   const totalChars = plan.scenes.reduce((a, s) => a + (s.narration || '').length, 0);
+   log(`[수동] "${plan.title}" · ${plan.scenes.length}장면 구성 · 목표 ${perScene}자/장면 · 실제 총 ${totalChars}자(평균 ${Math.round(totalChars / plan.scenes.length)}자/장면)`);
+-  if (process.env.DRY_SCRIPT) {
+-    log(`[DRY] 대본만 생성하고 종료(렌더 생략). 예상 길이 ≈ ${(totalChars / 6.0).toFixed(1)}초`);
+-    return {out: '', title: plan.title, imageDir: abs(pubRel)};
+-  }
++  return {plan, sources};
++}
++
++export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Promise<{out: string; title: string; imageDir: string}> {
++  const log = opts.log || (() => {});
++  const id = randomUUID().slice(0, 8);
++  const pubRel = `jobs/${id}`;
++  const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
++  await mkdir(abs(pubRel), {recursive: true});
++  const preset = opts.presetId ? getPreset(opts.presetId) : undefined;
++  const {plan, sources} = await generateManualDraft(keys, opts);
++  const totalChars = plan.scenes.reduce((n, s) => n + s.narration.length, 0);
++  if (process.env.DRY_SCRIPT) return {out: '', title: plan.title, imageDir: abs(pubRel)};
+ 
+   const voiceKey = opts.voice || preset?.voice || 'adam';
+   const voiceId = VOICES[voiceKey]?.id || VOICES.adam.id;
+diff --git a/lib/pipeline.ts b/lib/pipeline.ts
+index 8c25e66..47765e2 100644
+--- a/lib/pipeline.ts
++++ b/lib/pipeline.ts
+@@ -12,7 +12,7 @@ import type {SceneData} from '../src/Scene';
+ 
+ const FPS = 30;
+ 
+-async function fetchSource(urls: string[], log: (m: string) => void): Promise<string> {
++export async function fetchSource(urls: string[], log: (m: string) => void): Promise<string> {
+   const blocks: string[] = [];
+   for (const u of urls) {
+     try {
+diff --git a/lib/render.ts b/lib/render.ts
+index 4392e09..97694bd 100644
+--- a/lib/render.ts
++++ b/lib/render.ts
+@@ -3,6 +3,7 @@
+ import {bundle} from '@remotion/bundler';
+ import {selectComposition, renderMedia} from '@remotion/renderer';
+ import path from 'node:path';
++import {rm} from 'node:fs/promises';
+ import type {SceneData} from '../src/Scene';
+ 
+ let cachedServeUrl: string | null = null;
+@@ -23,8 +24,12 @@ export async function renderVideo(
+   log?: (m: string) => void,
+   bgmSrc?: string,
+   voiceSrc?: string,
++  publicDir?: string,
+ ): Promise<void> {
+-  const serveUrl = await getServeUrl(log);
++  const serveUrl = publicDir
++    ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
++    : await getServeUrl(log);
++  try {
+   const inputProps = {scenes, transitionFrames, bgmSrc, voiceSrc};
+   const composition = await selectComposition({
+     serveUrl,
+@@ -48,4 +53,7 @@ export async function renderVideo(
+     },
+   });
+   log?.(`[렌더] 완료 → ${outPath}`);
++  } finally {
++    if (publicDir) await rm(serveUrl, {recursive: true, force: true});
++  }
+ }
+diff --git a/lib/studio-http.ts b/lib/studio-http.ts
+new file mode 100644
+index 0000000..5f80c89
+--- /dev/null
++++ b/lib/studio-http.ts
+@@ -0,0 +1,78 @@
++import fs from 'node:fs';
++import path from 'node:path';
++import type {IncomingMessage, ServerResponse} from 'node:http';
++import {ZodError} from 'zod';
++import {Studio, StudioError} from './studio';
++import {studioProviders} from './studio-providers';
++
++const studio = new Studio(path.join(process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data'), 'studio'), studioProviders);
++function json(res: ServerResponse, code: number, body: unknown) {
++  res.writeHead(code, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'});
++  res.end(JSON.stringify(body));
++}
++function read(req: IncomingMessage): Promise<any> {
++  return new Promise((resolve, reject) => {
++    const chunks: Buffer[] = []; let size = 0; let failed = false;
++    req.on('data', chunk => {
++      size += chunk.length;
++      if (size > 30 * 1024 * 1024) {
++        if (!failed) reject(new StudioError('한 작업의 업로드 총 크기는 30MB 이내로 줄여주세요.', 413));
++        failed = true; chunks.length = 0;
++      } else if (!failed) chunks.push(chunk);
++    });
++    req.on('end', () => {
++      if (failed) return;
++      try { resolve(JSON.parse(Buffer.concat(chunks).toString() || '{}')); }
++      catch { reject(new StudioError('요청 형식을 확인하세요.')); }
++    });
++    req.on('error', reject);
++  });
++}
++function sendAsset(req: IncomingMessage, res: ServerResponse, file: string) {
++  const size = fs.statSync(file).size;
++  const mime: Record<string, string> = {'.mp4': 'video/mp4', '.mp3': 'audio/mpeg', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp'};
++  const headers = {'Content-Type': mime[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'private, no-store', 'Accept-Ranges': 'bytes'};
++  let start = 0; let end = size - 1; let code = 200;
++  if (req.headers.range) {
++    const m = req.headers.range.match(/^bytes=(\d*)-(\d*)$/);
++    if (!m || (!m[1] && !m[2])) { res.writeHead(416, {'Content-Range': `bytes */${size}`}); res.end(); return; }
++    start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
++    end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
++    if (start > end || start >= size) { res.writeHead(416, {'Content-Range': `bytes */${size}`}); res.end(); return; }
++    code = 206;
++  }
++  res.writeHead(code, {...headers, 'Content-Length': end - start + 1, ...(code === 206 ? {'Content-Range': `bytes ${start}-${end}/${size}`} : {})});
++  if (req.method === 'HEAD') { res.end(); return; }
++  const stream = fs.createReadStream(file, {start, end});
++  stream.on('error', () => res.destroy()); res.on('close', () => stream.destroy()); stream.pipe(res);
++}
++export async function handleStudio(req: IncomingMessage, res: ServerResponse, pathname: string) {
++  if (pathname !== '/api/studio' && !pathname.startsWith('/api/studio/')) return false;
++  try {
++    if (!['GET', 'HEAD'].includes(req.method || '') && req.headers.origin) {
++      if (new URL(req.headers.origin).host !== req.headers.host) throw new StudioError('같은 사이트에서 요청하세요.', 403);
++    }
++    if (pathname === '/api/studio') {
++      if (req.method === 'GET') json(res, 200, studio.list().map(p => studio.summary(p)));
++      else if (req.method === 'POST') json(res, 202, studio.create(await read(req)));
++      else throw new StudioError('지원하지 않는 요청입니다.', 405);
++      return true;
++    }
++    const m = pathname.match(/^\/api\/studio\/([0-9a-f-]{36})(?:\/(.*))?$/);
++    if (!m) throw new StudioError('작업을 찾을 수 없습니다.', 404);
++    const [, id, action = ''] = m;
++    if (!action && req.method === 'GET') json(res, 200, studio.view(id));
++    else if (!action && req.method === 'PUT') json(res, 200, studio.edit(id, await read(req)));
++    else if (action.startsWith('assets/') && ['GET', 'HEAD'].includes(req.method || '')) sendAsset(req, res, studio.asset(id, action.slice(7)));
++    else if (action === 'render' && req.method === 'POST') {
++      const b = await read(req); json(res, 202, studio.render(id, b.revision));
++    } else if (/^scenes\/\d+\/(image|voice)$/.test(action) && req.method === 'POST') {
++      const [, index, kind] = action.split('/'); const b = await read(req);
++      json(res, 202, studio.regenerate(id, Number(index), kind as 'image' | 'voice', b.revision));
++    } else throw new StudioError('지원하지 않는 요청입니다.', 404);
++  } catch (e) {
++    if (e instanceof ZodError) json(res, 400, {error: '입력값을 확인하세요: ' + e.issues.map(i => `${i.path.join('.')} ${i.message}`).join(', ').slice(0, 500)});
++    else json(res, e instanceof StudioError ? e.status : 500, {error: e instanceof Error ? e.message : '작업에 실패했습니다.'});
++  }
++  return true;
++}
+diff --git a/lib/studio-model.ts b/lib/studio-model.ts
+new file mode 100644
+index 0000000..4665986
+--- /dev/null
++++ b/lib/studio-model.ts
+@@ -0,0 +1,79 @@
++import {z} from 'zod';
++import {createHash} from 'node:crypto';
++
++const text = (max: number) => z.string().max(max);
++const rate = z.number().finite().min(0).max(1000000).nullable().default(null);
++export const ratesSchema = z.object({draft: rate, image: rate, voice: rate, music: rate});
++export const productSchema = z.object({
++  name: text(60).min(1), price: text(40), benefit: text(100), url: text(200),
++}).refine(p => !p.url || /^https?:\/\/[^\s]+$/.test(p.url), '구매 주소는 http 또는 https로 입력하세요.');
++export const createSchema = z.object({
++  mode: z.enum(['auto', 'manual']), url: text(2000).default(''),
++  images: z.array(text(15_000_000)).max(20).default([]),
++  keywords: text(1000).default(''), facts: text(4000).default(''),
++  duration: z.number().int().min(15).max(180),
++  voice: text(60).default(''), presetId: text(80).default(''),
++  quality: z.enum(['fast', 'high']).default('high'),
++  music: z.boolean().default(false),
++  product: productSchema.nullable().default(null),
++  rates: ratesSchema.default({draft: null, image: null, voice: null, music: null}),
++}).superRefine((v, ctx) => {
++  if (v.mode === 'auto' && !/^https?:\/\/[^\s]+$/.test(v.url))
++    ctx.addIssue({code: 'custom', message: 'http 또는 https 링크를 입력하세요.'});
++  if (v.mode === 'manual' && !v.images.length)
++    ctx.addIssue({code: 'custom', message: '이미지를 최소 1장 넣어주세요.'});
++  if (v.product && v.mode !== 'manual')
++    ctx.addIssue({code: 'custom', message: '상품 정보 고정은 원본 사진을 쓰는 내 이미지 모드에서 사용하세요.'});
++});
++export const sceneEditSchema = z.object({
++  narration: text(1600).min(1), hookTop: text(120), hookAccent: text(120),
++  visualPrompt: text(2000).default(''), accentColor: z.string().regex(/^#[0-9a-f]{6}$/i),
++  imageIndex: z.number().int().min(0).max(19).optional(),
++});
++export const editSchema = z.object({
++  revision: z.number().int(), title: text(120).min(1), musicPrompt: text(1000),
++  scenes: z.array(sceneEditSchema).min(1).max(12),
++});
++export type EditScene = z.infer<typeof sceneEditSchema>;
++export type Product = z.infer<typeof productSchema>;
++export type Rates = z.infer<typeof ratesSchema>;
++export type Input = Omit<z.infer<typeof createSchema>, 'images'>;
++export type Media = {signature: string; file: string; words?: {t: string; s: number; e: number}[]; frames?: number};
++export type Scene = EditScene & {image?: Media; voice?: Media; imageVersion?: number; voiceVersion?: number};
++export type Project = {
++  id: string; revision: number; createdAt: string; updatedAt: string;
++  status: 'planning' | 'draft' | 'running' | 'completed' | 'failed';
++  phase: string; error?: string; logs: string[]; input: Input; sources: string[];
++  title: string; subject: string; musicPrompt: string; scenes: Scene[];
++  bgm?: Media; output?: string; outputRevision?: number;
++};
++export const fingerprint = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 24);
++export function resolveProduct(value: string, product: Product | null): string {
++  return value.replace(/\{\{product\.(name|price|benefit|url)\}\}/g, (_, key: keyof Product) => product?.[key] || '');
++}
++export function assertTokens(value: string, product: Product | null) {
++  const stripped = resolveProduct(value, product);
++  if (/\{\{|\}\}/.test(stripped)) throw new Error('알 수 없는 상품 변수입니다.');
++  if (!product && /\{\{product\./.test(value)) throw new Error('고정할 상품 정보가 없습니다.');
++}
++export function signatures(p: Project, s: Scene) {
++  return {
++    image: fingerprint([p.input.mode, p.input.quality, p.subject, s.visualPrompt, p.sources[s.imageIndex ?? 0], s.imageVersion || 0]),
++    voice: fingerprint([resolveProduct(s.narration, p.input.product), p.input.voice, p.input.presetId, s.voiceVersion || 0]),
++  };
++}
++export function estimate(p: Project) {
++  const images = p.input.mode === 'manual' ? 0 : p.scenes.filter(s => s.image?.signature !== signatures(p, s).image).length;
++  const characters = p.scenes.filter(s => s.voice?.signature !== signatures(p, s).voice)
++    .reduce((n, s) => n + resolveProduct(s.narration, p.input.product).length, 0);
++  const music = p.input.music && !p.bgm ? Math.max(10, p.input.duration) / 60 : 0;
++  const quantities = {draft: p.scenes.length ? 0 : 1, image: images, voice: characters / 1000, music};
++  const missing: string[] = [];
++  let subtotal = 0;
++  for (const key of Object.keys(quantities) as (keyof Rates)[]) {
++    if (!quantities[key]) continue;
++    if (p.input.rates[key] === null) missing.push(key);
++    else subtotal += quantities[key] * p.input.rates[key]!;
++  }
++  return {images, characters, musicMinutes: music, subtotal: Math.ceil(subtotal), missing, complete: !missing.length};
++}
+diff --git a/lib/studio-providers.ts b/lib/studio-providers.ts
+new file mode 100644
+index 0000000..baf6d53
+--- /dev/null
++++ b/lib/studio-providers.ts
+@@ -0,0 +1,71 @@
++import fs from 'node:fs/promises';
++import path from 'node:path';
++import os from 'node:os';
++import {pipelineKeys} from './keys';
++import {fetchSource} from './pipeline';
++import {generateStoryboard} from './script';
++import {generateManualDraft} from './manual';
++import {generateImageFlux} from './image';
++import {ttsEleven, alignToWords, VOICES} from './tts';
++import {generateBgm} from './music';
++import {getPreset} from './presets';
++import {renderVideo} from './render';
++import {resolveProduct} from './studio-model';
++import type {StudioDependencies} from './studio';
++
++export const studioProviders: StudioDependencies = {
++  async plan(p, dir, log) {
++    const k = pipelineKeys();
++    if (!k.gemini.length && !k.openai) throw new Error('키 설정에서 Gemini 또는 OpenAI 키를 저장하세요.');
++    if (p.input.mode === 'manual') {
++      const {plan} = await generateManualDraft(k, {
++        imagePaths: p.sources.map(s => path.join(dir, s)), keywords: p.input.keywords,
++        facts: p.input.facts, duration: p.input.duration, presetId: p.input.presetId, log,
++      }, dir);
++      return {...plan, subject: '', musicPrompt: plan.musicPrompt || '', scenes: plan.scenes.map(s => ({...s, visualPrompt: ''}))};
++    }
++    const source = await fetchSource([p.input.url], log);
++    return generateStoryboard(k.gemini, source, {duration: p.input.duration, openaiKey: k.openai,
++      preset: getPreset(p.input.presetId), log});
++  },
++  async image(p, s, file, log) {
++    const k = pipelineKeys();
++    if (!k.replicate) throw new Error('키 설정에서 Replicate 키를 저장하세요.');
++    await generateImageFlux(k.replicate, `${p.subject}. ${s.visualPrompt}`, file, log, p.input.quality);
++  },
++  async voice(p, s, file) {
++    const k = pipelineKeys();
++    if (!k.elevenlabs) throw new Error('키 설정에서 ElevenLabs 키를 저장하세요.');
++    const voice = p.input.voice || getPreset(p.input.presetId)?.voice || 'adam';
++    const text = resolveProduct(s.narration, p.input.product);
++    const align = await ttsEleven(k.elevenlabs, text, file, (VOICES[voice] || VOICES.adam).id);
++    if (!align?.length) throw new Error('음성 타이밍을 받지 못했습니다. 해당 장면을 다시 시도하세요.');
++    return {words: alignToWords(align, 30), frames: Math.max(30, Math.ceil(align[align.length - 1].end * 30) + 6)};
++  },
++  async music(p, file, log) {
++    const k = pipelineKeys();
++    const ms = p.scenes.reduce((n, s) => n + (s.voice?.frames || 0), 0) / 30 * 1000;
++    if (!k.elevenlabs || !await generateBgm(k.elevenlabs, p.musicPrompt, ms, file, log))
++      throw new Error('배경음악 생성에 실패했습니다. 이어서 재시작하면 이미지·음성을 재사용합니다.');
++  },
++  async render(p, dir, output, log) {
++    // Fresh public folder per render: cached bundles must never serve an older scene.
++    const publicDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onvideo-render-'));
++    try {
++      for (const folder of ['fonts', 'sfx']) await fs.cp(path.join(process.cwd(), 'public', folder), path.join(publicDir, folder), {recursive: true});
++      const prefix = `studio/${p.id}`;
++      const mediaDir = path.join(publicDir, prefix);
++      await fs.mkdir(mediaDir, {recursive: true});
++      const names = new Set(p.scenes.flatMap(s => [s.image!.file, s.voice!.file]));
++      if (p.bgm) names.add(p.bgm.file);
++      for (const name of names) await fs.copyFile(path.join(dir, name), path.join(mediaDir, name));
++      const scenes = p.scenes.map((s, i) => ({
++        image: `${prefix}/${s.image!.file}`, voiceSrc: `${prefix}/${s.voice!.file}`,
++        hookTop: resolveProduct(s.hookTop, p.input.product), hookAccent: resolveProduct(s.hookAccent, p.input.product),
++        accentColor: s.accentColor, words: s.voice!.words || [], durationInFrames: s.voice!.frames!,
++        motion: i, punch: i === 0, product: p.input.product || undefined,
++      }));
++      await renderVideo(scenes, 0, output, log, p.bgm ? `${prefix}/${p.bgm.file}` : undefined, undefined, publicDir);
++    } finally { await fs.rm(publicDir, {recursive: true, force: true}); }
++  },
++};
+diff --git a/lib/studio.ts b/lib/studio.ts
+new file mode 100644
+index 0000000..54d960d
+--- /dev/null
++++ b/lib/studio.ts
+@@ -0,0 +1,212 @@
++import fs from 'node:fs';
++import path from 'node:path';
++import {randomUUID} from 'node:crypto';
++import {createSchema, editSchema, estimate, signatures, resolveProduct, assertTokens, type Project, type Scene, type Media} from './studio-model';
++
++export type StudioDependencies = {
++  plan: (p: Project, directory: string, log: (s: string) => void) => Promise<{title: string; subject: string; musicPrompt: string; scenes: unknown[]}>;
++  image: (p: Project, s: Scene, file: string, log: (s: string) => void) => Promise<void>;
++  voice: (p: Project, s: Scene, file: string) => Promise<Pick<Media, 'words' | 'frames'>>;
++  music: (p: Project, file: string, log: (s: string) => void) => Promise<void>;
++  render: (p: Project, directory: string, output: string, log: (s: string) => void) => Promise<void>;
++};
++export class StudioError extends Error {
++  constructor(message: string, public status = 400) { super(message); }
++}
++export class Studio {
++  private active: string | null = null;
++  private tasks = new Map<string, Promise<void>>();
++  constructor(readonly root: string, private deps: StudioDependencies) {
++    fs.mkdirSync(root, {recursive: true});
++    for (const p of this.list()) {
++      if (p.status === 'running' || p.status === 'planning') {
++        p.status = 'failed'; p.error = '서버가 재시작됐습니다. 완료된 단계는 유지됩니다. 이어서 재시작하세요.';
++        this.save(p);
++      }
++    }
++  }
++  directory(id: string) {
++    if (!/^[0-9a-f-]{36}$/.test(id)) throw new StudioError('작업을 찾을 수 없습니다.', 404);
++    return path.join(this.root, id);
++  }
++  get(id: string): Project {
++    const file = path.join(this.directory(id), 'project.json');
++    if (!fs.existsSync(file)) throw new StudioError('작업을 찾을 수 없습니다.', 404);
++    const p: Project = JSON.parse(fs.readFileSync(file, 'utf8'));
++    // Missing files (e.g. incomplete volume restore) are never treated as cached.
++    for (const scene of p.scenes) for (const kind of ['image', 'voice'] as const) {
++      if (scene[kind] && !fs.existsSync(path.join(this.directory(id), scene[kind]!.file))) scene[kind] = undefined;
++    }
++    if (p.bgm && !fs.existsSync(path.join(this.directory(id), p.bgm.file))) p.bgm = undefined;
++    return p;
++  }
++  list(): Project[] {
++    return fs.readdirSync(this.root).filter(id => /^[0-9a-f-]{36}$/.test(id)).flatMap(id => {
++      try { return [this.get(id)]; } catch { return []; }
++    }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
++  }
++  summary(p: Project) {
++    return {id: p.id, title: p.title, status: p.status, phase: p.phase, updatedAt: p.updatedAt,
++      revision: p.revision, error: p.error, sceneCount: p.scenes.length, output: p.output};
++  }
++  view(id: string) {
++    const p = this.get(id);
++    return {...p, scenes: p.scenes.map(s => ({...s,
++      imageCurrent: s.image?.signature === signatures(p, s).image,
++      voiceCurrent: s.voice?.signature === signatures(p, s).voice,
++    })), estimate: estimate(p)};
++  }
++  private save(p: Project) {
++    p.updatedAt = new Date().toISOString();
++    const dir = this.directory(p.id);
++    fs.mkdirSync(dir, {recursive: true});
++    fs.writeFileSync(path.join(dir, 'project.json.tmp'), JSON.stringify(p));
++    fs.renameSync(path.join(dir, 'project.json.tmp'), path.join(dir, 'project.json'));
++  }
++  private available() {
++    if (this.active) throw new StudioError('다른 제작 작업이 진행 중입니다. 완료 후 다시 시도하세요.', 409);
++  }
++  private editable(id: string, revision: number) {
++    const p = this.get(id);
++    if (p.status === 'running' || p.status === 'planning') throw new StudioError('작업 진행 중에는 수정할 수 없습니다.', 409);
++    if (revision !== p.revision) throw new StudioError('다른 창에서 변경됐습니다. 작업 내역에서 다시 열어주세요.', 409);
++    return p;
++  }
++  private start(p: Project, phase: string, task: (log: (s: string) => void) => Promise<void>) {
++    this.available();
++    this.active = p.id;
++    p.status = phase === '대본 작성' ? 'planning' : 'running';
++    p.phase = phase; p.error = undefined;
++    this.save(p);
++    const log = (s: string) => { p.logs.push(s.slice(0, 500)); p.logs = p.logs.slice(-150); this.save(p); };
++    const pending = Promise.resolve().then(() => task(log)).catch((e: Error) => {
++      p.status = 'failed'; p.error = e.message.slice(0, 500); log('[실패] ' + p.error);
++    }).finally(() => { this.active = null; this.tasks.delete(p.id); this.save(p); });
++    this.tasks.set(p.id, pending);
++    return this.view(p.id);
++  }
++  async settled(id: string) { await this.tasks.get(id); return this.get(id); }
++  create(body: unknown) {
++    this.available();
++    const {images, ...input} = createSchema.parse(body);
++    const id = randomUUID();
++    const p: Project = {id, revision: 1, createdAt: new Date().toISOString(), updatedAt: '',
++      status: 'draft', phase: '', logs: [], input, sources: [], title: '새 영상', subject: '', musicPrompt: '', scenes: []};
++    // Validate all uploads before creating a durable project.
++    const uploads = images.map((url, i) => {
++      const m = url.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
++      if (!m) throw new StudioError('JPG, PNG, WebP 이미지만 지원합니다.');
++      const data = Buffer.from(m[2], 'base64');
++      const valid = m[1] === 'png' ? data.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
++        : m[1] === 'jpeg' ? data[0] === 255 && data[1] === 216
++        : data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP';
++      if (!valid || data.length > 10 * 1024 * 1024) throw new StudioError('이미지 형식 또는 크기를 확인하세요(장당 최대 10MB).');
++      return {name: `source-${i}.${m[1] === 'jpeg' ? 'jpg' : m[1]}`, data};
++    });
++    fs.mkdirSync(this.directory(id), {recursive: true});
++    for (const u of uploads) { fs.writeFileSync(path.join(this.directory(id), u.name), u.data); p.sources.push(u.name); }
++    this.save(p);
++    return this.plan(p);
++  }
++  private plan(p: Project) {
++    return this.start(p, '대본 작성', async log => {
++      const draft = await this.deps.plan(p, this.directory(p.id), log);
++      const valid = editSchema.parse({...draft, revision: p.revision});
++      p.title = valid.title; p.subject = String(draft.subject || '').slice(0, 300); p.musicPrompt = valid.musicPrompt;
++      p.scenes = valid.scenes;
++      if (p.input.mode === 'manual') p.scenes.forEach((s, i) => { s.imageIndex = Math.min(s.imageIndex ?? i, p.sources.length - 1); });
++      // Product facts live outside AI output. Narration references immutable values.
++      if (p.input.product) {
++        p.title = p.input.product.name;
++        p.scenes.forEach((s, i) => {
++          s.hookTop = '{{product.name}}';
++          s.hookAccent = i === p.scenes.length - 1 ? '{{product.price}}' : '';
++          s.narration = i === 0 ? '{{product.name}}을 소개합니다. 사진 속 모습을 천천히 살펴보세요. 지금부터 함께 확인해 볼게요.'
++            : i === p.scenes.length - 1 ? '{{product.name}}. {{product.price}}. {{product.benefit}}.'
++            : '{{product.name}}의 원본 사진입니다. 화면 속 모습을 자세히 살펴보고, 찾으시던 상품인지 확인해 보세요.';
++        });
++      }
++      this.validateScenes(p, p.scenes);
++      p.status = 'draft'; p.phase = '대본 검토'; log('[대본] 검토 후 제작 버튼을 누르세요. 이미지·음성은 아직 생성하지 않았습니다.');
++    });
++  }
++  private validateScenes(p: Project, scenes: Scene[]) {
++    for (const s of scenes) {
++      for (const value of [s.narration, s.hookTop, s.hookAccent]) assertTokens(value, p.input.product);
++      if (!resolveProduct(s.narration, p.input.product).trim()) throw new StudioError('나레이션을 입력하세요.');
++      if (p.input.mode === 'manual' && (s.imageIndex === undefined || s.imageIndex >= p.sources.length))
++        throw new StudioError('올바른 원본 이미지를 선택하세요.');
++    }
++  }
++  edit(id: string, body: unknown) {
++    const edit = editSchema.parse(body);
++    const p = this.editable(id, edit.revision);
++    if (!p.scenes.length || edit.scenes.length !== p.scenes.length) throw new StudioError('현재 작업의 장면 수를 유지하세요.');
++    this.validateScenes(p, edit.scenes);
++    p.title = edit.title;
++    if (p.musicPrompt !== edit.musicPrompt) p.bgm = undefined;
++    p.musicPrompt = edit.musicPrompt;
++    p.scenes = edit.scenes.map((s, i) => ({...p.scenes[i], ...s}));
++    p.revision++; p.status = 'draft'; p.error = undefined; p.phase = '수정 저장됨';
++    this.save(p); return this.view(id);
++  }
++  private async media(p: Project, index: number, kind: 'image' | 'voice', log: (s: string) => void) {
++    const s = p.scenes[index]; const signature = signatures(p, s)[kind];
++    if (s[kind]?.signature === signature && fs.existsSync(path.join(this.directory(p.id), s[kind]!.file))) return;
++    p.phase = `장면 ${index + 1} ${kind === 'image' ? '이미지' : '음성'}`;
++    log(`[${p.phase}] 준비 중…`);
++    let file = `${kind}-${index}-${signature}.${kind === 'image' ? 'jpg' : 'mp3'}`;
++    let extra: Pick<Media, 'words' | 'frames'> = {};
++    if (kind === 'image' && p.input.mode === 'manual') {
++      file = p.sources[s.imageIndex!];
++      if (!fs.existsSync(path.join(this.directory(p.id), file))) throw new StudioError('원본 사진이 없습니다. 새 작업에 다시 올려주세요.');
++    } else {
++      const target = path.join(this.directory(p.id), file);
++      if (kind === 'image') await this.deps.image(p, s, target, log);
++      else extra = await this.deps.voice(p, s, target);
++      if (!fs.existsSync(target) || fs.statSync(target).size === 0) throw new Error('생성된 파일이 비어 있습니다. 재시작하세요.');
++    }
++    s[kind] = {signature, file, ...extra}; this.save(p);
++  }
++  regenerate(id: string, index: number, kind: 'image' | 'voice', revision: number) {
++    this.available();
++    const p = this.editable(id, revision);
++    if (!Number.isInteger(index) || !p.scenes[index]) throw new StudioError('장면이 없습니다.');
++    if (kind === 'image' && p.input.mode === 'manual') throw new StudioError('원본 사진은 이미지 선택에서 교체하세요.');
++    const field = kind === 'image' ? 'imageVersion' : 'voiceVersion';
++    p.scenes[index][field] = (p.scenes[index][field] || 0) + 1; p.revision++;
++    return this.start(p, '장면 수정', async log => {
++      await this.media(p, index, kind, log); p.status = 'draft'; p.phase = '장면 수정 완료';
++      log('[장면] 수정 완료. 최종 제작을 누르면 다른 장면은 재사용합니다.');
++    });
++  }
++  render(id: string, revision: number) {
++    this.available();
++    const p = this.editable(id, revision);
++    if (!p.scenes.length) return this.plan(p);
++    this.validateScenes(p, p.scenes);
++    return this.start(p, '제작', async log => {
++      for (let i = 0; i < p.scenes.length; i++) {
++        await this.media(p, i, 'image', log); await this.media(p, i, 'voice', log);
++      }
++      if (p.input.music && !p.bgm) {
++        p.phase = '배경음악'; this.save(p);
++        const file = `music-${randomUUID()}.mp3`;
++        await this.deps.music(p, path.join(this.directory(id), file), log);
++        p.bgm = {signature: p.musicPrompt, file}; this.save(p);
++      }
++      p.phase = '영상 합성'; this.save(p);
++      const output = `video-${p.revision}-${randomUUID()}.mp4`;
++      await this.deps.render(p, this.directory(id), path.join(this.directory(id), output), log);
++      p.output = output; p.outputRevision = p.revision; p.status = 'completed'; p.phase = '완성'; log('[완료] 영상을 다운로드할 수 있습니다.');
++    });
++  }
++  asset(id: string, name: string) {
++    const p = this.get(id);
++    const allowed = [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output];
++    if (!allowed.includes(name) || name !== path.basename(name)) throw new StudioError('파일이 없습니다.', 404);
++    const file = path.join(this.directory(id), name);
++    if (!fs.existsSync(file)) throw new StudioError('파일이 없습니다.', 404);
++    return file;
++  }
++}
+diff --git a/package-lock.json b/package-lock.json
+index 68c4937..5e6933e 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,12 +1,12 @@
+ {
+   "name": "onvideo-remotion",
+-  "version": "1.0.0",
++  "version": "1.1.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "onvideo-remotion",
+-      "version": "1.0.0",
++      "version": "1.1.0",
+       "license": "ISC",
+       "dependencies": {
+         "@remotion/bundler": "^4.0.530",
+diff --git a/package.json b/package.json
+index 5d2f3e9..9eac955 100644
+--- a/package.json
++++ b/package.json
+@@ -1,10 +1,11 @@
+ {
+   "name": "onvideo-remotion",
+-  "version": "1.0.5",
++  "version": "1.1.0",
+   "main": "index.js",
+   "scripts": {
+-    "test": "echo \"Error: no test specified\" && exit 1",
+-    "web": "tsx server.ts"
++    "test": "node --import tsx --test tests/*.test.ts",
++    "web": "tsx server.ts",
++    "typecheck": "tsc --noEmit"
+   },
+   "keywords": [],
+   "author": "",
+diff --git a/server.ts b/server.ts
+index 3bbd837..197d192 100644
+--- a/server.ts
++++ b/server.ts
+@@ -1,5 +1,6 @@
+ // OnVideo 웹 서버 — 브라우저에서 링크→카테고리→영상 생성. 단일 사용자 로컬 앱.
+ import http from 'node:http';
++import {handleStudio} from './lib/studio-http';
+ import fs from 'node:fs';
+ import os from 'node:os';
+ import path from 'node:path';
+@@ -125,6 +126,8 @@ const server = http.createServer(async (req, res) => {
+       }
+     });
+   }
++  if (p === '/studio.js')
++    return serveFile(res, path.join(ROOT, 'web', 'studio.js'), 'text/javascript; charset=utf-8');
+   if (p === '/app.js')
+     return serveFile(res, path.join(ROOT, 'web', 'app.js'), 'text/javascript; charset=utf-8');
+   if (p === '/style.css')
+@@ -134,6 +137,8 @@ const server = http.createServer(async (req, res) => {
+   if (p.startsWith('/api/') && !authed(req))
+     return json(res, 401, {error: '로그인이 필요합니다.'});
+ 
++  if (await handleStudio(req, res, p)) return;
++
+   // ── 카테고리 목록 ──
+   if (p === '/api/categories')
+     return json(res, 200, {
+diff --git a/src/Scene.tsx b/src/Scene.tsx
+index 3a281d5..2243809 100644
+--- a/src/Scene.tsx
++++ b/src/Scene.tsx
+@@ -22,6 +22,8 @@ loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight
+ 
+ export const sceneSchema = z.object({
+   image: z.string(),
++  voiceSrc: z.string().optional(),
++  product: z.object({name: z.string(), price: z.string(), benefit: z.string(), url: z.string()}).optional(),
+   video: z.string().optional(), // 배경 영상 클립(있으면 이미지 대신 사용)
+   hookTop: z.string(),
+   hookAccent: z.string(),
+@@ -43,6 +45,8 @@ const outline = (px: number) =>
+ 
+ export const Scene: React.FC<SceneData> = ({
+   image,
++  voiceSrc,
++  product,
+   video,
+   hookTop,
+   hookAccent,
+@@ -85,6 +89,7 @@ export const Scene: React.FC<SceneData> = ({
+ 
+   return (
+     <AbsoluteFill style={{backgroundColor: '#000'}}>
++      {voiceSrc ? <Audio src={staticFile(voiceSrc)} /> : null}
+       {/* (나레이션은 Video 전체에 통짜로 깔림 — 여기선 재생 안 함) */}
+ 
+       {/* 효과음(공짜 청각 임팩트): 첫 장면=임팩트, 나머지=전환 whoosh. 장면 시작에 짧게. */}
+@@ -194,7 +199,7 @@ export const Scene: React.FC<SceneData> = ({
+       <div
+         style={{
+           position: 'absolute',
+-          bottom: comment ? 360 : 170,
++          bottom: product || comment ? 360 : 170,
+           width: '100%',
+           display: 'flex',
+           flexWrap: 'wrap',
+@@ -226,6 +231,15 @@ export const Scene: React.FC<SceneData> = ({
+         })}
+       </div>
+ 
++      {product ? (
++        <div style={{position: 'absolute', bottom: 45, left: 65, right: 65, padding: '18px 24px', borderRadius: 18,
++          background: 'rgba(10,10,12,0.92)', color: '#fff', fontFamily: notoFont, lineHeight: 1.35, overflowWrap: 'anywhere'}}>
++          <div style={{fontSize: 36, fontWeight: 700}}>{product.name} {product.price}</div>
++          {product.benefit ? <div style={{fontSize: 28, color: '#4FE0D0'}}>{product.benefit}</div> : null}
++          {product.url ? <div style={{fontSize: 22, marginTop: 6}}>{product.url}</div> : null}
++        </div>
++      ) : null}
++
+       {/* 이지컷식 댓글 템플릿(옵션) */}
+       {comment ? (
+         <div
+diff --git a/tests/smoke-render.ts b/tests/smoke-render.ts
+new file mode 100644
+index 0000000..acfc980
+--- /dev/null
++++ b/tests/smoke-render.ts
+@@ -0,0 +1,26 @@
++// Explicit local smoke test. Uses fixtures only, no paid provider calls.
++import fs from 'node:fs';
++import path from 'node:path';
++import {Studio} from '../lib/studio';
++import {studioProviders} from '../lib/studio-providers';
++
++async function main() {
++  const root = process.env.STUDIO_SMOKE_DIR;
++  if (!root) throw new Error('Set STUDIO_SMOKE_DIR to an isolated test directory.');
++  fs.mkdirSync(root, {recursive: true});
++  const audio = path.join(root, 'fixture.mp3');
++  fs.copyFileSync('public/sfx/whoosh.mp3', audio);
++  const studio = new Studio(path.join(root, 'studio'), {
++    ...studioProviders,
++    async plan() { return {title:'검증용 샘플 — 원본 사진과 고정 상품 정보',subject:'',musicPrompt:'',scenes:[0,1].map(i => ({narration:`샘플 장면 ${i+1}입니다.`,hookTop:'검증용 영상',hookAccent:'장면별 수정',accentColor:'#FFE24B',visualPrompt:'',imageIndex:0}))}; },
++    async voice(_,__,file) { fs.copyFileSync(audio,file);return {frames:30,words:[{t:'검증용 샘플',s:0,e:28}]}; },
++  });
++  let p = studio.create({mode:'manual',duration:15,images:['data:image/jpeg;base64,'+fs.readFileSync('public/bg1.jpg').toString('base64')],
++    product:{name:'샘플 상품',price:'29,900원',benefit:'무료 배송',url:'https://example.com/product'},rates:{draft:10,image:0,voice:100,music:0}});
++  await studio.settled(p.id);
++  studio.render(p.id,p.revision);
++  const result=await studio.settled(p.id);
++  console.log(JSON.stringify({id:result.id,status:result.status,error:result.error,output:result.output,logs:result.logs.slice(-8)},null,2));
++  if (result.status!=='completed') process.exitCode=1;
++}
++main().catch(e=>{console.error(e);process.exitCode=1;});
+diff --git a/tests/studio-http.test.ts b/tests/studio-http.test.ts
+new file mode 100644
+index 0000000..13f2d3c
+--- /dev/null
++++ b/tests/studio-http.test.ts
+@@ -0,0 +1,44 @@
++import {test} from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import path from 'node:path';
++import os from 'node:os';
++import {spawn} from 'node:child_process';
++import {Studio, type StudioDependencies} from '../lib/studio';
++
++test('HTTP authentication, draft edits, private assets and video range requests', async t => {
++  const root=fs.mkdtempSync(path.join(os.tmpdir(),'onvideo-http-'));
++  const unused=async()=>{throw new Error('Paid provider must not be invoked in this test');};
++  const deps:StudioDependencies={plan:async()=>({title:'HTTP fixture',subject:'',musicPrompt:'',scenes:[{narration:'검증 대본',hookTop:'제목',hookAccent:'',accentColor:'#FFE24B',visualPrompt:'image'}]}),image:unused,voice:unused,music:unused,render:unused};
++  const store=new Studio(path.join(root,'studio'),deps);
++  let p=store.create({mode:'auto',url:'https://example.com',duration:15});
++  const project=await store.settled(p.id);
++  project.output='fixture.mp4';project.outputRevision=project.revision;
++  fs.writeFileSync(path.join(store.directory(p.id),'fixture.mp4'),'0123456789');
++  fs.writeFileSync(path.join(store.directory(p.id),'project.json'),JSON.stringify(project));
++  const port=42000+Math.floor(Math.random()*10000);
++  const child=spawn(process.execPath,['--import','tsx','server.ts'],{cwd:process.cwd(),env:{...process.env,PORT:String(port),ADMIN_PASSWORD:'http-test-only',APP_SECRET:'http-test-secret',STUDIO_DATA_DIR:root},stdio:['ignore','pipe','pipe']});
++  t.after(async()=>{child.kill('SIGTERM');await new Promise(r=>child.once('close',r));fs.rmSync(root,{recursive:true,force:true});});
++  await new Promise<void>((resolve,reject)=>{
++    const timer=setTimeout(()=>reject(new Error('Server start timeout')),10000);
++    child.stdout.on('data',d=>{if(String(d).includes('http://localhost:')){clearTimeout(timer);resolve();}});
++    child.once('error',e=>{clearTimeout(timer);reject(e);});
++    child.once('exit',code=>{if(code){clearTimeout(timer);reject(new Error('Server failed: '+code));}});
++  });
++  const base=`http://127.0.0.1:${port}`;
++  assert.equal((await fetch(base+'/api/studio')).status,401);
++  assert.equal((await fetch(base+`/api/studio/${p.id}/assets/fixture.mp4`)).status,401);
++  const login=await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:'http-test-only'})});
++  assert.equal(login.status,200);
++  const cookie=login.headers.get('set-cookie')!.split(';')[0];
++  const headers={cookie,'Content-Type':'application/json'};
++  const rows=await (await fetch(base+'/api/studio',{headers})).json();assert.equal(rows[0].id,p.id);
++  const file=await fetch(base+`/api/studio/${p.id}/assets/fixture.mp4`,{headers:{...headers,range:'bytes=2-5'}});
++  assert.equal(file.status,206);assert.equal(file.headers.get('content-range'),'bytes 2-5/10');assert.equal(await file.text(),'2345');
++  assert.equal((await fetch(base+`/api/studio/${p.id}/assets/project.json`,{headers})).status,404);
++  assert.equal((await fetch(base+`/api/studio/${p.id}/assets/fixture.mp4`,{headers:{...headers,range:'bytes=999-'}})).status,416);
++  const edit={revision:project.revision,title:'HTTP 수정 확인',musicPrompt:'',scenes:project.scenes};
++  assert.equal((await fetch(base+`/api/studio/${p.id}`,{method:'PUT',headers,body:JSON.stringify(edit)})).status,200);
++  assert.equal((await fetch(base+`/api/studio/${p.id}`,{method:'PUT',headers,body:JSON.stringify(edit)})).status,409);
++  assert.equal((await fetch(base+`/api/studio/${p.id}`,{method:'PUT',headers:{...headers,origin:'https://other.example'},body:JSON.stringify(edit)})).status,403);
++});
+diff --git a/tests/studio.test.ts b/tests/studio.test.ts
+new file mode 100644
+index 0000000..ef60d4b
+--- /dev/null
++++ b/tests/studio.test.ts
+@@ -0,0 +1,140 @@
++import {test} from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import os from 'node:os';
++import path from 'node:path';
++import {Studio, StudioError, type StudioDependencies} from '../lib/studio';
++import {estimate, resolveProduct, signatures} from '../lib/studio-model';
++
++function setup(t: any, overrides: Partial<StudioDependencies> = {}) {
++  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'onvideo-test-'));
++  t.after(() => fs.rmSync(root, {recursive: true, force: true}));
++  const calls = {plan:0, image:0, voice:0, music:0, render:0};
++  const deps: StudioDependencies = {
++    async plan() { calls.plan++; return {title:'테스트', subject:'rice', musicPrompt:'calm', scenes:[0,1].map(i => ({narration:`장면 ${i}입니다.`, hookTop:'제목', hookAccent:'강조', accentColor:'#FFE24B', visualPrompt:`rice ${i}`, imageIndex:i}))}; },
++    async image(_, __, file) { calls.image++; fs.writeFileSync(file, 'image'); },
++    async voice(_, __, file) { calls.voice++; fs.writeFileSync(file, 'voice'); return {frames:60, words:[{t:'장면',s:0,e:50}]}; },
++    async music(_, file) { calls.music++; fs.writeFileSync(file, 'music'); },
++    async render(_, __, file) { calls.render++; fs.writeFileSync(file, 'video'); },
++    ...overrides,
++  };
++  return {studio:new Studio(root, deps), root, calls, deps};
++}
++const input = {mode:'auto', url:'https://example.com/article', duration:30, rates:{draft:10, image:5, voice:100, music:20}};
++async function draft(s: Studio, body: any = input) { const p = s.create(body); return s.settled(p.id); }
++function editBody(p: any) { return {revision:p.revision,title:p.title,musicPrompt:p.musicPrompt,scenes:structuredClone(p.scenes)}; }
++
++test('draft review does not trigger image, voice or rendering', async t => {
++  const {studio, calls} = setup(t); const p = await draft(studio);
++  assert.equal(p.status, 'draft'); assert.deepEqual(calls, {plan:1,image:0,voice:0,music:0,render:0});
++  assert.equal(p.scenes.length, 2); assert.equal(estimate(p).images, 2);
++});
++test('render caches assets; caption-only edit does not regenerate paid media', async t => {
++  const {studio, calls} = setup(t); let p = await draft(studio);
++  studio.render(p.id,p.revision); p = await studio.settled(p.id);
++  const e = editBody(p); e.scenes[0].hookTop = '수정 자막'; studio.edit(p.id,e);
++  studio.render(p.id,p.revision + 1); p = await studio.settled(p.id);
++  assert.equal(p.status,'completed'); assert.equal(calls.image,2); assert.equal(calls.voice,2); assert.equal(calls.render,2);
++  assert.equal(estimate(p).subtotal,0);
++});
++test('changing one narration regenerates only that voice', async t => {
++  const {studio,calls} = setup(t); let p = await draft(studio);
++  studio.render(p.id,p.revision); p = await studio.settled(p.id);
++  const e = editBody(p); e.scenes[1].narration = '이 문장만 수정합니다.'; studio.edit(p.id,e);
++  studio.render(p.id,p.revision + 1); await studio.settled(p.id);
++  assert.equal(calls.voice,3); assert.equal(calls.image,2); assert.equal(calls.plan,1);
++});
++test('explicit image retry invalidates one image and keeps old completed video', async t => {
++  const {studio,calls} = setup(t); let p = await draft(studio);
++  studio.render(p.id,p.revision); p = await studio.settled(p.id); const oldOutput=p.output;
++  studio.regenerate(p.id,0,'image',p.revision); p = await studio.settled(p.id);
++  assert.equal(calls.image,3); assert.equal(calls.voice,2); assert.equal(p.output,oldOutput); assert.notEqual(p.revision,p.outputRevision);
++  studio.render(p.id,p.revision); await studio.settled(p.id); assert.equal(calls.image,3);
++});
++test('failure checkpoint survives restart and skips completed steps', async t => {
++  let attempt=0;
++  const {studio,root,deps,calls} = setup(t, {async voice(_,__,file) {
++    attempt++; if (attempt===2) throw new Error('provider unavailable');
++    fs.writeFileSync(file,'voice'); return {frames:60,words:[]};
++  }});
++  let p=await draft(studio); studio.render(p.id,p.revision); p=await studio.settled(p.id);
++  assert.equal(p.status,'failed'); assert.ok(p.scenes[0].voice); assert.equal(p.scenes[1].voice,undefined);
++  const restarted=new Studio(root,deps); restarted.render(p.id,p.revision); p=await restarted.settled(p.id);
++  assert.equal(p.status,'completed'); assert.equal(attempt,3); assert.equal(calls.image,2);
++});
++test('running job recovered as resumable failure on startup', async t => {
++  const {studio,root,deps}=setup(t); const p=await draft(studio);
++  p.status='running'; fs.writeFileSync(path.join(root,p.id,'project.json'),JSON.stringify(p));
++  const recovered=new Studio(root,deps).get(p.id); assert.equal(recovered.status,'failed'); assert.match(recovered.error!,/재시작/);
++});
++test('concurrent submissions and stale writes are rejected', async t => {
++  let finish!: () => void; const gate=new Promise<void>(r => {finish=r;});
++  const {studio}=setup(t,{async image(_,__,file) {await gate;fs.writeFileSync(file,'image');}});
++  let p=await draft(studio); studio.render(p.id,p.revision);
++  assert.throws(()=>studio.render(p.id,p.revision), /진행 중/);
++  assert.throws(()=>studio.edit(p.id,editBody(p)), /진행 중/);
++  finish(); p=await studio.settled(p.id); const e=editBody(p); studio.edit(p.id,e);
++  assert.throws(()=>studio.edit(p.id,e), /다른 창/);
++});
++test('locked product facts use exact values and original photo; cannot be patched', async t => {
++  const {studio,calls}=setup(t);
++  const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=';
++  let p=await draft(studio,{...input,mode:'manual',images:[png],product:{name:'우리 상품',price:'29,900원',benefit:'무료 배송',url:'https://example.com/buy'}});
++  assert.match(resolveProduct(p.scenes[1].narration,p.input.product),/29,900원/);
++  const e={...editBody(p),product:{price:'1원'}}; studio.edit(p.id,e);
++  p=studio.get(p.id); assert.equal(p.input.product!.price,'29,900원');
++  studio.render(p.id,p.revision); p=await studio.settled(p.id);
++  assert.equal(calls.image,0); assert.equal(p.scenes[0].image!.file,p.sources[0]);
++  assert.throws(()=>studio.regenerate(p.id,0,'image',p.revision),/원본 사진/);
++});
++test('unknown tokens and invalid image references are rejected', async t => {
++  const {studio}=setup(t); const p=await draft(studio); const e=editBody(p);
++  e.scenes[0].narration='{{product.unexpected}}'; assert.throws(()=>studio.edit(p.id,e),/상품 변수/);
++  e.scenes[0].narration='{{product.name}}'; assert.throws(()=>studio.edit(p.id,e),/상품 정보|나레이션/);
++});
++test('history and files persist without API keys; traversal and project metadata unavailable', async t => {
++  const {studio,root,deps}=setup(t); const p=await draft(studio);
++  const restarted=new Studio(root,deps); assert.equal(restarted.list()[0].id,p.id);
++  assert.throws(()=>studio.asset(p.id,'project.json'),/파일이 없습니다/);
++  assert.throws(()=>studio.asset(p.id,'../../.env.local'),/파일이 없습니다/);
++  assert.throws(()=>studio.get('../secret'),/작업을 찾을 수 없습니다/);
++  assert.ok(!fs.readFileSync(path.join(root,p.id,'project.json'),'utf8').includes('API_KEY'));
++});
++test('unknown rates produce partial estimate, never a fake zero total', async t => {
++  const {studio}=setup(t); const p=await draft(studio,{...input,rates:{draft:null,image:5,voice:null,music:null}});
++  const e=estimate(p); assert.equal(e.subtotal,10); assert.equal(e.complete,false); assert.deepEqual(e.missing,['voice']);
++});
++test('BGM prompt edits regenerate music but reuse images and voice', async t => {
++  const {studio,calls}=setup(t); let p=await draft(studio,{...input,music:true});
++  studio.render(p.id,p.revision);p=await studio.settled(p.id);
++  const e=editBody(p); e.musicPrompt='bright';studio.edit(p.id,e);
++  studio.render(p.id,p.revision+1);await studio.settled(p.id);
++  assert.equal(calls.music,2);assert.equal(calls.voice,2);assert.equal(calls.image,2);
++});
++test('changing source prompt invalidates only image signature', async t => {
++  const {studio}=setup(t);const p=await draft(studio);const s=p.scenes[0];const old=signatures(p,s);
++  s.visualPrompt='a new scene';const changed=signatures(p,s);
++  assert.notEqual(old.image,changed.image);assert.equal(old.voice,changed.voice);
++});
++test('empty and excessive inputs rejected before paid calls', async t => {
++  const {studio,calls}=setup(t);
++  assert.throws(()=>studio.create({...input,duration:9999}));
++  assert.throws(()=>studio.create({...input,mode:'manual',images:[]}));
++  assert.throws(()=>studio.create({...input,url:'file:///etc/passwd'}));
++  assert.throws(()=>studio.create({...input,mode:'manual',images:['data:image/png;base64,YQ==']}));
++  assert.equal(calls.plan,0);assert.equal(studio.list().length,0);
++});
++test('render failure retries composition without regenerating paid assets', async t => {
++  let attempts=0;
++  const {studio,calls}=setup(t,{async render(_,__,file){attempts++;if(attempts===1)throw new Error('encoder unavailable');fs.writeFileSync(file,'video');}});
++  let p=await draft(studio);studio.render(p.id,p.revision);p=await studio.settled(p.id);
++  assert.equal(p.status,'failed');studio.render(p.id,p.revision);p=await studio.settled(p.id);
++  assert.equal(p.status,'completed');assert.equal(calls.image,2);assert.equal(calls.voice,2);assert.equal(attempts,2);
++});
++test('missing cached asset is included in estimate and regenerated on retry', async t => {
++  const {studio,calls}=setup(t);let p=await draft(studio);studio.render(p.id,p.revision);p=await studio.settled(p.id);
++  fs.unlinkSync(path.join(studio.directory(p.id),p.scenes[0].image!.file));
++  assert.equal(studio.view(p.id).estimate.images,1);
++  studio.render(p.id,p.revision);await studio.settled(p.id);
++  assert.equal(calls.image,3);assert.equal(calls.voice,2);
++});
+diff --git a/tsconfig.json b/tsconfig.json
+index 1c49c2e..e88b966 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -7,8 +7,19 @@
+     "strict": true,
+     "esModuleInterop": true,
+     "skipLibCheck": true,
+-    "types": ["node", "react"],
+-    "lib": ["ESNext", "DOM"]
++    "types": [
++      "node",
++      "react"
++    ],
++    "lib": [
++      "ESNext",
++      "DOM"
++    ]
+   },
+-  "include": ["src", "lib"]
++  "include": [
++    "src",
++    "lib",
++    "server.ts",
++    "tests"
++  ]
+ }
+diff --git a/web/app.js b/web/app.js
+index 041c6ff..d513668 100644
+--- a/web/app.js
++++ b/web/app.js
+@@ -52,6 +52,7 @@ async function loadCategories() {
+     html += '</optgroup>';
+   }
+   $('voice').innerHTML = html;
++  document.dispatchEvent(new Event('onvideo-auth-ready'));
+   // 선택 시 팁 표시
+   $('voice').onchange = () => {
+     const v = (window.__voices || []).find((x) => x.id === $('voice').value);
+diff --git a/web/index.html b/web/index.html
+index 8e67102..683ef3a 100644
+--- a/web/index.html
++++ b/web/index.html
+@@ -91,8 +91,8 @@
+           <div class="col">
+             <label class="field-label">이미지 화질 <span class="hint">— 자동 모드만</span></label>
+             <select id="quality" class="input">
+-              <option value="fast">빠르게·저렴 (테스트용, 장당 4원)</option>
+-              <option value="high" selected>고퀄 실사 (판매·업로드용, 장당 35원)</option>
++              <option value="fast">빠르게 (테스트용)</option>
++              <option value="high" selected>고퀄 실사 (판매·업로드용)</option>
+             </select>
+           </div>
+           <div class="col">
+@@ -105,9 +105,39 @@
+           </div>
+         </div>
+ 
+-        <button id="generate" class="primary-btn">🎬 영상 만들기</button>
++        <details class="studio-options">
++          <summary>상품 정보 고정 · 배경음악 · 예상 비용</summary>
++          <label class="field-label"><input type="checkbox" id="product-lock" /> 상품 정보 고정 (내 이미지 모드)</label>
++          <p class="hint">상품 사진을 그대로 사용하고, 입력한 정보를 영상에 고정 표시합니다. AI가 가격이나 혜택을 새로 만들지 않습니다.</p>
++          <div id="product-fields" class="hidden">
++            <label class="field-label" for="product-name">상품명</label><input id="product-name" class="input" maxlength="60" />
++            <label class="field-label" for="product-price">가격 (예: 29,900원)</label><input id="product-price" class="input" maxlength="40" />
++            <label class="field-label" for="product-benefit">확정된 혜택</label><input id="product-benefit" class="input" maxlength="100" />
++            <label class="field-label" for="product-url">구매 주소</label><input id="product-url" type="url" class="input" maxlength="200" placeholder="https://" />
++          </div>
++          <label class="field-label"><input id="studio-music" type="checkbox" /> AI 배경음악 생성 (추가 비용)</label>
++          <h3 class="field-label">예상 비용에 사용할 단가 (원)</h3>
++          <p class="hint">이용 중인 서비스의 단가를 입력하세요. 비워두면 미산정으로 표시합니다. 실제 청구액은 요금제·환율·재시도에 따라 다릅니다.</p>
++          <div class="rate-grid">
++            <label>대본 1회<input id="rate-draft" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
++            <label>이미지 1장<input id="rate-image" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
++            <label>음성 1,000자<input id="rate-voice" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
++            <label>배경음악 1분<input id="rate-music" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
++          </div>
++        </details>
++        <div id="create-estimate" class="cost-box" aria-live="polite"></div>
++        <button id="generate" class="primary-btn">1. 대본 먼저 만들기</button>
++        <p class="mini-state">대본을 확인한 후 이미지·음성 제작을 시작합니다. 대본 작성에도 API 비용이 발생할 수 있습니다.</p>
++        <p id="studio-message" class="mini-state" role="status"></p>
+       </div>
+ 
++      <section id="studio-editor" class="card hidden" aria-label="대본 편집"></section>
++      <section class="card" aria-label="작업 내역">
++        <div class="modal-head"><h2 class="block-title">작업 내역</h2><button id="history-refresh" class="ghost-btn">새로고침</button></div>
++        <p class="hint">새 편집 기능으로 만든 작업이 저장됩니다. 실패한 작업은 열어서 이어서 재시작할 수 있습니다.</p>
++        <div id="studio-history" aria-live="polite">로그인 후 작업 내역을 불러옵니다.</div>
++      </section>
++
+       <section id="progress-block" class="card hidden">
+         <div class="log-head">
+           <h3 class="block-title">제작 진행</h3>
+@@ -157,5 +187,6 @@
+     </div>
+ 
+     <script src="/app.js"></script>
++    <script src="/studio.js"></script>
+   </body>
+ </html>
+diff --git a/web/studio.js b/web/studio.js
+new file mode 100644
+index 0000000..3b969ad
+--- /dev/null
++++ b/web/studio.js
+@@ -0,0 +1,191 @@
++(() => {
++  const el = id => document.getElementById(id);
++  const escape = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
++  const labels = {draft:'대본', image:'이미지', voice:'음성', music:'배경음악'};
++  const productLabels = {name:'상품명', price:'가격', benefit:'혜택', url:'구매 주소'};
++  const displayText = text => String(text).replace(/\{\{product\.(name|price|benefit|url)\}\}/g, (_, k) => '[' + productLabels[k] + ']');
++  const storeText = text => Object.entries(productLabels).reduce((s, [k, label]) => s.split('[' + label + ']').join('{{product.' + k + '}}'), text);
++  const stateNames = {planning:'대본 작성 중', draft:'검토 가능', running:'제작 중', failed:'재시작 필요', completed:'완성'};
++  let current = null, dirty = false, timer = null, loading = false;
++  const active = p => p && ['planning', 'running'].includes(p.status);
++  const asset = (p, file) => `/api/studio/${p.id}/assets/${encodeURIComponent(file)}`;
++  function regenerationCost(p, s, kind) {
++    const rate = p.input.rates[kind];
++    if (rate === null) return '유료 · 단가 미산정';
++    const narration = s.narration.replace(/\{\{product\.(name|price|benefit|url)\}\}/g, (_, k) => p.input.product?.[k] || '');
++    const amount = Math.ceil(rate * (kind === 'image' ? 1 : narration.length / 1000));
++    return '약 ' + amount.toLocaleString('ko-KR') + '원';
++  }
++
++  function message(text, error = false) { for (const id of ['studio-message','editor-message']) { const node = el(id); if (node) { node.textContent = text; node.classList.toggle('error', error); } } }
++  async function api(url, body, method = 'POST') {
++    const r = await fetch(url, body === undefined ? {cache:'no-store'} : {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
++    const data = await r.json();
++    if (!r.ok) {
++      if (r.status === 401) el('login-overlay').classList.remove('hidden');
++      throw new Error(data.error || '요청에 실패했습니다.');
++    }
++    return data;
++  }
++  function rates() {
++    return Object.fromEntries(Object.keys(labels).map(k => {
++      const v = el('rate-' + k).value;
++      return [k, v === '' ? null : Number(v)];
++    }));
++  }
++  function priceText(e) {
++    const amount = `${Number(e.subtotal).toLocaleString('ko-KR')}원`;
++    return e.complete ? `추가 API 비용 약 ${amount}` : `산정된 비용 ${amount} + ${e.missing.map(k => labels[k]).join('·')} 미산정`;
++  }
++  function updateEstimate() {
++    const n = Number(el('duration').value);
++    const count = n <= 30 ? 4 : n <= 60 ? 6 : Math.min(10, Math.ceil(n / 12));
++    const r = rates();
++    const quantities = {draft:1, image:mode === 'manual' ? 0 : count, voice:n * 5.6 / 1000, music:el('studio-music').checked ? n / 60 : 0};
++    let subtotal = 0; const missing = [];
++    for (const [k, qty] of Object.entries(quantities)) {
++      if (!qty) continue;
++      if (r[k] === null) missing.push(k); else subtotal += r[k] * qty;
++    }
++    el('create-estimate').textContent = `전체 제작 예상: ${priceText({subtotal:Math.ceil(subtotal), missing, complete:!missing.length})}. 약 ${count}장면 기준 · 서버 비용 별도.`;
++    try { localStorage.setItem('onvideo-unit-rates', JSON.stringify(r)); } catch {}
++  }
++  try {
++    const r = JSON.parse(localStorage.getItem('onvideo-unit-rates') || '{}');
++    Object.keys(labels).forEach(k => { if (Number.isFinite(r[k]) && r[k] >= 0) el('rate-' + k).value = r[k]; });
++  } catch {}
++  document.querySelectorAll('.studio-options input, #duration, #quality').forEach(i => i.addEventListener('input', updateEstimate));
++  ['tab-auto', 'tab-manual'].forEach(id => el(id).addEventListener('click', updateEstimate));
++  el('product-lock').onchange = () => el('product-fields').classList.toggle('hidden', !el('product-lock').checked);
++  // The existing pipeline does not implement AI clips. Do not estimate or charge for that option.
++  el('aiClips').value = '0'; el('aiClips').disabled = true;
++  el('aiClips').title = '장면 편집에서는 원본 사진 또는 AI 이미지를 사용합니다.';
++  updateEstimate();
++  async function loadHistory() {
++    const rows = await api('/api/studio');
++    el('studio-history').innerHTML = rows.length ? rows.map(p => `<button class="history-item" data-project="${p.id}"><span><strong>${escape(p.title)}</strong><small>${escape(new Date(p.updatedAt).toLocaleString('ko-KR'))}</small></span><span class="badge ${p.status === 'failed' ? 'error' : ''}">${stateNames[p.status]}</span></button>`).join('') : '<p class="mini-state">첫 대본을 만들어보세요.</p>';
++  }
++  const report = e => message(e.message || String(e), true);
++  el('history-refresh').onclick = () => loadHistory().catch(report);
++  document.addEventListener('onvideo-auth-ready', () => loadHistory().catch(report));
++  el('studio-history').onclick = async e => {
++    const button = e.target.closest('[data-project]');
++    if (!button) return;
++    if (dirty) { message('현재 대본의 수정 내용을 먼저 저장하세요.', true); return; }
++    try { await open(button.dataset.project); } catch (err) { report(err); }
++  };
++  function render(p) {
++    current = p; dirty = false;
++    el('log').textContent = p.logs.join('\n');
++    const busy = active(p), disabled = busy ? 'disabled' : '';
++    el('studio-editor').classList.remove('hidden');
++    el('studio-editor').innerHTML = `
++      <div class="modal-head"><h2>대본 검토 · 장면 편집</h2><span class="badge">${stateNames[p.status]}</span></div>
++      <p class="mini-state">${escape(p.phase)}</p><p id="editor-message" class="mini-state" role="status"></p>
++      ${p.error ? `<p class="error" role="alert">${escape(p.error)}</p>` : ''}
++      ${p.input.product ? `<div class="product-summary"><strong>고정된 상품 정보</strong><p>${escape(p.input.product.name)} · ${escape(p.input.product.price)}</p><p>${escape(p.input.product.benefit)}</p><p>${escape(p.input.product.url)}</p><small>상품 정보는 이 작업에서 변경되지 않습니다. 대본의 [상품명], [가격], [혜택]은 위 값으로 읽힙니다. 직접 쓰는 문구의 사실관계는 확인해주세요.</small></div>` : ''}
++      ${p.scenes.length ? `<label class="field-label" for="edit-title">영상 제목</label><input id="edit-title" class="input" maxlength="120" value="${escape(p.title)}" ${disabled} />
++      ${p.input.music ? `<label class="field-label" for="edit-music">배경음악 분위기</label><input id="edit-music" class="input" maxlength="1000" value="${escape(p.musicPrompt)}" ${disabled} />` : ''}
++      <div class="scene-list">${p.scenes.map((s, i) => `
++        <article class="scene-editor" data-scene="${i}">
++          <h3>장면 ${i + 1}</h3>${(s.image && !s.imageCurrent) || (s.voice && !s.voiceCurrent) ? '<p class="hint">이전 생성 미리보기입니다. 최종 제작하면 수정 내용으로 갱신됩니다.</p>' : ''}
++          <div class="scene-layout">
++            <div>${s.image ? `<img class="scene-preview" src="${asset(p, s.image.file)}" alt="장면 ${i + 1} 이미지" />` : p.input.mode === 'manual' ? `<img class="scene-preview" src="${asset(p, p.sources[s.imageIndex])}" alt="선택한 원본 사진" />` : '<div class="scene-preview placeholder">제작 후 이미지가 표시됩니다</div>'}</div>
++            <div>
++              <label class="field-label" for="narration-${i}">나레이션 · 하단 자막</label><textarea id="narration-${i}" data-field="narration" class="input" rows="4" maxlength="1600" ${disabled}>${escape(displayText(s.narration))}</textarea>
++              <div class="row"><label class="col field-label">상단 첫 줄<input data-field="hookTop" class="input" maxlength="120" value="${escape(displayText(s.hookTop))}" ${disabled} /></label><label class="col field-label">강조 문구<input data-field="hookAccent" class="input" maxlength="120" value="${escape(displayText(s.hookAccent))}" ${disabled} /></label></div>
++              <label class="field-label">강조색 <input data-field="accentColor" type="color" value="${escape(s.accentColor)}" ${disabled} /></label>
++              ${p.input.mode === 'manual' ? `<label class="field-label">원본 사진<select data-field="imageIndex" class="input" ${disabled}>${p.sources.map((_, n) => `<option value="${n}" ${s.imageIndex === n ? 'selected' : ''}>사진 ${n + 1}</option>`).join('')}</select></label>` : `<label class="field-label">이미지 설명<textarea data-field="visualPrompt" class="input" rows="2" maxlength="2000" ${disabled}>${escape(s.visualPrompt)}</textarea></label>`}
++              ${s.voice ? `<audio controls preload="none" src="${asset(p, s.voice.file)}"></audio>` : ''}
++              <div class="scene-actions">${p.input.mode === 'auto' ? `<button class="ghost-btn" data-action="image" data-index="${i}" ${disabled}>이미지만 다시 생성 (${regenerationCost(p, s, 'image')})</button>` : ''}<button class="ghost-btn" data-action="voice" data-index="${i}" ${disabled}>음성만 다시 생성 (${regenerationCost(p, s, 'voice')})</button></div>
++            </div>
++          </div>
++        </article>`).join('')}</div>
++        <p id="edit-state" class="mini-state" role="status">저장된 대본입니다. 수정한 장면만 새로 생성합니다.</p>
++        <div class="cost-box">${priceText(p.estimate)}<small>남은 생성: 이미지 ${p.estimate.images}장 · 음성 ${p.estimate.characters}자. 입력 단가 기준이며 서버 비용·재시도 비용은 별도입니다.</small></div>
++        <button class="ghost-btn" data-action="save" ${disabled}>대본 수정 저장</button>
++        <button class="primary-btn" data-action="render" ${disabled}>${p.status === 'failed' ? '완료된 단계부터 이어서 재시작' : '2. 검토한 대본으로 최종 제작'}</button>
++        <p class="mini-state">나레이션 수정은 해당 장면 음성을 다시 생성합니다. 상단 문구·색상만 바꾸면 음성을 재사용합니다. 장면별 음성은 이어지는 억양이 달라질 수 있습니다.</p>` : !busy ? '<button class="primary-btn" data-action="render">대본 작성 재시작</button>' : ''}
++      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><a class="ghost-btn" href="${asset(p, p.output)}" download="${escape(p.title.replace(/[\\/:*?"<>|]/g, '_'))}.mp4">영상 다운로드</a></div>` : ''}
++      <details ${busy || p.status === 'failed' ? 'open' : ''}><summary>제작 로그</summary><div class="scene-actions"><button class="ghost-btn" data-action="copy-log">로그 복사</button><button class="ghost-btn" data-action="expand-log">크게 보기</button></div><pre class="log">${escape(p.logs.join('\n'))}</pre></details>`;
++    el('generate').disabled = busy;
++  }
++  function schedule() {
++    clearTimeout(timer);
++    if (!active(current)) return;
++    timer = setTimeout(async () => {
++      try {
++        const id = current.id;
++        const p = await api('/api/studio/' + id);
++        if (current?.id !== id) return;
++        render(p); if (!active(p)) await loadHistory(); schedule();
++      } catch (e) { report(e); schedule(); }
++    }, 1800);
++  }
++  async function open(id) {
++    clearTimeout(timer);
++    render(await api('/api/studio/' + id)); schedule();
++    el('studio-editor').scrollIntoView({behavior:'smooth', block:'start'});
++  }
++  el('studio-editor').addEventListener('input', () => {
++    dirty = true;
++    const status = el('edit-state');
++    if (status) status.textContent = '저장하지 않은 수정이 있습니다. 먼저 저장하면 남은 예상 비용을 다시 계산합니다.';
++  });
++  async function save() {
++    if (!dirty) return;
++    const scenes = [...document.querySelectorAll('.scene-editor')].map((box, i) => {
++      const s = {...current.scenes[i]};
++      box.querySelectorAll('[data-field]').forEach(input => { s[input.dataset.field] = input.dataset.field === 'imageIndex' ? Number(input.value) : ['narration','hookTop','hookAccent'].includes(input.dataset.field) ? storeText(input.value) : input.value; });
++      return s;
++    });
++    render(await api('/api/studio/' + current.id, {revision:current.revision, title:el('edit-title').value,
++      musicPrompt:el('edit-music')?.value ?? current.musicPrompt, scenes}, 'PUT'));
++    await loadHistory(); message('대본을 저장했습니다.');
++  }
++  el('studio-editor').onclick = async e => {
++    const button = e.target.closest('[data-action]');
++    if (!button) return;
++    if (button.dataset.action === 'copy-log') { copyLog(button); return; }
++    if (button.dataset.action === 'expand-log') { el('log-expand').click(); return; }
++    if (loading || active(current)) return;
++    loading = true;
++    try {
++      const action = button.dataset.action;
++      if (action === 'save') await save();
++      else {
++        if (dirty) { message('대본 수정 저장을 먼저 눌러 예상 비용과 수정 내용을 확인하세요.', true); return; }
++        button.disabled = true;
++        const endpoint = action === 'render' ? 'render' : `scenes/${button.dataset.index}/${action}`;
++        render(await api(`/api/studio/${current.id}/${endpoint}`, {revision:current.revision}));
++        schedule(); await loadHistory();
++      }
++    } catch (err) { report(err); button.disabled = false; }
++    finally { loading = false; }
++  };
++  el('generate').onclick = async () => {
++    if (loading) return;
++    if (dirty) { message('편집 중인 대본을 먼저 저장하세요.', true); return; }
++    loading = true; el('generate').disabled = true; message('대본 작업을 준비하고 있습니다…');
++    try {
++      const images = [];
++      if (mode === 'manual') {
++        const files = [...el('images').files];
++        if (!files.length || files.length > 20) throw new Error('이미지는 1~20장 선택하세요.');
++        if ([...el('videos').files].length) throw new Error('새 장면 편집은 사진을 지원합니다. 영상 파일 선택을 해제하세요.');
++        if (files.reduce((n, f) => n + f.size, 0) > 21 * 1024 * 1024) throw new Error('사진 전체 크기를 21MB 이하로 줄여주세요.');
++        for (const file of files) {
++          if (!['image/jpeg','image/png','image/webp'].includes(file.type)) throw new Error('JPG·PNG·WebP 사진만 지원합니다.');
++          images.push(await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('사진을 읽지 못했습니다.')); reader.readAsDataURL(file); }));
++        }
++      }
++      const product = el('product-lock').checked ? Object.fromEntries(['name','price','benefit','url'].map(k => [k, el('product-' + k).value.trim()])) : null;
++      const p = await api('/api/studio', {mode, url:el('url').value.trim(), images, keywords:el('keywords').value.trim(), facts:el('facts').value.trim(),
++        duration:Number(el('duration').value), voice:el('voice').value, presetId:selectedPreset || '', quality:el('quality').value,
++        music:el('studio-music').checked, product, rates:rates()});
++      render(p); schedule(); await loadHistory();
++      el('studio-editor').scrollIntoView({behavior:'smooth'}); message('대본 작성이 시작됐습니다. 작업 내역에서 다시 열 수 있습니다.');
++    } catch (e) { report(e); }
++    finally { loading = false; el('generate').disabled = active(current); }
++  };
++})();
+diff --git a/web/style.css b/web/style.css
+index 3631c46..b09f606 100644
+--- a/web/style.css
++++ b/web/style.css
+@@ -145,3 +145,33 @@ textarea.input { resize: vertical; font-family: inherit; }
+   .hero { font-size: 30px; }
+   .row { flex-direction: column; }
+ }
++
++/* 대본 검토와 장면별 편집 */
++.studio-options { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 18px; }
++summary { cursor: pointer; font-weight: 700; }
++.rate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; font-size: 13px; }
++.cost-box { padding: 14px; margin: 18px 0 8px; background: #14302c; color: #c6f5e9; border-radius: 12px; font-size: 13px; }
++.cost-box small { display: block; margin-top: 6px; }
++.history-item { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; background: none; color: var(--text); border: 0; border-bottom: 1px solid var(--line); text-align: left; cursor: pointer; }
++.history-item small { display: block; color: var(--muted); margin-top: 4px; }
++.badge { font-size: 12px; background: var(--card2); padding: 5px 9px; border-radius: 12px; white-space: nowrap; }
++.scene-editor { border-top: 1px solid var(--line); padding: 22px 0; margin-top: 16px; }
++.scene-editor h3 { margin-bottom: 12px; }
++.scene-layout { display: grid; grid-template-columns: 120px minmax(0,1fr); gap: 16px; }
++.scene-preview { width: 120px; height: 180px; object-fit: contain; background: #100d0a; border-radius: 10px; }
++.scene-preview.placeholder { display: flex; align-items: center; text-align: center; color: var(--muted); padding: 12px; font-size: 12px; }
++.scene-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
++.scene-editor audio { width: 100%; margin-top: 12px; }
++.product-summary { background: var(--card2); padding: 16px; border-radius: 12px; overflow-wrap: anywhere; }
++.product-summary small { color: var(--muted); }
++.studio-result { margin: 24px 0; }
++.studio-result h3 { margin-bottom: 14px; }
++#studio-editor { scroll-margin-top: 85px; }
++#studio-editor details { margin-top: 24px; }
++.error { color: #ff9385; }
++button:disabled { cursor: not-allowed; opacity: 0.5; }
++@media (max-width: 600px) {
++  .scene-layout { grid-template-columns: 1fr; }
++  .scene-preview { width: 100%; height: 180px; }
++  .card { padding: 20px; }
++}
+diff --git "a/\353\263\200\352\262\275\354\202\254\355\225\255-\355\201\264\353\241\234\353\223\234\354\240\204\353\213\254.md" "b/\353\263\200\352\262\275\354\202\254\355\225\255-\355\201\264\353\241\234\353\223\234\354\240\204\353\213\254.md"
+new file mode 100644
+index 0000000..9bfe0a2
+--- /dev/null
++++ "b/\353\263\200\352\262\275\354\202\254\355\225\255-\355\201\264\353\241\234\353\223\234\354\240\204\353\213\254.md"
+@@ -0,0 +1,73 @@
++# 온비디오 1.1 — 대본 검토와 장면 편집
++
++이 전달본에는 CSS 한 줄 수정만 들어 있는 것이 아닙니다. 아래 다섯 기능을 추가했습니다.
++기준 커밋은 `3474d12`입니다. 이 기준본의 다크/라이트 전환, 목소리 샘플, 로그 복사/크게 보기와 기존 모달 숨김 수정도 포함했습니다.
++운영에는 배포하지 않았습니다. 별도 개발 브랜치에서 작성한 전달용 소스입니다.
++
++## 추가된 기능
++
++1. **대본 미리보기와 수정**: 첫 버튼은 대본만 작성합니다. 제목, 장면 나레이션, 상단 자막, 강조색, 이미지 설명/원본 사진을 검토하고 저장한 뒤 제작합니다.
++2. **장면별 재생성**: 이미지 또는 음성을 한 장면씩 다시 생성합니다. 최종 제작 시 나머지 미디어는 재사용합니다. 나레이션 변경은 해당 음성만, 이미지 설명 변경은 해당 이미지만 갱신합니다. 상단 자막/색상 변경은 미디어 생성 없이 다시 합성합니다. 원본 이미지 모드는 사진 선택으로 교체합니다.
++3. **상품 정보 고정**: 내 이미지 모드에서 상품명·가격·혜택·구매 주소를 별도로 저장하고 영상에 고정 표시합니다. AI가 쓴 상품 주장 대신 고정 정보를 참조하는 안전한 초안으로 시작하며 사용자가 문구를 편집할 수 있습니다. 화면의 [상품명], [가격], [혜택]은 내부에서 고정 값으로 치환됩니다. 원본 사진은 AI로 재생성하지 않습니다. 자유 입력 문구의 사실관계까지 자동 보증하지는 않습니다.
++4. **작업 내역과 재시작**: 대본, 원본 사진, 완성된 장면 이미지·음성, 배경음악, 결과 영상을 디스크에 저장합니다. 서버 재시작 시 실행 중이던 작업은 재시작 가능한 실패 상태로 전환합니다. 사용자가 이어서 재시작하면 완료된 단계는 재사용합니다.
++5. **예상 비용**: 사용자가 입력한 대본 1회·이미지 1장·음성 1,000자·음악 1분 단가로 계산합니다. 단가를 비우면 미산정으로 표시합니다. 제작 전에는 전체 예상, 편집 후에는 남은 생성 비용, 장면 재생성 버튼에는 해당 작업의 예상 비용을 표시합니다. 공식 요금표나 실제 결제 금액이 아니며 서버 비용·환율·실패 재시도 비용은 별도입니다.
++
++## 변경 파일을 찾으려면
++
++| 파일 | 역할 |
++| --- | --- |
++| `lib/studio-model.ts` (신규) | 입력 검증, 상품 값 치환, 장면 캐시 식별, 비용 계산 |
++| `lib/studio.ts` (신규) | 파일 저장, 작업 상태, 중복 실행 차단, 수정/재생성/재시작 |
++| `lib/studio-providers.ts` (신규) | 기존 대본·이미지·음성 API 연결과 실제 영상 합성 |
++| `lib/studio-http.ts` (신규) | `/api/studio` API, 인증 뒤 라우팅, 비공개 미디어와 Range 재생 |
++| `web/studio.js` (신규) | 편집기, 작업 내역, 자동 진행 조회, 상품 정보, 예상 비용 UI |
++| `web/index.html`, `web/style.css` | 새 입력 폼과 편집 화면 |
++| `web/app.js` | 인증 완료 시 작업 내역 로드를 위한 이벤트 한 줄 |
++| `server.ts` | 새 정적 파일 및 인증된 API 연결 |
++| `lib/manual.ts` | 수동 대본 생성 단계를 분리하여 영상 제작 전 검토 가능하게 함 |
++| `lib/pipeline.ts` | 기존 본문 읽기 함수 export |
++| `lib/render.ts` | 작업별 새 public 디렉터리로 합성하여 이전 이미지가 재사용되는 번들 문제 방지 |
++| `src/Scene.tsx` | 장면별 음성과 고정 상품 정보 표시 |
++| `tests/` | 17개 자동 검증과 유료 API 없는 실제 렌더 smoke test |
++| `package.json`, `package-lock.json`, `tsconfig.json` | 버전 1.1.0, 테스트/타입검사 명령 |
++
++## 실행과 확인
++
++```sh
++npm ci
++npm run typecheck
++npm test
++npm run web
++```
++
++기본 주소는 `http://localhost:4000`입니다. `PORT`로 변경할 수 있습니다.
++기존 API 키 설정을 그대로 사용합니다. ZIP에는 API 키와 `.env.local`, 실제 작업 데이터, node_modules가 들어 있지 않습니다.
++
++실제 합성 검증은 별도 테스트 데이터 디렉터리에서 실행합니다. 이 명령은 기존 샘플 사진·음원을 사용하며 유료 AI API를 호출하지 않습니다.
++
++```sh
++STUDIO_SMOKE_DIR=/tmp/onvideo-smoke node --import tsx tests/smoke-render.ts
++```
++
++## 운영 반영 조건
++
++- 기존 Railway 서비스의 `/app/data` 영구 볼륨을 유지하세요. 기본 저장 위치는 `data/studio/`입니다.
++- 저장 위치를 바꾸려면 `STUDIO_DATA_DIR`에 상위 저장 경로를 설정하세요. 그 아래 `studio/`를 만듭니다.
++- **단일 서버 프로세스·단일 replica** 기준입니다. 여러 replica에서는 공유 작업 큐와 분산 잠금이 추가로 필요합니다.
++- 기존 `ADMIN_PASSWORD`와 `APP_SECRET`을 유지하세요. 작업 내역과 미디어 API도 기존 로그인 보호를 받습니다.
++- 기존 생성 API는 남겨 두었습니다. 새 작업 내역은 새 편집 기능으로 만든 작업부터 저장됩니다. 예전 메모리 작업을 복원하지는 않습니다.
++- 새 편집 흐름은 JPG/PNG/WebP 사진을 지원합니다. 영상 클립 입력과 AI 움직이는 클립 생성은 이 편집 흐름에 포함하지 않았습니다.
++- 장면별 음성은 해당 장면만 다시 만들 수 있는 대신, 기존 통짜 나레이션과 이어지는 억양이 다를 수 있습니다. 목표 길이는 대본 기준이며 실제 음성 길이에 따라 달라집니다.
++- 완료 파일을 저장한 단계부터 재사용합니다. 제공자가 과금한 직후 프로세스가 종료되는 등 저장 직전 실패에서는 그 단계 재호출 비용이 생길 수 있습니다.
++- 고정 상품 정보는 작업 생성 후 읽기 전용입니다. 가격·상품 자체가 바뀌면 새 작업을 만드세요.
++- 결과 미디어는 계속 보관합니다. 운영 디스크 용량을 관리하고 별도 백업을 유지하세요.
++
++## 검증 결과와 범위
++
++- 자동 검증 17개: 대본 단계의 유료 미디어 호출 금지, 수정 장면만 갱신, 이미지/음성 캐시, 실패/서버 재시작 복구, 렌더 실패 재시도, 누락 파일 처리, 중복 작업/오래된 수정 차단, 상품 값 보호, 잘못된 입력, 비용 미산정, 로그인 보호, 미디어 접근, 영상 Range 요청 등.
++- TypeScript 검사와 브라우저 JavaScript 구문 검사 통과.
++- 실제 Remotion으로 샘플 MP4 합성 성공.
++- 브라우저에서 로그인 → 작업 내역 → 자막 편집 → 저장 → 기존 미디어 재사용 합성 → 완성본 확인.
++- 유료 Gemini/OpenAI/Replicate/ElevenLabs의 실제 호출 검증은 수행하지 않았습니다. 기존 공급자 구현을 재사용하며, 운영 배포 전 유효한 키와 잔액으로 짧은 영상 한 건을 확인해야 합니다.
++
++첨부 `온비디오-기능추가.patch`는 기준 커밋 대비 변경분입니다. 같은 파일에서 다른 작업이 진행됐다면 전체 덮어쓰기보다 패치를 검토해 병합하세요.

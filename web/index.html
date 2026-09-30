@@ -116,16 +116,6 @@
             <label class="field-label" for="product-url">구매 주소</label><input id="product-url" type="url" class="input" maxlength="200" placeholder="https://" />
           </div>
           <label class="field-label"><input id="studio-music" type="checkbox" /> AI 배경음악 생성 (추가 비용)</label>
-          <div id="rate-section" class="dev-only">
-            <h3 class="field-label">예상 비용에 사용할 단가 (원) <span class="hint">🔒 관리자 전용</span></h3>
-            <p class="hint">이용 중인 서비스의 단가를 입력하세요. 비워두면 미산정으로 표시합니다. 실제 청구액은 요금제·환율·재시도에 따라 다릅니다.</p>
-            <div class="rate-grid">
-              <label>대본 1회<input id="rate-draft" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
-              <label>이미지 1장<input id="rate-image" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
-              <label>음성 1,000자<input id="rate-voice" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
-              <label>배경음악 1분<input id="rate-music" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
-            </div>
-          </div>
         </details>
         <div id="create-estimate" class="cost-box dev-only" aria-live="polite"></div>
         <button id="generate" class="primary-btn">1. 대본 먼저 만들기</button>
@@ -169,6 +159,19 @@
         </div>
         <p class="sub small">키는 로컬 .env.local에 저장됩니다. 저장된 키는 마스킹되어 표시돼요.</p>
         <div id="key-fields"></div>
+
+        <div id="rate-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
+          <h3 class="field-label">💰 예상 비용 단가 (원) <span class="hint">강의 화면엔 안 보입니다</span></h3>
+          <p class="hint">여기에 단가를 넣으면 생성 화면에 예상 비용이 표시됩니다. 비워두면 비용이 아예 안 보여요(강의용).</p>
+          <div class="rate-grid">
+            <label>대본 1회<input id="rate-draft" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
+            <label>이미지 1장<input id="rate-image" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
+            <label>음성 1,000자<input id="rate-voice" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
+            <label>배경음악 1분<input id="rate-music" class="input" type="number" min="0" max="1000000" step="any" placeholder="미산정" /></label>
+          </div>
+          <label class="field-label" style="margin-top:10px"><input type="checkbox" id="cost-visible" /> 생성 화면에 예상 비용 표시</label>
+        </div>
+
         <button id="save-keys" class="primary-btn">저장</button>
         <p id="settings-msg" class="mini-state"></p>
       </div>

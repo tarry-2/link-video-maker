@@ -273,32 +273,17 @@ $('theme-btn')?.addEventListener('click', () => {
   applyTheme(next);
 });
 
-// ── 관리자(dev) 모드: 로고 7클릭 + 코드 → 단가·예상비용 노출 ──
-const DEV_CODE = '413601';
+// ── 예상 비용 표시 토글(키설정 모달 안 체크박스) ──
+// 강의 화면엔 비용이 안 보이게 기본 OFF. 관리자가 키설정에서 켜면 표시.
 function setDev(on) {
-  if (on) { document.documentElement.setAttribute('data-dev', 'on'); localStorage.setItem('onvideo-dev', '1'); }
-  else { document.documentElement.removeAttribute('data-dev'); localStorage.removeItem('onvideo-dev'); }
+  if (on) document.documentElement.setAttribute('data-dev', 'on');
+  else document.documentElement.removeAttribute('data-dev');
+  localStorage.setItem('onvideo-dev', on ? '1' : '0');
+  const cb = $('cost-visible');
+  if (cb) cb.checked = on;
 }
-if (localStorage.getItem('onvideo-dev') === '1') setDev(true);
-(() => {
-  let clicks = 0, timer = null;
-  const logo = document.querySelector('.wordmark');
-  logo?.addEventListener('click', () => {
-    // 이미 켜져 있으면 로고 7클릭으로 끈다(강의 직전 빠르게 숨김).
-    if (localStorage.getItem('onvideo-dev') === '1') {
-      clicks++; clearTimeout(timer); timer = setTimeout(() => { clicks = 0; }, 1500);
-      if (clicks >= 7) { clicks = 0; setDev(false); alert('관리자 단가 표시를 껐습니다.'); }
-      return;
-    }
-    clicks++; clearTimeout(timer); timer = setTimeout(() => { clicks = 0; }, 1500);
-    if (clicks >= 7) {
-      clicks = 0;
-      const code = prompt('관리자 코드를 입력하세요');
-      if (code === DEV_CODE) { setDev(true); alert('관리자 모드: 단가·예상비용이 표시됩니다.'); }
-      else if (code !== null) alert('코드가 틀렸습니다.');
-    }
-  });
-})();
+setDev(localStorage.getItem('onvideo-dev') === '1');
+$('cost-visible')?.addEventListener('change', (e) => setDev(e.target.checked));
 
 // ── 로그 복사 / 크게보기 ──
 function flashCopied(btn) {
