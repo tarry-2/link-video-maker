@@ -43,17 +43,20 @@
       .pf-yt-badge { position: absolute; top: 8px; right: 8px; background: #ff0000; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-thumb-card figcaption { padding: 10px 12px 14px; }
       .pf-thumb-card h3 { font-size: 13px; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-      /* 크게보기 모달 */
-      .big-inner { position: relative; background: var(--card); border-radius: 18px; max-width: 900px; width: 100%; max-height: 92vh; overflow-y: auto; display: flex; gap: 20px; padding: 20px; }
-      .big-video { width: 46%; max-width: 360px; aspect-ratio: 9/16; border-radius: 12px; background: #000; flex-shrink: 0; }
-      .big-meta { flex: 1; min-width: 0; }
-      .big-meta h3 { font-size: 18px; margin: 8px 0; }
-      .big-close { position: absolute; top: 10px; right: 12px; background: var(--card2); border: 1px solid var(--line); color: var(--text); width: 34px; height: 34px; border-radius: 50%; font-size: 16px; cursor: pointer; z-index: 2; }
+      /* 큰 미리보기 스테이지 */
+      .pf-stage { display: flex; gap: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; margin-bottom: 18px; }
+      .pf-stage-video { width: 42%; max-width: 300px; aspect-ratio: 9/16; border-radius: 12px; background: #000; flex-shrink: 0; }
+      .pf-stage-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .pf-stage-meta select { margin-bottom: 14px; }
+      .pf-stage-title { font-size: 18px; font-weight: 800; margin: 8px 0; }
+      .pf-dl { display: inline-block; background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; }
+      .pf-dl:hover { border-color: var(--teal); color: var(--teal); }
+      .pf-thumb-card.sel { outline: 2px solid var(--teal); outline-offset: 1px; }
       @media (max-width: 640px) {
-        .big-inner { flex-direction: column; align-items: center; }
-        .big-video { width: 100%; max-width: 240px; }
-        .big-meta { width: 100%; text-align: center; }
-        .big-meta .pf-actions { justify-content: center; }
+        .pf-stage { flex-direction: column; padding: 14px; }
+        .pf-stage-video { width: 100%; max-width: 220px; margin: 0 auto; }
+        .pf-stage-meta { text-align: center; }
+        .pf-stage-meta .pf-actions { justify-content: center; }
       }
       .mypf-count { font-weight: 700; color: var(--teal); }
       @media (max-width: 640px) {
@@ -81,69 +84,27 @@
       <h1 class="hero">목소리 듣고 고르기</h1>
       <p class="sub">재생 버튼을 눌러 직접 들어보세요. 콘텐츠에 맞는 목소리를 쓰면 시청 시간이 확 늘어납니다.</p>
 
-      <!-- 내가 만든 영상(완성 시 자동 등록) -->
+      <!-- 포트폴리오: 드롭다운 선택 + 큰 미리보기 + 썸네일 목록 -->
       <section class="portfolio" id="my-videos" hidden>
         <div class="portfolio-head">
-          <h2 class="pf-title">🎬 내가 만든 영상 <span id="mypf-count" class="mypf-count"></span></h2>
-          <p class="pf-sub">완성한 영상이 여기에 자동으로 쌓입니다. 최신순으로 정렬돼요.</p>
+          <h2 class="pf-title">🎬 포트폴리오 <span id="mypf-count" class="mypf-count"></span></h2>
+          <p class="pf-sub">영상을 고르면 아래에서 크게 보고, 유튜브에 올리거나 내려받을 수 있어요.</p>
         </div>
+
+        <!-- 큰 미리보기 플레이어 + 액션 -->
+        <div class="pf-stage">
+          <video id="pf-stage-video" class="pf-stage-video" controls playsinline preload="metadata"></video>
+          <div class="pf-stage-meta">
+            <select id="pf-select" class="input" aria-label="영상 선택"></select>
+            <div id="pf-stage-info"></div>
+          </div>
+        </div>
+
+        <!-- 썸네일 목록(탭하면 위 플레이어에서 재생) -->
         <div id="mypf-grid" class="mypf-grid"></div>
         <div style="text-align:center; margin-top:18px"><button id="mypf-more" class="ghost-btn" hidden>더 보기</button></div>
       </section>
 
-      <section class="portfolio">
-        <div class="portfolio-head">
-          <h2 class="pf-title">🎬 실제 제작 영상 — 목소리 들어보기</h2>
-          <p class="pf-sub">OnVideo가 자동 생성한 실제 영상입니다. 소리를 켜고 목소리 톤을 확인해 보세요.</p>
-        </div>
-        <div class="pf-grid">
-          <figure class="pf-card">
-            <video class="pf-video" src="/portfolio/gulbi-luna.mp4" controls playsinline preload="metadata"></video>
-            <figcaption>
-              <span class="pf-badge sell">🛍️ 판매·음식</span>
-              <h3>Luna · 다정 여성</h3>
-              <p class="pf-voice-note">다정하고 부드러운 톤. 음식·감성 콘텐츠를 사랑스럽게.</p>
-              <p class="pf-clip">영광 법성포 굴비 (온종일팜)</p>
-            </figcaption>
-          </figure>
-          <figure class="pf-card">
-            <video class="pf-video" src="/portfolio/city-shin.mp4" controls playsinline preload="metadata"></video>
-            <figcaption>
-              <span class="pf-badge issue">📰 이슈·미스터리</span>
-              <h3>Shin · 깊고 묵직</h3>
-              <p class="pf-voice-note">깊고 묵직한 저음. 사건·다큐에 긴장감과 몰입을.</p>
-              <p class="pf-clip">사라진 도시, 인구 절벽의 미래</p>
-            </figcaption>
-          </figure>
-          <figure class="pf-card">
-            <video class="pf-video" src="/portfolio/greentea-suzie.mp4" controls playsinline preload="metadata"></video>
-            <figcaption>
-              <span class="pf-badge info">💡 정보·건강</span>
-              <h3>Suzie · 차분 30대</h3>
-              <p class="pf-voice-note">차분한 30대 여성. 건강·정보를 편안하고 신뢰감 있게.</p>
-              <p class="pf-clip">녹차 카페인, 이렇게 마시면 꿀팁</p>
-            </figcaption>
-          </figure>
-          <figure class="pf-card">
-            <video class="pf-video" src="/portfolio/kidney-suzie.mp4" controls playsinline preload="metadata"></video>
-            <figcaption>
-              <span class="pf-badge info">💡 정보·건강</span>
-              <h3>Suzie · 차분 30대</h3>
-              <p class="pf-voice-note">링크·이미지 없이 <b>주제 추천</b>만으로 만든 영상.</p>
-              <p class="pf-clip">물 마실 때 신장 망가지는 습관</p>
-            </figcaption>
-          </figure>
-          <figure class="pf-card">
-            <video class="pf-video" src="/portfolio/ocean-anime.mp4" controls playsinline preload="metadata"></video>
-            <figcaption>
-              <span class="pf-badge issue">🎨 애니 스타일</span>
-              <h3>Jaewon · 자연스러운</h3>
-              <p class="pf-voice-note"><b>애니 일러스트</b> 스타일 + 주제 추천으로 제작.</p>
-              <p class="pf-clip">바다에서 절대 하면 안 되는 행동</p>
-            </figcaption>
-          </figure>
-        </div>
-      </section>
 
       <h2 class="pf-title" style="margin-top:36px">🔊 전체 목소리 미리듣기</h2>
       <div id="groups" class="voice-groups"></div>
@@ -228,15 +189,15 @@
       }
       load();
 
-      // ── 내가 만든 영상(자동 포트폴리오) ──
+      // ── 포트폴리오: 드롭다운 선택 + 큰 미리보기 ──
       const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       const BADGE = { issue:'📰', info:'💡', sell:'🛍️', heal:'🌿' };
-      let myItems = [], myShown = 0, canDelete = false;
-      const PAGE = 9;
-      async function loadMyVideos() {
+      let myItems = [], myShown = 0, canDelete = false, curIdx = 0;
+      const PAGE = 12;
+      async function loadMyVideos(keepIdx) {
         try {
           const a = await (await fetch('/api/auth')).json();
-          canDelete = !a.required || a.ok; // 로그인(또는 비번 미설정) 시에만 삭제 버튼
+          canDelete = !a.required || a.ok;
           const d = await (await fetch('/api/portfolio')).json();
           myItems = Array.isArray(d.items) ? d.items : [];
         } catch { myItems = []; }
@@ -244,7 +205,14 @@
         if (!myItems.length) { sec.hidden = true; return; }
         sec.hidden = false;
         $('mypf-count').textContent = `(총 ${myItems.length}개)`;
+        // 드롭다운 채우기
+        $('pf-select').innerHTML = myItems.map((it, i) =>
+          `<option value="${i}">${it.kind === 'sample' ? '🔹 ' : ''}${esc(it.title)} — ${esc(it.voice)}</option>`).join('');
+        // 그리드(썸네일)
         myShown = 0; $('mypf-grid').innerHTML = ''; showMore();
+        curIdx = Math.min(keepIdx ?? 0, myItems.length - 1);
+        $('pf-select').value = curIdx;
+        selectVideo(curIdx, false);
       }
       function showMore() {
         const grid = $('mypf-grid');
@@ -253,50 +221,48 @@
           const fig = document.createElement('figure');
           fig.className = 'pf-card pf-thumb-card';
           fig.dataset.idx = i;
-          // 카드는 썸네일+제목만(컴팩트) — 탭하면 크게보기 모달. 세로로 안 길어짐.
           fig.innerHTML = `
             <div class="pf-thumb"><video src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}</div>
-            <figcaption>
-              <span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span>
-              <h3>${esc(it.title)}</h3>
-            </figcaption>`;
+            <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${esc(it.title)}</h3></figcaption>`;
           grid.appendChild(fig);
         }
         myShown = Math.min(myShown + PAGE, myItems.length);
         $('mypf-more').hidden = myShown >= myItems.length;
       }
-      // 카드 크게보기 모달 — 영상 크게 재생 + 정보 + 유튜브/삭제.
-      function openBig(idx) {
+      // 드롭다운/썸네일 선택 → 위 큰 플레이어에 로드 + 액션 렌더
+      function selectVideo(idx, doScroll) {
         const it = myItems[idx]; if (!it) return;
-        let box = $('big-modal');
-        if (!box) { box = document.createElement('div'); box.id = 'big-modal'; document.body.appendChild(box); }
-        box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:16px;z-index:60';
-        box.innerHTML = `<div class="big-inner">
-          <button class="big-close" data-big="close">✕</button>
-          <video class="big-video" src="${it.video}" controls autoplay playsinline></video>
-          <div class="big-meta">
-            <span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span>
-            <h3>${esc(it.title)}</h3>
-            <p class="pf-voice-note">🎙 ${esc(it.voice)}</p>
-            <p class="pf-clip">${esc(new Date(it.createdAt).toLocaleString('ko-KR'))}</p>
-            ${it.youtubeUrl ? `<a class="pf-yt-link" href="${esc(it.youtubeUrl)}" target="_blank">▶ 유튜브에서 보기</a>` : ''}
-            ${canDelete ? `<div class="pf-actions"><button class="pf-yt" data-id="${esc(it.projectId)}">📺 유튜브 올리기</button><button class="pf-del" data-id="${esc(it.projectId)}">🗑 삭제</button></div>` : ''}
-          </div>
-        </div>`;
-        box.onclick = e => {
-          if (e.target === box || e.target.closest('[data-big="close"]')) { box.remove(); return; }
-          const yt = e.target.closest('.pf-yt'); if (yt) { box.remove(); uploadToYouTube(yt); return; }
-          const del = e.target.closest('.pf-del');
-          if (del) { if (confirm('이 영상을 포트폴리오에서 삭제할까요? (원본 작업은 남아 있어요)')) { fetch('/api/portfolio/' + encodeURIComponent(del.dataset.id), { method: 'DELETE' }).then(r => { if (r.ok) { box.remove(); loadMyVideos(); } }); } }
-        };
+        curIdx = idx;
+        const v = $('pf-stage-video'); v.src = it.video;
+        $('pf-select').value = idx;
+        $('pf-stage-info').innerHTML = `
+          <span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span>
+          <h3 class="pf-stage-title">${esc(it.title)}</h3>
+          <p class="pf-voice-note">🎙 ${esc(it.voice)}</p>
+          ${it.createdAt ? `<p class="pf-clip">${esc(new Date(it.createdAt).toLocaleString('ko-KR'))}</p>` : '<p class="pf-clip">샘플 영상</p>'}
+          ${it.youtubeUrl ? `<a class="pf-yt-link" href="${esc(it.youtubeUrl)}" target="_blank">▶ 유튜브에서 보기</a>` : ''}
+          <div class="pf-actions">
+            <button class="pf-yt" data-id="${esc(it.id)}">📺 유튜브 올리기</button>
+            <a class="pf-dl" href="${it.video}" download="${esc(it.title)}.mp4">⬇ 다운로드</a>
+            ${canDelete && it.kind === 'mine' ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}
+          </div>`;
+        document.querySelectorAll('.pf-thumb-card').forEach(c => c.classList.toggle('sel', Number(c.dataset.idx) === idx));
+        if (doScroll) $('my-videos').scrollIntoView({behavior:'smooth', block:'start'});
       }
       $('mypf-more').onclick = showMore;
+      $('pf-select').onchange = e => selectVideo(Number(e.target.value), false);
       $('mypf-grid').onclick = e => {
         const card = e.target.closest('.pf-thumb-card');
-        if (card) openBig(Number(card.dataset.idx));
+        if (card) selectVideo(Number(card.dataset.idx), true);
+      };
+      // 큰 미리보기 액션(유튜브/삭제) 위임
+      $('pf-stage-info').onclick = e => {
+        const yt = e.target.closest('.pf-yt'); if (yt) { uploadToYouTube(yt); return; }
+        const del = e.target.closest('.pf-del');
+        if (del) { if (confirm('이 영상을 포트폴리오에서 삭제할까요? (원본 작업은 남아 있어요)')) fetch('/api/portfolio/' + encodeURIComponent(del.dataset.id), { method: 'DELETE' }).then(r => { if (r.ok) loadMyVideos(Math.max(0, curIdx - 1)); }); }
       };
 
-      // ── 포트폴리오 카드 → 유튜브 올리기 ──
+      // ── 유튜브 올리기 ──
       async function uploadToYouTube(btn) {
         const id = btn.dataset.id;
         const orig = btn.textContent; btn.disabled = true; btn.textContent = '📺 준비 중…';
@@ -304,7 +270,7 @@
           const st = await (await fetch('/api/youtube/status')).json();
           if (!st.connected) { alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 유튜브 계정을 연결하세요.'); btn.disabled = false; btn.textContent = orig; return; }
           btn.textContent = '📺 제목·설명 만드는 중…';
-          const r = await fetch('/api/youtube/meta/' + id);
+          const r = await fetch('/api/youtube/meta/' + encodeURIComponent(id));
           const meta = await r.json();
           if (!r.ok) throw new Error(meta.error || '메타 생성 실패');
           openYtModal(id, meta, st.channelTitle);
@@ -334,13 +300,13 @@
             const up = e.target; up.disabled = true; up.textContent = '올리는 중… (잠시 걸려요)';
             $('yt-up-msg').textContent = '';
             try {
-              const r = await fetch('/api/youtube/upload/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              const r = await fetch('/api/youtube/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: $('yt-title').value, description: $('yt-desc').value, tags: $('yt-tags').value.split(',').map(s => s.trim()).filter(Boolean), privacy: $('yt-privacy').value }) });
               const d = await r.json();
               if (!r.ok) throw new Error(d.error || '업로드 실패');
-              $('yt-up-msg').innerHTML = `✅ 업로드 완료! <a href="${d.url}" target="_blank" style="color:var(--teal)">${d.url}</a>`;
-              up.textContent = '완료 🎉';
-              loadMyVideos();
+              $('yt-up-msg').innerHTML = `✅ 업로드 완료!<br><a href="${d.url}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:#ff0000;color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 유튜브에서 열기</a><br><span style="font-size:12px;color:var(--muted)">${d.url}</span>`;
+              up.textContent = '완료 🎉'; up.disabled = true;
+              loadMyVideos(curIdx); // 스테이지·썸네일에 유튜브 링크/뱃지 즉시 반영
             } catch (err) { $('yt-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '유튜브에 올리기'; }
           }
         };

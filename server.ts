@@ -12,7 +12,7 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
-import {listPortfolio, removePortfolio, setPortfolioYouTube} from './lib/portfolio';
+import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -54,6 +54,29 @@ function ytProto(req: http.IncomingMessage): string {
   const fwd = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
   if (fwd) return fwd;
   return String(req.headers.host || '').startsWith('localhost') ? 'http' : 'https';
+}
+
+// 포트폴리오 항목 id → 실제 mp4 파일 경로 + 메타 소스. 내 완성작(uuid) / 샘플(sample:파일) 공용.
+function resolveVideo(id: string): {kind: 'mine' | 'sample'; file: string; title: string; narrations: string[]; durSec: number} | null {
+  if (id.startsWith('sample:')) {
+    const name = path.basename(id.slice('sample:'.length));
+    if (!/^[\w.-]+\.mp4$/.test(name)) return null;
+    const s = SAMPLES.find((x) => x.file === name);
+    const file = path.join(ROOT, 'public', 'portfolio', name);
+    if (!s || !fs.existsSync(file)) return null;
+    return {kind: 'sample', file, title: s.title, narrations: [s.title], durSec: 40};
+  }
+  if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+  const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
+  const pjPath = path.join(dir, 'project.json');
+  if (!fs.existsSync(pjPath)) return null;
+  const proj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
+  if (proj.status !== 'completed' || !proj.output || proj.output !== path.basename(proj.output)) return null;
+  const file = path.join(dir, proj.output);
+  if (!fs.existsSync(file)) return null;
+  const narrations = (proj.scenes || []).map((s: any) => s.narration || '');
+  const durSec = (proj.scenes || []).reduce((n: number, s: any) => n + (s.voice?.frames || 0), 0) / 30 || proj.input?.duration || 30;
+  return {kind: 'mine', file, title: proj.title, narrations, durSec};
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
@@ -162,10 +185,11 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // ── 자동 포트폴리오: 목록(공개, voices.html이 로드) ──
+  // ── 자동 포트폴리오: 목록(공개, voices.html이 로드) ── 내 완성작 + 기본 샘플 병합.
   if (p === '/api/portfolio' && req.method === 'GET') {
-    const items = listPortfolio().map((it) => ({
-      projectId: it.projectId,
+    const mine = listPortfolio().map((it) => ({
+      id: it.projectId,
+      kind: 'mine' as const,
       title: it.title,
       voice: it.voice,
       category: it.category,
@@ -174,7 +198,19 @@ const server = http.createServer(async (req, res) => {
       youtubeUrl: it.youtubeUrl || '',
       video: `/portfolio-item/${it.projectId}.mp4`,
     }));
-    return json(res, 200, {items});
+    const sampleYt = loadSampleYouTube();
+    const samples = SAMPLES.map((s) => ({
+      id: 'sample:' + s.file,
+      kind: 'sample' as const,
+      title: s.title,
+      voice: s.voice,
+      category: s.category,
+      goal: s.goal,
+      createdAt: '',
+      youtubeUrl: sampleYt[s.file] || '',
+      video: `/portfolio/${s.file}`,
+    }));
+    return json(res, 200, {items: [...mine, ...samples]});
   }
   // ── 자동 포트폴리오: 완성 영상 공개 서빙(로그인 없이 /voices에서 재생, Range 지원) ──
   if (p.startsWith('/portfolio-item/')) {
@@ -236,42 +272,35 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {url: authUrl(redirectUri)});
     } catch (e: any) { return json(res, 400, {error: e.message}); }
   }
-  // ── 유튜브: 완성 영상 업로드 ──
+  // ── 유튜브: 완성 영상 업로드 ── 내 완성작(uuid) + 샘플(sample:파일) 둘 다 지원.
   if (p.startsWith('/api/youtube/upload/') && req.method === 'POST') {
-    const id = p.slice('/api/youtube/upload/'.length);
-    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '잘못된 요청'});
-    const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
-    const pjPath = path.join(dir, 'project.json');
-    if (!fs.existsSync(pjPath)) return json(res, 404, {error: '작업을 찾을 수 없습니다.'});
-    const proj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
-    if (proj.status !== 'completed' || !proj.output) return json(res, 400, {error: '완성된 영상만 업로드할 수 있습니다.'});
-    const file = path.join(dir, proj.output);
-    if (proj.output !== path.basename(proj.output) || !fs.existsSync(file)) return json(res, 404, {error: '영상 파일이 없습니다.'});
+    const id = decodeURIComponent(p.slice('/api/youtube/upload/'.length));
+    const src = resolveVideo(id);
+    if (!src) return json(res, 404, {error: '영상을 찾을 수 없습니다.'});
     const b = await readBody(req);
     const privacy = ['public', 'unlisted', 'private'].includes(b.privacy) ? b.privacy : 'public';
     try {
-      const r = await uploadVideo(file, {
-        title: String(b.title || proj.title).slice(0, 100),
+      const r = await uploadVideo(src.file, {
+        title: String(b.title || src.title).slice(0, 100),
         description: String(b.description || '').slice(0, 4900),
         tags: Array.isArray(b.tags) ? b.tags.map((x: any) => String(x)).slice(0, 15) : [],
         privacy: privacy as any,
       });
-      try { setPortfolioYouTube(id, r.url); } catch {} // 포트폴리오에 링크 기록(있으면)
+      try {
+        if (src.kind === 'mine') setPortfolioYouTube(id, r.url);
+        else setSampleYouTube(path.basename(id.slice('sample:'.length)), r.url);
+      } catch {}
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
   }
-  // ── 유튜브: 메타(제목·설명·태그) 자동 생성 ──
+  // ── 유튜브: 메타(제목·설명·태그) 자동 생성 ── 내 완성작 + 샘플 둘 다.
   if (p.startsWith('/api/youtube/meta/') && req.method === 'GET') {
-    const id = p.slice('/api/youtube/meta/'.length);
-    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '잘못된 요청'});
-    const pjPath = path.join(STUDIO_DATA_DIR, 'studio', id, 'project.json');
-    if (!fs.existsSync(pjPath)) return json(res, 404, {error: '작업을 찾을 수 없습니다.'});
-    const proj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
+    const id = decodeURIComponent(p.slice('/api/youtube/meta/'.length));
+    const src = resolveVideo(id);
+    if (!src) return json(res, 404, {error: '영상을 찾을 수 없습니다.'});
     const k = pipelineKeys();
-    const narrations = (proj.scenes || []).map((s: any) => s.narration || '');
-    const durSec = (proj.scenes || []).reduce((n: number, s: any) => n + (s.voice?.frames || 0), 0) / 30 || proj.input?.duration || 30;
     try {
-      const meta = await generateMeta({gemini: k.gemini, openai: k.openai}, proj.title, narrations, durSec);
+      const meta = await generateMeta({gemini: k.gemini, openai: k.openai}, src.title, src.narrations, src.durSec);
       return json(res, 200, meta);
     } catch (e: any) { return json(res, 502, {error: '메타 생성 실패: ' + e.message}); }
   }
