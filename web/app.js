@@ -198,16 +198,29 @@ const KEY_META = [
 ];
 
 $('settings-btn').onclick = async () => {
-  const reveal = await (await fetch('/api/settings/reveal')).json();
+  // ★입력칸을 먼저 렌더 + 모달 먼저 표시 — reveal fetch가 실패(401 등)해도 입력칸은 무조건 뜨게.
   $('key-fields').innerHTML = KEY_META.map((m) => `
     <div class="key-field">
       <label>${m.label}</label>
       <div class="desc">${m.desc} <a href="${m.link}" target="_blank">키 발급 →</a></div>
-      ${reveal[m.k] ? `<div class="saved">● 저장됨: ${reveal[m.k]}</div>` : '<div class="desc">미설정</div>'}
+      <div class="saved-state" data-state="${m.k}"><div class="desc">…</div></div>
       <input class="input" data-key="${m.k}" placeholder="새 키 입력(비우면 유지)" style="margin-top:6px" />
     </div>`).join('');
   $('settings-msg').textContent = '';
   $('settings-modal').classList.remove('hidden');
+  // 저장된 키 상태는 뒤에서 채운다(실패해도 입력엔 영향 없음).
+  try {
+    const reveal = await (await fetch('/api/settings/reveal')).json();
+    KEY_META.forEach((m) => {
+      const el = document.querySelector(`[data-state="${m.k}"]`);
+      if (el) el.innerHTML = reveal && reveal[m.k]
+        ? `<div class="saved">● 저장됨: ${reveal[m.k]}</div>`
+        : '<div class="desc">미설정</div>';
+    });
+  } catch {
+    document.querySelectorAll('.saved-state').forEach((el) => { el.innerHTML = '<div class="desc">미설정</div>'; });
+    $('settings-msg').textContent = '저장된 키 상태는 못 불러왔지만 입력·저장은 됩니다.';
+  }
 };
 $('settings-close').onclick = () => $('settings-modal').classList.add('hidden');
 $('save-keys').onclick = async () => {

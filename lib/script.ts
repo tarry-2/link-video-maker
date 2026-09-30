@@ -12,6 +12,16 @@ export type StoryScene = {
   comment?: {user: string; text: string; likes: string}; // 이지컷식 가짜 댓글(선택)
 };
 
+// ★나레이션 끝맺음 정규화: 끝의 쉼표/세미콜론/공백을 정리하고 종결부호가 없으면 마침표를 붙인다.
+// 여운 마무리가 "챙겨보세요," 처럼 쉼표로 끊기던 버그 방지(TTS·자막 둘 다 이 텍스트에서 나오므로 여기서 고침).
+export function normalizeEnding(text: string): string {
+  let t = (text || '').trim();
+  if (!t) return t;
+  t = t.replace(/[,，;；\s]+$/g, ''); // 끝의 쉼표(반각/전각)·세미콜론·공백 제거
+  if (!/[.!?…~。！？]$/.test(t)) t += '.'; // 종결부호 없으면 마침표
+  return t;
+}
+
 export type Storyboard = {
   title: string;
   subject: string; // ★영상 전체의 핵심 소재(영어) — 모든 장면 이미지에 일관 반영(예: "soy sauce fried rice with egg")
@@ -132,5 +142,7 @@ ${source.slice(0, 12000)}`;
     sb = JSON.parse(m[0]);
   }
   if (!sb.scenes?.length) throw new Error('대본에 장면이 없습니다.');
+  // ★모든 장면 나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
+  for (const s of sb.scenes) s.narration = normalizeEnding(s.narration);
   return sb;
 }
