@@ -48,6 +48,14 @@ function authed(req: http.IncomingMessage): boolean {
   return m ? validToken(decodeURIComponent(m[1])) : false;
 }
 
+// 유튜브 OAuth redirect_uri용 프로토콜 — Railway 등 프록시 뒤에서는 x-forwarded-proto가 실제(https).
+// 로컬(localhost)만 http, 그 외(배포 도메인)는 https로 고정(구글 콘솔 등록값과 일치시킴).
+function ytProto(req: http.IncomingMessage): string {
+  const fwd = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  if (fwd) return fwd;
+  return String(req.headers.host || '').startsWith('localhost') ? 'http' : 'https';
+}
+
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
 type Job = {id: string; logs: string[]; done: boolean; file?: string; title?: string; error?: string};
 const jobs = new Map<string, Job>();
@@ -194,7 +202,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/youtube/callback' && req.method === 'GET') {
     const code = u.searchParams.get('code') || '';
     const err = u.searchParams.get('error') || '';
-    const redirectUri = `${u.protocol}//${req.headers.host}/api/youtube/callback`;
+    const redirectUri = `${ytProto(req)}://${req.headers.host}/api/youtube/callback`;
     const done = (msg: string, ok: boolean) =>
       res.end(`<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#231e18;color:#efe9e0;text-align:center;padding:60px"><h2>${ok ? '✅ 유튜브 연결 완료' : '❌ 연결 실패'}</h2><p>${msg}</p><p><a style="color:#4fe0d0" href="/">← 돌아가기</a> (이 창은 닫아도 됩니다)</p></body>`);
     res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
@@ -223,7 +231,7 @@ const server = http.createServer(async (req, res) => {
   // ── 유튜브: 구글 동의 URL 발급(팝업으로 열게) ──
   if (p === '/api/youtube/auth' && req.method === 'GET') {
     try {
-      const redirectUri = `${u.protocol}//${req.headers.host}/api/youtube/callback`;
+      const redirectUri = `${ytProto(req)}://${req.headers.host}/api/youtube/callback`;
       return json(res, 200, {url: authUrl(redirectUri)});
     } catch (e: any) { return json(res, 400, {error: e.message}); }
   }
