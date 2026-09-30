@@ -9,7 +9,7 @@ export type StoryScene = {
   hookAccent: string; // 상단 후킹 2줄(강조색, 펀치)
   accentColor: string; // 이 장면 강조색 hex
   visualPrompt: string; // 이미지 생성용(영어)
-  comment?: {user: string; text: string; likes: string}; // 이지컷식 가짜 댓글(선택)
+  comment?: {user: string; text: string; likes: string}; // 인기 쇼츠식 가짜 댓글(선택)
 };
 
 // ★나레이션 끝맺음 정규화: 끝의 쉼표/세미콜론/공백을 정리하고 종결부호가 없으면 마침표를 붙인다.
@@ -101,7 +101,7 @@ ${catLine}
 - visualPrompt: 이미지 생성용 영어 프롬프트. ${landscape ? '16:9 landscape wide shot(가로 와이드 구도: 풍경·전경·넓은 현장을 담되 핵심 피사체는 중앙~좌우 3분할점에)' : '9:16 세로'}. ${preset ? `이 카테고리의 비주얼 느낌: "${preset.imageStyle}".` : '"실제 취재 보도사진 리얼리즘"(자연광·실제 질감).'} 나레이션의 핵심 사물·장소·상황을 구체적으로.
   ★★핵심 소재 일관성(매우 중요): 모든 장면의 visualPrompt는 반드시 위 [핵심 소재 subject]와 같은 대상을 보여줘야 한다. 예를 들어 주제가 '간장계란볶음밥'이면 모든 장면이 볶음밥이어야 하고, 절대 파스타·면·다른 음식으로 바뀌면 안 된다. 각 visualPrompt 안에 subject를 영어로 명시적으로 포함시켜라.
   ★사람(특히 얼굴·군중)은 절제하고 사물·장소·현장·상징물 위주. 사람이 꼭 필요하면 손·뒷모습·실루엣만 작게. ★글자·문서·표가 주요 피사체인 장면 금지. no text.
-- comment(선택): 4~6개 장면 중 딱 1개 장면에만, 이지컷식 가짜 시청자 댓글 {"user":"한국이름","text":"공감/놀람 한마디","likes":"4.2천"}.
+- comment(선택): 4~6개 장면 중 딱 1개 장면에만, 인기 쇼츠에 흔한 가짜 시청자 댓글 {"user":"한국이름","text":"공감/놀람 한마디","likes":"4.2천"}.
 
 [전체]
 - title: 클릭하고 싶은 한국어 영상 제목.

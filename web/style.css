@@ -104,9 +104,15 @@ body {
 .sub { color: var(--muted); font-size: 16px; margin-bottom: 28px; }
 .sub.small { font-size: 13px; margin-bottom: 18px; }
 .card {
-  background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+  /* 테두리 = teal↔퍼플 그라데이션(다크·라이트 공통), 안쪽은 카드색 */
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, var(--teal), var(--purple)) border-box;
+  border: 1px solid transparent; border-radius: 18px;
   padding: 26px; margin-bottom: 22px;
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
 }
+.card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(18, 169, 152, 0.14); }
 .field-label { display: block; font-size: 14px; font-weight: 700; margin: 18px 0 8px; }
 .field-label:first-child { margin-top: 0; }
 .hint { font-weight: 400; color: var(--muted); font-size: 12px; }
@@ -130,22 +136,27 @@ select.input { appearance: none; cursor: pointer; }
   background: var(--card2); border: 1px solid var(--line); color: var(--text);
   border-radius: 999px; padding: 9px 14px; font-size: 13px; cursor: pointer; transition: all 0.15s;
 }
-.chip:hover { border-color: var(--teal); }
+.chip:hover { border-color: var(--teal); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(18, 169, 152, 0.18); }
+.chip:active { transform: scale(0.96); }
 .chip.active { background: var(--grad); border-color: transparent; color: #fff; font-weight: 700; }
 
 .primary-btn {
   display: block; width: 100%; text-align: center; margin-top: 24px;
   background: var(--grad); color: #fff; border: none; border-radius: 12px;
   padding: 16px; font-size: 16px; font-weight: 800; cursor: pointer; text-decoration: none;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
 }
-.primary-btn:hover { opacity: 0.92; }
-.primary-btn:disabled { opacity: 0.5; cursor: default; }
+.primary-btn:hover { opacity: 0.96; transform: translateY(-2px); box-shadow: 0 10px 26px rgba(18, 169, 152, 0.38); }
+.primary-btn:active { transform: translateY(0) scale(0.98); box-shadow: none; }
+.primary-btn:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
 .ghost-btn {
-  background: transparent; border: 1px solid var(--line); color: var(--text);
+  background: transparent; border: 1px solid rgba(18, 169, 152, 0.4); color: var(--text);
   border-radius: 10px; padding: 9px 14px; font-size: 14px; cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
 .ghost-btn.small { padding: 9px 12px; font-size: 13px; white-space: nowrap; }
-.ghost-btn:hover { border-color: var(--teal); }
+.ghost-btn:hover { border-color: var(--teal); color: var(--teal); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(18, 169, 152, 0.2); }
+.ghost-btn:active { transform: scale(0.97); box-shadow: none; }
 
 .block-title { font-size: 16px; margin-bottom: 14px; }
 .log-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; }
@@ -191,10 +202,14 @@ select.input { appearance: none; cursor: pointer; }
 .pf-sub { color: var(--muted); font-size: 14px; }
 .pf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .pf-card {
-  margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 18px;
-  overflow: hidden; display: flex; flex-direction: column; transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
+  margin: 0; border-radius: 18px;
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    linear-gradient(135deg, var(--teal), var(--purple)) border-box;
+  border: 1px solid transparent;
+  overflow: hidden; display: flex; flex-direction: column; transition: transform 0.18s, box-shadow 0.18s;
 }
-.pf-card:hover { transform: translateY(-4px); border-color: var(--teal); box-shadow: 0 12px 28px rgba(0,0,0,0.18); }
+.pf-card:hover { transform: translateY(-4px); box-shadow: 0 14px 32px rgba(18, 169, 152, 0.22); }
 .pf-video { width: 100%; aspect-ratio: 9/16; object-fit: cover; background: #000; display: block; }
 .pf-card figcaption { padding: 14px 16px 18px; }
 .pf-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; color: #fff; }

@@ -71,10 +71,14 @@
       }
       .mypf-count { font-weight: 700; color: var(--teal); }
       @media (max-width: 640px) {
-        .mypf-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        /* 포트폴리오가 많아도 세로로 안 길어지게 — 가로 스크롤 캐러셀(옆으로 넘겨 봄) */
+        .mypf-grid { display: flex; grid-template-columns: none; overflow-x: auto; gap: 10px; padding-bottom: 10px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+        .mypf-grid > .pf-card { flex: 0 0 44%; scroll-snap-align: start; }
         .mypf-grid .pf-card figcaption { padding: 10px; }
         .mypf-grid .pf-card h3 { font-size: 13px; }
         .mypf-grid .pf-voice-note, .mypf-grid .pf-clip { font-size: 11px; }
+        /* 가로 스크롤 힌트 문구 */
+        .portfolio .pf-sub::after { content: " · 옆으로 넘겨 보세요 →"; color: var(--teal); font-weight: 700; }
       }
     </style>
   </head>
