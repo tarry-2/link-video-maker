@@ -62,10 +62,10 @@ export const Scene: React.FC<SceneData> = ({
   const land = width > height;
   const L = land
     ? {
-        // 가로 1920×1080 — 세로 여백이 좁아 폰트·좌표를 줄이고 좌우 여백은 넓게.
-        imgW: '94%', imgH: '88%',
-        hookTop: 44, hookPad: '0 100px', fsHookTop: 60, fsHookAccent: 72,
-        subBottom: 54, subBottomOverlay: 290, subPad: '0 140px', subGap: '10px 18px', fsSub: 44,
+        // 가로 1920×1080 — 후킹·자막을 큼직하게(세로보단 약간 작게). 자막은 2줄 나와도 적당히 크게.
+        imgW: '92%', imgH: '82%',
+        hookTop: 40, hookPad: '0 90px', fsHookTop: 80, fsHookAccent: 96,
+        subBottom: 56, subBottomOverlay: 300, subPad: '0 110px', subGap: '12px 20px', fsSub: 62,
         prodBottom: 40, prodSide: 90, fsProdName: 32, fsProdBenefit: 26, fsProdUrl: 20,
         cmtBottom: 90, cmtSide: 90, cmtAvatar: 64, fsCmtName: 30, fsCmtText: 32, fsCmtLikes: 26,
       }

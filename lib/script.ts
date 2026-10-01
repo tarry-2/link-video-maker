@@ -22,6 +22,19 @@ export function normalizeEnding(text: string): string {
   return t;
 }
 
+// ★영상 자막·후킹·나레이션의 이모지 제거 — Remotion 폰트(Noto Sans KR/Black Han Sans)엔
+//   이모지 글리프가 없어 두부(네모 ⊠)로 깨진다. 자막엔 이모지 금지(제목은 유튜브용이라 유지).
+export function stripEmoji(text: string): string {
+  return (text || '')
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')  // 이모지(그림문자) 전반
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')    // 기타 기호·딩뱃(날씨·체크 등)
+    .replace(/[\u{2B00}-\u{2BFF}]/gu, '')    // 화살표·별 등
+    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, '')  // 국기
+    .replace(/[︀-️‍⃣]/gu, '') // variation selector·ZWJ·keycap
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 export type Storyboard = {
   title: string;
   subject: string; // ★영상 전체의 핵심 소재(영어) — 모든 장면 이미지에 일관 반영(예: "soy sauce fried rice with egg")
@@ -145,6 +158,8 @@ ${source.slice(0, 12000)}`;
     sb = JSON.parse(m[0]);
   }
   if (!sb.scenes?.length) throw new Error('대본에 장면이 없습니다.');
+  // 자막·후킹·나레이션 이모지 제거(폰트에 없어 깨짐). title은 유튜브용이라 유지.
+  for (const s of sb.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = stripEmoji(s.narration || ''); }
   // ★모든 장면 나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
   for (const s of sb.scenes) s.narration = normalizeEnding(s.narration);
   return sb;

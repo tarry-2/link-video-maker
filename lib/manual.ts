@@ -10,7 +10,7 @@ import {openaiJson} from './openai';
 import {ttsElevenJoined, alignToWords, VOICES} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
-import {normalizeEnding} from './script';
+import {normalizeEnding, stripEmoji} from './script';
 import {renderVideo} from './render';
 import type {PipelineKeys} from './pipeline';
 import type {SceneData} from '../src/Scene';
@@ -145,7 +145,7 @@ JSON만 출력:
   }
   if (!plan.scenes?.length) throw new Error('대본 장면이 없습니다.');
   // ★나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
-  for (const s of plan.scenes) s.narration = normalizeEnding(s.narration);
+  for (const s of plan.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = normalizeEnding(stripEmoji(s.narration)); }
   const totalChars = plan.scenes.reduce((a, s) => a + (s.narration || '').length, 0);
   log(`[수동] "${plan.title}" · ${plan.scenes.length}장면 구성 · 목표 ${perScene}자/장면 · 실제 총 ${totalChars}자(평균 ${Math.round(totalChars / plan.scenes.length)}자/장면)`);
   return {plan, sources};
