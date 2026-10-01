@@ -506,6 +506,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       info: '하루 한 잔의 물, 별거 아닌 것 같죠? 그런데 우리 몸을 이렇게나 바꿔놓습니다.',
       sell: '이 가격, 실화인가요? 한 번 써보면 왜 다들 재구매하는지 바로 아실 거예요!',
       heal: '노릇하게 익어가는 소리, 고소하게 퍼지는 냄새. 오늘 하루도, 참 수고 많으셨어요.',
+      anime: '옛날 옛날, 깊은 숲속에 호기심 많은 아기 여우가 살았어요. 어느 날, 반짝이는 별님이 하늘에서 뚝 떨어졌지 뭐예요!',
     };
     const use0 = VOICES[voice].use?.[0] || 'info';
     const previewText = PREVIEW_TEXT[use0] || PREVIEW_TEXT.info;
