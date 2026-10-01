@@ -95,6 +95,34 @@ async function accessToken(): Promise<string> {
   return d.access_token;
 }
 
+// 유튜브 URL에서 video id 추출(youtu.be/ID · watch?v=ID).
+export function extractVideoId(url: string): string {
+  if (!url) return '';
+  const m = url.match(/(?:youtu\.be\/|[?&]v=|shorts\/)([\w-]{11})/);
+  return m ? m[1] : '';
+}
+
+// 영상 통계(조회수·좋아요·댓글). 본인 채널 영상, OAuth 토큰으로 조회. 50개씩 배치.
+export async function getVideoStats(ids: string[]): Promise<Record<string, {views: number; likes: number; comments: number}>> {
+  const out: Record<string, {views: number; likes: number; comments: number}> = {};
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (!uniq.length) return out;
+  const token = await accessToken();
+  for (let i = 0; i < uniq.length; i += 50) {
+    const batch = uniq.slice(i, i + 50);
+    const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${batch.join(',')}`, {
+      headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
+    });
+    const d: any = await r.json();
+    if (!r.ok) throw new Error('유튜브 통계 조회 실패: ' + (d?.error?.message || ''));
+    for (const it of (d.items || [])) {
+      const s = it.statistics || {};
+      out[it.id] = {views: Number(s.viewCount || 0), likes: Number(s.likeCount || 0), comments: Number(s.commentCount || 0)};
+    }
+  }
+  return out;
+}
+
 async function fetchChannelTitle(token: string): Promise<string> {
   const r = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', {
     headers: {Authorization: 'Bearer ' + token},

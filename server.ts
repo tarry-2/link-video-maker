@@ -13,7 +13,7 @@ import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
-import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
+import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption, maybeRefreshInstagram} from './lib/instagram';
@@ -379,6 +379,39 @@ const server = http.createServer(async (req, res) => {
   // ── 유튜브: 연결 상태 ──
   if (p === '/api/youtube/status' && req.method === 'GET')
     return json(res, 200, youtubeStatus());
+  // ── 성과 추적: 올린 유튜브 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──
+  if (p === '/api/youtube/stats' && req.method === 'GET') {
+    if (!youtubeStatus().connected) return json(res, 200, {connected: false, items: [], summary: null});
+    const sampleYt = loadSampleYouTube();
+    const all = [
+      ...listPortfolio().map((it) => ({id: it.projectId, title: it.title, voice: it.voice, category: it.category, goal: it.goal, url: it.youtubeUrl || readProjectYouTube(it.projectId)})),
+      ...SAMPLES.map((s) => ({id: 'sample:' + s.file, title: s.title, voice: s.voice, category: s.category, goal: s.goal, url: sampleYt[s.file] || ''})),
+    ];
+    const withId = all.map((x) => ({...x, videoId: extractVideoId(x.url)})).filter((x) => x.videoId);
+    if (!withId.length) return json(res, 200, {connected: true, items: [], summary: null});
+    let stats: Record<string, {views: number; likes: number; comments: number}> = {};
+    try { stats = await getVideoStats(withId.map((x) => x.videoId)); }
+    catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message}); }
+    const items = withId
+      .map((x) => ({...x, ...(stats[x.videoId] || {views: 0, likes: 0, comments: 0})}))
+      .sort((a, b) => b.views - a.views);
+    const avgBy = (key: 'voice' | 'category') => {
+      const m: Record<string, number[]> = {};
+      for (const it of items) (m[(it as any)[key]] = m[(it as any)[key]] || []).push(it.views);
+      return Object.entries(m)
+        .map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length}))
+        .sort((a, b) => b.avg - a.avg);
+    };
+    const summary = {
+      total: items.length,
+      totalViews: items.reduce((n, x) => n + x.views, 0),
+      totalLikes: items.reduce((n, x) => n + x.likes, 0),
+      top3: items.slice(0, 3),
+      byVoice: avgBy('voice').slice(0, 5),
+      byCategory: avgBy('category').slice(0, 5),
+    };
+    return json(res, 200, {connected: true, items, summary});
+  }
   // ── 유튜브: Client ID/Secret 저장 ──
   if (p === '/api/youtube/config' && req.method === 'POST') {
     const b = await readBody(req);
