@@ -54,15 +54,21 @@ export async function generateCaption(
   narrations: string[],
 ): Promise<string> {
   const body = narrations.join(' ').slice(0, 1500);
-  const prompt = `너는 인스타그램 릴스로 수십만 조회를 터뜨리는 바이럴 카피라이터다. 아래 영상에 어울리는, 사람들이 "이거 봐봐" 하고 친구 태그하고 댓글 달고 공유하고 싶어지는 가십성·화제성 릴스 캡션을 만들어라.
+  const prompt = `너는 인스타그램 릴스로 수십만 조회를 터뜨리는 바이럴 카피라이터다. 아래 영상에 어울리는, 사람들이 "헉 완전 내 얘기", "이거 저장!" 하며 공감하고 댓글 달고 친구 태그하는 릴스 캡션을 만들어라.
 영상 제목(초안): ${title}
 영상 내용: ${body}
 
-인스타 릴스 캡션 규칙(유튜브 설명과 완전히 다르게 — 더 가볍고 떡밥·공감 중심):
-- hook: 첫 줄은 스크롤을 멈추게 하는 강한 떡밥/반전/공감 한 문장. "헉" 하거나 궁금해서 끝까지 보게. 이모지 1~2개 자연스럽게. (거짓 낚시는 금지, 하지만 자극적이고 화제성 있게)
-- body: 2~4줄. 짧은 문장 + 줄바꿈으로 가독성. 친구한테 썰 푸는 말투(딱딱한 설명체 금지). 공감·호기심을 증폭시키고, 끝에 댓글을 부르는 질문 1개 + 저장/공유를 부르는 한마디.
-- hashtags: 인스타에서 실제 잘 노출되는 화제성 해시태그 12~15개. 한국어 중심 + 핵심 영어 2~3개. 초대형 트렌드 태그(릴스추천/탐색탭 류) 1~2개 + 주제 핵심 + 틈새를 믹스. # 없이 배열로, 공백 없는 단어.
-JSON만 출력: {"hook":"...","body":"...","hashtags":["...","..."]}`;
+★가장 중요: 인스타는 모바일로 본다. 글이 한 눈에 '술술' 읽혀야 한다. 긴 문단 금지. 짧은 문장 하나하나를 "블록"으로 쪼개고, 블록 사이는 빈 줄로 숨 쉬게 한다. 그리고 정보보다 '공감'을 먼저 친다(읽는 사람이 자기 얘기처럼 느끼게).
+
+규칙:
+- hook: 첫 줄. 스크롤을 멈추게 하는 강한 공감+떡밥 한 문장("아침마다 얼굴 붓는 사람 꼭 보세요" 처럼 대상을 콕 집어 공감 유발). 이모지 1~2개. 거짓 낚시 금지, 하지만 임팩트 최대.
+- blocks: 2~4개의 짧은 블록(배열). 각 블록은 1~2줄로 아주 짧게.
+   · 1번 블록 = 강한 공감(구체적 일상 상황·감정으로 "나도 그런데" 유발).
+   · 중간 블록 = 반전/핵심 가치/궁금증 증폭.
+   · 마지막 블록 = 댓글 부르는 질문 1개 + "저장해두고 써먹어요" 류 저장/공유 유도.
+   친구한테 썰 푸는 말투. 딱딱한 설명체·정보 나열 금지.
+- hashtags: 인스타에서 실제 잘 노출되는 화제성 해시태그 12~15개. 한국어 중심 + 핵심 영어 2~3개. 초대형 트렌드 태그(릴스추천/탐색탭 류) 1~2개 + 주제 핵심 + 틈새 믹스. # 없이 배열, 공백 없는 단어.
+JSON만 출력: {"hook":"...","blocks":["...","...","..."],"hashtags":["...","..."]}`;
   let raw = '';
   if (keys.gemini.length) {
     try { raw = await geminiGenerate(keys.gemini, prompt, {json: true, maxTokens: 1024, temperature: 1.0}); } catch {}
@@ -71,12 +77,15 @@ JSON만 출력: {"hook":"...","body":"...","hashtags":["...","..."]}`;
   const m = raw.match(/\{[\s\S]*\}/);
   const d: any = m ? JSON.parse(m[0]) : {};
   const hook = String(d.hook || title).trim();
-  const bodyText = String(d.body || '').trim();
+  // blocks(신규) 우선, 없으면 body(구) 호환. 각 블록을 빈 줄로 띄워 모바일 가독성 확보.
+  const blocks = Array.isArray(d.blocks)
+    ? d.blocks.map((x: any) => String(x).trim()).filter(Boolean)
+    : (d.body ? [String(d.body).trim()] : []);
   const tags = Array.isArray(d.hashtags)
     ? [...new Set(d.hashtags.map((x: any) => '#' + String(x).replace(/^#+/, '').replace(/\s+/g, '')).filter((t: string) => t.length > 1))].slice(0, 15)
     : [];
-  // 인스타식 레이아웃: 훅 / 빈 줄 / 본문 / 빈 줄 / 해시태그 한 줄
-  return [hook, bodyText, tags.join(' ')].filter(Boolean).join('\n\n').slice(0, 2200);
+  // 인스타식 레이아웃: 훅 / 빈 줄 / (블록마다 빈 줄) / 빈 줄 / 해시태그 한 줄
+  return [hook, ...blocks, tags.join(' ')].filter(Boolean).join('\n\n').slice(0, 2200);
 }
 
 // 릴스/피드 영상 게시. kind: 'reels'(세로 쇼츠) | 'feed'(일반 게시물 영상).
