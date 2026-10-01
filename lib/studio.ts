@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createSchema, editSchema, estimate, signatures, resolveProduct, assertTokens, type Project, type Scene, type Media} from './studio-model';
@@ -6,6 +7,7 @@ import {getPreset} from './presets';
 import {VOICES} from './tts';
 import {addPortfolio, listPortfolio} from './portfolio';
 import {pruneDir, dirSize, cleanTmpRemotion, mb} from './cleanup';
+import {r2Enabled, videoKey, uploadFile, deleteKey, getStream} from './storage';
 
 // 제작 시작 시 테리가 고른 설정을 사람이 읽을 수 있게 로그로 남긴다(처음부터 끝까지 전 절차 추적용).
 function settingsLines(p: Project): string[] {
@@ -81,7 +83,10 @@ export class Studio {
         const r = pruneDir(this.directory(p.id), ['project.json', ...this.allowedFiles(p)]);
         prunedFiles += r.removed; freed += r.bytes;
       } else {
-        try { const d = this.directory(p.id); freed += dirSize(d); fs.rmSync(d, {recursive: true, force: true}); delJobs++; } catch {}
+        try {
+          if (p.outputR2) deleteKey(p.outputR2); // 폴더와 함께 R2 영상도 제거(고아 방지). 포트폴리오는 protected라 여기 안 옴.
+          const d = this.directory(p.id); freed += dirSize(d); fs.rmSync(d, {recursive: true, force: true}); delJobs++;
+        } catch {}
       }
     }
     const t = cleanTmpRemotion(); freed += t.bytes;
@@ -278,8 +283,23 @@ export class Studio {
       }
       p.phase = '영상 합성'; this.save(p);
       const output = `video-${p.revision}-${randomUUID()}.mp4`;
-      await this.deps.render(p, this.directory(id), path.join(this.directory(id), output), log);
-      p.output = output; p.outputRevision = p.revision; p.status = 'completed'; p.phase = '완성'; log('[완료] 영상을 다운로드할 수 있습니다.');
+      const outAbs = path.join(this.directory(id), output);
+      await this.deps.render(p, this.directory(id), outAbs, log);
+      p.output = output; p.outputRevision = p.revision; p.outputR2 = undefined;
+      // ★완성 영상을 R2로 올려 볼륨을 비운다(R2 비활성이면 그대로 로컬 보관=폴백).
+      if (r2Enabled()) {
+        try {
+          const key = videoKey(p.id, output);
+          await uploadFile(key, outAbs, 'video/mp4');
+          p.outputR2 = key;
+          fs.rmSync(outAbs, {force: true}); // 볼륨에서 삭제 → 디스크 안 참
+          log('[저장] 완성 영상을 클라우드 저장소(R2)에 올렸습니다.');
+        } catch (e: any) {
+          p.outputR2 = undefined; // 업로드 실패 → 로컬 파일 유지(폴백), 서빙은 로컬에서
+          log('[저장] 클라우드 업로드 실패 — 로컬에 보관합니다. ' + (e?.message || '').slice(0, 120));
+        }
+      }
+      p.status = 'completed'; p.phase = '완성'; log('[완료] 영상을 다운로드할 수 있습니다.');
       // ★완성 영상을 포트폴리오에 자동 등록(기존 양식대로 voices.html에 카드로 표시).
       try {
         const preset = getPreset(p.input.presetId);
@@ -327,5 +347,30 @@ export class Studio {
     const file = path.join(this.directory(id), name);
     if (!fs.existsSync(file)) throw new StudioError('파일이 없습니다.', 404);
     return file;
+  }
+  // 서빙용 위치 해석: 완성영상이 R2에 있으면 R2 키, 아니면 로컬 경로. (이미지·음성은 항상 로컬)
+  assetLocation(id: string, name: string): {r2?: string; local?: string} {
+    const p = this.get(id);
+    if (!this.allowedFiles(p).includes(name) || name !== path.basename(name)) throw new StudioError('파일이 없습니다.', 404);
+    if (name === p.output && p.outputR2) return {r2: p.outputR2};
+    const local = path.join(this.directory(id), name);
+    if (!fs.existsSync(local)) throw new StudioError('파일이 없습니다.', 404);
+    return {local};
+  }
+  // 유튜브 업로드 등 로컬 파일이 꼭 필요할 때: R2에 있으면 임시로 내려받아 경로 반환(+정리 콜백).
+  async localCopyOfOutput(id: string): Promise<{file: string; cleanup: () => void}> {
+    const p = this.get(id);
+    if (!p.output) throw new StudioError('완성 영상이 없습니다.', 404);
+    const local = path.join(this.directory(id), p.output);
+    if (fs.existsSync(local)) return {file: local, cleanup: () => {}};
+    if (!p.outputR2) throw new StudioError('완성 영상 파일이 없습니다.', 404);
+    const tmp = path.join(os.tmpdir(), `yt-${id}-${p.output}`);
+    const got = await getStream(p.outputR2);
+    if (!got) throw new StudioError('클라우드에서 영상을 가져오지 못했습니다.', 502);
+    await new Promise<void>((resolve, reject) => {
+      const w = fs.createWriteStream(tmp);
+      got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject);
+    });
+    return {file: tmp, cleanup: () => { try { fs.rmSync(tmp, {force: true}); } catch {} }};
   }
 }

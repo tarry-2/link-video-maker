@@ -14,6 +14,7 @@ import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
+import {getStream} from './lib/storage';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -57,7 +58,7 @@ function ytProto(req: http.IncomingMessage): string {
 }
 
 // 포트폴리오 항목 id → 실제 mp4 파일 경로 + 메타 소스. 내 완성작(uuid) / 샘플(sample:파일) 공용.
-function resolveVideo(id: string): {kind: 'mine' | 'sample'; file: string; title: string; narrations: string[]; durSec: number} | null {
+function resolveVideo(id: string): {kind: 'mine' | 'sample'; file: string; r2key?: string; title: string; narrations: string[]; durSec: number} | null {
   if (id.startsWith('sample:')) {
     const name = path.basename(id.slice('sample:'.length));
     if (!/^[\w.-]+\.mp4$/.test(name)) return null;
@@ -73,10 +74,23 @@ function resolveVideo(id: string): {kind: 'mine' | 'sample'; file: string; title
   const proj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
   if (proj.status !== 'completed' || !proj.output || proj.output !== path.basename(proj.output)) return null;
   const file = path.join(dir, proj.output);
-  if (!fs.existsSync(file)) return null;
+  // 로컬에 없고 R2에만 있으면 r2key로 표시(유튜브 업로드 시 임시 다운로드).
+  if (!fs.existsSync(file) && !proj.outputR2) return null;
   const narrations = (proj.scenes || []).map((s: any) => s.narration || '');
   const durSec = (proj.scenes || []).reduce((n: number, s: any) => n + (s.voice?.frames || 0), 0) / 30 || proj.input?.duration || 30;
-  return {kind: 'mine', file, title: proj.title, narrations, durSec};
+  return {kind: 'mine', file, r2key: fs.existsSync(file) ? undefined : proj.outputR2, title: proj.title, narrations, durSec};
+}
+// 유튜브 업로드용: 로컬 파일이 있으면 그대로, R2에만 있으면 임시로 내려받아 경로+정리콜백 반환.
+async function localVideoFile(src: {file: string; r2key?: string}): Promise<{file: string; cleanup: () => void}> {
+  if (!src.r2key) return {file: src.file, cleanup: () => {}};
+  const tmp = path.join(os.tmpdir(), `yt-${randomUUID()}.mp4`);
+  const got = await getStream(src.r2key);
+  if (!got) throw new Error('클라우드에서 영상을 가져오지 못했습니다.');
+  await new Promise<void>((resolve, reject) => {
+    const w = fs.createWriteStream(tmp);
+    got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject);
+  });
+  return {file: tmp, cleanup: () => { try { fs.rmSync(tmp, {force: true}); } catch {} }};
 }
 
 // ── studio project.json의 유튜브 링크 read/write ──
@@ -94,6 +108,32 @@ function readProjectYouTube(projectId: string): string {
   try {
     return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).youtubeUrl || '';
   } catch { return ''; }
+}
+// project.json에서 완성영상 R2 키(있으면 R2에서 서빙).
+function readProjectOutputR2(projectId: string): string {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).outputR2 || '';
+  } catch { return ''; }
+}
+// R2 완성영상 스트리밍(Range 지원). 포트폴리오 전시용.
+async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse, key: string) {
+  const h = await getStream(key);
+  if (!h) { res.writeHead(404); return res.end('not found'); }
+  const size = h.size; h.stream.destroy();
+  const range = req.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
+  let start = 0, end = size - 1, code = 200;
+  if (range) {
+    start = range[1] ? Number(range[1]) : 0;
+    end = range[2] ? Number(range[2]) : size - 1;
+    if (start > end || start >= size) { res.writeHead(416, {'Content-Range': `bytes */${size}`}); return res.end(); }
+    code = 206;
+  }
+  const headers: Record<string, string | number> = {'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1, 'Cache-Control': 'public, max-age=3600'};
+  if (code === 206) headers['Content-Range'] = `bytes ${start}-${end}/${size}`;
+  res.writeHead(code, headers);
+  const got = await getStream(key, {start, end});
+  if (!got) { res.destroy(); return; }
+  got.stream.on('error', () => res.destroy()); res.on('close', () => got.stream.destroy()); got.stream.pipe(res);
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
@@ -248,6 +288,9 @@ const server = http.createServer(async (req, res) => {
     const item = listPortfolio().find((x) => x.projectId === m[1]);
     // 포트폴리오에 등록된 작업의 output만 서빙(목록에 없으면 비공개).
     if (!item || item.output !== path.basename(item.output)) { res.writeHead(404); return res.end('not found'); }
+    // 완성영상이 R2에 있으면 거기서 스트리밍(볼륨엔 없음).
+    const r2key = readProjectOutputR2(m[1]);
+    if (r2key) return streamR2Video(req, res, r2key);
     const file = path.join(STUDIO_DATA_DIR, 'studio', m[1], item.output);
     if (!fs.existsSync(file)) { res.writeHead(404); return res.end('not found'); }
     const size = fs.statSync(file).size;
@@ -308,8 +351,10 @@ const server = http.createServer(async (req, res) => {
     if (!src) return json(res, 404, {error: '영상을 찾을 수 없습니다.'});
     const b = await readBody(req);
     const privacy = ['public', 'unlisted', 'private'].includes(b.privacy) ? b.privacy : 'public';
+    let tmpCleanup = () => {};
     try {
-      const r = await uploadVideo(src.file, {
+      const local = await localVideoFile(src); tmpCleanup = local.cleanup;
+      const r = await uploadVideo(local.file, {
         title: String(b.title || src.title).slice(0, 100),
         description: String(b.description || '').slice(0, 4900),
         tags: Array.isArray(b.tags) ? b.tags.map((x: any) => String(x)).slice(0, 15) : [],
@@ -321,6 +366,7 @@ const server = http.createServer(async (req, res) => {
       } catch {}
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
+    finally { tmpCleanup(); }
   }
   // ── 유튜브: 메타(제목·설명·태그) 자동 생성 ── 내 완성작 + 샘플 둘 다.
   if (p.startsWith('/api/youtube/meta/') && req.method === 'GET') {

@@ -4,6 +4,7 @@ import type {IncomingMessage, ServerResponse} from 'node:http';
 import {ZodError} from 'zod';
 import {Studio, StudioError} from './studio';
 import {studioProviders} from './studio-providers';
+import {getStream} from './storage';
 
 const studio = new Studio(path.join(process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data'), 'studio'), studioProviders);
 function json(res: ServerResponse, code: number, body: unknown) {
@@ -46,6 +47,29 @@ function sendAsset(req: IncomingMessage, res: ServerResponse, file: string) {
   const stream = fs.createReadStream(file, {start, end});
   stream.on('error', () => res.destroy()); res.on('close', () => stream.destroy()); stream.pipe(res);
 }
+// R2에 있는 완성영상을 스트리밍(Range 지원). 전송료 0이라 영상 서빙에 최적.
+async function sendAssetR2(req: IncomingMessage, res: ServerResponse, key: string) {
+  const head = await getStream(key);
+  if (!head) { res.writeHead(404); res.end('not found'); return; }
+  const size = head.size;
+  head.stream.destroy(); // HEAD용으로만 받았으니 닫고 Range로 다시 연다
+  let start = 0, end = size - 1, code = 200;
+  if (req.headers.range) {
+    const m = req.headers.range.match(/^bytes=(\d*)-(\d*)$/);
+    if (!m || (!m[1] && !m[2])) { res.writeHead(416, {'Content-Range': `bytes */${size}`}); res.end(); return; }
+    start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+    end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+    if (start > end || start >= size) { res.writeHead(416, {'Content-Range': `bytes */${size}`}); res.end(); return; }
+    code = 206;
+  }
+  const headers: Record<string, string | number> = {'Content-Type': 'video/mp4', 'Cache-Control': 'private, no-store', 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1};
+  if (code === 206) headers['Content-Range'] = `bytes ${start}-${end}/${size}`;
+  res.writeHead(code, headers);
+  if (req.method === 'HEAD') { res.end(); return; }
+  const got = await getStream(key, {start, end});
+  if (!got) { res.destroy(); return; }
+  got.stream.on('error', () => res.destroy()); res.on('close', () => got.stream.destroy()); got.stream.pipe(res);
+}
 export async function handleStudio(req: IncomingMessage, res: ServerResponse, pathname: string) {
   if (pathname !== '/api/studio' && !pathname.startsWith('/api/studio/')) return false;
   try {
@@ -63,7 +87,11 @@ export async function handleStudio(req: IncomingMessage, res: ServerResponse, pa
     const [, id, action = ''] = m;
     if (!action && req.method === 'GET') json(res, 200, studio.view(id));
     else if (!action && req.method === 'PUT') json(res, 200, studio.edit(id, await read(req)));
-    else if (action.startsWith('assets/') && ['GET', 'HEAD'].includes(req.method || '')) sendAsset(req, res, studio.asset(id, action.slice(7)));
+    else if (action.startsWith('assets/') && ['GET', 'HEAD'].includes(req.method || '')) {
+      const loc = studio.assetLocation(id, action.slice(7));
+      if (loc.r2) await sendAssetR2(req, res, loc.r2);
+      else sendAsset(req, res, loc.local!);
+    }
     else if (action === 'render' && req.method === 'POST') {
       const b = await read(req); json(res, 202, studio.render(id, b.revision));
     } else if (/^scenes\/\d+\/(image|voice)$/.test(action) && req.method === 'POST') {
