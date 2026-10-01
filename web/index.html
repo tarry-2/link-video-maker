@@ -131,6 +131,19 @@
           </div>
         </div>
 
+        <div class="row" id="character-row" style="display:none">
+          <div class="col" style="flex:1">
+            <label class="field-label">🎭 주인공 캐릭터 <span class="hint">— 애니만 · 고르면 모든 장면·다음 편이 같은 캐릭터</span></label>
+            <select id="character-select" class="input">
+              <option value="">🎲 랜덤 (이야기에 맞게 매번 새 캐릭터)</option>
+            </select>
+          </div>
+          <div class="col" style="flex:0 0 auto;display:flex;align-items:flex-end;gap:8px">
+            <img id="character-thumb" alt="" style="display:none;width:52px;height:52px;border-radius:12px;object-fit:cover;border:2px solid var(--teal)" />
+            <button type="button" id="character-new" class="ghost-btn" style="white-space:nowrap">+ 캐릭터 만들기</button>
+          </div>
+        </div>
+
         <div class="row" id="advanced-row">
           <div class="col">
             <label class="field-label">움직이는 AI 영상 <span class="hint">— 유료, 신중히</span></label>

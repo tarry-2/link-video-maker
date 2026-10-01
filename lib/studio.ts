@@ -8,6 +8,7 @@ import {VOICES, pickVoice} from './tts';
 import {addPortfolio, listPortfolio} from './portfolio';
 import {pruneDir, dirSize, cleanTmpRemotion, mb} from './cleanup';
 import {r2Enabled, videoKey, uploadFile, deleteKey, getStream} from './storage';
+import {characterImagePath} from './characters';
 
 // 제작 시작 시 테리가 고른 설정을 사람이 읽을 수 있게 로그로 남긴다(처음부터 끝까지 전 절차 추적용).
 function settingsLines(p: Project): string[] {
@@ -186,6 +187,11 @@ export class Studio {
       return {name: `source-${i}.${m[1] === 'jpeg' ? 'jpg' : m[1]}`, data};
     });
     fs.mkdirSync(this.directory(id), {recursive: true});
+    // 애니 캐릭터 지정: 고른 캐릭터의 기준 이미지를 작업에 복사 → 첫 장면부터 그 캐릭터로 생성(없으면 랜덤).
+    if (input.imageStyle === 'anime' && input.characterId) {
+      const src = characterImagePath(input.characterId);
+      if (src) { const ref = 'character-ref.jpg'; fs.copyFileSync(src, path.join(this.directory(id), ref)); p.characterRef = ref; }
+    }
     for (const u of uploads) { fs.writeFileSync(path.join(this.directory(id), u.name), u.data); p.sources.push(u.name); }
     this.save(p);
     return this.plan(p);

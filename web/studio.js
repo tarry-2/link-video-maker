@@ -352,6 +352,7 @@
       const p = await api('/api/studio', {mode, url:el('url').value.trim(), topic:el('topic-input') ? el('topic-input').value.trim() : '', images, keywords:el('keywords').value.trim(), facts:el('facts').value.trim(),
         duration:Number(el('duration').value), voice:el('voice').value, presetId:selectedPreset || '', quality:el('quality').value,
         imageStyle:el('image-style') ? el('image-style').value : 'real',
+        characterId:el('character-select') ? el('character-select').value : '',
         music:el('studio-music').checked, product, rates:rates()});
       try { localStorage.setItem('onvideo-open', p.id); } catch {}
       render(p); schedule(); await loadHistory();

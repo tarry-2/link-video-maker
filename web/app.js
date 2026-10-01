@@ -128,6 +128,7 @@ async function loadCategories() {
         selectedPreset = p.id;
         // 애니 카테고리면 이미지 스타일을 애니로 자동 전환(동화·안전교육은 애니가 기본).
         if (p.anime) { const sel = $('image-style'); if (sel) sel.value = 'anime'; }
+        syncCharacterRow();
         saveFormState();
       };
       chips.appendChild(b);
@@ -136,7 +137,51 @@ async function loadCategories() {
     wrap.appendChild(box);
   }
   restoreFormState(); // 카테고리·목소리가 채워진 뒤 저장된 입력 복원
+  loadCharacters();
 }
+
+// ── 캐릭터 풀(애니 주인공) ──
+async function loadCharacters() {
+  const sel = $('character-select');
+  if (!sel) return;
+  try {
+    const d = await (await fetch('/api/characters', {cache: 'no-store'})).json();
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">🎲 랜덤 (이야기에 맞게 매번 새 캐릭터)</option>' +
+      (d.characters || []).map((c) => `<option value="${c.id}">${c.emoji} ${c.name}</option>`).join('');
+    if (cur) sel.value = cur;
+    updateCharacterThumb();
+  } catch {}
+}
+function updateCharacterThumb() {
+  const sel = $('character-select'), thumb = $('character-thumb');
+  if (!sel || !thumb) return;
+  if (sel.value) { thumb.src = `/api/characters/${encodeURIComponent(sel.value)}/image`; thumb.style.display = ''; }
+  else thumb.style.display = 'none';
+}
+// 애니일 때만 캐릭터 선택 노출
+function syncCharacterRow() {
+  const row = $('character-row');
+  if (row) row.style.display = ($('image-style')?.value === 'anime') ? 'flex' : 'none';
+}
+$('image-style')?.addEventListener('change', () => { syncCharacterRow(); saveFormState(); });
+$('character-select')?.addEventListener('change', () => { updateCharacterThumb(); saveFormState(); });
+$('character-new')?.addEventListener('click', async () => {
+  const name = prompt('캐릭터 이름? (예: 토끼 몽이)');
+  if (name === null) return;
+  const description = prompt('캐릭터 생김새를 적어주세요\n(예: 곱슬머리 7살 남자아이, 파란 멜빵바지, 환하게 웃는)');
+  if (!description || !description.trim()) return;
+  const btn = $('character-new'); const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '만드는 중…';
+  try {
+    const r = await fetch('/api/characters', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, description})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '생성 실패');
+    await loadCharacters();
+    $('character-select').value = d.id; updateCharacterThumb(); saveFormState();
+  } catch (e) { alert(e.message); }
+  finally { btn.disabled = false; btn.textContent = old; }
+});
 
 // ── 목소리 미리듣기 ──
 let previewAudio = null;
@@ -472,6 +517,7 @@ function saveFormState() {
       duration: $('duration')?.value,
       voice: $('voice')?.value || '',
       imageStyle: $('image-style')?.value,
+      characterId: $('character-select')?.value || '',
       quality: $('quality')?.value,
       keywords: $('keywords')?.value || '',
       facts: $('facts')?.value || '',
@@ -502,6 +548,8 @@ function restoreFormState() {
   if (s.duration) $('duration').value = s.duration;
   if (s.voice != null && $('voice')) $('voice').value = s.voice;
   if (s.imageStyle && $('image-style')) $('image-style').value = s.imageStyle;
+  syncCharacterRow();
+  if (s.characterId != null && $('character-select')) { $('character-select').value = s.characterId; updateCharacterThumb(); }
   if (s.quality && $('quality')) $('quality').value = s.quality;
   if (s.keywords != null) $('keywords').value = s.keywords;
   if (s.facts != null) $('facts').value = s.facts;

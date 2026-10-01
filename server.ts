@@ -15,6 +15,7 @@ import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
 import {getStream} from './lib/storage';
+import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -389,6 +390,38 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (await handleStudio(req, res, p)) return;
+
+  // ── 캐릭터 풀: 목록 ── (애니 영상에 쓸 주인공. 기본 캐릭터 + 내가 만든 캐릭터)
+  if (p === '/api/characters' && req.method === 'GET') {
+    return json(res, 200, {characters: listCharacters().map(c => ({id: c.id, name: c.name, emoji: c.emoji, builtin: c.builtin}))});
+  }
+  // 캐릭터 썸네일 이미지
+  if (p.startsWith('/api/characters/') && p.endsWith('/image') && req.method === 'GET') {
+    const id = decodeURIComponent(p.slice('/api/characters/'.length, -'/image'.length));
+    const file = characterImagePath(id);
+    if (!file) { res.writeHead(404); return res.end('not found'); }
+    const buf = fs.readFileSync(file);
+    res.writeHead(200, {'Content-Type': 'image/jpeg', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400'});
+    return res.end(buf);
+  }
+  // 캐릭터 만들기(묘사 → nano-banana 생성)
+  if (p === '/api/characters' && req.method === 'POST') {
+    const k = pipelineKeys();
+    if (!k.replicate) return json(res, 400, {error: '키 설정에서 Replicate 키를 저장하세요.'});
+    const b = await readBody(req);
+    const name = String(b.name || '').trim();
+    const desc = String(b.description || '').trim();
+    if (!desc) return json(res, 400, {error: '캐릭터 설명을 입력하세요(예: 곱슬머리 남자아이, 파란 멜빵바지).'});
+    try {
+      const c = await createCharacter(k.replicate, name, desc);
+      return json(res, 201, {id: c.id, name: c.name, emoji: c.emoji, builtin: false});
+    } catch (e: any) { return json(res, 502, {error: '캐릭터 생성 실패: ' + e.message}); }
+  }
+  // 캐릭터 삭제(내가 만든 것만)
+  if (p.startsWith('/api/characters/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(p.slice('/api/characters/'.length));
+    return json(res, 200, {ok: deleteCharacter(id)});
+  }
 
   // ── 주제 추천(링크·이미지 없이): 카테고리별로 요즘 잘 되는 주제 후보 ──
   if (p === '/api/topics' && req.method === 'GET') {

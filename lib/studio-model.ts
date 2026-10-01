@@ -14,6 +14,7 @@ export const createSchema = z.object({
   keywords: text(1000).default(''), facts: text(4000).default(''),
   duration: z.number().int().min(15).max(180),
   voice: text(60).default(''), presetId: text(80).default(''),
+  characterId: text(40).default(''), // 애니: 지정 캐릭터(비우면 랜덤 생성)
   quality: z.enum(['fast', 'high']).default('high'),
   imageStyle: z.enum(['real', 'anime']).default('real'),
   music: z.boolean().default(false),
