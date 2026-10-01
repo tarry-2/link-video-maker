@@ -53,6 +53,7 @@ export type Project = {
   bgm?: Media; output?: string; outputRevision?: number; outputR2?: string; // outputR2=R2에 올린 완성영상 키(있으면 볼륨엔 없음)
   thumb?: string; // 썸네일(커버) 파일명(작업 폴더 내). 후킹 프레임 PNG.
   thumbR2?: string; // R2에 올린 썸네일 키(있으면 볼륨엔 없음)
+  thumbText?: {big: string; small: string; badge: string}; // 대본이 만든 썸네일 전용 시선폭탄 문구
   characterRef?: string; // 애니 캐릭터 기준 이미지 파일명(작업 폴더 내). 모든 장면·다음 편이 이걸 참조해 같은 주인공 유지
   startedAt?: string; // 현재/마지막 실행 시작 시각(경과시간 타이머용)
 };

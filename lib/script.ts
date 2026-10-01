@@ -35,10 +35,12 @@ export function stripEmoji(text: string): string {
     .trim();
 }
 
+export type ThumbText = {big: string; small: string; badge: string};
 export type Storyboard = {
   title: string;
   subject: string; // ★영상 전체의 핵심 소재(영어) — 모든 장면 이미지에 일관 반영(예: "soy sauce fried rice with egg")
   musicPrompt: string; // BGM 무드(영어)
+  thumb?: ThumbText; // 썸네일 전용 시선폭탄 문구(없으면 후킹에서 폴백)
   scenes: StoryScene[];
 };
 
@@ -125,9 +127,13 @@ ${catLine}
 - title: 클릭하고 싶은 한국어 영상 제목.
 - subject: 이 영상의 핵심 소재를 영어로 명확히(예: "soy sauce fried rice with fried egg"). 모든 장면 이미지가 이 소재를 벗어나면 안 된다.
 - musicPrompt: 영상 분위기에 맞는 BGM 무드(영어 한 줄).
+- thumb: 썸네일(커버) 전용 문구. 영상 제목보다 훨씬 더 자극적이고 궁금해 미치게 만드는 "시선폭탄" 카피. 반드시 아래 3개:
+   · big: 초대형으로 박을 핵심 한 방. 6~10자, 띄어쓰기로 2~3덩어리(예: "이거 먹지 마세요", "월 3만원 공짜", "90%가 모름"). 문장부호 최소, 완성문장 금지. 스크롤을 멈추게 할 가장 센 말.
+   · small: big 위에 작게 깔 미끼 한 줄(10~16자). 대상을 콕 집어 공감·긴장(예: "의사들이 절대 안 먹는", "아침마다 붓는 사람").
+   · badge: 충격 뱃지 한 단어(실화?/충격/경악/소름/대박 중 분위기 맞는 것). 판매성이면 "초특가", 아이용 애니면 빈 문자열.
 
 반드시 아래 JSON만 출력(설명·마크다운 금지):
-{"title":"...","subject":"...","musicPrompt":"...","scenes":[{"narration":"...","hookTop":"...","hookAccent":"...","accentColor":"#FFE24B","visualPrompt":"...","comment":{"user":"...","text":"...","likes":"..."}}]}
+{"title":"...","subject":"...","musicPrompt":"...","thumb":{"big":"...","small":"...","badge":"..."},"scenes":[{"narration":"...","hookTop":"...","hookAccent":"...","accentColor":"#FFE24B","visualPrompt":"...","comment":{"user":"...","text":"...","likes":"..."}}]}
 
 [자료]
 ${source.slice(0, 12000)}`;
@@ -167,5 +173,7 @@ ${source.slice(0, 12000)}`;
   for (const s of sb.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = stripEmoji(s.narration || ''); }
   // ★모든 장면 나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
   for (const s of sb.scenes) s.narration = normalizeEnding(s.narration);
+  // 썸네일 전용 문구 이모지 제거(폰트 깨짐 방지).
+  if (sb.thumb) sb.thumb = {big: stripEmoji(String(sb.thumb.big || '')), small: stripEmoji(String(sb.thumb.small || '')), badge: stripEmoji(String(sb.thumb.badge || ''))};
   return sb;
 }

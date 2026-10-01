@@ -85,11 +85,28 @@ export const studioProviders: StudioDependencies = {
       // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16 (자동·수동 모드와 동일 기준).
       const orientation: 'portrait' | 'landscape' = p.input.duration >= 90 ? 'landscape' : 'portrait';
       await renderVideo(scenes, 0, output, log, p.bgm ? `${prefix}/${p.bgm.file}` : undefined, undefined, publicDir, orientation);
-      // 썸네일(커버) — 같은 publicDir/scenes 재사용. 실패해도 영상엔 영향 없음.
-      if (thumbOut) {
-        try { await renderThumbnail(scenes, 0, thumbOut, log, publicDir, orientation); }
+      // 전용 썸네일(커버) — 첫 장면 이미지 + 후킹 문구로 독립 디자인. 실패해도 영상엔 영향 없음.
+      if (thumbOut && scenes[0]) {
+        const s0 = scenes[0];
+        // 대본이 만든 전용 썸네일 문구(thumb) 우선, 없으면 후킹에서 추출.
+        const t = (p as any).thumbText || {};
+        const big = String(t.big || s0.hookAccent || s0.hookTop || p.title || '').slice(0, 20);
+        const small = String(t.small ?? (s0.hookAccent ? s0.hookTop : '')).slice(0, 20);
+        const badge = String(t.badge || badgeFor(p.input.presetId)).slice(0, 6);
+        try { await renderThumbnail({image: s0.image, big, small, badge, accentColor: s0.accentColor || '#FFE24B'}, thumbOut, log, publicDir, orientation); }
         catch (e: any) { log('[썸네일] 생성 건너뜀: ' + (e?.message || '').slice(0, 100)); }
       }
     } finally { await fs.rm(publicDir, {recursive: true, force: true}); }
   },
 };
+
+// 카테고리 성격별 썸네일 충격 뱃지(대본이 전용 문구를 안 줄 때 폴백).
+function badgeFor(presetId: string): string {
+  const p = getPreset(presetId);
+  const grp = p?.group || '';
+  if (grp.includes('판매')) return '초특가';
+  if (grp.includes('애니')) return '';
+  if (presetId.includes('mystery') || presetId.includes('fact')) return '실화?';
+  if (presetId.includes('health') || presetId.includes('money')) return '충격';
+  return '실화?';
+}

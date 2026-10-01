@@ -33,7 +33,7 @@ function settingsLines(p: Project): string[] {
 }
 
 export type StudioDependencies = {
-  plan: (p: Project, directory: string, log: (s: string) => void) => Promise<{title: string; subject: string; musicPrompt: string; scenes: unknown[]}>;
+  plan: (p: Project, directory: string, log: (s: string) => void) => Promise<{title: string; subject: string; musicPrompt: string; scenes: unknown[]; thumb?: {big: string; small: string; badge: string}}>;
   image: (p: Project, s: Scene, file: string, log: (s: string) => void) => Promise<void>;
   voice: (p: Project, s: Scene, file: string) => Promise<Pick<Media, 'words' | 'frames'>>;
   music: (p: Project, file: string, log: (s: string) => void) => Promise<void>;
@@ -205,6 +205,7 @@ export class Studio {
       const draft = await this.deps.plan(p, this.directory(p.id), log);
       const valid = editSchema.parse({...draft, revision: p.revision});
       p.title = valid.title; p.subject = String(draft.subject || '').slice(0, 300); p.musicPrompt = valid.musicPrompt;
+      if (draft.thumb) p.thumbText = {big: String(draft.thumb.big || '').slice(0, 24), small: String(draft.thumb.small || '').slice(0, 26), badge: String(draft.thumb.badge || '').slice(0, 8)};
       p.scenes = valid.scenes;
       if (p.input.mode === 'manual') p.scenes.forEach((s, i) => { s.imageIndex = Math.min(s.imageIndex ?? i, p.sources.length - 1); });
       // Product facts live outside AI output. Narration references immutable values.

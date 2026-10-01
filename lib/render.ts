@@ -105,11 +105,12 @@ export async function renderVideo(
   }
 }
 
-// 썸네일(커버) 1장 생성 — 영상의 후킹이 꽉 찬 프레임을 고화질 PNG로 추출(renderStill).
-// 영상과 똑같은 scenes/레이아웃/폰트를 재사용하므로 글자 안 깨지고 통일감 있다. 첫 장면 중반(후킹+줌) 프레임.
+export type ThumbInput = {image: string; big: string; small: string; badge: string; accentColor: string};
+
+// 전용 썸네일(커버) 1장 생성 — 영상 프레임 재활용이 아니라 독립 디자인(Thumbnail 컴포지션).
+// 큰 문구 + 강조색 블록 + 대비 강한 구도로 클릭을 부른다. 영상과 같은 폰트라 통일감 유지.
 export async function renderThumbnail(
-  scenes: SceneData[],
-  transitionFrames: number,
+  thumb: ThumbInput,
   outPath: string,
   log?: (m: string) => void,
   publicDir?: string,
@@ -119,18 +120,15 @@ export async function renderThumbnail(
     ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
     : await getServeUrl(log);
   try {
-    const inputProps = {scenes, transitionFrames, orientation};
-    const composition = await selectComposition({serveUrl, id: 'Video', inputProps});
-    // 첫 장면 중반 프레임(후킹 문구가 크게 들어오고 줌펀치가 꽉 찬 지점). 범위 안전 클램프.
-    const firstDur = (scenes[0] as any)?.durationInFrames || Math.round(composition.durationInFrames / Math.max(1, scenes.length));
-    const frame = Math.min(composition.durationInFrames - 1, Math.max(0, Math.round(firstDur * 0.5)));
-    log?.('[썸네일] 후킹 프레임 추출 중…');
+    const inputProps = {...thumb, orientation};
+    const composition = await selectComposition({serveUrl, id: 'Thumbnail', inputProps});
+    log?.('[썸네일] 전용 커버 디자인 생성 중…');
     await renderStill({
       composition,
       serveUrl,
       output: outPath,
       inputProps,
-      frame,
+      frame: 0,
       imageFormat: 'png',
       chromiumOptions: {gl: 'swiftshader', enableMultiProcessOnLinux: true},
     });

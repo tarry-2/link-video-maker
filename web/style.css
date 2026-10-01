@@ -254,9 +254,15 @@ select.input { appearance: none; cursor: pointer; }
 .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
 .tab {
   flex: 1; background: var(--card); border: 1px solid var(--line); color: var(--muted);
-  border-radius: 12px; padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer;
+  border-radius: 12px; padding: 12px 8px; font-size: 14px; font-weight: 700; cursor: pointer;
+  white-space: nowrap; text-align: center; min-width: 0;
 }
 .tab.active { background: var(--grad); border-color: transparent; color: #fff; }
+/* 모바일: 탭 4개가 한 줄에 안 들어가 지저분하게 깨짐 → 2×2 그리드로 가지런히 */
+@media (max-width: 560px) {
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tab { padding: 11px 6px; font-size: 13px; }
+}
 .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .thumbs img { width: 60px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
 textarea.input { resize: vertical; font-family: inherit; }

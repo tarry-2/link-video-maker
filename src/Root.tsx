@@ -1,6 +1,7 @@
 import React from 'react';
 import {Composition} from 'remotion';
 import {Video, videoSchema} from './Video';
+import {Thumbnail, thumbnailSchema} from './Thumbnail';
 import type {SceneData} from './Scene';
 
 const w = (parts: [string, number, number][]) =>
@@ -73,6 +74,7 @@ const demoScenes: SceneData[] = [
 export const RemotionRoot: React.FC = () => {
   const transitionFrames = 15;
   return (
+    <>
     <Composition
       id="Video"
       component={Video}
@@ -97,5 +99,21 @@ export const RemotionRoot: React.FC = () => {
         };
       }}
     />
+    {/* 전용 썸네일(커버) — renderStill 전용 1프레임 컴포지션 */}
+    <Composition
+      id="Thumbnail"
+      component={Thumbnail}
+      durationInFrames={1}
+      fps={30}
+      width={1080}
+      height={1920}
+      schema={thumbnailSchema}
+      defaultProps={{image: 'news1.jpg', big: '월 3만원 공짜', small: '정부가 챙겨주는', badge: '실화?', accentColor: '#FFE24B', orientation: 'portrait' as const}}
+      calculateMetadata={({props}) => {
+        const landscape = props.orientation === 'landscape';
+        return {width: landscape ? 1920 : 1080, height: landscape ? 1080 : 1920};
+      }}
+    />
+    </>
   );
 };
