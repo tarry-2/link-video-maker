@@ -113,6 +113,53 @@
       }
     };
   }
+  // 인스타 올리기 — 연결 확인 → 캡션 자동생성 → 릴스/게시물 선택 → 업로드.
+  async function openInstagram(btn) {
+    if (!current?.output) return;
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = '📷 준비 중…';
+    try {
+      const st = await (await fetch('/api/instagram/status')).json();
+      if (!st.connected) {
+        message('먼저 ⚙ 키 설정에서 인스타 계정을 연결하세요.', true);
+        btn.disabled = false; btn.textContent = orig; return;
+      }
+      btn.textContent = '📷 캡션 만드는 중…';
+      const d = await api('/api/instagram/caption/' + current.id, undefined); // GET
+      openIgModal(d.caption || '', st.username);
+    } catch (e) { report(e); }
+    finally { btn.disabled = false; btn.textContent = orig; }
+  }
+  function openIgModal(caption, username) {
+    // 세로(쇼츠)면 릴스 기본, 가로(롱폼)면 게시물 기본.
+    const vertical = !current || (current.input?.duration || 45) < 90;
+    let box = el('ig-modal');
+    if (!box) { box = document.createElement('div'); box.id = 'ig-modal'; box.className = 'modal hidden'; document.body.appendChild(box); }
+    box.innerHTML = `<div class="modal-box">
+      <div class="modal-head"><h2>📷 인스타 올리기</h2><button class="ghost-btn" data-ig="close">✕</button></div>
+      <p class="sub small">${username ? '계정: <b>@' + escape(username) + '</b> · ' : ''}캡션은 수정할 수 있어요.</p>
+      <label class="field-label">올릴 방식<select id="ig-kind" class="input">
+        <option value="reels" ${vertical ? 'selected' : ''}>릴스 (세로 쇼츠)</option>
+        <option value="feed" ${vertical ? '' : 'selected'}>게시물 (피드에도 노출)</option>
+      </select></label>
+      <label class="field-label">캡션 · 해시태그<textarea id="ig-caption" class="input" rows="7" maxlength="2200">${escape(caption)}</textarea></label>
+      <button class="primary-btn" data-ig="upload">인스타에 올리기</button>
+      <p id="ig-up-msg" class="mini-state">릴스는 인코딩 때문에 1~2분 걸릴 수 있어요.</p>
+    </div>`;
+    box.classList.remove('hidden');
+    box.onclick = async e => {
+      const act = e.target.closest('[data-ig]')?.dataset.ig;
+      if (act === 'close' || e.target === box) { box.classList.add('hidden'); return; }
+      if (act === 'upload') {
+        const up = e.target; up.disabled = true; up.textContent = '올리는 중… (1~2분)';
+        el('ig-up-msg').textContent = '인스타가 영상을 받아 처리하는 중이에요…';
+        try {
+          const r = await api('/api/instagram/upload/' + current.id, {kind: el('ig-kind').value, caption: el('ig-caption').value});
+          el('ig-up-msg').innerHTML = r.permalink ? `✅ 게시 완료! <a href="${r.permalink}" target="_blank" style="color:var(--teal)">${r.permalink}</a>` : '✅ 게시 완료! 인스타 앱에서 확인하세요.';
+          up.textContent = '완료 🎉';
+        } catch (err) { el('ig-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '인스타에 올리기'; }
+      }
+    };
+  }
   function celebrate() {
     const c = document.createElement('div'); c.className = 'confetti';
     const colors = ['#17b5a4', '#7c5cff', '#ff4d8d', '#FFE24B', '#ff8a5c', '#4fe0d0'];
@@ -248,7 +295,7 @@
         <button class="ghost-btn" data-action="save" ${disabled}>대본 수정 저장</button>
         <button class="primary-btn" data-action="render" ${disabled}>${p.status === 'failed' ? '완료된 단계부터 이어서 재시작' : '2. 검토한 대본으로 최종 제작'}</button>
         <p class="mini-state">나레이션 수정은 해당 장면 음성을 다시 생성합니다. 상단 문구·색상만 바꾸면 음성을 재사용합니다. 장면별 음성은 이어지는 억양이 달라질 수 있습니다.</p>` : !busy ? '<button class="primary-btn" data-action="render">대본 작성 재시작</button>' : ''}
-      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><button class="primary-btn" data-action="download">⬇ 영상 다운로드</button><button class="ghost-btn" data-action="add-portfolio">🎬 포트폴리오에 추가</button><button class="ghost-btn" data-action="youtube">📺 유튜브 올리기</button><p class="mini-state">앱에서 안 열리면 위 영상을 꾹 눌러 "동영상 저장"을 쓰세요. 포트폴리오는 완성 시 자동 등록되며, 필요하면 위 버튼으로 다시 넣을 수 있어요.</p></div>` : ''}
+      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><button class="primary-btn" data-action="download">⬇ 영상 다운로드</button><button class="ghost-btn" data-action="add-portfolio">🎬 포트폴리오에 추가</button><button class="ghost-btn" data-action="youtube">📺 유튜브 올리기</button><button class="ghost-btn" data-action="instagram">📷 인스타 올리기</button><p class="mini-state">앱에서 안 열리면 위 영상을 꾹 눌러 "동영상 저장"을 쓰세요. 포트폴리오는 완성 시 자동 등록되며, 필요하면 위 버튼으로 다시 넣을 수 있어요.</p></div>` : ''}
       <details ${busy || p.status === 'failed' ? 'open' : ''}><summary>제작 로그</summary><div class="scene-actions"><button class="ghost-btn" data-action="copy-log">로그 복사</button><button class="ghost-btn" data-action="expand-log">크게 보기</button></div><pre class="log">${escape(p.logs.join('\n'))}</pre></details>`;
     el('generate').disabled = busy;
     tickElapsed();
@@ -317,6 +364,7 @@
       return;
     }
     if (button.dataset.action === 'youtube') { openYouTube(button); return; }
+    if (button.dataset.action === 'instagram') { openInstagram(button); return; }
     if (loading || active(current)) return;
     loading = true;
     try {

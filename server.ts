@@ -14,8 +14,9 @@ import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
-import {getStream} from './lib/storage';
+import {getStream, presignGet} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
+import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram} from './lib/instagram';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -379,6 +380,52 @@ const server = http.createServer(async (req, res) => {
       const meta = await generateMeta({gemini: k.gemini, openai: k.openai}, src.title, src.narrations, src.durSec);
       return json(res, 200, meta);
     } catch (e: any) { return json(res, 502, {error: '메타 생성 실패: ' + e.message}); }
+  }
+
+  // ── 인스타그램 ── 연결 상태
+  if (p === '/api/instagram/status' && req.method === 'GET') return json(res, 200, instagramStatus());
+  // 인스타 연결(계정 ID + 토큰 저장, 유효성 검증)
+  if (p === '/api/instagram/connect' && req.method === 'POST') {
+    const b = await readBody(req);
+    const igUserId = String(b.igUserId || '').trim();
+    const accessToken = String(b.accessToken || '').trim();
+    const base = b.base === 'facebook' ? 'facebook' : 'instagram';
+    if (!igUserId || !accessToken) return json(res, 400, {error: '인스타 계정 ID와 액세스 토큰을 입력하세요.'});
+    try {
+      const username = await verifyInstagram({igUserId, accessToken, base});
+      saveInstagram({igUserId, accessToken, base, username});
+      return json(res, 200, {connected: true, username});
+    } catch (e: any) { return json(res, 400, {error: e.message}); }
+  }
+  // 인스타 캡션 자동 생성(영상 제목·나레이션 기반, 해시태그 포함)
+  if (p.startsWith('/api/instagram/caption/') && req.method === 'GET') {
+    const id = decodeURIComponent(p.slice('/api/instagram/caption/'.length));
+    const src = resolveVideo(id);
+    if (!src) return json(res, 404, {error: '영상을 찾을 수 없습니다.'});
+    const k = pipelineKeys();
+    try {
+      const meta = await generateMeta({gemini: k.gemini, openai: k.openai}, src.title, src.narrations, src.durSec);
+      const tags = (meta.tags || []).slice(0, 12).map((t: string) => '#' + String(t).replace(/\s+/g, '')).join(' ');
+      const caption = `${meta.title}\n\n${meta.description || ''}\n\n${tags}`.trim();
+      return json(res, 200, {caption});
+    } catch (e: any) { return json(res, 502, {error: '캡션 생성 실패: ' + e.message}); }
+  }
+  // 인스타 업로드(릴스/피드) — 완성 영상이 R2에 있어야 함(공개 presigned URL 필요)
+  if (p.startsWith('/api/instagram/upload/') && req.method === 'POST') {
+    const id = decodeURIComponent(p.slice('/api/instagram/upload/'.length));
+    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '내 완성작만 올릴 수 있습니다.'});
+    if (!instagramStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 인스타 계정을 연결하세요.'});
+    const r2key = readProjectOutputR2(id);
+    if (!r2key) return json(res, 400, {error: '인스타 업로드는 클라우드(R2) 저장이 필요합니다. 영상을 다시 제작해 주세요.'});
+    const b = await readBody(req);
+    const kind = b.kind === 'feed' ? 'feed' : 'reels';
+    const caption = String(b.caption || '').trim();
+    try {
+      const url = await presignGet(r2key, 3600);
+      if (!url) return json(res, 502, {error: '영상 임시 링크 생성 실패.'});
+      const r = await publishVideo(url, caption, kind as 'reels' | 'feed');
+      return json(res, 200, r);
+    } catch (e: any) { return json(res, 502, {error: e.message}); }
   }
 
   // ── 포트폴리오 삭제(관리, 로그인 필요) ──

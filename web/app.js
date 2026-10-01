@@ -356,6 +356,7 @@ $('settings-btn').onclick = async () => {
   if ($('yt-msg')) $('yt-msg').textContent = '';
   $('settings-modal').classList.remove('hidden');
   refreshYtStatus();
+  refreshIgStatus();
   // 저장된 키 상태는 뒤에서 채운다(실패해도 입력엔 영향 없음).
   try {
     const reveal = await (await fetch('/api/settings/reveal')).json();
@@ -401,6 +402,30 @@ $('yt-connect')?.addEventListener('click', async () => {
     $('yt-msg').textContent = '새 창에서 구글 로그인·허용 후, 이 창으로 돌아와 상태를 새로고침하세요.';
     setTimeout(refreshYtStatus, 4000);
   } catch (e) { $('yt-msg').textContent = e.message; }
+});
+// ── 인스타 연결 ──
+async function refreshIgStatus() {
+  const st = $('ig-status'); if (!st) return;
+  try {
+    const s = await (await fetch('/api/instagram/status')).json();
+    if (s.connected) st.innerHTML = `<span style="color:var(--teal)">● 연결됨${s.username ? ' · @' + s.username : ''}</span>`;
+    else st.textContent = '미연결';
+  } catch {}
+}
+$('ig-connect')?.addEventListener('click', async () => {
+  const igUserId = $('ig-user-id').value.trim();
+  const accessToken = $('ig-token').value.trim();
+  const base = $('ig-base').value;
+  if (!igUserId || !accessToken) { $('ig-msg').textContent = '계정 ID와 토큰을 입력하세요.'; return; }
+  $('ig-msg').textContent = '연결 확인 중…';
+  try {
+    const r = await fetch('/api/instagram/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ igUserId, accessToken, base }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '연결 실패');
+    $('ig-msg').innerHTML = `<span style="color:var(--teal)">✅ 연결됐습니다 · @${d.username}</span>`;
+    $('ig-token').value = '';
+    refreshIgStatus();
+  } catch (e) { $('ig-msg').textContent = '실패: ' + e.message; }
 });
 $('save-keys').onclick = async () => {
   // 1) 단가를 localStorage에 저장(studio.js가 onvideo-unit-rates에서 읽어씀)

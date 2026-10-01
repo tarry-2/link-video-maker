@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import {Readable} from 'node:stream';
 import {S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand} from '@aws-sdk/client-s3';
+import {getSignedUrl} from '@aws-sdk/s3-request-presigner';
 
 const {R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET} = process.env;
 const enabled = !!(R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET);
@@ -31,6 +32,13 @@ export async function uploadFile(key: string, localPath: string, contentType = '
   const body = fs.readFileSync(localPath);
   await s3().send(new PutObjectCommand({Bucket: R2_BUCKET, Key: key, Body: body, ContentType: contentType}));
   return true;
+}
+
+// 임시 공개 다운로드 URL(기본 1시간). 인스타 등 외부 서비스가 R2 영상을 가져갈 때 사용.
+export async function presignGet(key: string, expiresIn = 3600): Promise<string | null> {
+  if (!enabled) return null;
+  try { return await getSignedUrl(s3(), new GetObjectCommand({Bucket: R2_BUCKET, Key: key}), {expiresIn}); }
+  catch { return null; }
 }
 
 export async function deleteKey(key: string): Promise<void> {
