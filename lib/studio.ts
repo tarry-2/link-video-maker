@@ -169,6 +169,8 @@ export class Studio {
   create(body: unknown) {
     this.available();
     const {images, ...input} = createSchema.parse(body);
+    // 애니 전용 카테고리는 이미지를 무조건 애니로(실사로 두면 동화·안전교육이 어색해짐).
+    if (getPreset(input.presetId)?.anime) input.imageStyle = 'anime';
     const id = randomUUID();
     const p: Project = {id, revision: 1, createdAt: new Date().toISOString(), updatedAt: '',
       status: 'draft', phase: '', logs: [], input, sources: [], title: '새 영상', subject: '', musicPrompt: '', scenes: []};

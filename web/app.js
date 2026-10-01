@@ -126,6 +126,8 @@ async function loadCategories() {
         document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
         b.classList.add('active');
         selectedPreset = p.id;
+        // 애니 카테고리면 이미지 스타일을 애니로 자동 전환(동화·안전교육은 애니가 기본).
+        if (p.anime) { const sel = $('image-style'); if (sel) sel.value = 'anime'; }
         saveFormState();
       };
       chips.appendChild(b);

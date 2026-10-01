@@ -9,7 +9,8 @@ export type Preset = {
   label: string; // 화면 표시명
   emoji: string;
   goal: Goal;
-  group: '정보성' | '유익재미' | '판매성';
+  group: '정보성' | '유익재미' | '판매성' | '애니';
+  anime?: boolean; // 애니 전용 카테고리(이미지=애니 자동, 애니 목소리, 동화·모험 주제 추천)
   // 대본 프롬프트에 주입되는 지침
   toneGuide: string; // 전체 톤·화법
   hookStyle: string; // 후킹(첫 장면) 스타일
@@ -206,6 +207,56 @@ export const PRESETS: Preset[] = [
     voice: 'mirae',
     musicMood: 'confident corporate background, motivating and trustworthy',
     accentColors: ['#4FE0D0', '#FFE24B', '#7C5CFF'],
+  },
+
+  // ── 🎨 애니메이션(아이+어른 함께, 캐릭터 일관 유지) ──
+  {
+    id: 'kids_story',
+    label: '동화·모험 이야기',
+    emoji: '🧚',
+    goal: 'info',
+    group: '애니',
+    anime: true,
+    toneGuide: '따뜻하고 상상력 넘치는 동화 구연 화법. 아이도 어른도 빠져드는 이야기. 다음이 궁금하게, 마음이 몽글몽글하게.',
+    hookStyle: '"어느 날 ~에게 신기한 일이 일어났어요" 식, 바로 이야기 속으로 끌어들이는 훅.',
+    endingStyle:
+      '이야기의 따뜻한 여운 + 작은 교훈/감동 한마디로 맺어라(예: "용기는 작은 마음에서 시작돼요", "오늘도 좋은 꿈 꾸세요").',
+    imageStyle: 'whimsical storybook anime illustration, magical and heartwarming, consistent main character, Studio Ghibli inspired',
+    voice: 'sora',
+    musicMood: 'gentle magical storybook music, warm and whimsical, orchestral lullaby',
+    accentColors: ['#FFB3D9', '#A78BFA', '#FFD93D', '#7DD3FC'],
+  },
+  {
+    id: 'kids_safety',
+    label: '안전·생활 지킴이',
+    emoji: '🛟',
+    goal: 'info',
+    group: '애니',
+    anime: true,
+    toneGuide: '아이가 쉽게 이해하는 다정하지만 또렷한 화법. 겁주지 않되 꼭 기억하게. 실제 상황에서 바로 쓸 수 있는 구체적 행동 요령 중심.',
+    hookStyle: '"이런 일이 생기면 어떻게 해야 할까요?" 식, 아이가 상황을 떠올리게 하는 질문 훅.',
+    endingStyle:
+      '꼭 기억할 핵심 행동을 한 번 더 또렷하게 + 아이를 안심시키는 한마디로 맺어라(예: "이것만 기억하면 너는 너를 지킬 수 있어요", "무서우면 꼭 어른에게 말해요").',
+    imageStyle: 'friendly educational anime illustration for children safety, clear simple scenes, warm and reassuring, consistent child character',
+    voice: 'bokdeok',
+    musicMood: 'gentle friendly educational music, safe and warm, light and clear',
+    accentColors: ['#4FE0D0', '#FFD93D', '#FF9EC4', '#8BE28B'],
+  },
+  {
+    id: 'kids_wisdom',
+    label: '지혜·인성 우화',
+    emoji: '🦉',
+    goal: 'info',
+    group: '애니',
+    anime: true,
+    toneGuide: '이솝우화처럼 짧은 이야기 속에 교훈을 담는 화법. 아이에겐 쉽게, 어른에겐 울림 있게. 억지 교훈 설교 금지, 이야기로 스며들게.',
+    hookStyle: '"옛날 옛날, 욕심 많은 ~가 살았어요" 식 우화 도입 훅.',
+    endingStyle:
+      '이야기가 주는 교훈을 짧고 울림 있게 한 문장으로 맺어라(예: "진짜 부자는 마음이 넉넉한 사람이에요", "작은 친절이 가장 멀리 갑니다").',
+    imageStyle: 'classic fable anime illustration, animals and nature characters, timeless and warm, consistent character design',
+    voice: 'taek',
+    musicMood: 'warm folk fable music, gentle and wise, acoustic storytelling',
+    accentColors: ['#F59E0B', '#8BE28B', '#A78BFA', '#FFD93D'],
   },
 ];
 
