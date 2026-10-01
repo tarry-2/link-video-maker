@@ -58,7 +58,7 @@ export class Studio {
 
   // 유지해야 할 에셋 파일 목록(보안 서빙 + 청소 기준의 단일 소스).
   private allowedFiles(p: Project): string[] {
-    return [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output]
+    return [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output, p.characterRef]
       .filter((x): x is string => typeof x === 'string');
   }
 

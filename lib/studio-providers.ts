@@ -5,7 +5,7 @@ import {pipelineKeys} from './keys';
 import {fetchSource} from './pipeline';
 import {generateStoryboard} from './script';
 import {generateManualDraft} from './manual';
-import {generateImageFlux} from './image';
+import {generateImageFlux, generateImageNano} from './image';
 import {ttsEleven, alignToWords, VOICES, pickVoice} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
@@ -36,7 +36,19 @@ export const studioProviders: StudioDependencies = {
     if (!k.replicate) throw new Error('키 설정에서 Replicate 키를 저장하세요.');
     // ★화면비: 롱폼(≥90초)=가로 16:9 이미지 / 쇼츠=세로 9:16 (render·plan과 동일 기준).
     const landscape = p.input.duration >= 90;
-    await generateImageFlux(k.replicate, `${p.subject}. ${s.visualPrompt}`, file, log, p.input.quality, p.input.imageStyle, landscape);
+    const prompt = `${p.subject}. ${s.visualPrompt}`;
+    if (p.input.imageStyle === 'anime') {
+      // 애니 = nano-banana로 캐릭터 일관성. 첫 장면을 기준 캐릭터로 저장 → 이후 장면·다음 편이 참조.
+      const dir = path.dirname(file);
+      const refs = p.characterRef ? [path.join(dir, p.characterRef)] : [];
+      await generateImageNano(k.replicate, prompt, file, log, refs, landscape);
+      if (!p.characterRef) {
+        const cref = 'character-ref.jpg';
+        try { await fs.copyFile(file, path.join(dir, cref)); p.characterRef = cref; } catch {}
+      }
+    } else {
+      await generateImageFlux(k.replicate, prompt, file, log, p.input.quality, p.input.imageStyle, landscape);
+    }
   },
   async voice(p, s, file) {
     const k = pipelineKeys();

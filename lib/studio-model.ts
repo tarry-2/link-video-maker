@@ -50,6 +50,7 @@ export type Project = {
   phase: string; error?: string; logs: string[]; input: Input; sources: string[];
   title: string; subject: string; musicPrompt: string; scenes: Scene[];
   bgm?: Media; output?: string; outputRevision?: number; outputR2?: string; // outputR2=R2에 올린 완성영상 키(있으면 볼륨엔 없음)
+  characterRef?: string; // 애니 캐릭터 기준 이미지 파일명(작업 폴더 내). 모든 장면·다음 편이 이걸 참조해 같은 주인공 유지
   startedAt?: string; // 현재/마지막 실행 시작 시각(경과시간 타이머용)
 };
 export const fingerprint = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 24);
