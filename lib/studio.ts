@@ -4,7 +4,8 @@ import {randomUUID} from 'node:crypto';
 import {createSchema, editSchema, estimate, signatures, resolveProduct, assertTokens, type Project, type Scene, type Media} from './studio-model';
 import {getPreset} from './presets';
 import {VOICES} from './tts';
-import {addPortfolio} from './portfolio';
+import {addPortfolio, listPortfolio} from './portfolio';
+import {pruneDir, dirSize, cleanTmpRemotion, mb} from './cleanup';
 
 // 제작 시작 시 테리가 고른 설정을 사람이 읽을 수 있게 로그로 남긴다(처음부터 끝까지 전 절차 추적용).
 function settingsLines(p: Project): string[] {
@@ -49,6 +50,44 @@ export class Studio {
         this.save(p);
       }
     }
+    // 서버 부팅 시 1회 전체 청소 — 그동안 쌓인 옛 영상·임시파일을 치워 볼륨 공간을 확보한다.
+    try { this.cleanup({log: (s) => console.log(s)}); } catch {}
+  }
+
+  // 유지해야 할 에셋 파일 목록(보안 서빙 + 청소 기준의 단일 소스).
+  private allowedFiles(p: Project): string[] {
+    return [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output]
+      .filter((x): x is string => typeof x === 'string');
+  }
+
+  // 한 작업 폴더에서 project.json + 현재 쓰는 에셋 외 고아 파일(재시도로 쌓인 옛 video-*/music-* 등)을 삭제.
+  pruneProject(id: string): {removed: number; bytes: number} {
+    let p: Project;
+    try { p = this.get(id); } catch { return {removed: 0, bytes: 0}; }
+    return pruneDir(this.directory(id), ['project.json', ...this.allowedFiles(p)]);
+  }
+
+  // 전체 청소: 포트폴리오 등록분 + 최근 keepRecent개 작업만 보존, 나머지는 폴더째 삭제.
+  // 보존 작업은 내부 고아 파일만 정리한다. /tmp 렌더 잔재도 함께 비운다.
+  cleanup(opts: {keepRecent?: number; log?: (s: string) => void} = {}): {freed: number} {
+    const keepRecent = opts.keepRecent ?? 10;
+    const protectedIds = new Set<string>();
+    try { for (const it of listPortfolio()) protectedIds.add(it.projectId); } catch {}
+    const projects = this.list(); // updatedAt 내림차순
+    projects.slice(0, keepRecent).forEach(p => protectedIds.add(p.id));
+    let delJobs = 0, prunedFiles = 0, freed = 0;
+    for (const p of projects) {
+      if (protectedIds.has(p.id)) {
+        const r = pruneDir(this.directory(p.id), ['project.json', ...this.allowedFiles(p)]);
+        prunedFiles += r.removed; freed += r.bytes;
+      } else {
+        try { const d = this.directory(p.id); freed += dirSize(d); fs.rmSync(d, {recursive: true, force: true}); delJobs++; } catch {}
+      }
+    }
+    const t = cleanTmpRemotion(); freed += t.bytes;
+    if ((delJobs || prunedFiles || t.removed) && opts.log)
+      opts.log(`[정리] 오래된 작업 ${delJobs}개 · 잔여파일 ${prunedFiles}개 · 임시 ${t.removed}개 삭제 (약 ${mb(freed)}MB 확보)`);
+    return {freed};
   }
   directory(id: string) {
     if (!/^[0-9a-f-]{36}$/.test(id)) throw new StudioError('작업을 찾을 수 없습니다.', 404);
@@ -113,7 +152,11 @@ export class Studio {
     };
     const pending = Promise.resolve().then(() => task(log)).catch((e: Error) => {
       p.status = 'failed'; p.error = e.message.slice(0, 500); log('[실패] ' + p.error);
-    }).finally(() => { this.active = null; this.tasks.delete(p.id); this.save(p); });
+    }).finally(() => {
+      this.active = null; this.tasks.delete(p.id); this.save(p);
+      // 작업 끝날 때마다 그 폴더의 고아 파일(재시도로 쌓인 옛 영상·음악, 실패한 in-progress 잔재)을 즉시 정리.
+      try { this.pruneProject(p.id); } catch {}
+    });
     this.tasks.set(p.id, pending);
     return this.view(p.id);
   }
@@ -279,7 +322,7 @@ export class Studio {
   }
   asset(id: string, name: string) {
     const p = this.get(id);
-    const allowed = [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output];
+    const allowed = this.allowedFiles(p);
     if (!allowed.includes(name) || name !== path.basename(name)) throw new StudioError('파일이 없습니다.', 404);
     const file = path.join(this.directory(id), name);
     if (!fs.existsSync(file)) throw new StudioError('파일이 없습니다.', 404);
