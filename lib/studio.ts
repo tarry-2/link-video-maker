@@ -4,7 +4,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createSchema, editSchema, estimate, signatures, resolveProduct, assertTokens, type Project, type Scene, type Media} from './studio-model';
 import {getPreset} from './presets';
-import {VOICES} from './tts';
+import {VOICES, pickVoice} from './tts';
 import {addPortfolio, listPortfolio} from './portfolio';
 import {pruneDir, dirSize, cleanTmpRemotion, mb} from './cleanup';
 import {r2Enabled, videoKey, uploadFile, deleteKey, getStream} from './storage';
@@ -15,7 +15,7 @@ function settingsLines(p: Project): string[] {
   const modeLabel = inp.mode === 'auto' ? '링크로 자동' : inp.mode === 'topic' ? '주제 추천' : '내 이미지로';
   const source = inp.mode === 'auto' ? inp.url : inp.mode === 'topic' ? inp.topic : `업로드 이미지 ${p.sources.length}장${inp.keywords ? ` · 키워드 "${inp.keywords}"` : ''}`;
   const preset = getPreset(inp.presetId);
-  const voiceKey = inp.voice || preset?.voice || 'adam';
+  const voiceKey = pickVoice(inp.voice, preset?.voice, inp.imageStyle);
   const voiceLabel = VOICES[voiceKey]?.label || voiceKey;
   return [
     '[설정] ───────── 제작 설정 ─────────',
@@ -310,7 +310,7 @@ export class Studio {
       // ★완성 영상을 포트폴리오에 자동 등록(기존 양식대로 voices.html에 카드로 표시).
       try {
         const preset = getPreset(p.input.presetId);
-        const voiceKey = p.input.voice || preset?.voice || 'adam';
+        const voiceKey = pickVoice(p.input.voice, preset?.voice, p.input.imageStyle);
         const v = VOICES[voiceKey];
         addPortfolio({
           projectId: p.id,
@@ -333,7 +333,7 @@ export class Studio {
     const p = this.get(id);
     if (p.status !== 'completed' || !p.output) throw new StudioError('완성된 영상만 포트폴리오에 추가할 수 있습니다.');
     const preset = getPreset(p.input.presetId);
-    const voiceKey = p.input.voice || preset?.voice || 'adam';
+    const voiceKey = pickVoice(p.input.voice, preset?.voice, p.input.imageStyle);
     const v = VOICES[voiceKey];
     addPortfolio({
       projectId: p.id,

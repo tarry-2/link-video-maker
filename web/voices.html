@@ -146,6 +146,7 @@
         info: { t: '💡 정보·건강·상식', d: '차분하고 신뢰가는 설명이 필요할 때' },
         sell: { t: '🛍️ 판매·리뷰·홍보', d: '밝고 에너지 있게 구매를 자극할 때' },
         heal: { t: '🌿 힐링·음식·여행', d: '따뜻하고 감성적인 분위기가 필요할 때' },
+        anime: { t: '🎨 애니·동화·키즈', d: '밝고 명랑한 톤 · 아이가 봐도 재밌는 애니메이션 영상에' },
       };
       let curAudio = null, curCard = null;
 
@@ -159,7 +160,7 @@
         }
         const wrap = $('groups');
         wrap.innerHTML = '';
-        for (const key of ['issue', 'info', 'sell', 'heal']) {
+        for (const key of ['issue', 'info', 'sell', 'heal', 'anime']) {
           if (!groups[key]) continue;
           const box = document.createElement('div');
           box.innerHTML = `<div class="vg-title">${USE_LABEL[key].t}</div><div class="vg-desc">${USE_LABEL[key].d}</div>`;
@@ -206,7 +207,7 @@
 
       // ── 포트폴리오: 드롭다운 선택 + 큰 미리보기 ──
       const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-      const BADGE = { issue:'📰', info:'💡', sell:'🛍️', heal:'🌿' };
+      const BADGE = { issue:'📰', info:'💡', sell:'🛍️', heal:'🌿', anime:'🎨' };
       let myItems = [], myShown = 0, canDelete = false, curIdx = 0;
       const PAGE = 12;
       async function loadMyVideos(keepIdx) {

@@ -86,11 +86,11 @@ async function loadCategories() {
 
   // 목소리 셀렉트 — 용도 그룹으로(optgroup). 카테고리 고르면 자동 추천이 기본.
   window.__voices = d.voices;
-  const useName = { issue: '📰 이슈·미스터리', info: '💡 정보·건강', sell: '🛍️ 판매·리뷰', heal: '🌿 힐링·음식·여행' };
+  const useName = { issue: '📰 이슈·미스터리', info: '💡 정보·건강', sell: '🛍️ 판매·리뷰', heal: '🌿 힐링·음식·여행', anime: '🎨 애니·동화·키즈 (밝고 명랑)' };
   const grouped = {};
   for (const v of d.voices) (grouped[v.use[0]] = grouped[v.use[0]] || []).push(v);
   let html = '<option value="">🎯 카테고리 자동 추천</option>';
-  for (const key of ['issue', 'info', 'sell', 'heal']) {
+  for (const key of ['issue', 'info', 'sell', 'heal', 'anime']) {
     if (!grouped[key]) continue;
     html += `<optgroup label="${useName[key]}">`;
     html += grouped[key].map((v) => `<option value="${v.id}">${v.label} (${v.gender})</option>`).join('');

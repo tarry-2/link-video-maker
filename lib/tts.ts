@@ -3,14 +3,15 @@ import {writeFile} from 'node:fs/promises';
 
 // 목소리 목록 — 실제 ElevenLabs 한국어 보이스를 용도별로 큐레이션.
 // use: 어떤 콘텐츠에 어울리는지(issue=이슈/경고/미스터리 진중, info=정보/건강 신뢰,
-//      sell=판매/리뷰 밝음, heal=힐링/음식/여행 따뜻). gender: 남/여.
+//      sell=판매/리뷰 밝음, heal=힐링/음식/여행 따뜻, anime=애니/동화/키즈 밝고 명랑). gender: 남/여.
 export type VoiceInfo = {
   label: string;
   id: string;
   note: string;
   tip: string; // 이럴 때 쓰세요(사용자 가이드)
   gender: '남' | '여';
-  use: ('issue' | 'info' | 'sell' | 'heal')[];
+  use: ('issue' | 'info' | 'sell' | 'heal' | 'anime')[];
+  anime?: boolean; // 애니/동화/키즈 전용 목소리(밝고 명랑, 성인 나레이션과 분리 표시)
 };
 export const VOICES: Record<string, VoiceInfo> = {
   // ── 남성 진중(이슈·경고·미스터리) — 무게감·긴장감 ──
@@ -29,7 +30,25 @@ export const VOICES: Record<string, VoiceInfo> = {
   suzie: {label: 'Suzie · 차분 30대', id: 'UqW1DivwFt1NwUMSGnTn', note: '차분한 30대 여성', tip: '🌿 건강·힐링·정보에. 편안하고 신뢰감', gender: '여', use: ['info', 'heal']},
   // ── 여성 밝음(판매·리뷰) ──
   yuna: {label: 'Yuna · 밝은 여성', id: 'ajfBUI2mmJMjvf2H6Yw7', note: '밝고 발랄한', tip: '✨ 꿀팁·리뷰·판매에. 발랄하고 친근하게', gender: '여', use: ['sell', 'heal']},
+
+  // ── 🎨 애니/동화/키즈 전용 — 밝고 명랑, 아이가 봐도 재밌는 톤(성인 나레이션과 분리) ──
+  sujin: {label: 'Sujin · 명랑 애니', id: '9cino9hfS3ougiPeFvp1', note: '명랑하고 친근한 여성', tip: '🎨 애니·동화·키즈에. 밝고 사랑스럽게 들려줄 때', gender: '여', use: ['anime', 'heal'], anime: true},
+  juwon: {label: 'Juwon · 활기 애니', id: 'oZLQ9kHPMuIyd7Ja0YNU', note: '활기차고 표현력 풍부한 여성', tip: '🎨 애니·동화에. 리액션 크고 생동감 있게 읽어줄 때', gender: '여', use: ['anime', 'sell'], anime: true},
+  bokdeok: {label: 'Bokdeok · 맑은 누나', id: 'PjmtdeplRoyIlaqlTeS3', note: '맑고 밝은 누나 톤', tip: '🎨 애니·키즈에. 깨끗하고 또렷하게 동화 읽어줄 때', gender: '여', use: ['anime', 'heal'], anime: true},
+  taek: {label: 'Taek · 친근 소년', id: 'rCm09Tf1yMYbOyCRLDyB', note: '친근하고 동적인 소년 톤', tip: '🎨 애니·모험·동화에. 주인공 소년처럼 신나게', gender: '남', use: ['anime', 'info'], anime: true},
+  deoksu: {label: 'Deoksu · 귀여운 캐릭', id: 'IAETYMYM3nJvjnlkVTKI', note: '통통하고 귀여운 캐릭터 남성', tip: '🎨 애니·코믹에. 엉뚱하고 귀여운 캐릭터로', gender: '남', use: ['anime', 'sell'], anime: true},
 };
+
+// 애니 스타일 기본 목소리(사용자가 목소리 직접 안 고르면 이걸로 추천).
+export const ANIME_DEFAULT_VOICE = 'sujin';
+
+// 목소리 키 결정 — 단일 소스. 사용자가 고른 게 있으면 그걸, 없으면 애니 스타일이면 애니 목소리,
+// 아니면 카테고리 추천, 최후엔 adam. 모든 호출 경로(표시·TTS·포트폴리오)가 이걸 써야 일관된다.
+export function pickVoice(voice: string | undefined, presetVoice: string | undefined, imageStyle?: string): string {
+  if (voice) return voice;
+  if (imageStyle === 'anime') return ANIME_DEFAULT_VOICE;
+  return presetVoice || 'adam';
+}
 
 export type CharAlign = {ch: string; start: number; end: number}[];
 export type Word = {t: string; s: number; e: number}; // s,e = 프레임
