@@ -16,7 +16,7 @@ import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, l
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
-import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption, maybeRefreshInstagram} from './lib/instagram';
+import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats} from './lib/instagram';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -466,6 +466,39 @@ const server = http.createServer(async (req, res) => {
 
   // ── 인스타그램 ── 연결 상태
   if (p === '/api/instagram/status' && req.method === 'GET') return json(res, 200, instagramStatus());
+  // ── 성과 추적: 올린 인스타 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──
+  if (p === '/api/instagram/stats' && req.method === 'GET') {
+    if (!instagramStatus().connected) return json(res, 200, {connected: false, items: [], summary: null});
+    const sampleIg = loadSampleInstagram();
+    const all = [
+      ...listPortfolio().map((it) => ({id: it.projectId, title: it.title, voice: it.voice, category: it.category, goal: it.goal, url: it.instagramUrl || readProjectInstagram(it.projectId)})),
+      ...SAMPLES.map((s) => ({id: 'sample:' + s.file, title: s.title, voice: s.voice, category: s.category, goal: s.goal, url: sampleIg[s.file] || ''})),
+    ];
+    const withUrl = all.filter((x) => x.url);
+    if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null});
+    let byPermalink: Record<string, {views: number; likes: number; comments: number}> = {};
+    try { byPermalink = await getInstaStats(); }
+    catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message}); }
+    const items = withUrl
+      .map((x) => ({...x, ...(byPermalink[x.url] || {views: 0, likes: 0, comments: 0})}))
+      .sort((a, b) => b.views - a.views || b.likes - a.likes);
+    const avgBy = (key: 'voice' | 'category') => {
+      const m: Record<string, number[]> = {};
+      for (const it of items) (m[(it as any)[key]] = m[(it as any)[key]] || []).push(it.views || it.likes);
+      return Object.entries(m)
+        .map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length}))
+        .sort((a, b) => b.avg - a.avg);
+    };
+    const summary = {
+      total: items.length,
+      totalViews: items.reduce((n, x) => n + x.views, 0),
+      totalLikes: items.reduce((n, x) => n + x.likes, 0),
+      top3: items.slice(0, 3),
+      byVoice: avgBy('voice').slice(0, 5),
+      byCategory: avgBy('category').slice(0, 5),
+    };
+    return json(res, 200, {connected: true, items, summary});
+  }
   // 인스타 연결(계정 ID + 토큰 저장, 유효성 검증)
   if (p === '/api/instagram/connect' && req.method === 'POST') {
     const b = await readBody(req);

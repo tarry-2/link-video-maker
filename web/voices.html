@@ -133,8 +133,9 @@
           <p class="pf-sub">영상을 고르면 아래에서 크게 보고, 유튜브에 올리거나 내려받을 수 있어요.</p>
         </div>
 
-        <!-- 📊 성과(유튜브 올린 영상의 조회수·반응 집계) -->
+        <!-- 📊 성과(올린 영상의 조회수·반응 집계) -->
         <div id="yt-stats" class="yt-stats" hidden></div>
+        <div id="ig-stats" class="yt-stats" hidden></div>
 
         <!-- 큰 미리보기 플레이어 + 액션 -->
         <div class="pf-stage">
@@ -444,35 +445,44 @@
         if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + '천';
         return String(n);
       }
-      // ── 📊 성과 패널(유튜브 올린 영상의 조회수·반응) ──
+      // ── 📊 성과 패널 공용 렌더(유튜브/인스타) ──
+      function renderPerf(boxId, d, title) {
+        const box = $(boxId);
+        if (!d.connected || !d.summary || !d.summary.total) { box.hidden = true; return; }
+        const s = d.summary, medal = ['🥇', '🥈', '🥉'];
+        const top = s.top3.map((it, i) => `<div class="yt-top-row"><span class="yt-rank">${medal[i] || ''}</span><span class="yt-top-title">${esc(it.title)}</span><span class="yt-top-views">${fmtNum(it.views)}회</span></div>`).join('');
+        const voiceChips = (s.byVoice || []).filter(v => v.avg > 0).map(v => `<span class="yt-chip">🎙 ${esc(v.name)} <b>평균 ${fmtNum(v.avg)}</b></span>`).join('');
+        const catChips = (s.byCategory || []).filter(c => c.avg > 0).map(c => `<span class="yt-chip">${esc(c.name)} <b>평균 ${fmtNum(c.avg)}</b></span>`).join('');
+        box.hidden = false;
+        box.innerHTML = `
+          <div class="yt-stats-head">${title} <span style="font-size:12px;color:var(--muted);font-weight:600">· 올린 영상 ${s.total}개</span></div>
+          <div class="yt-kpis">
+            <div class="yt-kpi"><div class="num">${fmtNum(s.totalViews)}</div><div class="lbl">총 조회수</div></div>
+            <div class="yt-kpi"><div class="num">${fmtNum(s.totalLikes)}</div><div class="lbl">총 좋아요</div></div>
+            <div class="yt-kpi"><div class="num">${s.total}</div><div class="lbl">올린 영상</div></div>
+          </div>
+          <div class="yt-sec-title">🏆 조회수 TOP 3</div>
+          <div class="yt-top">${top}</div>
+          ${voiceChips ? `<div class="yt-sec-title">🎙 어떤 목소리가 먹히나 (평균)</div><div class="yt-chips">${voiceChips}</div>` : ''}
+          ${catChips ? `<div class="yt-sec-title">📂 어떤 주제가 먹히나 (평균)</div><div class="yt-chips">${catChips}</div>` : ''}`;
+      }
       async function loadYtStats() {
         try {
           const d = await (await fetch('/api/youtube/stats')).json();
-          window.__ytStats = {};
-          (d.items || []).forEach(it => { window.__ytStats[it.id] = it; });
-          const box = $('yt-stats');
-          if (!d.connected || !d.summary || !d.summary.total) { box.hidden = true; return; }
-          const s = d.summary, medal = ['🥇', '🥈', '🥉'];
-          const top = s.top3.map((it, i) => `<div class="yt-top-row"><span class="yt-rank">${medal[i] || ''}</span><span class="yt-top-title">${esc(it.title)}</span><span class="yt-top-views">${fmtNum(it.views)}회</span></div>`).join('');
-          const voiceChips = (s.byVoice || []).filter(v => v.avg > 0).map(v => `<span class="yt-chip">🎙 ${esc(v.name)} <b>평균 ${fmtNum(v.avg)}회</b></span>`).join('');
-          const catChips = (s.byCategory || []).filter(c => c.avg > 0).map(c => `<span class="yt-chip">${esc(c.name)} <b>평균 ${fmtNum(c.avg)}회</b></span>`).join('');
-          box.hidden = false;
-          box.innerHTML = `
-            <div class="yt-stats-head">📊 유튜브 성과 <span style="font-size:12px;color:var(--muted);font-weight:600">· 올린 영상 ${s.total}개</span></div>
-            <div class="yt-kpis">
-              <div class="yt-kpi"><div class="num">${fmtNum(s.totalViews)}</div><div class="lbl">총 조회수</div></div>
-              <div class="yt-kpi"><div class="num">${fmtNum(s.totalLikes)}</div><div class="lbl">총 좋아요</div></div>
-              <div class="yt-kpi"><div class="num">${s.total}</div><div class="lbl">올린 영상</div></div>
-            </div>
-            <div class="yt-sec-title">🏆 조회수 TOP 3</div>
-            <div class="yt-top">${top}</div>
-            ${voiceChips ? `<div class="yt-sec-title">🎙 어떤 목소리가 먹히나 (평균 조회수)</div><div class="yt-chips">${voiceChips}</div>` : ''}
-            ${catChips ? `<div class="yt-sec-title">📂 어떤 주제가 먹히나 (평균 조회수)</div><div class="yt-chips">${catChips}</div>` : ''}`;
-          if (typeof curIdx === 'number' && myItems[curIdx]) selectVideo(curIdx, false); // 선택된 영상 스테이지에도 숫자 반영
+          window.__ytStats = {}; (d.items || []).forEach(it => { window.__ytStats[it.id] = it; });
+          renderPerf('yt-stats', d, '📊 유튜브 성과');
+          if (typeof curIdx === 'number' && myItems[curIdx]) selectVideo(curIdx, false);
+        } catch (e) {}
+      }
+      async function loadIgStats() {
+        try {
+          const d = await (await fetch('/api/instagram/stats')).json();
+          renderPerf('ig-stats', d, '📷 인스타 성과');
         } catch (e) {}
       }
       loadMyVideos();
       loadYtStats();
+      loadIgStats();
     </script>
   </body>
 </html>
