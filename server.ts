@@ -12,7 +12,7 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
-import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, SAMPLES} from './lib/portfolio';
+import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
@@ -139,20 +139,28 @@ function saveProjectOutputR2(projectId: string, key: string) {
     fs.writeFileSync(pj, JSON.stringify(proj));
   } catch {}
 }
-// R2 이전에 만든 영상(볼륨에만 있음)을 인스타 업로드 전에 R2로 올려 공개 URL 확보.
-// 한 번 올리면 project.json outputR2에 기록돼 이후 재사용(유튜브/포트폴리오 서빙도 R2 경로).
-async function ensureVideoOnR2(projectId: string): Promise<string> {
-  let key = readProjectOutputR2(projectId);
+// 인스타 업로드 전 공개 URL(R2 presign) 확보 — 내 완성작(uuid) + 샘플(sample:파일) 공용.
+// R2에 없으면 로컬 완성본/샘플 파일을 R2로 백필 업로드하고 키를 기록(한 번만 올리고 재사용).
+async function ensureInstaVideoR2(id: string): Promise<string> {
+  const src = resolveVideo(id);
+  if (!src) return '';
+  if (src.kind === 'mine') {
+    let key = readProjectOutputR2(id);
+    if (key) return key;
+    if (!r2Enabled() || !fs.existsSync(src.file)) return '';
+    key = videoKey(id, 'video-backfill.mp4');
+    if (!(await uploadFile(key, src.file))) return '';
+    saveProjectOutputR2(id, key);
+    return key;
+  }
+  // 샘플(public/portfolio/*.mp4): sample-r2.json에 백필 키 기록.
+  const base = path.basename(src.file);
+  let key = loadSampleR2()[base];
   if (key) return key;
-  if (!r2Enabled()) return '';
-  const item = listPortfolio().find((x) => x.projectId === projectId);
-  if (!item || item.output !== path.basename(item.output)) return '';
-  const localFile = path.join(STUDIO_DATA_DIR, 'studio', projectId, item.output);
-  if (!fs.existsSync(localFile)) return '';
-  key = videoKey(projectId, 'video-backfill.mp4');
-  const ok = await uploadFile(key, localFile);
-  if (!ok) return '';
-  saveProjectOutputR2(projectId, key);
+  if (!r2Enabled() || !fs.existsSync(src.file)) return '';
+  key = `samples/${base}`;
+  if (!(await uploadFile(key, src.file))) return '';
+  setSampleR2(base, key);
   return key;
 }
 // R2 완성영상 스트리밍(Range 지원). 포트폴리오 전시용.
@@ -308,6 +316,7 @@ const server = http.createServer(async (req, res) => {
       video: `/portfolio-item/${it.projectId}.mp4`,
     }));
     const sampleYt = loadSampleYouTube();
+    const sampleIg = loadSampleInstagram();
     const samples = SAMPLES.map((s) => ({
       id: 'sample:' + s.file,
       kind: 'sample' as const,
@@ -317,7 +326,7 @@ const server = http.createServer(async (req, res) => {
       goal: s.goal,
       createdAt: '',
       youtubeUrl: sampleYt[s.file] || '',
-      instagramUrl: '', // 샘플은 R2에 없어 인스타 업로드 대상이 아님
+      instagramUrl: sampleIg[s.file] || '', // 샘플도 인스타 업로드 시 R2 백필 후 배지 기록
       orientation: s.orientation || 'portrait', // 샘플은 전부 세로(9:16)
       video: `/portfolio/${s.file}`,
     }));
@@ -451,9 +460,10 @@ const server = http.createServer(async (req, res) => {
   // 인스타 업로드(릴스/피드) — 완성 영상이 R2에 있어야 함(공개 presigned URL 필요)
   if (p.startsWith('/api/instagram/upload/') && req.method === 'POST') {
     const id = decodeURIComponent(p.slice('/api/instagram/upload/'.length));
-    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '내 완성작만 올릴 수 있습니다.'});
+    const isSample = id.startsWith('sample:');
+    if (!isSample && !/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '올릴 수 없는 영상입니다.'});
     if (!instagramStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 인스타 계정을 연결하세요.'});
-    const r2key = await ensureVideoOnR2(id); // R2 이전 영상이면 로컬→R2 백필 후 진행
+    const r2key = await ensureInstaVideoR2(id); // 내 완성작/샘플 모두 R2에 없으면 백필 후 진행
     if (!r2key) return json(res, 400, {error: '영상 파일을 찾을 수 없어요. 너무 오래돼 정리됐을 수 있어요 — 다시 제작해 주세요.'});
     const b = await readBody(req);
     const kind = b.kind === 'feed' ? 'feed' : 'reels';
@@ -462,8 +472,11 @@ const server = http.createServer(async (req, res) => {
       const url = await presignGet(r2key, 3600);
       if (!url) return json(res, 502, {error: '영상 임시 링크 생성 실패.'});
       const r = await publishVideo(url, caption, kind as 'reels' | 'feed');
-      // ★배지: 게시 성공 시 permalink를 portfolio.json + project.json 둘 다에 기록(어느 경로든 IG 배지 뜨게).
-      if (r.permalink) { setPortfolioInstagram(id, r.permalink); saveProjectInstagram(id, r.permalink); }
+      // ★배지: 게시 성공 시 permalink 기록(어느 경로든 IG 배지 뜨게). 샘플/내작품 분기.
+      if (r.permalink) {
+        if (isSample) setSampleInstagram(path.basename(id.slice('sample:'.length)), r.permalink);
+        else { setPortfolioInstagram(id, r.permalink); saveProjectInstagram(id, r.permalink); }
+      }
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
   }

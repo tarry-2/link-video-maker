@@ -269,7 +269,7 @@
           <div class="pf-actions">
             <button class="pf-zoom">🔍 크게 보기</button>
             <button class="pf-yt" data-id="${esc(it.id)}">📺 유튜브 올리기</button>
-            ${it.kind === 'mine' ? `<button class="pf-ig" data-id="${esc(it.id)}">📷 인스타 올리기</button>` : ''}
+            <button class="pf-ig" data-id="${esc(it.id)}">📷 인스타 올리기</button>
             <a class="pf-dl" href="${it.video}" download="${esc(it.title)}.mp4">⬇ 다운로드</a>
             ${canDelete && it.kind === 'mine' ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}
           </div>`;

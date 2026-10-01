@@ -46,6 +46,32 @@ export function setSampleYouTube(file: string, youtubeUrl: string) {
   fs.renameSync(SAMPLE_YT_FILE + '.tmp', SAMPLE_YT_FILE);
 }
 
+// 샘플 영상의 인스타 링크(배지용) — 유튜브와 동일 방식.
+const SAMPLE_IG_FILE = path.join(DATA_DIR, 'sample-instagram.json');
+export function loadSampleInstagram(): Record<string, string> {
+  try { return JSON.parse(fs.readFileSync(SAMPLE_IG_FILE, 'utf8')); } catch { return {}; }
+}
+export function setSampleInstagram(file: string, instagramUrl: string) {
+  const m = loadSampleInstagram();
+  m[file] = instagramUrl;
+  fs.mkdirSync(DATA_DIR, {recursive: true});
+  fs.writeFileSync(SAMPLE_IG_FILE + '.tmp', JSON.stringify(m));
+  fs.renameSync(SAMPLE_IG_FILE + '.tmp', SAMPLE_IG_FILE);
+}
+
+// 샘플 영상을 인스타로 보낼 때 R2 백필 키 기록(public/portfolio 파일 → R2, 한 번만 올리고 재사용).
+const SAMPLE_R2_FILE = path.join(DATA_DIR, 'sample-r2.json');
+export function loadSampleR2(): Record<string, string> {
+  try { return JSON.parse(fs.readFileSync(SAMPLE_R2_FILE, 'utf8')); } catch { return {}; }
+}
+export function setSampleR2(file: string, key: string) {
+  const m = loadSampleR2();
+  m[file] = key;
+  fs.mkdirSync(DATA_DIR, {recursive: true});
+  fs.writeFileSync(SAMPLE_R2_FILE + '.tmp', JSON.stringify(m));
+  fs.renameSync(SAMPLE_R2_FILE + '.tmp', SAMPLE_R2_FILE);
+}
+
 export function listPortfolio(): PortfolioItem[] {
   try {
     const raw = JSON.parse(fs.readFileSync(FILE, 'utf8'));
