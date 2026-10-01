@@ -14,9 +14,9 @@ import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
-import {getStream, presignGet} from './lib/storage';
+import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
-import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption} from './lib/instagram';
+import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption, maybeRefreshInstagram} from './lib/instagram';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -130,6 +130,30 @@ function readProjectOutputR2(projectId: string): string {
   try {
     return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).outputR2 || '';
   } catch { return ''; }
+}
+function saveProjectOutputR2(projectId: string, key: string) {
+  try {
+    const pj = path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json');
+    const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+    proj.outputR2 = key;
+    fs.writeFileSync(pj, JSON.stringify(proj));
+  } catch {}
+}
+// R2 이전에 만든 영상(볼륨에만 있음)을 인스타 업로드 전에 R2로 올려 공개 URL 확보.
+// 한 번 올리면 project.json outputR2에 기록돼 이후 재사용(유튜브/포트폴리오 서빙도 R2 경로).
+async function ensureVideoOnR2(projectId: string): Promise<string> {
+  let key = readProjectOutputR2(projectId);
+  if (key) return key;
+  if (!r2Enabled()) return '';
+  const item = listPortfolio().find((x) => x.projectId === projectId);
+  if (!item || item.output !== path.basename(item.output)) return '';
+  const localFile = path.join(STUDIO_DATA_DIR, 'studio', projectId, item.output);
+  if (!fs.existsSync(localFile)) return '';
+  key = videoKey(projectId, 'video-backfill.mp4');
+  const ok = await uploadFile(key, localFile);
+  if (!ok) return '';
+  saveProjectOutputR2(projectId, key);
+  return key;
 }
 // R2 완성영상 스트리밍(Range 지원). 포트폴리오 전시용.
 async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse, key: string) {
@@ -409,7 +433,7 @@ const server = http.createServer(async (req, res) => {
     if (!igUserId || !accessToken) return json(res, 400, {error: '인스타 계정 ID와 액세스 토큰을 입력하세요.'});
     try {
       const username = await verifyInstagram({igUserId, accessToken, base});
-      saveInstagram({igUserId, accessToken, base, username});
+      saveInstagram({igUserId, accessToken, base, username, tokenSavedAt: Date.now()});
       return json(res, 200, {connected: true, username});
     } catch (e: any) { return json(res, 400, {error: e.message}); }
   }
@@ -429,8 +453,8 @@ const server = http.createServer(async (req, res) => {
     const id = decodeURIComponent(p.slice('/api/instagram/upload/'.length));
     if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '내 완성작만 올릴 수 있습니다.'});
     if (!instagramStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 인스타 계정을 연결하세요.'});
-    const r2key = readProjectOutputR2(id);
-    if (!r2key) return json(res, 400, {error: '인스타 업로드는 클라우드(R2) 저장이 필요합니다. 영상을 다시 제작해 주세요.'});
+    const r2key = await ensureVideoOnR2(id); // R2 이전 영상이면 로컬→R2 백필 후 진행
+    if (!r2key) return json(res, 400, {error: '영상 파일을 찾을 수 없어요. 너무 오래돼 정리됐을 수 있어요 — 다시 제작해 주세요.'});
     const b = await readBody(req);
     const kind = b.kind === 'feed' ? 'feed' : 'reels';
     const caption = String(b.caption || '').trim();
@@ -778,4 +802,8 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
 
 server.listen(PORT, () => {
   console.log(`\n🎬 OnVideo 웹 → http://localhost:${PORT}\n`);
+  // 인스타 토큰 자동 갱신: 부팅 시 1회 + 24시간마다(45일 넘으면 ig_refresh_token으로 연장 → 재발급 불필요).
+  const igRefresh = () => maybeRefreshInstagram((m) => console.log(m)).catch(() => {});
+  igRefresh();
+  setInterval(igRefresh, 24 * 60 * 60 * 1000);
 });

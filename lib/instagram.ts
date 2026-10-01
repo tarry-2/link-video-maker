@@ -15,6 +15,7 @@ export type InstagramConfig = {
   accessToken?: string; // 긴 수명 액세스 토큰(instagram_content_publish 권한)
   base?: 'instagram' | 'facebook'; // graph.instagram.com(IG 로그인) / graph.facebook.com(FB 로그인)
   username?: string; // 표시용
+  tokenSavedAt?: number; // 토큰 발급/갱신 시각(ms). 자동 갱신 판단용.
 };
 
 export function loadInstagram(): InstagramConfig {
@@ -131,4 +132,33 @@ export async function publishVideo(
   } catch {}
   log?.('[인스타] 게시 완료!');
   return {permalink, id: pd.id};
+}
+
+// 60일 long-lived 토큰을 ig_refresh_token으로 갱신(또 60일 연장). Instagram 로그인(graph.instagram.com) 토큰만 가능.
+export async function refreshInstagram(log?: (m: string) => void): Promise<boolean> {
+  const c = loadInstagram();
+  if (!c.accessToken || c.base === 'facebook') return false;
+  try {
+    const r = await fetch(
+      `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(c.accessToken)}`,
+      {cache: 'no-store'},
+    );
+    const d: any = await r.json();
+    if (r.ok && d.access_token) {
+      saveInstagram({accessToken: d.access_token, tokenSavedAt: Date.now()});
+      log?.(`[인스타] 토큰 자동 갱신 완료 (+${Math.round((d.expires_in || 0) / 86400)}일)`);
+      return true;
+    }
+    log?.('[인스타] 토큰 갱신 건너뜀: ' + (d?.error?.message || JSON.stringify(d).slice(0, 150)));
+  } catch (e: any) { log?.('[인스타] 토큰 갱신 오류: ' + e.message); }
+  return false;
+}
+
+// 토큰 나이를 보고 필요할 때만 갱신(45일↑). 연결 안 됐거나 FB방식이면 무시. 기준시각 없으면 지금으로 기록만.
+export async function maybeRefreshInstagram(log?: (m: string) => void): Promise<void> {
+  const c = loadInstagram();
+  if (!c.accessToken || !c.igUserId || c.base === 'facebook') return;
+  if (!c.tokenSavedAt) { saveInstagram({tokenSavedAt: Date.now()}); return; }
+  const ageDays = (Date.now() - c.tokenSavedAt) / 86400000;
+  if (ageDays >= 45) await refreshInstagram(log);
 }
