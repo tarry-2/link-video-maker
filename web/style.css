@@ -172,6 +172,19 @@ select.input { appearance: none; cursor: pointer; }
 .btn-yt:active, .btn-ig:active { transform: scale(0.97); box-shadow: none; }
 .result-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 
+/* 📚 배치 생성 현황 */
+.batch-status { margin-top: 14px; background: rgba(127,127,127,.06); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.batch-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.batch-head b { font-size: 14px; }
+.batch-list { display: flex; flex-direction: column; gap: 6px; }
+.batch-row { display: flex; align-items: center; gap: 9px; padding: 8px 11px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.batch-row.done { border-color: rgba(18,169,152,.4); }
+.batch-row.failed { border-color: rgba(255,107,94,.5); opacity: .8; }
+.batch-row.rendering, .batch-row.creating { border-color: rgba(107,76,240,.4); }
+.batch-ic { font-size: 14px; }
+.batch-tp { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.batch-st { font-size: 11.5px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+
 .block-title { font-size: 16px; margin-bottom: 14px; }
 .log-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; }
 .log-head .block-title { margin-bottom: 0; }

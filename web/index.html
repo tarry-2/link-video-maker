@@ -50,6 +50,7 @@
         <button id="tab-auto" class="tab active" type="button">🔗 링크로 자동</button>
         <button id="tab-topic" class="tab" type="button">💡 주제 추천</button>
         <button id="tab-manual" class="tab" type="button">🖼 내 이미지로</button>
+        <button id="tab-batch" class="tab" type="button">📚 여러 편 한 번에</button>
       </div>
 
       <div class="card">
@@ -81,6 +82,15 @@
           <input id="keywords" class="input" placeholder="예: 제주도, 인생사진 명소" />
           <label class="field-label">담을 내용/팩트 <span class="hint">(선택)</span></label>
           <textarea id="facts" class="input" rows="3" placeholder="영상에 담고 싶은 내용을 적어주세요"></textarea>
+        </div>
+
+        <!-- 배치 모드: 주제 여러 줄 → 순차 자동 제작 -->
+        <div id="pane-batch" class="hidden">
+          <label class="field-label">1. 주제 목록 <span class="hint">— 한 줄에 하나씩. 아래 카테고리·길이·목소리 설정이 모든 편에 똑같이 적용돼요</span></label>
+          <textarea id="batch-topics" class="input" rows="6" placeholder="예:&#10;물 많이 마시면 안 되는 사람 특징&#10;아침 공복에 이것 먹으면 큰일&#10;자기 전 5분 스트레칭 효과"></textarea>
+          <button id="batch-start" class="primary-btn" type="button" style="margin-top:12px">📚 이 목록으로 순차 제작 시작</button>
+          <div id="batch-status" class="batch-status" hidden></div>
+          <p class="mini-state">한 편씩 차례로 자동 제작돼요(대본→영상). 완성되면 포트폴리오에 쌓이고, 창을 닫아도 서버가 계속 만들어요.</p>
         </div>
 
         <label class="field-label">2. 카테고리 <span class="hint">— 고르면 톤·이미지·목소리·배경음악이 자동으로 맞춰져요</span></label>

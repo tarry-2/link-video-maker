@@ -13,16 +13,18 @@ let uploadedImages = []; // dataURL 배열
 $('tab-auto').onclick = () => setMode('auto');
 $('tab-topic').onclick = () => setMode('topic');
 $('tab-manual').onclick = () => setMode('manual');
-function setMode(m) {
+$('tab-batch').onclick = () => setMode('batch');
+function applyMode(m) {
   mode = m;
-  $('tab-auto').classList.toggle('active', m === 'auto');
-  $('tab-topic').classList.toggle('active', m === 'topic');
-  $('tab-manual').classList.toggle('active', m === 'manual');
-  $('pane-auto').classList.toggle('hidden', m !== 'auto');
-  $('pane-topic').classList.toggle('hidden', m !== 'topic');
-  $('pane-manual').classList.toggle('hidden', m !== 'manual');
-  saveFormState();
+  for (const t of ['auto', 'topic', 'manual', 'batch']) {
+    $('tab-' + t).classList.toggle('active', m === t);
+    $('pane-' + t).classList.toggle('hidden', m !== t);
+  }
+  // 배치 모드에선 단일 제작 버튼 숨기고, 배치 현황 폴링 시작.
+  const gen = $('generate'); if (gen) gen.classList.toggle('hidden', m === 'batch');
+  if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
 }
+function setMode(m) { applyMode(m); saveFormState(); }
 
 // ── 주제 추천(링크·이미지 없이) ──
 // 추천 결과 렌더(저장된 상태 복원에도 재사용). selected=이전에 고른 주제 제목.
@@ -554,15 +556,7 @@ function saveFormState() {
   } catch {}
 }
 // setMode는 saveFormState를 호출하므로, 복원/리셋 땐 저장을 안 하는 조용한 버전을 쓴다.
-function setModeSilent(m) {
-  mode = m;
-  $('tab-auto').classList.toggle('active', m === 'auto');
-  $('tab-topic').classList.toggle('active', m === 'topic');
-  $('tab-manual').classList.toggle('active', m === 'manual');
-  $('pane-auto').classList.toggle('hidden', m !== 'auto');
-  $('pane-topic').classList.toggle('hidden', m !== 'topic');
-  $('pane-manual').classList.toggle('hidden', m !== 'manual');
-}
+function setModeSilent(m) { applyMode(m); }
 function restoreFormState() {
   let s; try { s = JSON.parse(localStorage.getItem(FORM_KEY) || 'null'); } catch {}
   if (!s) return;

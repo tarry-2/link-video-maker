@@ -408,4 +408,48 @@
     } catch (e) { report(e); }
     finally { loading = false; el('generate').disabled = active(current); }
   };
+
+  // ── 📚 배치 생성: 주제 여러 개 → 순차 자동 제작 ──
+  let batchTimer = null;
+  const batchStart = el('batch-start');
+  if (batchStart) batchStart.onclick = async () => {
+    const topics = el('batch-topics').value.split('\n').map(s => s.trim()).filter(Boolean);
+    if (!topics.length) { alert('주제를 한 줄에 하나씩 입력하세요.'); return; }
+    if (!selectedPreset) { alert('아래에서 카테고리를 먼저 골라주세요.'); return; }
+    batchStart.disabled = true; batchStart.textContent = '큐에 등록 중…';
+    try {
+      await api('/api/batch', {
+        topics,
+        presetId: selectedPreset || '', duration: Number(el('duration').value),
+        voice: el('voice').value, quality: el('quality').value,
+        imageStyle: el('image-style') ? el('image-style').value : 'real',
+        characterId: el('character-select') ? el('character-select').value : '',
+        music: el('studio-music').checked,
+      });
+      el('batch-topics').value = '';
+      renderBatch();
+    } catch (e) { report(e); }
+    finally { batchStart.disabled = false; batchStart.textContent = '📚 이 목록으로 순차 제작 시작'; }
+  };
+  const batchClear = () => api('/api/batch', null, 'DELETE').then(renderBatch).catch(() => {});
+  async function renderBatch() {
+    const box = el('batch-status'); if (!box) return;
+    let d; try { d = await (await fetch('/api/batch')).json(); } catch { return; }
+    if (!d.total) { box.hidden = true; return; }
+    box.hidden = false;
+    const icon = {queued: '⏳', creating: '✍️', rendering: '🎬', done: '✅', failed: '⚠️'};
+    const label = {queued: '대기', creating: '대본 작성', rendering: '영상 제작', done: '완성', failed: '실패'};
+    const rows = d.items.map(it => `<div class="batch-row ${it.status}"><span class="batch-ic">${icon[it.status] || ''}</span><span class="batch-tp">${escape(it.topic)}</span><span class="batch-st">${label[it.status] || ''}</span></div>`).join('');
+    box.innerHTML = `
+      <div class="batch-head"><b>진행 ${d.done}/${d.total}</b> <span class="mini-state">${d.pending ? `· 남은 ${d.pending}편 자동 제작 중…` : (d.running ? '' : '· 완료')}</span>
+        ${d.pending ? '<button class="ghost-btn small" id="batch-clear" type="button">대기 취소</button>' : ''}</div>
+      <div class="batch-list">${rows}</div>`;
+    const bc = el('batch-clear'); if (bc) bc.onclick = batchClear;
+  }
+  function startBatchPoll() {
+    renderBatch();
+    if (batchTimer) return;
+    batchTimer = setInterval(renderBatch, 6000);
+  }
+  window.startBatchPoll = startBatchPoll; // app.js setMode에서 호출
 })();

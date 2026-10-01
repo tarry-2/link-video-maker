@@ -5,8 +5,12 @@ import {ZodError} from 'zod';
 import {Studio, StudioError} from './studio';
 import {studioProviders} from './studio-providers';
 import {getStream} from './storage';
+import {BatchQueue, type BatchConfig} from './batch';
 
 const studio = new Studio(path.join(process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data'), 'studio'), studioProviders);
+export const batch = new BatchQueue(studio);
+// 서버 부팅 시 중단됐던 큐를 이어서 진행(재배포/재시작 복구).
+batch.tick();
 function json(res: ServerResponse, code: number, body: unknown) {
   res.writeHead(code, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'});
   res.end(JSON.stringify(body));
@@ -71,10 +75,28 @@ async function sendAssetR2(req: IncomingMessage, res: ServerResponse, key: strin
   got.stream.on('error', () => res.destroy()); res.on('close', () => got.stream.destroy()); got.stream.pipe(res);
 }
 export async function handleStudio(req: IncomingMessage, res: ServerResponse, pathname: string) {
-  if (pathname !== '/api/studio' && !pathname.startsWith('/api/studio/')) return false;
+  if (pathname !== '/api/studio' && !pathname.startsWith('/api/studio/') && !pathname.startsWith('/api/batch')) return false;
   try {
     if (!['GET', 'HEAD'].includes(req.method || '') && req.headers.origin) {
       if (new URL(req.headers.origin).host !== req.headers.host) throw new StudioError('같은 사이트에서 요청하세요.', 403);
+    }
+    // ── 배치 생성: 주제 여러 개를 큐에 넣어 순차 자동 제작 ──
+    if (pathname === '/api/batch') {
+      if (req.method === 'GET') { json(res, 200, batch.status()); return true; }
+      if (req.method === 'POST') {
+        const b = await read(req);
+        const topics: string[] = Array.isArray(b.topics) ? b.topics.map((x: any) => String(x)) : String(b.topics || '').split('\n');
+        const cfg: BatchConfig = {
+          presetId: String(b.presetId || ''), duration: Number(b.duration) || 40,
+          voice: String(b.voice || ''), quality: b.quality === 'fast' ? 'fast' : 'high',
+          imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real', music: !!b.music,
+          characterId: String(b.characterId || ''),
+        };
+        if (!topics.filter(t => t.trim()).length) throw new StudioError('주제를 한 줄에 하나씩 입력하세요.');
+        json(res, 202, batch.enqueue(topics, cfg)); return true;
+      }
+      if (req.method === 'DELETE') { json(res, 200, batch.clear()); return true; }
+      throw new StudioError('지원하지 않는 요청입니다.', 405);
     }
     if (pathname === '/api/studio') {
       if (req.method === 'GET') json(res, 200, studio.list().map(p => studio.summary(p)));
