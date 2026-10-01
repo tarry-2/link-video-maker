@@ -283,19 +283,26 @@ export class Studio {
       }
       p.phase = '영상 합성'; this.save(p);
       const output = `video-${p.revision}-${randomUUID()}.mp4`;
-      const outAbs = path.join(this.directory(id), output);
+      // ★R2 활성이면 렌더 출력을 볼륨이 아니라 /tmp에 쓴다. Remotion은 마지막 remux도 output 경로에
+      // 쓰므로, 볼륨이 꽉 차면(500MB) 그 단계가 ENOSPC(exit 228)로 죽는다. /tmp는 컨테이너 로컬
+      // ephemeral 디스크(수GB)라 넉넉 → 렌더 성공 후 R2로 올리고 /tmp 삭제. 볼륨은 아예 안 쓴다.
+      const outAbs = r2Enabled()
+        ? path.join(os.tmpdir(), `onvideo-out-${p.id}-${output}`)
+        : path.join(this.directory(id), output);
       await this.deps.render(p, this.directory(id), outAbs, log);
       p.output = output; p.outputRevision = p.revision; p.outputR2 = undefined;
-      // ★완성 영상을 R2로 올려 볼륨을 비운다(R2 비활성이면 그대로 로컬 보관=폴백).
+      // ★완성 영상을 R2로 올린다(R2 비활성이면 outAbs가 볼륨이라 그대로 로컬 보관=폴백).
       if (r2Enabled()) {
         try {
           const key = videoKey(p.id, output);
           await uploadFile(key, outAbs, 'video/mp4');
           p.outputR2 = key;
-          fs.rmSync(outAbs, {force: true}); // 볼륨에서 삭제 → 디스크 안 참
+          fs.rmSync(outAbs, {force: true}); // /tmp 출력 삭제
           log('[저장] 완성 영상을 클라우드 저장소(R2)에 올렸습니다.');
         } catch (e: any) {
-          p.outputR2 = undefined; // 업로드 실패 → 로컬 파일 유지(폴백), 서빙은 로컬에서
+          // R2 업로드 실패 → /tmp 출력을 볼륨으로 옮겨 로컬 폴백 유지(서빙은 로컬에서)
+          try { fs.copyFileSync(outAbs, path.join(this.directory(id), output)); fs.rmSync(outAbs, {force: true}); } catch {}
+          p.outputR2 = undefined;
           log('[저장] 클라우드 업로드 실패 — 로컬에 보관합니다. ' + (e?.message || '').slice(0, 120));
         }
       }
