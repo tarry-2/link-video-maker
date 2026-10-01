@@ -37,7 +37,8 @@ export type StudioDependencies = {
   image: (p: Project, s: Scene, file: string, log: (s: string) => void) => Promise<void>;
   voice: (p: Project, s: Scene, file: string) => Promise<Pick<Media, 'words' | 'frames'>>;
   music: (p: Project, file: string, log: (s: string) => void) => Promise<void>;
-  render: (p: Project, directory: string, output: string, log: (s: string) => void) => Promise<void>;
+  // thumbOut을 주면 영상과 함께 후킹 프레임 썸네일 PNG도 같은 경로에 생성(실패해도 영상엔 영향 없음).
+  render: (p: Project, directory: string, output: string, log: (s: string) => void, thumbOut?: string) => Promise<void>;
 };
 export class StudioError extends Error {
   constructor(message: string, public status = 400) { super(message); }
@@ -59,7 +60,7 @@ export class Studio {
 
   // 유지해야 할 에셋 파일 목록(보안 서빙 + 청소 기준의 단일 소스).
   private allowedFiles(p: Project): string[] {
-    return [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output, p.characterRef]
+    return [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output, p.characterRef, p.thumb]
       .filter((x): x is string => typeof x === 'string');
   }
 
@@ -86,6 +87,7 @@ export class Studio {
       } else {
         try {
           if (p.outputR2) deleteKey(p.outputR2); // 폴더와 함께 R2 영상도 제거(고아 방지). 포트폴리오는 protected라 여기 안 옴.
+          if (p.thumbR2) deleteKey(p.thumbR2); // R2 썸네일도 함께 제거.
           const d = this.directory(p.id); freed += dirSize(d); fs.rmSync(d, {recursive: true, force: true}); delJobs++;
         } catch {}
       }
@@ -297,8 +299,12 @@ export class Studio {
       const outAbs = r2Enabled()
         ? path.join(os.tmpdir(), `onvideo-out-${p.id}-${output}`)
         : path.join(this.directory(id), output);
-      await this.deps.render(p, this.directory(id), outAbs, log);
+      // 썸네일(커버)도 함께 생성 — 영상은 /tmp 혹은 볼륨, 썸네일은 항상 작업 폴더(작아서 볼륨 OK).
+      const thumbName = `thumb-${p.revision}.png`;
+      const thumbAbs = path.join(this.directory(id), thumbName);
+      await this.deps.render(p, this.directory(id), outAbs, log, thumbAbs);
       p.output = output; p.outputRevision = p.revision; p.outputR2 = undefined;
+      p.thumb = fs.existsSync(thumbAbs) ? thumbName : undefined; p.thumbR2 = undefined;
       // ★완성 영상을 R2로 올린다(R2 비활성이면 outAbs가 볼륨이라 그대로 로컬 보관=폴백).
       if (r2Enabled()) {
         try {
@@ -306,6 +312,10 @@ export class Studio {
           await uploadFile(key, outAbs, 'video/mp4');
           p.outputR2 = key;
           fs.rmSync(outAbs, {force: true}); // /tmp 출력 삭제
+          // 썸네일도 R2로(작업 폴더 PNG → R2, 볼륨 절약). 실패해도 로컬 thumb 폴백.
+          if (p.thumb) {
+            try { const tk = videoKey(p.id, thumbName); await uploadFile(tk, thumbAbs, 'image/png'); p.thumbR2 = tk; fs.rmSync(thumbAbs, {force: true}); } catch {}
+          }
           log('[저장] 완성 영상을 클라우드 저장소(R2)에 올렸습니다.');
         } catch (e: any) {
           // R2 업로드 실패 → /tmp 출력을 볼륨으로 옮겨 로컬 폴백 유지(서빙은 로컬에서)
@@ -371,6 +381,24 @@ export class Studio {
     const local = path.join(this.directory(id), name);
     if (!fs.existsSync(local)) throw new StudioError('파일이 없습니다.', 404);
     return {local};
+  }
+  // 썸네일 로컬 경로 확보(유튜브 커버 지정용). 로컬에 있으면 그대로, R2에만 있으면 임시 다운로드. 없으면 null.
+  async localCopyOfThumb(id: string): Promise<{file: string; cleanup: () => void} | null> {
+    const p = this.get(id);
+    if (!p.thumb) return null;
+    const local = path.join(this.directory(id), p.thumb);
+    if (fs.existsSync(local)) return {file: local, cleanup: () => {}};
+    if (!p.thumbR2) return null;
+    const tmp = path.join(os.tmpdir(), `thumb-${id}-${p.thumb}`);
+    const got = await getStream(p.thumbR2);
+    if (!got) return null;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const w = fs.createWriteStream(tmp);
+        got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject);
+      });
+    } catch { return null; }
+    return {file: tmp, cleanup: () => { try { fs.rmSync(tmp, {force: true}); } catch {} }};
   }
   // 유튜브 업로드 등 로컬 파일이 꼭 필요할 때: R2에 있으면 임시로 내려받아 경로 반환(+정리 콜백).
   async localCopyOfOutput(id: string): Promise<{file: string; cleanup: () => void}> {

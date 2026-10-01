@@ -269,7 +269,7 @@
           fig.className = 'pf-card pf-thumb-card';
           fig.dataset.idx = i;
           fig.innerHTML = `
-            <div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>
+            <div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${esc(it.title)}</h3></figcaption>`;
           grid.appendChild(fig);
           // 썸네일 박스 비율도 실제 영상 비율 우선(저장된 orientation 틀려도 정확히 표시).
@@ -283,7 +283,7 @@
       function selectVideo(idx, doScroll) {
         const it = myItems[idx]; if (!it) return;
         curIdx = idx;
-        const v = $('pf-stage-video'); v.src = it.video;
+        const v = $('pf-stage-video'); v.src = it.video; if (it.thumb) v.poster = it.thumb; else v.removeAttribute('poster');
         // 박스 비율 = 실제 영상 비율 우선(저장된 orientation이 틀려도 레터박스 안 생기게).
         v.classList.toggle('land', it.orientation === 'landscape'); // 로드 전 초기 폴백
         v.onloadedmetadata = () => { if (v.videoWidth && v.videoHeight) v.classList.toggle('land', v.videoWidth > v.videoHeight); };

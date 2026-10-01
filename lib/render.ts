@@ -1,7 +1,7 @@
 // Remotion 프로그래매틱 렌더 — CLI 없이 코드에서 scenes 데이터를 주입해 MP4 생성.
 // pipeline이 대본→이미지→음성으로 scenes를 만든 뒤 이 함수만 호출하면 된다.
 import {bundle} from '@remotion/bundler';
-import {selectComposition, renderMedia} from '@remotion/renderer';
+import {selectComposition, renderMedia, renderStill} from '@remotion/renderer';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -100,6 +100,41 @@ export async function renderVideo(
     },
   });
   log?.(`[렌더] 완료 → ${outPath}`);
+  } finally {
+    if (publicDir) await rm(serveUrl, {recursive: true, force: true});
+  }
+}
+
+// 썸네일(커버) 1장 생성 — 영상의 후킹이 꽉 찬 프레임을 고화질 PNG로 추출(renderStill).
+// 영상과 똑같은 scenes/레이아웃/폰트를 재사용하므로 글자 안 깨지고 통일감 있다. 첫 장면 중반(후킹+줌) 프레임.
+export async function renderThumbnail(
+  scenes: SceneData[],
+  transitionFrames: number,
+  outPath: string,
+  log?: (m: string) => void,
+  publicDir?: string,
+  orientation: 'portrait' | 'landscape' = 'portrait',
+): Promise<void> {
+  const serveUrl = publicDir
+    ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
+    : await getServeUrl(log);
+  try {
+    const inputProps = {scenes, transitionFrames, orientation};
+    const composition = await selectComposition({serveUrl, id: 'Video', inputProps});
+    // 첫 장면 중반 프레임(후킹 문구가 크게 들어오고 줌펀치가 꽉 찬 지점). 범위 안전 클램프.
+    const firstDur = (scenes[0] as any)?.durationInFrames || Math.round(composition.durationInFrames / Math.max(1, scenes.length));
+    const frame = Math.min(composition.durationInFrames - 1, Math.max(0, Math.round(firstDur * 0.5)));
+    log?.('[썸네일] 후킹 프레임 추출 중…');
+    await renderStill({
+      composition,
+      serveUrl,
+      output: outPath,
+      inputProps,
+      frame,
+      imageFormat: 'png',
+      chromiumOptions: {gl: 'swiftshader', enableMultiProcessOnLinux: true},
+    });
+    log?.(`[썸네일] 완료 → ${outPath}`);
   } finally {
     if (publicDir) await rm(serveUrl, {recursive: true, force: true});
   }

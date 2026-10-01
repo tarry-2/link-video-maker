@@ -94,6 +94,24 @@ async function localVideoFile(src: {file: string; r2key?: string}): Promise<{fil
   });
   return {file: tmp, cleanup: () => { try { fs.rmSync(tmp, {force: true}); } catch {} }};
 }
+// 내 완성작의 썸네일(커버) 로컬 경로 확보 — 유튜브 커버 지정용. 로컬/R2/없음. 샘플은 썸네일 없음.
+async function localThumbFile(projectId: string): Promise<{file: string; cleanup: () => void} | null> {
+  try {
+    const proj = JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8'));
+    if (!proj.thumb) return null;
+    const local = path.join(STUDIO_DATA_DIR, 'studio', projectId, proj.thumb);
+    if (fs.existsSync(local)) return {file: local, cleanup: () => {}};
+    if (!proj.thumbR2) return null;
+    const tmp = path.join(os.tmpdir(), `thumb-${randomUUID()}.png`);
+    const got = await getStream(proj.thumbR2);
+    if (!got) return null;
+    await new Promise<void>((resolve, reject) => {
+      const w = fs.createWriteStream(tmp);
+      got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject);
+    });
+    return {file: tmp, cleanup: () => { try { fs.rmSync(tmp, {force: true}); } catch {} }};
+  } catch { return null; }
+}
 
 // ── studio project.json의 유튜브 링크 read/write ──
 // ★배지 버그 방지: 제작 화면에서 바로 올리면 포트폴리오 등록 순서와 어긋나 setPortfolioYouTube가
@@ -130,6 +148,12 @@ function readProjectOutputR2(projectId: string): string {
   try {
     return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).outputR2 || '';
   } catch { return ''; }
+}
+function readProjectThumb(projectId: string): {thumb: string; thumbR2: string} {
+  try {
+    const proj = JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8'));
+    return {thumb: proj.thumb || '', thumbR2: proj.thumbR2 || ''};
+  } catch { return {thumb: '', thumbR2: ''}; }
 }
 function saveProjectOutputR2(projectId: string, key: string) {
   try {
@@ -314,6 +338,7 @@ const server = http.createServer(async (req, res) => {
       instagramUrl: it.instagramUrl || readProjectInstagram(it.projectId),
       orientation: it.orientation || 'portrait', // 레거시(없음)=세로 폴백
       video: `/portfolio-item/${it.projectId}.mp4`,
+      thumb: readProjectThumb(it.projectId).thumb ? `/portfolio-thumb/${it.projectId}.png` : '',
     }));
     const sampleYt = loadSampleYouTube();
     const sampleIg = loadSampleInstagram();
@@ -329,8 +354,28 @@ const server = http.createServer(async (req, res) => {
       instagramUrl: sampleIg[s.file] || '', // 샘플도 인스타 업로드 시 R2 백필 후 배지 기록
       orientation: s.orientation || 'portrait', // 샘플은 전부 세로(9:16)
       video: `/portfolio/${s.file}`,
+      thumb: '', // 샘플은 썸네일 파일 없음(영상 메타프레임 사용)
     }));
     return json(res, 200, {items: [...mine, ...samples]});
+  }
+  // ── 포트폴리오 썸네일(커버) 공개 서빙 — 로컬/R2 ──
+  if (p.startsWith('/portfolio-thumb/')) {
+    const m = p.match(/^\/portfolio-thumb\/([0-9a-f-]{36})\.png$/);
+    if (!m) { res.writeHead(404); return res.end('not found'); }
+    const item = listPortfolio().find((x) => x.projectId === m[1]);
+    if (!item) { res.writeHead(404); return res.end('not found'); }
+    const {thumb, thumbR2} = readProjectThumb(m[1]);
+    if (!thumb) { res.writeHead(404); return res.end('not found'); }
+    if (thumbR2) {
+      const got = await getStream(thumbR2);
+      if (!got) { res.writeHead(404); return res.end('not found'); }
+      res.writeHead(200, {'Content-Type': 'image/png', 'Content-Length': got.size, 'Cache-Control': 'public, max-age=86400'});
+      return got.stream.pipe(res);
+    }
+    const file = path.join(STUDIO_DATA_DIR, 'studio', m[1], thumb);
+    if (thumb !== path.basename(thumb) || !fs.existsSync(file)) { res.writeHead(404); return res.end('not found'); }
+    res.writeHead(200, {'Content-Type': 'image/png', 'Content-Length': fs.statSync(file).size, 'Cache-Control': 'public, max-age=86400'});
+    return fs.createReadStream(file).pipe(res);
   }
   // ── 자동 포트폴리오: 완성 영상 공개 서빙(로그인 없이 /voices에서 재생, Range 지원) ──
   if (p.startsWith('/portfolio-item/')) {
@@ -436,21 +481,25 @@ const server = http.createServer(async (req, res) => {
     const b = await readBody(req);
     const privacy = ['public', 'unlisted', 'private'].includes(b.privacy) ? b.privacy : 'public';
     let tmpCleanup = () => {};
+    let thumbCleanup = () => {};
     try {
       const local = await localVideoFile(src); tmpCleanup = local.cleanup;
+      // 내 완성작이면 후킹 프레임 썸네일을 커버로 지정(샘플은 썸네일 없음).
+      const thumb = src.kind === 'mine' ? await localThumbFile(id) : null;
+      if (thumb) thumbCleanup = thumb.cleanup;
       const r = await uploadVideo(local.file, {
         title: String(b.title || src.title).slice(0, 100),
         description: String(b.description || '').slice(0, 4900),
         tags: Array.isArray(b.tags) ? b.tags.map((x: any) => String(x)).slice(0, 15) : [],
         privacy: privacy as any,
-      });
+      }, thumb?.file);
       try {
         if (src.kind === 'mine') { setPortfolioYouTube(id, r.url); saveProjectYouTube(id, r.url); }
         else setSampleYouTube(path.basename(id.slice('sample:'.length)), r.url);
       } catch {}
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
-    finally { tmpCleanup(); }
+    finally { tmpCleanup(); thumbCleanup(); }
   }
   // ── 유튜브: 메타(제목·설명·태그) 자동 생성 ── 내 완성작 + 샘플 둘 다.
   if (p.startsWith('/api/youtube/meta/') && req.method === 'GET') {

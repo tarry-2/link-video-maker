@@ -175,7 +175,7 @@ JSON만 출력: {"title":"...","description":"...","tags":["..."]}`;
 }
 
 // 4) 실제 업로드 — resumable 아닌 멀티파트(단순). 완성 mp4 경로와 메타를 받는다.
-export async function uploadVideo(filePath: string, meta: UploadMeta): Promise<{id: string; url: string}> {
+export async function uploadVideo(filePath: string, meta: UploadMeta, thumbPath?: string): Promise<{id: string; url: string}> {
   const token = await accessToken();
   const stat = fs.statSync(filePath);
   const snippet = {
@@ -208,5 +208,16 @@ export async function uploadVideo(filePath: string, meta: UploadMeta): Promise<{
   });
   const d: any = await up.json();
   if (!up.ok || !d.id) throw new Error('업로드 실패: ' + (d.error?.message || JSON.stringify(d)).slice(0, 300));
+  // 3단계: 커스텀 썸네일 지정(있으면). 실패해도 업로드 자체는 성공으로 둔다.
+  if (thumbPath) {
+    try {
+      const img = fs.readFileSync(thumbPath);
+      await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${d.id}`, {
+        method: 'POST',
+        headers: {Authorization: 'Bearer ' + token, 'Content-Type': 'image/png', 'Content-Length': String(img.length)},
+        body: img,
+      });
+    } catch {}
+  }
   return {id: d.id, url: 'https://youtu.be/' + d.id};
 }

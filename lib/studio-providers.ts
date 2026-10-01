@@ -9,7 +9,7 @@ import {generateImageFlux, generateImageNano} from './image';
 import {ttsEleven, alignToWords, VOICES, pickVoice} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
-import {renderVideo} from './render';
+import {renderVideo, renderThumbnail} from './render';
 import {resolveProduct} from './studio-model';
 import type {StudioDependencies} from './studio';
 
@@ -65,7 +65,7 @@ export const studioProviders: StudioDependencies = {
     if (!k.elevenlabs || !await generateBgm(k.elevenlabs, p.musicPrompt, ms, file, log))
       throw new Error('배경음악 생성에 실패했습니다. 이어서 재시작하면 이미지·음성을 재사용합니다.');
   },
-  async render(p, dir, output, log) {
+  async render(p, dir, output, log, thumbOut) {
     // Fresh public folder per render: cached bundles must never serve an older scene.
     const publicDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onvideo-render-'));
     try {
@@ -85,6 +85,11 @@ export const studioProviders: StudioDependencies = {
       // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16 (자동·수동 모드와 동일 기준).
       const orientation: 'portrait' | 'landscape' = p.input.duration >= 90 ? 'landscape' : 'portrait';
       await renderVideo(scenes, 0, output, log, p.bgm ? `${prefix}/${p.bgm.file}` : undefined, undefined, publicDir, orientation);
+      // 썸네일(커버) — 같은 publicDir/scenes 재사용. 실패해도 영상엔 영향 없음.
+      if (thumbOut) {
+        try { await renderThumbnail(scenes, 0, thumbOut, log, publicDir, orientation); }
+        catch (e: any) { log('[썸네일] 생성 건너뜀: ' + (e?.message || '').slice(0, 100)); }
+      }
     } finally { await fs.rm(publicDir, {recursive: true, force: true}); }
   },
 };
