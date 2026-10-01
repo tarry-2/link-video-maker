@@ -36,12 +36,18 @@
       .mypf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px; align-items: start; } /* 가로·세로 카드 섞여도 위 정렬(빈공간 방지) */
       .mypf-grid .pf-card h3 { font-size: 14px; }
       .mypf-grid .pf-card figcaption { padding: 12px 12px 14px; }
-      .pf-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-      .pf-del { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
-      .pf-del:hover { border-color: #ff6b5e; color: #ff6b5e; }
-      .pf-yt { background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
-      .pf-yt:hover { border-color: #ff0000; color: #ff4d4d; }
-      .pf-yt:disabled { opacity: .5; cursor: default; }
+      .pf-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+      .pf-actions button { border-radius: 11px; padding: 9px 14px; font-size: 12.5px; font-weight: 800; cursor: pointer; border: none; letter-spacing: -.2px; display: inline-flex; align-items: center; gap: 5px; transition: transform .15s ease, box-shadow .15s ease, filter .15s ease; }
+      .pf-actions button:hover { transform: translateY(-2px); }
+      .pf-zoom { background: linear-gradient(135deg, var(--teal), var(--purple)); color: #fff; box-shadow: 0 3px 12px rgba(107,76,240,.3); }
+      .pf-zoom:hover { box-shadow: 0 7px 20px rgba(107,76,240,.45); filter: brightness(1.06); }
+      .pf-ig { background: linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); color: #fff; box-shadow: 0 3px 12px rgba(220,39,67,.38); }
+      .pf-ig:hover { box-shadow: 0 7px 20px rgba(220,39,67,.52); filter: brightness(1.06); }
+      .pf-yt { background: linear-gradient(135deg,#ff3b3b,#cc0000); color: #fff; box-shadow: 0 3px 12px rgba(255,0,0,.32); }
+      .pf-yt:hover { box-shadow: 0 7px 20px rgba(255,0,0,.46); filter: brightness(1.06); }
+      .pf-yt:disabled { opacity: .5; cursor: default; transform: none; box-shadow: none; }
+      .pf-del { background: transparent !important; border: 1.5px solid var(--line) !important; color: var(--muted); }
+      .pf-del:hover { border-color: #ff6b5e !important; color: #ff6b5e; }
       .pf-yt-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #ff4d4d; text-decoration: none; }
       /* 컴팩트 썸네일 카드 — 세로로 안 길어지게 */
       .pf-thumb-card { cursor: pointer; }
@@ -61,8 +67,8 @@
       .pf-stage-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
       .pf-stage-meta select { margin-bottom: 14px; }
       .pf-stage-title { font-size: 18px; font-weight: 800; margin: 8px 0; }
-      .pf-dl { display: inline-block; background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: none; }
-      .pf-dl:hover { border-color: var(--teal); color: var(--teal); }
+      .pf-dl { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 1.5px solid var(--line); color: var(--text); border-radius: 11px; padding: 9px 14px; font-size: 12.5px; font-weight: 800; cursor: pointer; text-decoration: none; transition: transform .15s ease, border-color .15s ease, color .15s ease; }
+      .pf-dl:hover { border-color: var(--teal); color: var(--teal); transform: translateY(-2px); }
       .pf-thumb-card.sel { outline: 2px solid var(--teal); outline-offset: 1px; }
       @media (max-width: 640px) {
         .pf-stage { flex-direction: column; padding: 14px; }
@@ -297,12 +303,12 @@
         const land = it.orientation === 'landscape'; // 폭 힌트용 초기값(실제 비율은 video가 유지)
         let box = $('video-modal');
         if (!box) { box = document.createElement('div'); box.id = 'video-modal'; box.className = 'modal'; document.body.appendChild(box); }
-        box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60';
+        box.style.cssText = 'position:fixed;inset:0;background:rgba(8,8,12,.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60';
         box.innerHTML = `
-          <button data-vm="close" aria-label="닫기" style="position:absolute;top:16px;right:18px;width:46px;height:46px;border-radius:50%;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:24px;font-weight:700;cursor:pointer;line-height:1;z-index:2">✕</button>
-          <div style="display:flex;flex-direction:column;align-items:center;gap:12px;max-width:94vw">
-            <video src="${it.video}" controls autoplay playsinline style="max-width:min(94vw, ${land ? '1100px' : '440px'});max-height:82vh;background:#000;border-radius:14px"></video>
-            <p style="color:#fff;font-weight:700;font-size:15px;text-align:center;margin:0;opacity:.95">${esc(it.title || '')}</p>
+          <button data-vm="close" aria-label="닫기" style="position:absolute;top:18px;right:20px;width:48px;height:48px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.16);backdrop-filter:blur(8px);color:#fff;font-size:24px;font-weight:700;cursor:pointer;line-height:1;z-index:2;transition:background .15s,transform .15s" onmouseover="this.style.background='rgba(255,255,255,.3)';this.style.transform='scale(1.08)'" onmouseout="this.style.background='rgba(255,255,255,.16)';this.style.transform='scale(1)'">✕</button>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;max-width:94vw">
+            <video src="${it.video}" controls autoplay playsinline style="max-width:min(94vw, ${land ? '1100px' : '440px'});max-height:82vh;background:#000;border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07)"></video>
+            <p style="color:#fff;font-weight:800;font-size:15.5px;text-align:center;margin:0;opacity:.96;letter-spacing:-.2px">${esc(it.title || '')}</p>
           </div>`;
         const close = () => { const v = box.querySelector('video'); if (v) v.pause(); box.remove(); document.removeEventListener('keydown', onKey); };
         const onKey = ev => { if (ev.key === 'Escape') close(); };

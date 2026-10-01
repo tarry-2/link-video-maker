@@ -158,6 +158,20 @@ select.input { appearance: none; cursor: pointer; }
 .ghost-btn:hover { border-color: var(--teal); color: var(--teal); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(18, 169, 152, 0.2); }
 .ghost-btn:active { transform: scale(0.97); box-shadow: none; }
 
+/* 소셜 올리기 버튼(브랜드 색) — 생성 후 화면·공용 */
+.btn-yt, .btn-ig {
+  border: none; color: #fff; border-radius: 11px; padding: 9px 15px;
+  font-size: 14px; font-weight: 800; cursor: pointer; letter-spacing: -.2px;
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+.btn-yt { background: linear-gradient(135deg, #ff3b3b, #cc0000); box-shadow: 0 3px 12px rgba(255, 0, 0, 0.32); }
+.btn-yt:hover { transform: translateY(-2px); box-shadow: 0 7px 20px rgba(255, 0, 0, 0.46); filter: brightness(1.06); }
+.btn-ig { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); box-shadow: 0 3px 12px rgba(220, 39, 67, 0.38); }
+.btn-ig:hover { transform: translateY(-2px); box-shadow: 0 7px 20px rgba(220, 39, 67, 0.52); filter: brightness(1.06); }
+.btn-yt:active, .btn-ig:active { transform: scale(0.97); box-shadow: none; }
+.result-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
 .block-title { font-size: 16px; margin-bottom: 14px; }
 .log-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 10px; }
 .log-head .block-title { margin-bottom: 0; }
