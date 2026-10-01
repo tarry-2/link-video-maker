@@ -50,6 +50,8 @@
       .pf-thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
       .pf-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); opacity: .92; }
       .pf-yt-badge { position: absolute; top: 8px; right: 8px; background: #ff0000; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
+      .pf-ig-badge { position: absolute; top: 8px; left: 8px; background: linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
+      .pf-ig-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #dc2743; text-decoration: none; }
       .pf-thumb-card figcaption { padding: 10px 12px 14px; }
       .pf-thumb-card h3 { font-size: 13px; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
       /* 큰 미리보기 스테이지 */
@@ -238,7 +240,7 @@
           fig.className = 'pf-card pf-thumb-card';
           fig.dataset.idx = i;
           fig.innerHTML = `
-            <div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}</div>
+            <div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${esc(it.title)}</h3></figcaption>`;
           grid.appendChild(fig);
           // 썸네일 박스 비율도 실제 영상 비율 우선(저장된 orientation 틀려도 정확히 표시).
@@ -263,9 +265,11 @@
           <p class="pf-voice-note">🎙 ${esc(it.voice)}</p>
           ${it.createdAt ? `<p class="pf-clip">${esc(new Date(it.createdAt).toLocaleString('ko-KR'))}</p>` : '<p class="pf-clip">샘플 영상</p>'}
           ${it.youtubeUrl ? `<a class="pf-yt-link" href="${esc(it.youtubeUrl)}" target="_blank">▶ 유튜브에서 보기</a>` : ''}
+          ${it.instagramUrl ? `<a class="pf-ig-link" href="${esc(it.instagramUrl)}" target="_blank">▶ 인스타에서 보기</a>` : ''}
           <div class="pf-actions">
             <button class="pf-zoom">🔍 크게 보기</button>
             <button class="pf-yt" data-id="${esc(it.id)}">📺 유튜브 올리기</button>
+            ${it.kind === 'mine' ? `<button class="pf-ig" data-id="${esc(it.id)}">📷 인스타 올리기</button>` : ''}
             <a class="pf-dl" href="${it.video}" download="${esc(it.title)}.mp4">⬇ 다운로드</a>
             ${canDelete && it.kind === 'mine' ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}
           </div>`;
@@ -282,6 +286,7 @@
       $('pf-stage-info').onclick = e => {
         if (e.target.closest('.pf-zoom')) { openVideoModal(myItems[curIdx]); return; }
         const yt = e.target.closest('.pf-yt'); if (yt) { uploadToYouTube(yt); return; }
+        const ig = e.target.closest('.pf-ig'); if (ig) { uploadToInstagram(ig); return; }
         const del = e.target.closest('.pf-del');
         if (del) { if (confirm('이 영상을 포트폴리오에서 삭제할까요? (원본 작업은 남아 있어요)')) fetch('/api/portfolio/' + encodeURIComponent(del.dataset.id), { method: 'DELETE' }).then(r => { if (r.ok) loadMyVideos(Math.max(0, curIdx - 1)); }); }
       };
@@ -351,6 +356,55 @@
               up.textContent = '완료 🎉'; up.disabled = true;
               loadMyVideos(curIdx); // 스테이지·썸네일에 유튜브 링크/뱃지 즉시 반영
             } catch (err) { $('yt-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '유튜브에 올리기'; }
+          }
+        };
+      }
+      // ── 포트폴리오에서 인스타 올리기(릴스/피드) ──
+      async function uploadToInstagram(btn) {
+        const id = btn.dataset.id;
+        const orig = btn.textContent; btn.disabled = true; btn.textContent = '📷 준비 중…';
+        try {
+          const st = await (await fetch('/api/instagram/status')).json();
+          if (!st.connected) { alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 인스타 계정을 연결하세요.'); btn.disabled = false; btn.textContent = orig; return; }
+          btn.textContent = '📷 캡션 만드는 중…';
+          const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id));
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || '캡션 생성 실패');
+          openIgPfModal(id, d.caption || '', st.username);
+        } catch (e) { alert(e.message); }
+        finally { btn.disabled = false; btn.textContent = orig; }
+      }
+      function openIgPfModal(id, caption, username) {
+        let box = $('ig-modal');
+        if (!box) { box = document.createElement('div'); box.id = 'ig-modal'; box.className = 'modal'; document.body.appendChild(box); }
+        box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50';
+        box.innerHTML = `<div class="modal-box" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">
+          <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>📷 인스타 올리기</h2><button class="ghost-btn" data-ig="close">✕</button></div>
+          <p class="sub small">${username ? '계정: <b>@' + esc(username) + '</b> · ' : ''}캡션·해시태그는 수정할 수 있어요.</p>
+          <label class="field-label">올릴 방식<select id="ig-kind" class="input">
+            <option value="reels" selected>릴스(세로 쇼츠)</option><option value="feed">게시물(피드 영상)</option>
+          </select></label>
+          <label class="field-label">캡션 · 해시태그<textarea id="ig-caption" class="input" rows="8" maxlength="2200">${esc(caption)}</textarea></label>
+          <button class="primary-btn" data-ig="upload">인스타에 올리기</button>
+          <p id="ig-up-msg" class="mini-state">릴스는 인코딩 때문에 1~2분 걸릴 수 있어요.</p>
+        </div>`;
+        box.onclick = async e => {
+          const act = e.target.closest('[data-ig]')?.dataset.ig;
+          if (act === 'close' || e.target === box) { box.remove(); return; }
+          if (act === 'upload') {
+            const up = e.target; up.disabled = true; up.textContent = '올리는 중… (잠시 걸려요)';
+            $('ig-up-msg').textContent = '인스타가 영상을 받아 처리하는 중이에요…';
+            try {
+              const r = await fetch('/api/instagram/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kind: $('ig-kind').value, caption: $('ig-caption').value }) });
+              const d = await r.json();
+              if (!r.ok) throw new Error(d.error || '업로드 실패');
+              $('ig-up-msg').innerHTML = d.permalink
+                ? `✅ 게시 완료!<br><a href="${d.permalink}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 인스타에서 열기</a>`
+                : '✅ 게시 완료! 인스타 앱에서 확인하세요.';
+              up.textContent = '완료 🎉'; up.disabled = true;
+              loadMyVideos(curIdx); // 스테이지·썸네일에 인스타 링크/뱃지 즉시 반영
+            } catch (err) { $('ig-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '인스타에 올리기'; }
           }
         };
       }

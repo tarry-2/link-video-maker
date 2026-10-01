@@ -12,11 +12,11 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
-import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, SAMPLES} from './lib/portfolio';
+import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo} from './lib/youtube';
 import {getStream, presignGet} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
-import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram} from './lib/instagram';
+import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption} from './lib/instagram';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -109,6 +109,20 @@ function saveProjectYouTube(projectId: string, url: string) {
 function readProjectYouTube(projectId: string): string {
   try {
     return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).youtubeUrl || '';
+  } catch { return ''; }
+}
+// ── 인스타 링크도 동일 방식으로 project.json에 보강(배지 안정화) ──
+function saveProjectInstagram(projectId: string, url: string) {
+  try {
+    const pj = path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json');
+    const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+    proj.instagramUrl = url;
+    fs.writeFileSync(pj, JSON.stringify(proj));
+  } catch {}
+}
+function readProjectInstagram(projectId: string): string {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).instagramUrl || '';
   } catch { return ''; }
 }
 // project.json에서 완성영상 R2 키(있으면 R2에서 서빙).
@@ -265,6 +279,7 @@ const server = http.createServer(async (req, res) => {
       createdAt: it.createdAt,
       // ★배지: portfolio.json에 링크 없으면 project.json에서 보강(제작 화면서 바로 올린 경우도 배지 뜨게).
       youtubeUrl: it.youtubeUrl || readProjectYouTube(it.projectId),
+      instagramUrl: it.instagramUrl || readProjectInstagram(it.projectId),
       orientation: it.orientation || 'portrait', // 레거시(없음)=세로 폴백
       video: `/portfolio-item/${it.projectId}.mp4`,
     }));
@@ -278,6 +293,7 @@ const server = http.createServer(async (req, res) => {
       goal: s.goal,
       createdAt: '',
       youtubeUrl: sampleYt[s.file] || '',
+      instagramUrl: '', // 샘플은 R2에 없어 인스타 업로드 대상이 아님
       orientation: s.orientation || 'portrait', // 샘플은 전부 세로(9:16)
       video: `/portfolio/${s.file}`,
     }));
@@ -404,9 +420,7 @@ const server = http.createServer(async (req, res) => {
     if (!src) return json(res, 404, {error: '영상을 찾을 수 없습니다.'});
     const k = pipelineKeys();
     try {
-      const meta = await generateMeta({gemini: k.gemini, openai: k.openai}, src.title, src.narrations, src.durSec);
-      const tags = (meta.tags || []).slice(0, 12).map((t: string) => '#' + String(t).replace(/\s+/g, '')).join(' ');
-      const caption = `${meta.title}\n\n${meta.description || ''}\n\n${tags}`.trim();
+      const caption = await generateCaption({gemini: k.gemini, openai: k.openai}, src.title, src.narrations);
       return json(res, 200, {caption});
     } catch (e: any) { return json(res, 502, {error: '캡션 생성 실패: ' + e.message}); }
   }
@@ -424,6 +438,8 @@ const server = http.createServer(async (req, res) => {
       const url = await presignGet(r2key, 3600);
       if (!url) return json(res, 502, {error: '영상 임시 링크 생성 실패.'});
       const r = await publishVideo(url, caption, kind as 'reels' | 'feed');
+      // ★배지: 게시 성공 시 permalink를 portfolio.json + project.json 둘 다에 기록(어느 경로든 IG 배지 뜨게).
+      if (r.permalink) { setPortfolioInstagram(id, r.permalink); saveProjectInstagram(id, r.permalink); }
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
   }

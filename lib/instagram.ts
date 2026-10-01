@@ -3,6 +3,8 @@
 // 설정(IG User ID·access token)은 data 볼륨 instagram.json에 저장(재배포해도 유지).
 import fs from 'node:fs';
 import path from 'node:path';
+import {geminiGenerate} from './gemini';
+import {openaiJson} from './openai';
 
 const DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data');
 const FILE = path.join(DATA_DIR, 'instagram.json');
@@ -41,6 +43,39 @@ export async function verifyInstagram(cfg: {igUserId: string; accessToken: strin
   const d: any = await r.json();
   if (!r.ok || !d.username) throw new Error('인스타 연결 확인 실패: ' + (d?.error?.message || JSON.stringify(d).slice(0, 200)));
   return d.username;
+}
+
+// 인스타 릴스 전용 캡션 자동 생성(유튜브 메타와 다르게 — 가십성·화제성·댓글 유발 톤).
+// 반환 = 바로 붙여 쓸 수 있는 완성 캡션(훅 / 빈줄 / 본문 / 빈줄 / 해시태그 한 줄).
+export async function generateCaption(
+  keys: {gemini: string[]; openai?: string},
+  title: string,
+  narrations: string[],
+): Promise<string> {
+  const body = narrations.join(' ').slice(0, 1500);
+  const prompt = `너는 인스타그램 릴스로 수십만 조회를 터뜨리는 바이럴 카피라이터다. 아래 영상에 어울리는, 사람들이 "이거 봐봐" 하고 친구 태그하고 댓글 달고 공유하고 싶어지는 가십성·화제성 릴스 캡션을 만들어라.
+영상 제목(초안): ${title}
+영상 내용: ${body}
+
+인스타 릴스 캡션 규칙(유튜브 설명과 완전히 다르게 — 더 가볍고 떡밥·공감 중심):
+- hook: 첫 줄은 스크롤을 멈추게 하는 강한 떡밥/반전/공감 한 문장. "헉" 하거나 궁금해서 끝까지 보게. 이모지 1~2개 자연스럽게. (거짓 낚시는 금지, 하지만 자극적이고 화제성 있게)
+- body: 2~4줄. 짧은 문장 + 줄바꿈으로 가독성. 친구한테 썰 푸는 말투(딱딱한 설명체 금지). 공감·호기심을 증폭시키고, 끝에 댓글을 부르는 질문 1개 + 저장/공유를 부르는 한마디.
+- hashtags: 인스타에서 실제 잘 노출되는 화제성 해시태그 12~15개. 한국어 중심 + 핵심 영어 2~3개. 초대형 트렌드 태그(릴스추천/탐색탭 류) 1~2개 + 주제 핵심 + 틈새를 믹스. # 없이 배열로, 공백 없는 단어.
+JSON만 출력: {"hook":"...","body":"...","hashtags":["...","..."]}`;
+  let raw = '';
+  if (keys.gemini.length) {
+    try { raw = await geminiGenerate(keys.gemini, prompt, {json: true, maxTokens: 1024, temperature: 1.0}); } catch {}
+  }
+  if (!raw && keys.openai) raw = await openaiJson(keys.openai, prompt, 1024);
+  const m = raw.match(/\{[\s\S]*\}/);
+  const d: any = m ? JSON.parse(m[0]) : {};
+  const hook = String(d.hook || title).trim();
+  const bodyText = String(d.body || '').trim();
+  const tags = Array.isArray(d.hashtags)
+    ? [...new Set(d.hashtags.map((x: any) => '#' + String(x).replace(/^#+/, '').replace(/\s+/g, '')).filter((t: string) => t.length > 1))].slice(0, 15)
+    : [];
+  // 인스타식 레이아웃: 훅 / 빈 줄 / 본문 / 빈 줄 / 해시태그 한 줄
+  return [hook, bodyText, tags.join(' ')].filter(Boolean).join('\n\n').slice(0, 2200);
 }
 
 // 릴스/피드 영상 게시. kind: 'reels'(세로 쇼츠) | 'feed'(일반 게시물 영상).

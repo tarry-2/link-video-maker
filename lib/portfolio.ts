@@ -15,6 +15,7 @@ export type PortfolioItem = {
   goal: 'issue' | 'info' | 'sell' | 'heal'; // 뱃지 색상 분류
   createdAt: string;
   youtubeUrl?: string; // 유튜브 업로드 완료 시 링크
+  instagramUrl?: string; // 인스타 업로드 완료 시 permalink
   orientation?: 'portrait' | 'landscape'; // 화면비(롱폼=landscape). 없으면 세로 폴백(레거시).
 };
 
@@ -23,6 +24,13 @@ export function setPortfolioYouTube(projectId: string, youtubeUrl: string) {
   const items = listPortfolio();
   const it = items.find((x) => x.projectId === projectId);
   if (it) { it.youtubeUrl = youtubeUrl; save(items); }
+}
+
+// 특정 항목에 인스타 링크 기록(업로드 완료 후).
+export function setPortfolioInstagram(projectId: string, instagramUrl: string) {
+  const items = listPortfolio();
+  const it = items.find((x) => x.projectId === projectId);
+  if (it) { it.instagramUrl = instagramUrl; save(items); }
 }
 
 // 샘플 영상의 유튜브 링크는 별도 파일에 기록(샘플은 portfolio.json에 없으므로).
