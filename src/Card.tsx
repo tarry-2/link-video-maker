@@ -97,6 +97,10 @@ export const Card: React.FC<CardData> = (c) => {
 
   const frame = useCurrentFrame();
   const bgZoom = 1.03 + interpolate(frame, [0, c.durationInFrames || 90], [0, 0.05]);
+  // 떠다니는 장식(모션그래픽 디테일) — 느리게 순환 이동.
+  const blobX = interpolate(frame % 300, [0, 150, 300], [0, 36, 0]);
+  const blobY = interpolate(frame % 360, [0, 180, 360], [0, -28, 0]);
+  const ringSpin = (frame % 1200) / 1200 * 360;
 
   return (
     <AbsoluteFill style={{fontFamily: notoFont, overflow: 'hidden', background: `linear-gradient(155deg, ${P.base} 0%, ${P.base2} 100%)`}}>
@@ -117,6 +121,13 @@ export const Card: React.FC<CardData> = (c) => {
           <Img src={staticFile(c.bg!)} style={{position: 'absolute', right: 0, top: 0, width: '44%', height: '100%', objectFit: 'cover', transform: `scale(${bgZoom})`}} />
           <div style={{position: 'absolute', right: 0, top: 0, width: '50%', height: '100%', background: `linear-gradient(90deg, ${P.base} 0%, ${P.base}f2 14%, ${P.base}00 40%)`}} />
           <div style={{position: 'absolute', right: 0, bottom: 0, width: '44%', height: '30%', background: `linear-gradient(0deg, ${P.base}cc 0%, transparent 100%)`}} />
+        </>
+      ) : !isHero ? (
+        // ★본문(이미지 없음): 떠다니는 액센트 블롭 + 회전 링 장식(디자이너 디테일 + 모션).
+        <>
+          <div style={{position: 'absolute', width: width * 0.72, height: width * 0.72, borderRadius: '50%', top: -width * 0.22 + blobY, right: -width * 0.16 + blobX, background: c.accent, opacity: theme === 'light' ? 0.10 : 0.18, filter: 'blur(75px)'}} />
+          <div style={{position: 'absolute', width: width * 0.5, height: width * 0.5, borderRadius: '50%', bottom: -width * 0.14 - blobY, left: -width * 0.1 - blobX, background: c.accent, opacity: theme === 'light' ? 0.07 : 0.12, filter: 'blur(65px)'}} />
+          <div style={{position: 'absolute', top: width * 0.5, right: width * 0.08, width: width * 0.22, height: width * 0.22, borderRadius: '50%', border: `${Math.max(2, Math.round(width * 0.004))}px solid ${bgAccent}`, opacity: 0.16, transform: `rotate(${ringSpin}deg)`, borderStyle: 'dashed'}} />
         </>
       ) : null}
 
@@ -153,7 +164,10 @@ const Body: React.FC<CardData & {width: number; theme: 'light' | 'dark'; motion:
   const numCircle = (sz: number): React.CSSProperties => ({fontFamily: blackFont, fontSize: Math.round(w * sz), color: P.numText, background: P.bgAccent, width: Math.round(w * 0.1), height: Math.round(w * 0.1), borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, lineHeight: 1});
 
   const Kicker = c.kicker ? (
-    <div style={{...sub(0.03, P.ta), fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: Math.round(w * 0.012)}}>{c.kicker}</div>
+    <div style={{display: 'flex', alignItems: 'center', gap: Math.round(w * 0.018), marginBottom: Math.round(w * 0.014)}}>
+      <span style={{width: Math.round(w * 0.055), height: Math.max(3, Math.round(w * 0.007)), borderRadius: 3, background: P.bgAccent, display: 'inline-block'}} />
+      <span style={{...sub(0.03, P.ta), fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase'}}>{c.kicker}</span>
+    </div>
   ) : null;
 
   switch (c.type) {
