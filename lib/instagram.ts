@@ -172,6 +172,24 @@ export async function maybeRefreshInstagram(log?: (m: string) => void): Promise<
   if (ageDays >= 45) await refreshInstagram(log);
 }
 
+// 업로드 현황: 인스타에 실제로 올라간 시각(media timestamp) 기준으로
+// "오늘(한국시간) 몇 개 · 마지막 게시 시각 · 총 개수"를 반환. 업로드 페이스 모니터용.
+export async function getUploadActivity(): Promise<{today: number; lastAt: string | null; total: number; error?: string}> {
+  const c = loadInstagram();
+  if (!c.igUserId || !c.accessToken) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
+  const base = host(c), token = c.accessToken;
+  try {
+    const r = await fetch(`${base}/${API}/${c.igUserId}/media?fields=id,timestamp&limit=100&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+    const d: any = await r.json();
+    if (!r.ok) return {today: 0, lastAt: null, total: 0, error: d?.error?.message || `API 오류(${r.status})`};
+    const times: string[] = (d.data || []).map((m: any) => m.timestamp).filter(Boolean).sort().reverse();
+    const kstDay = (iso: string) => new Date(iso).toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'}); // YYYY-MM-DD
+    const todayKst = new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'});
+    const today = times.filter((t) => kstDay(t) === todayKst).length;
+    return {today, lastAt: times[0] || null, total: times.length};
+  } catch (e: any) { return {today: 0, lastAt: null, total: 0, error: e.message}; }
+}
+
 // 성과 추적: 내 인스타 미디어의 조회수·좋아요·댓글을 permalink 키로 반환.
 // 좋아요/댓글은 미디어 목록 fields로 1콜(확실), 조회수(릴스 재생)는 미디어별 insights(views).
 // diag(옵션): 진단 로그 배열을 넘기면 Meta API 실제 응답/에러를 담아준다(삼키지 않음). debug=1 용.

@@ -18,7 +18,7 @@ import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, l
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
-import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats} from './lib/instagram';
+import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -593,6 +593,8 @@ const server = http.createServer(async (req, res) => {
 
   // ── 인스타그램 ── 연결 상태
   if (p === '/api/instagram/status' && req.method === 'GET') return json(res, 200, instagramStatus());
+  // ── 인스타 업로드 현황(오늘 몇 개·마지막 게시 시각) — 페이스 모니터 ──
+  if (p === '/api/instagram/activity' && req.method === 'GET') return json(res, 200, await getUploadActivity());
   // ── 성과 추적: 올린 인스타 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──
   if (p === '/api/instagram/stats' && req.method === 'GET') {
     const debug = u.searchParams.get('debug') === '1';

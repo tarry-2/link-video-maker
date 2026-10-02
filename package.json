@@ -1,6 +1,6 @@
 {
   "name": "onvideo-remotion",
-  "version": "1.28.4",
+  "version": "1.29.0",
   "main": "index.js",
   "scripts": {
     "test": "node --import tsx --test tests/*.test.ts",

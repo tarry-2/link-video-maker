@@ -412,6 +412,24 @@ async function refreshIgStatus() {
     const s = await (await fetch('/api/instagram/status')).json();
     if (s.connected) st.innerHTML = `<span style="color:var(--teal)">● 연결됨${s.username ? ' · @' + s.username : ''}</span>`;
     else st.textContent = '미연결';
+    if (s.connected) refreshIgActivity();
+  } catch {}
+}
+// 인스타 업로드 페이스 — 오늘 몇 개·마지막 게시 시각(실제 인스타 기준).
+async function refreshIgActivity() {
+  const el = $('ig-activity'); if (!el) return;
+  try {
+    const a = await (await fetch('/api/instagram/activity')).json();
+    if (a.error) { el.innerHTML = `<span style="color:var(--muted)">📅 업로드 현황 확인 불가 — ${a.error}</span>`; return; }
+    let last = '없음';
+    if (a.lastAt) {
+      const d = new Date(a.lastAt);
+      const hhmm = d.toLocaleTimeString('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit'});
+      const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+      const ago = mins < 1 ? '방금' : mins < 60 ? `${mins}분 전` : mins < 1440 ? `${Math.floor(mins / 60)}시간 전` : `${Math.floor(mins / 1440)}일 전`;
+      last = `${hhmm} (${ago})`;
+    }
+    el.innerHTML = `<span style="color:var(--teal)">📅 오늘 <b>${a.today}</b>개 올림 · 마지막 게시 ${last} · 총 ${a.total}개</span>`;
   } catch {}
 }
 $('ig-connect')?.addEventListener('click', async () => {
