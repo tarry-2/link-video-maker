@@ -434,8 +434,21 @@ function attachProgress(id, freshLog) {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && curJobId && !curES) { reconnTries = 0; attachProgress(curJobId, true); }
 });
-// 페이지 다시 열었을 때 진행 중이던 작업 자동 복원
-try { const j = localStorage.getItem('onvideo-genjob'); if (j) attachProgress(j, true); } catch {}
+// 페이지 다시 열었을 때 진행 중이던 작업 자동 복원 + (없으면) 서버의 현재 진행 작업에 붙어 모바일↔PC 실시간 공유
+async function syncCurrentJob() {
+  if (curJobId || curES) return; // 이미 보고 있으면 패스
+  try {
+    const local = localStorage.getItem('onvideo-genjob');
+    if (local) { attachProgress(local, true); return; }
+    const r = await fetch('/api/jobs/current');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.id) attachProgress(d.id, true); // 다른 기기(모바일/PC)가 시작한 작업을 그대로 이어 봄
+  } catch {}
+}
+syncCurrentJob();
+// ★유휴 상태면 6초마다 서버 진행작업 확인 → 다른 기기에서 시작하면 여기서도 실시간으로 뜬다.
+setInterval(syncCurrentJob, 6000);
 
 function addLog(text, cls) {
   const line = document.createElement('div');

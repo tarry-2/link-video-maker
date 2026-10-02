@@ -294,6 +294,8 @@ function jlog(job: Job, s: string) {
   job.logs.push(`[${t}] ${s}`.slice(0, 500));
 }
 const jobs = new Map<string, Job>();
+// ★모바일↔PC 실시간 동기화: 현재 진행 중인 생성 작업 id. 어느 기기든 로드 시 이걸 받아 같은 SSE에 붙는다.
+let currentGenJob = '';
 
 function json(res: http.ServerResponse, code: number, data: unknown) {
   const b = JSON.stringify(data);
@@ -938,6 +940,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
+    currentGenJob = id;
 
     // 백그라운드 실행
     (async () => {
@@ -988,6 +991,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
+    currentGenJob = id;
 
     (async () => {
       try {
@@ -1058,6 +1062,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
+    currentGenJob = id;
     (async () => {
       try {
         // 업로드 배경(dataURL) 저장.
@@ -1110,6 +1115,11 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     return json(res, 202, {id});
   }
 
+  // ── 현재 진행 중 작업(모바일↔PC 공유) — 어느 기기든 이걸 받아 같은 SSE에 붙어 실시간으로 같이 본다 ──
+  if (p === '/api/jobs/current' && req.method === 'GET') {
+    const j = currentGenJob ? jobs.get(currentGenJob) : undefined;
+    return json(res, 200, {id: j && !j.done ? currentGenJob : null});
+  }
   // ── 진행 로그(SSE) ──
   if (p === '/api/progress') {
     const id = u.searchParams.get('id') || '';
