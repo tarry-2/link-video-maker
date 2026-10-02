@@ -13,6 +13,7 @@ import {renderCardVideo, renderCardStills} from './render';
 import {buildZip} from './zip';
 import {writeFile} from 'node:fs/promises';
 import type {CardData, MotionStyle} from '../src/Card';
+import {pickSkin, getSkin} from '../src/skins';
 
 const FPS = 30;
 
@@ -32,6 +33,7 @@ export type CardOpts = {
   imageStyle?: 'real' | 'anime';
   cardTheme?: 'light' | 'dark'; // 본문 카드 톤(기본 light=매거진). cover/closing은 항상 사진 위 다크.
   motion?: MotionStyle;    // 등장 효과(auto/pop/slide/type/zoom/flip)
+  skin?: string;           // 디자인 시스템 id(skins.ts). 미지정=주제로 자동 선택.
   log?: (m: string) => void;
 };
 
@@ -70,6 +72,11 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   log('[대본] 카드 구성 중…');
   const sb = await generateCardStoryboard({gemini: keys.gemini, openai: keys.openai}, opts.topic, count, preset);
   log(`[대본] "${sb.title}" · 카드 ${sb.cards.length}장 (${sb.cards.map(c => c.type).join('/')})`);
+
+  // ★스킨 자동 선택 — 주제/카테고리로 어울리는 디자인 시스템을 고른다(덱마다 폰트·배경·색·장식·모션이
+  //   통째로 달라져 100개면 100개가 다른 룩). 제목 기준이라 "제목 자동인식→모션그래픽"(테리).
+  const skin = opts.skin ? getSkin(opts.skin) : pickSkin(sb.title || opts.topic, preset?.label);
+  log(`[디자인] 스킨 "${skin.name}" (${skin.headFont} · ${skin.bg} 배경 · ${skin.deco} 장식 · ${skin.entrance} 모션)`);
 
   // 배경 준비 — ai=카드별 flux, upload=사용자 이미지, solid=없음.
   const bgRel: (string | undefined)[] = [];
@@ -124,6 +131,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
       accent: c.accent || palette[i % palette.length],
       theme: isHero ? 'dark' : (opts.cardTheme || 'light'),
       motion: opts.motion || 'auto',
+      skin: skin.id,
       kicker: isHero ? undefined : (preset?.label || undefined),
       badge: c.badge, big: c.big, small: c.small, title: c.title, body: c.body,
       number: c.number, unit: c.unit, items: c.items,
