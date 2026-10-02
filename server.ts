@@ -324,7 +324,21 @@ const server = http.createServer(async (req, res) => {
     ].filter(Boolean);
     const apiKeys = Object.keys(byPermalink);
     const matched = urls.filter((x) => byPermalink[x]).length;
-    return json(res, 200, {connected: instagramStatus().connected, diag, savedUrls: urls.slice(0, 8), apiPermalinks: apiKeys.slice(0, 8), matched, totalSaved: urls.length});
+    // 토큰 권한 정밀 프로브 — /me(기본)·/me/media(목록)·insights(조회수)를 각각 때려 뭐가 되고 뭐가 막히는지 비교.
+    const cfg = loadInstagram();
+    const pbase = cfg.base === 'facebook' ? 'https://graph.facebook.com' : 'https://graph.instagram.com';
+    const probe = async (suffix: string) => {
+      try {
+        const r = await fetch(`${pbase}/v21.0/${suffix}${suffix.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(cfg.accessToken || '')}`, {cache: 'no-store'});
+        const d: any = await r.json();
+        return {status: r.status, result: r.ok ? Object.keys(d) : (d?.error?.message || JSON.stringify(d).slice(0, 200)), code: r.ok ? undefined : d?.error?.code};
+      } catch (e: any) { return {error: e.message}; }
+    };
+    const probes = {
+      me: await probe('me?fields=id,username,account_type'),
+      media: await probe('me/media?fields=id,permalink&limit=1'),
+    };
+    return json(res, 200, {connected: instagramStatus().connected, diag, probes, savedUrls: urls.slice(0, 8), apiPermalinks: apiKeys.slice(0, 8), matched, totalSaved: urls.length});
   }
   // ── 로그인 상태 확인 ──
   if (p === '/api/auth') return json(res, 200, {required: !!ADMIN_PASSWORD, ok: authed(req)});
