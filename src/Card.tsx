@@ -54,15 +54,25 @@ export const Card: React.FC<CardData> = (c) => {
   const pad = Math.round(width * 0.085);
   const baseColor = c.bgColor || '#1b1b22';
 
+  // 단색 배경일 때 은은한 움직이는 블롭(밋밋함 제거). 느리게 떠다님.
+  const blobX = interpolate(frame % 300, [0, 150, 300], [0, 40, 0]);
+  const blobY = interpolate(frame % 360, [0, 180, 360], [0, -30, 0]);
+
   return (
-    <AbsoluteFill style={{background: grad(baseColor), fontFamily: notoFont}}>
+    <AbsoluteFill style={{background: grad(baseColor), fontFamily: notoFont, overflow: 'hidden'}}>
       {/* 배경 이미지 모드 — 이미지 위에 어둠 오버레이(글자 가독성). */}
       {c.bg ? (
         <>
           <Img src={staticFile(c.bg)} style={{position: 'absolute', width: '100%', height: '100%', objectFit: 'cover'}} />
           <AbsoluteFill style={{background: 'linear-gradient(180deg, #00000070 0%, #00000030 40%, #000000aa 100%)'}} />
         </>
-      ) : null}
+      ) : (
+        // 단색 모드 장식 — 강조색 블롭 2개(blur) + 미세 그레인으로 깊이감.
+        <>
+          <div style={{position: 'absolute', width: width * 0.9, height: width * 0.9, borderRadius: '50%', top: -width * 0.25 + blobY, right: -width * 0.3 + blobX, background: c.accent, opacity: 0.16, filter: 'blur(90px)'}} />
+          <div style={{position: 'absolute', width: width * 0.7, height: width * 0.7, borderRadius: '50%', bottom: -width * 0.2 - blobY, left: -width * 0.25 - blobX, background: c.accent, opacity: 0.1, filter: 'blur(80px)'}} />
+        </>
+      )}
 
       {/* 상단 진행 점(페이지네이션) */}
       <div style={{position: 'absolute', top: pad * 0.7, left: pad, right: pad, display: 'flex', gap: 8, justifyContent: 'center'}}>
