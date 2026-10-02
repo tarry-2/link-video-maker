@@ -7,7 +7,7 @@ import {generateCardStoryboard, type CardPlan} from './cards';
 import {getPreset} from './presets';
 import {generateImageFlux} from './image';
 import {ttsElevenJoined} from './tts';
-import {VOICES, pickVoice} from './tts';
+import {VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {renderCardVideo, renderCardStills} from './render';
 import {buildZip} from './zip';
@@ -107,7 +107,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   if (opts.narration && output === 'video') {
     if (!keys.elevenlabs) throw new Error('나레이션을 쓰려면 ElevenLabs 키가 필요합니다.');
     const voiceKey = pickVoice(opts.voice, preset?.voice, opts.imageStyle);
-    const voiceId = VOICES[voiceKey]?.id || VOICES.adam.id;
+    const voiceId = VOICES[voiceKey]?.id || VOICES[DEFAULT_VOICE].id;
     log('[음성] 나레이션 생성 중…');
     const voiceRel = `${pubRel}/voice.mp3`;
     const {sceneRanges} = await ttsElevenJoined(keys.elevenlabs, sb.cards.map(cardSpeech), abs(voiceRel), voiceId);

@@ -7,7 +7,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {geminiGenerate, type GeminiImage} from './gemini';
 import {openaiJson} from './openai';
-import {ttsElevenJoined, alignToWords, VOICES} from './tts';
+import {ttsElevenJoined, alignToWords, VOICES, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {normalizeEnding, stripEmoji} from './script';
@@ -163,8 +163,8 @@ export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Pro
   const totalChars = plan.scenes.reduce((n, s) => n + s.narration.length, 0);
   if (process.env.DRY_SCRIPT) return {out: '', title: plan.title, imageDir: abs(pubRel)};
 
-  const voiceKey = opts.voice || preset?.voice || 'adam';
-  const voiceId = VOICES[voiceKey]?.id || VOICES.adam.id;
+  const voiceKey = opts.voice || preset?.voice || DEFAULT_VOICE;
+  const voiceId = VOICES[voiceKey]?.id || VOICES[DEFAULT_VOICE].id;
   const scenes: SceneData[] = [];
 
   // ★음성 통짜 생성(자연스러운 억양)

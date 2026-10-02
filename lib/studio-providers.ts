@@ -6,7 +6,7 @@ import {fetchSource} from './pipeline';
 import {generateStoryboard} from './script';
 import {generateManualDraft} from './manual';
 import {generateImageFlux, generateImageNano} from './image';
-import {ttsEleven, alignToWords, VOICES, pickVoice} from './tts';
+import {ttsEleven, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {renderVideo, renderThumbnail} from './render';
@@ -55,7 +55,7 @@ export const studioProviders: StudioDependencies = {
     if (!k.elevenlabs) throw new Error('키 설정에서 ElevenLabs 키를 저장하세요.');
     const voice = pickVoice(p.input.voice, getPreset(p.input.presetId)?.voice, p.input.imageStyle);
     const text = resolveProduct(s.narration, p.input.product);
-    const align = await ttsEleven(k.elevenlabs, text, file, (VOICES[voice] || VOICES.adam).id);
+    const align = await ttsEleven(k.elevenlabs, text, file, (VOICES[voice] || VOICES[DEFAULT_VOICE]).id);
     if (!align?.length) throw new Error('음성 타이밍을 받지 못했습니다. 해당 장면을 다시 시도하세요.');
     return {words: alignToWords(align, 30), frames: Math.max(30, Math.ceil(align[align.length - 1].end * 30) + 6)};
   },

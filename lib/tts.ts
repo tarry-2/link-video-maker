@@ -41,13 +41,15 @@ export const VOICES: Record<string, VoiceInfo> = {
 
 // 애니 스타일 기본 목소리(사용자가 목소리 직접 안 고르면 이걸로 추천).
 export const ANIME_DEFAULT_VOICE = 'sujin';
+// ★최후 기본 목소리 — 반드시 VOICES에 실존하는 키여야 한다. (예전 'adam'은 VOICES에 없어서
+//   VOICES.adam.id가 undefined.id로 터졌다 → 가장 자연스러운 jaewon으로.)
+export const DEFAULT_VOICE = 'jaewon';
 
-// 목소리 키 결정 — 단일 소스. 사용자가 고른 게 있으면 그걸, 없으면 애니 스타일이면 애니 목소리,
-// 아니면 카테고리 추천, 최후엔 adam. 모든 호출 경로(표시·TTS·포트폴리오)가 이걸 써야 일관된다.
+// 목소리 키 결정 — 단일 소스. 사용자가 고른 게 있으면 그걸, 없으면 애니면 애니 목소리, 아니면 카테고리 추천,
+// 최후엔 DEFAULT_VOICE. ★항상 VOICES에 존재하는 키를 반환(없는 키면 DEFAULT로 보정). 모든 경로가 이걸 써야 일관.
 export function pickVoice(voice: string | undefined, presetVoice: string | undefined, imageStyle?: string): string {
-  if (voice) return voice;
-  if (imageStyle === 'anime') return ANIME_DEFAULT_VOICE;
-  return presetVoice || 'adam';
+  const pick = voice || (imageStyle === 'anime' ? ANIME_DEFAULT_VOICE : (presetVoice || DEFAULT_VOICE));
+  return VOICES[pick] ? pick : DEFAULT_VOICE;
 }
 
 export type CharAlign = {ch: string; start: number; end: number}[];

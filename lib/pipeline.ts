@@ -4,7 +4,7 @@ import {mkdir, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {generateStoryboard} from './script';
 import {generateImageFlux} from './image';
-import {ttsElevenJoined, alignToWords, VOICES, pickVoice} from './tts';
+import {ttsElevenJoined, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {renderVideo} from './render';
@@ -88,7 +88,7 @@ export async function makeVideo(
 
   // 목소리: 사용자 지정 > (애니 스타일이면 애니 목소리) > 프리셋 추천 > adam
   const voiceKey = pickVoice(opts.voice, preset?.voice, opts.imageStyle);
-  const voiceId = VOICES[voiceKey]?.id || VOICES.adam.id;
+  const voiceId = VOICES[voiceKey]?.id || VOICES[DEFAULT_VOICE].id;
   const scenes: SceneData[] = [];
 
   // ★음성은 통짜로 한 번에 생성(억양이 자연스럽게 이어짐). 장면별 구간(sceneRanges)만 나눠 쓴다.
