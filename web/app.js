@@ -333,17 +333,35 @@ window.startCardGen = async function () {
     motion: $('card-motion') ? $('card-motion').value : 'auto',
     cardTheme: $('card-theme') ? $('card-theme').value : 'light',
   };
+  return runCardGen(body);
+};
+// ★이어서 다시 만들기 — 마지막 카드 생성 설정을 저장(새로고침에도)해두고, 멈추거나 실패하면 그대로 재생성.
+//   (카드는 영상 studio처럼 '완료단계부터'가 아니라, 같은 설정으로 다시 돌리는 방식)
+function saveLastCardBody(body) { try { localStorage.setItem('onvideo-lastcard', JSON.stringify(body)); } catch {} }
+function loadLastCardBody() { try { return JSON.parse(localStorage.getItem('onvideo-lastcard') || 'null'); } catch { return null; } }
+async function runCardGen(body) {
+  saveLastCardBody(body);
   $('progress-block').classList.remove('hidden');
   $('result-block').classList.add('hidden');
   $('post-result').classList.add('hidden');
+  if ($('card-resume')) $('card-resume').classList.add('hidden');
   if ($('log')) $('log').textContent = '';
+  const en = $('card-energy'); if (en) en.classList.add('anim');
+  cardPct = 0; cardStartTs = Date.now(); cardJobStart = null;
   try {
     const r = await fetch('/api/generate-cards', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || '실패');
     attachProgress(d.id, true);
-  } catch (e) { addLog('[실패] ' + e.message, 'fail'); }
-};
+  } catch (e) { addLog('[실패] ' + e.message, 'fail'); showCardResume(); }
+}
+// 실패/중단 시 '이어서 다시 만들기' 버튼 노출.
+function showCardResume() {
+  const b = $('card-resume'); if (!b) return;
+  if (!loadLastCardBody()) return;
+  b.classList.remove('hidden');
+}
+$('card-resume')?.addEventListener('click', () => { const b = loadLastCardBody(); if (b) runCardGen(b); });
 // 게시물 결과 렌더(이미지 그리드 + ZIP).
 window.showPostResult = function (title, images, zip, projectId) {
   $('post-result').classList.remove('hidden');
@@ -409,7 +427,7 @@ function attachProgress(id, freshLog) {
       clearTimeout(cardTimer);
       try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
-      if (m.error) { setCardEnergy(cardPct, '실패'); }
+      if (m.error) { setCardEnergy(cardPct, '실패'); showCardResume(); }
       else {
         cardPct = 100; setCardEnergy(100, '완성! 🎉'); const f = $('card-energy'); if (f) f.classList.remove('anim');
         cardCelebrate();
@@ -424,9 +442,10 @@ function attachProgress(id, freshLog) {
       reconnTries++;
       setTimeout(() => { if (curJobId === id && !curES) attachProgress(id, true); }, 2500);
     } else if (curJobId === id) {
-      // 서버에 작업이 없음(재시작 등) — 조용히 종료
+      // 서버에 작업이 없음(재시작/중단 등) — 종료 + 카드면 '이어서 다시 만들기' 노출
       curJobId = null; try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
+      if (typeof mode !== 'undefined' && mode === 'card') { clearTimeout(cardTimer); showCardResume(); }
     }
   };
 }
