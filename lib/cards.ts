@@ -62,8 +62,10 @@ ${TYPE_GUIDE}
 - 과장 낚시·허위 금지. 하지만 임팩트는 최대.
 - accent는 카드마다 이 팔레트 중 하나: ${palette}
 
+[BGM 무드] musicPrompt는 반드시 밝고 경쾌하게(upbeat, bright, cheerful, positive). 카드뉴스는 나레이션 없이 음악만 깔릴 때가 많으니 분위기가 중요하다. 어둡거나 무섭거나 긴장되는 무드(dark, horror, suspense, sad)는 절대 쓰지 마라.
+
 JSON만 출력:
-{"title":"콘텐츠 제목","musicPrompt":"BGM 무드 영어 한 줄","cards":[{"type":"cover","accent":"#..","badge":"충격","big":"육즙 팡! 삼겹살 혁명","small":"냉동실에 쟁여둔 삼겹살","body":"딱 3가지만 바꾸면 끝"}, {"type":"body","accent":"#..","title":"..","body":".."}, ...]}`;
+{"title":"콘텐츠 제목","musicPrompt":"upbeat bright cheerful background music","cards":[{"type":"cover","accent":"#..","badge":"충격","big":"육즙 팡! 삼겹살 혁명","small":"냉동실에 쟁여둔 삼겹살","body":"딱 3가지만 바꾸면 끝"}, {"type":"body","accent":"#..","title":"..","body":".."}, ...]}`;
 }
 
 function normalize(j: Record<string, unknown>, count: number, palette: string[]): CardStoryboard {
@@ -89,7 +91,7 @@ function normalize(j: Record<string, unknown>, count: number, palette: string[])
     if (!cards[0].big) cards[0].big = cards[0].title || cards[0].body || String(j.title || '');
     cards[cards.length - 1].type = 'closing';
   }
-  return {title: String(j.title || '카드뉴스').slice(0, 80), musicPrompt: String(j.musicPrompt || 'calm modern background music'), cards};
+  return {title: String(j.title || '카드뉴스').slice(0, 80), musicPrompt: String(j.musicPrompt || 'upbeat bright cheerful light background music'), cards};
 }
 
 export async function generateCardStoryboard(

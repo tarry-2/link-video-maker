@@ -153,8 +153,12 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
     if (!keys.elevenlabs) throw new Error('배경음악을 쓰려면 ElevenLabs 키가 필요합니다.');
     const totalMs = (cards.reduce((a, c) => a + c.durationInFrames, 0) / FPS) * 1000;
     const bgmRel = `${pubRel}/bgm.mp3`;
+    // ★영상과 동일: 카테고리별 검증된 무드(preset.musicMood)를 최우선으로 쓴다. 카드는 나레이션이
+    //   없을 때가 많아 음악이 분위기를 주도하므로, AI 즉석 무드(어둡게 나오던 원인)보다 신뢰도 높은
+    //   카테고리 무드를 우선. 둘 다 없으면 밝은 기본값. 어둡거나 무서운 무드는 쓰지 않는다.
+    const musicMood = preset?.musicMood || sb.musicPrompt || 'upbeat bright cheerful light background music, positive and clean';
     log('[BGM] 배경음악 생성 중…');
-    await generateBgm(keys.elevenlabs, sb.musicPrompt, totalMs, abs(bgmRel), log);
+    await generateBgm(keys.elevenlabs, musicMood, totalMs, abs(bgmRel), log);
     bgmSrc = bgmRel;
   }
 
