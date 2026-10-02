@@ -14,6 +14,7 @@ import {buildZip} from './zip';
 import {writeFile} from 'node:fs/promises';
 import type {CardData, MotionStyle} from '../src/Card';
 import {pickSkin, getSkin} from '../src/skins';
+import {registerCardDeck} from './card-portfolio';
 
 const FPS = 30;
 
@@ -58,7 +59,7 @@ function cardLen(c: CardPlan): number {
   return cardSpeech(c).length;
 }
 
-export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{out: string; title: string; dir: string; kind: CardOutput; images?: string[]}> {
+export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{out: string; title: string; dir: string; kind: CardOutput; images?: string[]; projectId?: string}> {
   const log = opts.log || (() => {});
   const id = randomUUID().slice(0, 8);
   const pubRel = `jobs/card-${id}`;
@@ -84,9 +85,14 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
     if (bgMode === 'ai') {
       if (!keys.replicate) throw new Error('AI 배경을 쓰려면 Replicate 키가 필요합니다.');
       const rel = `${pubRel}/bg-${i}.jpg`;
-      const prompt = `${opts.topic}. clean minimal background photo for a text card, soft focus, no text, no letters, muted tones`;
       log(`[배경 ${i + 1}/${sb.cards.length}] 이미지 생성…`);
-      try { await generateImageFlux(keys.replicate, prompt, abs(rel), log, 'fast', opts.imageStyle || 'real', false); bgRel.push(`${pubRel}/bg-${i}.jpg`); }
+      // ★영상과 100% 동일: subject(핵심 소재) + 카드별 visualPrompt + 소재 강제 → flux-dev(high).
+      //   (영상 pipeline.ts와 토씨까지 같은 방식. 간판/글자 깨짐은 '글자 피사체 금지' 지시 + 좋은 피사체 서술로 방지)
+      const card = sb.cards[i];
+      const vp = sb.subject
+        ? `${sb.subject}. ${card.visualPrompt || opts.topic}. (main subject must be ${sb.subject})`
+        : (card.visualPrompt || opts.topic);
+      try { await generateImageFlux(keys.replicate, vp, abs(rel), log, 'high', opts.imageStyle || 'real', false); bgRel.push(`${pubRel}/bg-${i}.jpg`); }
       catch (e: any) { log(`[배경 ${i + 1}] ⚠️ 실패(${e.message}) → 단색 배경`); bgRel.push(undefined); }
     } else if (bgMode === 'upload') {
       bgRel.push(opts.uploads?.[i] || opts.uploads?.[opts.uploads.length - 1]);
@@ -142,6 +148,14 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
 
   await mkdir(path.join(process.cwd(), 'out'), {recursive: true});
 
+  // 포트폴리오 등록용 메타(영상과 동일 양식) — 목소리 라벨·카테고리·뱃지색·나레이션·길이.
+  const vKey = pickVoice(opts.voice, preset?.voice, opts.imageStyle);
+  const regVoice = opts.narration ? (VOICES[vKey]?.label || vKey) : '🎴 카드뉴스';
+  const regGoal: 'issue' | 'info' | 'sell' | 'heal' = (opts.narration && (VOICES[vKey]?.use?.[0] as any)) || 'info';
+  const regCategory = preset ? `${preset.emoji} ${preset.label}` : '🎴 카드뉴스';
+  const regNarrations = sb.cards.map(cardSpeech);
+  const regDurSec = cards.reduce((a, c) => a + c.durationInFrames, 0) / FPS;
+
   // ── 게시물(캐러셀) 모드: 카드 N장을 4:5 PNG로 뽑고 ZIP으로 묶는다(오디오 없음). ──
   if (output === 'post') {
     const pngAbs = cards.map((_, i) => abs(`${pubRel}/card-${i + 1}.png`));
@@ -152,7 +166,12 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
     await writeFile(zipAbs, buildZip(files));
     log(`[완료] 게시물 카드 ${cards.length}장 완성! (ZIP + 개별 이미지)`);
     // images = 웹에서 미리보기할 public 상대경로.
-    return {out: zipAbs, title: sb.title, dir: abs(pubRel), kind: 'post', images: cards.map((_, i) => `${pubRel}/card-${i + 1}.png`)};
+    const images = cards.map((_, i) => `${pubRel}/card-${i + 1}.png`);
+    let projectId: string | undefined;
+    try {
+      projectId = await registerCardDeck({cards, title: sb.title, kind: 'post', out: zipAbs, images, narrations: regNarrations, voice: regVoice, category: regCategory, goal: regGoal, orientation: 'portrait', durSec: regDurSec, log});
+    } catch (e: any) { log('[안내] 포트폴리오 등록 건너뜀: ' + (e?.message || e)); }
+    return {out: zipAbs, title: sb.title, dir: abs(pubRel), kind: 'post', images, projectId};
   }
 
   // ── 영상(릴스) 모드 ──
@@ -175,5 +194,9 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   const transitionFrames = 12;
   await renderCardVideo(cards, transitionFrames, out, log, bgmSrc, voiceSrc, undefined, 'portrait');
   log('[완료] 카드뉴스 영상 완성!');
-  return {out, title: sb.title, dir: abs(pubRel), kind: 'video'};
+  let projectId: string | undefined;
+  try {
+    projectId = await registerCardDeck({cards, title: sb.title, kind: 'video', out, narrations: regNarrations, voice: regVoice, category: regCategory, goal: regGoal, orientation: 'portrait', durSec: regDurSec, log});
+  } catch (e: any) { log('[안내] 포트폴리오 등록 건너뜀: ' + (e?.message || e)); }
+  return {out, title: sb.title, dir: abs(pubRel), kind: 'video', projectId};
 }

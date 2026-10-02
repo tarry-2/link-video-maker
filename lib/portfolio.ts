@@ -9,7 +9,7 @@ const FILE = path.join(DATA_DIR, 'portfolio.json');
 export type PortfolioItem = {
   projectId: string;
   title: string;
-  output: string; // data/studio/{projectId}/{output} 파일명
+  output: string; // data/studio/{projectId}/{output} 파일명. card-post는 ''(mp4 없음).
   voice: string; // 목소리 라벨(예: "Luna · 다정 여성")
   category: string; // 카테고리 라벨(예: "💊 건강/의학")
   goal: 'issue' | 'info' | 'sell' | 'heal'; // 뱃지 색상 분류
@@ -17,6 +17,9 @@ export type PortfolioItem = {
   youtubeUrl?: string; // 유튜브 업로드 완료 시 링크
   instagramUrl?: string; // 인스타 업로드 완료 시 permalink
   orientation?: 'portrait' | 'landscape'; // 화면비(롱폼=landscape). 없으면 세로 폴백(레거시).
+  // ★작업내역 분리: 영상(video) / 카드영상(card) / 카드게시물=캐러셀(card-post). 없으면 video(레거시).
+  kind?: 'video' | 'card' | 'card-post';
+  images?: string[]; // card-post: data/studio/{projectId}/{name} PNG 파일명들(캐러셀 순서).
 };
 
 // 특정 항목에 유튜브 링크 기록(업로드 완료 후).

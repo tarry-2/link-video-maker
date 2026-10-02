@@ -100,6 +100,17 @@
         .pf-stage-meta .pf-actions { justify-content: center; }
       }
       .mypf-count { font-weight: 700; color: var(--teal); }
+      /* 작업내역 분리 필터(전체/영상/카드) */
+      .pf-filter { display: inline-flex; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 5px; margin: 6px 0 16px; }
+      .pf-filter button { border: none; background: transparent; color: var(--muted); font-weight: 800; font-size: 13px; padding: 8px 18px; border-radius: 999px; cursor: pointer; transition: all .15s ease; }
+      .pf-filter button.on { background: linear-gradient(135deg, var(--teal), var(--purple)); color: #fff; box-shadow: 0 3px 12px rgba(107,76,240,.3); }
+      /* 카드 게시물(캐러셀) 미리보기 */
+      .pf-stage-cards { width: 42%; max-width: 300px; flex-shrink: 0; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+      .pf-stage-cards img { width: 100%; aspect-ratio: 4/5; object-fit: cover; border-radius: 10px; flex: 0 0 100%; scroll-snap-align: center; background: #000; }
+      .pf-thumb.post { aspect-ratio: 4/5; }
+      .pf-thumb.post img { width: 100%; height: 100%; object-fit: cover; }
+      .pf-card-count { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+      @media (max-width: 640px) { .pf-stage-cards { width: 100%; max-width: 220px; margin: 0 auto; } }
       @media (max-width: 640px) {
         /* 포트폴리오가 많아도 세로로 안 길어지게 — 가로 스크롤 캐러셀(옆으로 넘겨 봄) */
         .mypf-grid { display: flex; grid-template-columns: none; overflow-x: auto; gap: 10px; padding-bottom: 10px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
@@ -143,7 +154,14 @@
       <section class="portfolio" id="my-videos" hidden>
         <div class="portfolio-head">
           <h2 class="pf-title">🎬 포트폴리오 <span id="mypf-count" class="mypf-count"></span></h2>
-          <p class="pf-sub">영상을 고르면 아래에서 크게 보고, 유튜브에 올리거나 내려받을 수 있어요.</p>
+          <p class="pf-sub">고르면 아래에서 크게 보고, 유튜브·인스타에 올리거나 내려받을 수 있어요.</p>
+        </div>
+
+        <!-- 작업내역 분리 필터(영상 / 카드) -->
+        <div class="pf-filter" id="pf-filter" role="tablist">
+          <button data-media="all" class="on">전체</button>
+          <button data-media="video">🎬 영상</button>
+          <button data-media="card">🎴 카드</button>
         </div>
 
         <!-- 📊 성과(올린 영상의 조회수·반응 집계) -->
@@ -153,8 +171,9 @@
         <!-- 큰 미리보기 플레이어 + 액션 -->
         <div class="pf-stage">
           <video id="pf-stage-video" class="pf-stage-video" controls playsinline preload="metadata"></video>
+          <div id="pf-stage-cards" class="pf-stage-cards" hidden></div>
           <div class="pf-stage-meta">
-            <select id="pf-select" class="input" aria-label="영상 선택"></select>
+            <select id="pf-select" class="input" aria-label="작업 선택"></select>
             <div id="pf-stage-info"></div>
           </div>
         </div>
@@ -256,42 +275,66 @@
       // ── 포트폴리오: 드롭다운 선택 + 큰 미리보기 ──
       const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       const BADGE = { issue:'📰', info:'💡', sell:'🛍️', heal:'🌿', anime:'🎨' };
-      let myItems = [], myShown = 0, canDelete = false, curIdx = 0;
+      let allItems = [], myItems = [], myShown = 0, canDelete = false, curIdx = 0, mediaFilter = 'all';
       const PAGE = 12;
+      const isCard = it => it.media === 'card' || it.media === 'card-post';
+      const isVideo = it => it.media === 'video' || !it.media; // 레거시=영상
       async function loadMyVideos(keepIdx) {
         try {
           const a = await (await fetch('/api/auth')).json();
           canDelete = !a.required || a.ok;
           const d = await (await fetch('/api/portfolio')).json();
-          myItems = Array.isArray(d.items) ? d.items : [];
-        } catch { myItems = []; }
+          allItems = Array.isArray(d.items) ? d.items : [];
+        } catch { allItems = []; }
+        applyFilter(keepIdx);
+      }
+      // 작업내역 분리: 영상/카드 필터 적용 후 드롭다운·그리드·스테이지 갱신.
+      function applyFilter(keepIdx) {
         const sec = $('my-videos');
-        if (!myItems.length) { sec.hidden = true; return; }
+        if (!allItems.length) { sec.hidden = true; return; }
         sec.hidden = false;
-        $('mypf-count').textContent = `(총 ${myItems.length}개)`;
-        // 드롭다운 채우기
+        const nV = allItems.filter(isVideo).length, nC = allItems.length - nV;
+        $('mypf-count').textContent = `(영상 ${nV} · 카드 ${nC})`;
+        myItems = allItems.filter(it => mediaFilter === 'all' ? true : mediaFilter === 'card' ? isCard(it) : isVideo(it));
+        if (!myItems.length) {
+          $('pf-select').innerHTML = '';
+          $('mypf-grid').innerHTML = '<p class="pf-sub" style="padding:24px 4px">이 분류엔 아직 없어요.</p>';
+          $('pf-stage-info').innerHTML = ''; $('pf-stage-video').hidden = true; $('pf-stage-cards').hidden = true;
+          $('mypf-more').hidden = true;
+          return;
+        }
         $('pf-select').innerHTML = myItems.map((it, i) =>
-          `<option value="${i}">${it.kind === 'sample' ? '🔹 ' : ''}${esc(it.title)} — ${esc(it.voice)}</option>`).join('');
-        // 그리드(썸네일)
+          `<option value="${i}">${it.kind === 'sample' ? '🔹 ' : (it.media === 'card-post' ? '🎴 ' : it.media === 'card' ? '🎞 ' : '')}${esc(it.title)} — ${esc(it.voice)}</option>`).join('');
         myShown = 0; $('mypf-grid').innerHTML = ''; showMore();
         curIdx = Math.min(keepIdx ?? 0, myItems.length - 1);
         $('pf-select').value = curIdx;
         selectVideo(curIdx, false);
       }
+      $('pf-filter').onclick = e => {
+        const b = e.target.closest('[data-media]'); if (!b) return;
+        mediaFilter = b.dataset.media;
+        [...$('pf-filter').children].forEach(c => c.classList.toggle('on', c === b));
+        applyFilter(0);
+      };
       function showMore() {
         const grid = $('mypf-grid');
         for (let i = myShown; i < Math.min(myShown + PAGE, myItems.length); i++) {
           const it = myItems[i];
+          const isPost = it.media === 'card-post';
           const fig = document.createElement('figure');
           fig.className = 'pf-card pf-thumb-card';
           fig.dataset.idx = i;
-          fig.innerHTML = `
-            <div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>
+          const thumbBox = isPost
+            ? `<div class="pf-thumb post"><img src="${esc(it.thumb || (it.images && it.images[0]) || '')}" alt="" loading="lazy">${(it.images && it.images.length) ? `<span class="pf-card-count">🎴 ${it.images.length}장</span>` : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>`
+            : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>`;
+          fig.innerHTML = `${thumbBox}
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${esc(it.title)}</h3></figcaption>`;
           grid.appendChild(fig);
-          // 썸네일 박스 비율도 실제 영상 비율 우선(저장된 orientation 틀려도 정확히 표시).
-          const tv = fig.querySelector('.pf-thumb video'), tbox = fig.querySelector('.pf-thumb');
-          tv.addEventListener('loadedmetadata', () => { if (tv.videoWidth && tv.videoHeight) tbox.classList.toggle('land', tv.videoWidth > tv.videoHeight); });
+          if (!isPost) {
+            // 썸네일 박스 비율도 실제 영상 비율 우선(저장된 orientation 틀려도 정확히 표시).
+            const tv = fig.querySelector('.pf-thumb video'), tbox = fig.querySelector('.pf-thumb');
+            tv.addEventListener('loadedmetadata', () => { if (tv.videoWidth && tv.videoHeight) tbox.classList.toggle('land', tv.videoWidth > tv.videoHeight); });
+          }
         }
         myShown = Math.min(myShown + PAGE, myItems.length);
         $('mypf-more').hidden = myShown >= myItems.length;
@@ -300,26 +343,41 @@
       function selectVideo(idx, doScroll) {
         const it = myItems[idx]; if (!it) return;
         curIdx = idx;
-        const v = $('pf-stage-video'); v.src = it.video; if (it.thumb) v.poster = it.thumb; else v.removeAttribute('poster');
-        // 박스 비율 = 실제 영상 비율 우선(저장된 orientation이 틀려도 레터박스 안 생기게).
-        v.classList.toggle('land', it.orientation === 'landscape'); // 로드 전 초기 폴백
-        v.onloadedmetadata = () => { if (v.videoWidth && v.videoHeight) v.classList.toggle('land', v.videoWidth > v.videoHeight); };
+        const isPost = it.media === 'card-post';
+        const v = $('pf-stage-video'), cc = $('pf-stage-cards');
+        if (isPost) {
+          // 카드 게시물 = 이미지 캐러셀(영상 플레이어 숨김).
+          v.hidden = true; v.removeAttribute('src');
+          cc.hidden = false;
+          cc.innerHTML = (it.images || []).map(u => `<img src="${esc(u)}" alt="" loading="lazy">`).join('');
+        } else {
+          cc.hidden = true; cc.innerHTML = '';
+          v.hidden = false;
+          v.src = it.video; if (it.thumb) v.poster = it.thumb; else v.removeAttribute('poster');
+          v.classList.toggle('land', it.orientation === 'landscape');
+          v.onloadedmetadata = () => { if (v.videoWidth && v.videoHeight) v.classList.toggle('land', v.videoWidth > v.videoHeight); };
+        }
         $('pf-select').value = idx;
+        const canDel = canDelete && it.kind === 'mine';
+        const createdTxt = it.createdAt ? esc(new Date(it.createdAt).toLocaleString('ko-KR')) : (isPost ? '카드 게시물' : '샘플 영상');
+        const actions = isPost
+          ? `<button class="pf-zoom">🔍 크게 보기</button>
+             <button class="pf-ig" data-id="${esc(it.id)}">📷 인스타 캐러셀 올리기</button>
+             ${canDel ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}`
+          : `<button class="pf-zoom">🔍 크게 보기</button>
+             <button class="pf-yt" data-id="${esc(it.id)}">📺 유튜브 올리기</button>
+             <button class="pf-ig" data-id="${esc(it.id)}">📷 인스타 올리기</button>
+             <a class="pf-dl" href="${it.video}" download="${esc(it.title)}.mp4">⬇ 다운로드</a>
+             ${canDel ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}`;
         $('pf-stage-info').innerHTML = `
           <span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span>
           <h3 class="pf-stage-title">${esc(it.title)}</h3>
-          <p class="pf-voice-note">🎙 ${esc(it.voice)}</p>
-          ${it.createdAt ? `<p class="pf-clip">${esc(new Date(it.createdAt).toLocaleString('ko-KR'))}</p>` : '<p class="pf-clip">샘플 영상</p>'}
+          <p class="pf-voice-note">${isPost ? '🎴 ' + ((it.images || []).length) + '장 카드뉴스' : '🎙 ' + esc(it.voice)}</p>
+          <p class="pf-clip">${createdTxt}</p>
           ${(() => { const st = (window.__ytStats || {})[it.id]; return st && (st.views || st.likes || st.comments) ? `<div class="pf-stage-stats"><div class="pf-stat"><b>${fmtNum(st.views)}</b><span>조회수</span></div><div class="pf-stat"><b>${fmtNum(st.likes)}</b><span>좋아요</span></div><div class="pf-stat"><b>${fmtNum(st.comments)}</b><span>댓글</span></div></div>` : ''; })()}
           ${it.youtubeUrl ? `<a class="pf-yt-link" href="${esc(it.youtubeUrl)}" target="_blank">▶ 유튜브에서 보기</a>` : ''}
           ${it.instagramUrl ? `<a class="pf-ig-link" href="${esc(it.instagramUrl)}" target="_blank">▶ 인스타에서 보기</a>` : ''}
-          <div class="pf-actions">
-            <button class="pf-zoom">🔍 크게 보기</button>
-            <button class="pf-yt" data-id="${esc(it.id)}">📺 유튜브 올리기</button>
-            <button class="pf-ig" data-id="${esc(it.id)}">📷 인스타 올리기</button>
-            <a class="pf-dl" href="${it.video}" download="${esc(it.title)}.mp4">⬇ 다운로드</a>
-            ${canDelete && it.kind === 'mine' ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}
-          </div>`;
+          <div class="pf-actions">${actions}</div>`;
         document.querySelectorAll('.pf-thumb-card').forEach(c => c.classList.toggle('sel', Number(c.dataset.idx) === idx));
         if (doScroll) $('my-videos').scrollIntoView({behavior:'smooth', block:'start'});
       }
@@ -333,7 +391,11 @@
       $('pf-stage-info').onclick = e => {
         if (e.target.closest('.pf-zoom')) { openVideoModal(myItems[curIdx]); return; }
         const yt = e.target.closest('.pf-yt'); if (yt) { uploadToYouTube(yt); return; }
-        const ig = e.target.closest('.pf-ig'); if (ig) { uploadToInstagram(ig); return; }
+        const ig = e.target.closest('.pf-ig');
+        if (ig) {
+          if (myItems[curIdx] && myItems[curIdx].media === 'card-post') { alert('카드 캐러셀(여러 장) 인스타 올리기는 다음 업데이트에서 켜집니다. 지금은 🔍 크게 보기에서 각 장을 저장해 올려주세요.'); return; }
+          uploadToInstagram(ig); return;
+        }
         const del = e.target.closest('.pf-del');
         if (del) { if (confirm('이 영상을 포트폴리오에서 삭제할까요? (원본 작업은 남아 있어요)')) fetch('/api/portfolio/' + encodeURIComponent(del.dataset.id), { method: 'DELETE' }).then(r => { if (r.ok) loadMyVideos(Math.max(0, curIdx - 1)); }); }
       };
@@ -342,14 +404,18 @@
       function openVideoModal(it) {
         if (!it) return;
         const land = it.orientation === 'landscape'; // 폭 힌트용 초기값(실제 비율은 video가 유지)
+        const isPost = it.media === 'card-post';
         let box = $('video-modal');
         if (!box) { box = document.createElement('div'); box.id = 'video-modal'; box.className = 'modal'; document.body.appendChild(box); }
         box.style.cssText = 'position:fixed;inset:0;background:rgba(8,8,12,.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60';
+        const media = isPost
+          ? `<div style="display:flex;gap:12px;overflow-x:auto;max-width:94vw;scroll-snap-type:x mandatory;padding:4px">${(it.images || []).map(u => `<img src="${esc(u)}" style="height:80vh;aspect-ratio:4/5;object-fit:cover;border-radius:16px;scroll-snap-align:center;background:#000;box-shadow:0 24px 70px rgba(0,0,0,.65)">`).join('')}</div>`
+          : `<video src="${it.video}" controls autoplay playsinline style="max-width:min(94vw, ${land ? '1100px' : '440px'});max-height:82vh;background:#000;border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07)"></video>`;
         box.innerHTML = `
           <button data-vm="close" aria-label="닫기" style="position:absolute;top:18px;right:20px;width:48px;height:48px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.16);backdrop-filter:blur(8px);color:#fff;font-size:24px;font-weight:700;cursor:pointer;line-height:1;z-index:2;transition:background .15s,transform .15s" onmouseover="this.style.background='rgba(255,255,255,.3)';this.style.transform='scale(1.08)'" onmouseout="this.style.background='rgba(255,255,255,.16)';this.style.transform='scale(1)'">✕</button>
           <div style="display:flex;flex-direction:column;align-items:center;gap:14px;max-width:94vw">
-            <video src="${it.video}" controls autoplay playsinline style="max-width:min(94vw, ${land ? '1100px' : '440px'});max-height:82vh;background:#000;border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07)"></video>
-            <p style="color:#fff;font-weight:800;font-size:15.5px;text-align:center;margin:0;opacity:.96;letter-spacing:-.2px">${esc(it.title || '')}</p>
+            ${media}
+            <p style="color:#fff;font-weight:800;font-size:15.5px;text-align:center;margin:0;opacity:.96;letter-spacing:-.2px">${esc(it.title || '')}${isPost ? ' · 옆으로 넘겨 보세요 →' : ''}</p>
           </div>`;
         const close = () => { const v = box.querySelector('video'); if (v) v.pause(); box.remove(); document.removeEventListener('keydown', onKey); };
         const onKey = ev => { if (ev.key === 'Escape') close(); };

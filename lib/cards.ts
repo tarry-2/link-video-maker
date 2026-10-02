@@ -22,8 +22,9 @@ export type CardPlan = {
   after?: string;
   wrong?: string;
   right?: string;
+  visualPrompt?: string; // ★이미지 생성용(영어) — 영상과 동일 방식. 카드 내용에 맞는 장면.
 };
-export type CardStoryboard = {title: string; musicPrompt: string; cards: CardPlan[]};
+export type CardStoryboard = {title: string; musicPrompt: string; cards: CardPlan[]; subject: string};
 
 const TYPE_GUIDE = `카드 타입(역할이 달라야 다채롭다. 내용에 맞는 타입을 섞어라):
 - cover: 첫 장. ★시선폭탄 후킹. big(초대형 훅 2~5단어, 스크롤 멈추는 한 방), small(윗줄 보조 한 줄), badge(충격 뱃지 2~4자: 충격/실화?/꿀팁/경악/소름 등), body(짧은 미끼 한 줄). title은 비워도 됨.
@@ -62,10 +63,15 @@ ${TYPE_GUIDE}
 - 과장 낚시·허위 금지. 하지만 임팩트는 최대.
 - accent는 카드마다 이 팔레트 중 하나: ${palette}
 
+★★이미지(배경 사진) — 영상과 똑같이 AI가 제대로 지시한다(이게 생명):
+- subject: 이 카드뉴스 전체를 관통하는 핵심 피사체를 영어로 구체적으로(예: "a cluster of fresh purple grapes and a glass of grape juice on a wooden table"). 모든 카드 이미지가 이 소재를 벗어나면 안 된다.
+- 각 카드 visualPrompt(영어): 그 카드 내용에 맞는 장면을 "실제 취재 보도사진 리얼리즘"(자연광·실제 질감·얕은 심도)으로 구체적으로. 세로 9:16. 반드시 subject를 영어로 포함시켜라. 카드 뒤에 깔리는 배경이므로 한쪽이 비어 글이 들어갈 여백이 느껴지는 깔끔한 구도로.
+  ★절대 금지: 글자·간판·메뉴판·문서·표·가격표·신분증이 주요 피사체인 장면(AI가 글자를 깨뜨린다). 대신 실제 사물·재료·현장·행동·질감으로 보여줘라. 거리·상점 간판이 보이는 장면 금지.
+
 [BGM 무드] musicPrompt는 반드시 밝고 경쾌하게(upbeat, bright, cheerful, positive). 카드뉴스는 나레이션 없이 음악만 깔릴 때가 많으니 분위기가 중요하다. 어둡거나 무섭거나 긴장되는 무드(dark, horror, suspense, sad)는 절대 쓰지 마라.
 
-JSON만 출력:
-{"title":"콘텐츠 제목","musicPrompt":"upbeat bright cheerful background music","cards":[{"type":"cover","accent":"#..","badge":"충격","big":"육즙 팡! 삼겹살 혁명","small":"냉동실에 쟁여둔 삼겹살","body":"딱 3가지만 바꾸면 끝"}, {"type":"body","accent":"#..","title":"..","body":".."}, ...]}`;
+JSON만 출력(각 카드에 visualPrompt 필수):
+{"title":"콘텐츠 제목","subject":"core subject in English","musicPrompt":"upbeat bright cheerful background music","cards":[{"type":"cover","accent":"#..","badge":"충격","big":"육즙 팡! 삼겹살 혁명","small":"냉동실에 쟁여둔 삼겹살","body":"딱 3가지만 바꾸면 끝","visualPrompt":"a thick juicy pork belly searing on a hot cast-iron pan, close-up, natural light, shallow depth of field, authentic food photography"}, {"type":"body","accent":"#..","title":"..","body":"..","visualPrompt":".."}, ...]}`;
 }
 
 function normalize(j: Record<string, unknown>, count: number, palette: string[]): CardStoryboard {
@@ -82,6 +88,7 @@ function normalize(j: Record<string, unknown>, count: number, palette: string[])
       number: str(c.number), unit: str(c.unit),
       items: Array.isArray(c.items) ? c.items.map(x => String(x).trim()).filter(Boolean).slice(0, 5) : undefined,
       before: str(c.before), after: str(c.after), wrong: str(c.wrong), right: str(c.right),
+      visualPrompt: str(c.visualPrompt),
     };
   });
   // 안전장치: 첫=cover, 끝=closing 강제.
@@ -91,7 +98,8 @@ function normalize(j: Record<string, unknown>, count: number, palette: string[])
     if (!cards[0].big) cards[0].big = cards[0].title || cards[0].body || String(j.title || '');
     cards[cards.length - 1].type = 'closing';
   }
-  return {title: String(j.title || '카드뉴스').slice(0, 80), musicPrompt: String(j.musicPrompt || 'upbeat bright cheerful light background music'), cards};
+  const subject = typeof j.subject === 'string' ? j.subject.trim() : '';
+  return {title: String(j.title || '카드뉴스').slice(0, 80), musicPrompt: String(j.musicPrompt || 'upbeat bright cheerful light background music'), cards, subject};
 }
 
 export async function generateCardStoryboard(

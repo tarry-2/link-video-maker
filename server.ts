@@ -210,7 +210,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; file?: string; title?: string; error?: string; kind?: 'video' | 'post'; images?: string[]; zip?: string};
+type Job = {id: string; logs: string[]; done: boolean; file?: string; title?: string; error?: string; kind?: 'video' | 'post'; images?: string[]; zip?: string; projectId?: string};
 const jobs = new Map<string, Job>();
 
 function json(res: http.ServerResponse, code: number, data: unknown) {
@@ -326,26 +326,33 @@ const server = http.createServer(async (req, res) => {
 
   // ── 자동 포트폴리오: 목록(공개, voices.html이 로드) ── 내 완성작 + 기본 샘플 병합.
   if (p === '/api/portfolio' && req.method === 'GET') {
-    const mine = listPortfolio().map((it) => ({
-      id: it.projectId,
-      kind: 'mine' as const,
-      title: it.title,
-      voice: it.voice,
-      category: it.category,
-      goal: it.goal,
-      createdAt: it.createdAt,
-      // ★배지: portfolio.json에 링크 없으면 project.json에서 보강(제작 화면서 바로 올린 경우도 배지 뜨게).
-      youtubeUrl: it.youtubeUrl || readProjectYouTube(it.projectId),
-      instagramUrl: it.instagramUrl || readProjectInstagram(it.projectId),
-      orientation: it.orientation || 'portrait', // 레거시(없음)=세로 폴백
-      video: `/portfolio-item/${it.projectId}.mp4`,
-      thumb: readProjectThumb(it.projectId).thumb ? `/portfolio-thumb/${it.projectId}.png` : '',
-    }));
+    const mine = listPortfolio().map((it) => {
+      const isPost = it.kind === 'card-post';
+      return {
+        id: it.projectId,
+        kind: 'mine' as const,
+        // ★작업내역 분리용 매체 종류: video(영상)·card(카드영상)·card-post(카드 캐러셀). 없으면 video.
+        media: it.kind || 'video',
+        title: it.title,
+        voice: it.voice,
+        category: it.category,
+        goal: it.goal,
+        createdAt: it.createdAt,
+        // ★배지: portfolio.json에 링크 없으면 project.json에서 보강(제작 화면서 바로 올린 경우도 배지 뜨게).
+        youtubeUrl: it.youtubeUrl || readProjectYouTube(it.projectId),
+        instagramUrl: it.instagramUrl || readProjectInstagram(it.projectId),
+        orientation: it.orientation || 'portrait', // 레거시(없음)=세로 폴백
+        video: isPost ? '' : `/portfolio-item/${it.projectId}.mp4`,
+        images: isPost ? (it.images || []).map((_, i) => `/portfolio-card/${it.projectId}/${i + 1}.png`) : undefined,
+        thumb: readProjectThumb(it.projectId).thumb ? `/portfolio-thumb/${it.projectId}.png` : '',
+      };
+    });
     const sampleYt = loadSampleYouTube();
     const sampleIg = loadSampleInstagram();
     const samples = SAMPLES.map((s) => ({
       id: 'sample:' + s.file,
       kind: 'sample' as const,
+      media: 'video' as const,
       title: s.title,
       voice: s.voice,
       category: s.category,
@@ -375,6 +382,29 @@ const server = http.createServer(async (req, res) => {
     }
     const file = path.join(STUDIO_DATA_DIR, 'studio', m[1], thumb);
     if (thumb !== path.basename(thumb) || !fs.existsSync(file)) { res.writeHead(404); return res.end('not found'); }
+    res.writeHead(200, {'Content-Type': 'image/png', 'Content-Length': fs.statSync(file).size, 'Cache-Control': 'public, max-age=86400'});
+    return fs.createReadStream(file).pipe(res);
+  }
+  // ── 카드 게시물(캐러셀) 이미지 공개 서빙 — 로컬/R2. /portfolio-card/{id}/{n}.png ──
+  if (p.startsWith('/portfolio-card/')) {
+    const m = p.match(/^\/portfolio-card\/([0-9a-f-]{36})\/(\d+)\.png$/);
+    if (!m) { res.writeHead(404); return res.end('not found'); }
+    const item = listPortfolio().find((x) => x.projectId === m[1] && x.kind === 'card-post');
+    if (!item) { res.writeHead(404); return res.end('not found'); }
+    const n = parseInt(m[2], 10) - 1;
+    let proj: any = {};
+    try { proj = JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', m[1], 'project.json'), 'utf8')); } catch {}
+    const names: string[] = proj.images || [];
+    const r2keys: string[] = proj.imagesR2 || [];
+    if (n < 0 || n >= names.length) { res.writeHead(404); return res.end('not found'); }
+    if (r2keys[n]) {
+      const got = await getStream(r2keys[n]);
+      if (!got) { res.writeHead(404); return res.end('not found'); }
+      res.writeHead(200, {'Content-Type': 'image/png', 'Content-Length': got.size, 'Cache-Control': 'public, max-age=86400'});
+      return got.stream.pipe(res);
+    }
+    const file = path.join(STUDIO_DATA_DIR, 'studio', m[1], names[n]);
+    if (names[n] !== path.basename(names[n]) || !fs.existsSync(file)) { res.writeHead(404); return res.end('not found'); }
     res.writeHead(200, {'Content-Type': 'image/png', 'Content-Length': fs.statSync(file).size, 'Cache-Control': 'public, max-age=86400'});
     return fs.createReadStream(file).pipe(res);
   }
@@ -967,6 +997,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         if (r.kind === 'post') { job.zip = path.basename(r.out); job.images = r.images; }
         else job.file = path.basename(r.out);
         job.title = r.title;
+        job.projectId = r.projectId; // 포트폴리오 등록 id(카드 작업내역·업로드에 사용)
         job.done = true;
       } catch (e: any) {
         job.error = e.message;
@@ -995,7 +1026,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       }
       if (job.done) {
         res.write(
-          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip})}\n\n`,
+          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip, projectId: job.projectId})}\n\n`,
         );
         clearInterval(timer);
         res.end();
