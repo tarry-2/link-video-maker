@@ -261,6 +261,11 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
 type Job = {id: string; logs: string[]; done: boolean; file?: string; title?: string; error?: string; kind?: 'video' | 'post'; images?: string[]; zip?: string; projectId?: string};
+// ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
+function jlog(job: Job, s: string) {
+  const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
+  job.logs.push(`[${t}] ${s}`.slice(0, 500));
+}
 const jobs = new Map<string, Job>();
 
 function json(res: http.ServerResponse, code: number, data: unknown) {
@@ -914,7 +919,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           quality: b.quality === 'fast' ? 'fast' : 'high',
           imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real',
           aiClips: Number(b.aiClips) || 0,
-          log: (m) => job.logs.push(m),
+          log: (m) => jlog(job, m),
         });
         // 바탕화면 폴더에도 저장
         const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
@@ -928,11 +933,11 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         job.file = path.basename(r.out);
         job.title = r.title;
         job.done = true;
-        job.logs.push(`[완료] 바탕화면에도 저장됨: ${folder}`);
+        jlog(job, `[완료] 바탕화면에도 저장됨: ${folder}`);
       } catch (e: any) {
         job.error = e.message;
         job.done = true;
-        job.logs.push('[실패] ' + e.message);
+        jlog(job, '[실패] ' + e.message);
       }
     })();
 
@@ -985,7 +990,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           duration: Number(b.duration) || 30,
           presetId: b.presetId || undefined,
           voice: b.voice || undefined,
-          log: (m) => job.logs.push(m),
+          log: (m) => jlog(job, m),
         });
         const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
         const today = new Date().toLocaleDateString('sv-SE');
@@ -995,11 +1000,11 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         job.file = path.basename(r.out);
         job.title = r.title;
         job.done = true;
-        job.logs.push(`[완료] 바탕화면에도 저장됨: ${folder}`);
+        jlog(job, `[완료] 바탕화면에도 저장됨: ${folder}`);
       } catch (e: any) {
         job.error = e.message;
         job.done = true;
-        job.logs.push('[실패] ' + e.message);
+        jlog(job, '[실패] ' + e.message);
       }
     })();
 
@@ -1049,7 +1054,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real',
           cardTheme: b.cardTheme === 'dark' ? 'dark' : 'light',
           motion: ['pop', 'slide', 'type', 'zoom', 'flip'].includes(b.motion) ? b.motion : 'auto',
-          log: (m) => job.logs.push(m),
+          log: (m) => jlog(job, m),
         });
         // 바탕화면 저장은 선택(로컬에서만, 실패해도 무시 — Railway엔 Desktop 없음).
         try {
@@ -1058,7 +1063,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           const folder = path.join(os.homedir(), 'Desktop', `온비디오 카드 ${today}`, safe);
           fs.mkdirSync(folder, {recursive: true});
           fs.copyFileSync(r.out, path.join(folder, path.basename(r.out)));
-          job.logs.push(`[완료] 바탕화면에도 저장됨: ${folder}`);
+          jlog(job, `[완료] 바탕화면에도 저장됨: ${folder}`);
         } catch { /* Railway 등 Desktop 없는 환경 — 무시 */ }
         job.kind = r.kind;
         if (r.kind === 'post') { job.zip = path.basename(r.out); job.images = r.images; }
@@ -1069,7 +1074,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       } catch (e: any) {
         job.error = e.message;
         job.done = true;
-        job.logs.push('[실패] ' + e.message);
+        jlog(job, '[실패] ' + e.message);
       }
     })();
     return json(res, 202, {id});

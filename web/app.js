@@ -315,8 +315,8 @@ function setCardOutput(o) {
     ? '카드별 이미지 여러 장 → 인스타 게시물(손가락으로 넘기는 카드뉴스)로 올려요.'
     : '자동으로 넘어가는 세로 영상 1개 → 릴스/쇼츠에 올려요.';
 }
-$('card-out-video')?.addEventListener('click', () => setCardOutput('video'));
-$('card-out-post')?.addEventListener('click', () => setCardOutput('post'));
+$('card-out-video')?.addEventListener('click', () => { setCardOutput('video'); saveFormState(); });
+$('card-out-post')?.addEventListener('click', () => { setCardOutput('post'); saveFormState(); });
 
 // ── 카드뉴스 생성(studio.js의 generate가 버튼을 덮으므로, 카드 모드는 이 함수로 처리) ──
 window.startCardGen = async function () {
@@ -363,7 +363,13 @@ let curJobId = null, curES = null, reconnTries = 0;
 let cardStartTs = 0, cardTimer = null, cardPct = 0, cardJobStart = null;
 function cardElapsedText() { if (!cardStartTs) return ''; const s = Math.floor((Date.now() - cardStartTs) / 1000); const m = Math.floor(s / 60); return '⏱ ' + (m ? m + '분 ' : '') + (s % 60) + '초'; }
 function cardTick() { clearTimeout(cardTimer); const n = $('card-elapsed'); if (!n) return; n.textContent = cardElapsedText(); cardTimer = setTimeout(cardTick, 1000); }
-function setCardEnergy(pct, label) { cardPct = Math.max(cardPct, pct); const f = $('card-energy'); if (f) f.style.width = cardPct + '%'; const l = $('card-energy-label'); if (l && label) l.textContent = label; }
+let cardLabel = '시작하는 중…';
+function setCardEnergy(pct, label) {
+  cardPct = Math.max(cardPct, Math.round(pct));
+  if (label) cardLabel = label;
+  const f = $('card-energy'); if (f) f.style.width = cardPct + '%';
+  const l = $('card-energy-label'); if (l) l.textContent = cardPct + '% · ' + cardLabel; // ★영상처럼 퍼센트 표시
+}
 function cardEnergyFromLog(line) {
   const ph = $('card-phase'); const set = (t) => { if (ph) ph.textContent = t; };
   const im = line.match(/\[배경 (\d+)\/(\d+)\]/) || line.match(/카드 (\d+)\/(\d+) 이미지/);
@@ -764,6 +770,15 @@ function saveFormState() {
       music: $('studio-music')?.checked || false,
       productLock: $('product-lock')?.checked || false,
       product: ['name', 'price', 'benefit', 'url'].reduce((o, k) => { o[k] = $('product-' + k)?.value || ''; return o; }, {}),
+      // 카드뉴스 입력(새로고침에도 유지, '초기화' 전까진 안 지움)
+      cardTopic: $('card-topic')?.value || '',
+      cardCount: $('card-count')?.value,
+      cardBg: $('card-bg')?.value,
+      cardOutput,
+      cardNarration: $('card-narration')?.checked || false,
+      cardBgm: $('card-bgm') ? $('card-bgm').checked : true,
+      cardMotion: $('card-motion')?.value,
+      cardTheme: $('card-theme')?.value,
     };
     localStorage.setItem(FORM_KEY, JSON.stringify(s));
   } catch {}
@@ -796,6 +811,15 @@ function restoreFormState() {
   const v = (window.__voices || []).find((x) => x.id === ($('voice')?.value));
   if (v) $('voice-state').textContent = v.tip;
   $('duration')?.dispatchEvent(new Event('input')); // studio.js 예상비용 갱신
+  // 카드뉴스 입력 복원
+  if (s.cardTopic != null && $('card-topic')) $('card-topic').value = s.cardTopic;
+  if (s.cardCount && $('card-count')) $('card-count').value = s.cardCount;
+  if (s.cardMotion && $('card-motion')) $('card-motion').value = s.cardMotion;
+  if (s.cardTheme && $('card-theme')) $('card-theme').value = s.cardTheme;
+  if ($('card-narration')) $('card-narration').checked = !!s.cardNarration;
+  if ($('card-bgm')) $('card-bgm').checked = s.cardBgm !== false;
+  if (s.cardBg && $('card-bg')) { $('card-bg').value = s.cardBg; $('card-bg').dispatchEvent(new Event('change')); }
+  if (s.cardOutput) setCardOutput(s.cardOutput);
 }
 function resetForm() {
   if ($('url')) $('url').value = '';
@@ -813,6 +837,17 @@ function resetForm() {
   selectedPreset = null; document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
   if ($('voice')) $('voice').value = ''; if ($('voice-state')) $('voice-state').textContent = '';
   uploadedImages = []; if ($('thumbs')) $('thumbs').innerHTML = ''; if ($('images')) $('images').value = '';
+  // 카드뉴스 입력 초기화
+  if ($('card-topic')) $('card-topic').value = '';
+  if ($('card-topic-list')) $('card-topic-list').innerHTML = ''; if ($('card-topic-state')) $('card-topic-state').textContent = '';
+  if ($('card-count')) $('card-count').value = '7';
+  if ($('card-bg')) { $('card-bg').value = 'solid'; $('card-bg').dispatchEvent(new Event('change')); }
+  if ($('card-motion')) $('card-motion').value = 'auto';
+  if ($('card-theme')) $('card-theme').value = 'light';
+  if ($('card-narration')) $('card-narration').checked = false;
+  if ($('card-bgm')) $('card-bgm').checked = true;
+  cardImages = []; if ($('card-thumbs')) $('card-thumbs').innerHTML = ''; if ($('card-images')) $('card-images').value = '';
+  setCardOutput('video');
   setModeSilent('auto');
   $('duration')?.dispatchEvent(new Event('input'));
 }
@@ -821,9 +856,9 @@ $('reset-form')?.addEventListener('click', () => {
   localStorage.removeItem(FORM_KEY);
   resetForm();
 });
-['url', 'topic-input', 'duration', 'quality', 'image-style', 'keywords', 'facts', 'product-name', 'product-price', 'product-benefit', 'product-url']
+['url', 'topic-input', 'duration', 'quality', 'image-style', 'keywords', 'facts', 'product-name', 'product-price', 'product-benefit', 'product-url', 'card-topic']
   .forEach((id) => { const e = $(id); if (e) e.addEventListener('input', saveFormState); });
-['studio-music', 'product-lock'].forEach((id) => { const e = $(id); if (e) e.addEventListener('change', saveFormState); });
+['studio-music', 'product-lock', 'card-count', 'card-bg', 'card-motion', 'card-theme', 'card-narration', 'card-bgm'].forEach((id) => { const e = $(id); if (e) e.addEventListener('change', saveFormState); });
 
 // 부트스트랩: 로그인 상태 확인 후, 인증된 경우에만 카테고리·목소리 로드(비로그인 시 401→throw 방지).
 (async () => {
