@@ -382,6 +382,8 @@
   };
   el('generate').onclick = async () => {
     if (loading) return;
+    // 카드뉴스 모드는 studio 작업 시스템이 아니라 전용 카드 파이프라인(app.js)으로 처리.
+    if (typeof mode !== 'undefined' && mode === 'card') { if (window.startCardGen) window.startCardGen(); return; }
     if (dirty) { message('편집 중인 대본을 먼저 저장하세요.', true); return; }
     loading = true; el('generate').disabled = true; message('대본 작업을 준비하고 있습니다…');
     try {

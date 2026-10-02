@@ -14,9 +14,10 @@ $('tab-auto').onclick = () => setMode('auto');
 $('tab-topic').onclick = () => setMode('topic');
 $('tab-manual').onclick = () => setMode('manual');
 $('tab-batch').onclick = () => setMode('batch');
+$('tab-card').onclick = () => setMode('card');
 function applyMode(m) {
   mode = m;
-  for (const t of ['auto', 'topic', 'manual', 'batch']) {
+  for (const t of ['auto', 'topic', 'manual', 'batch', 'card']) {
     $('tab-' + t).classList.toggle('active', m === t);
     $('pane-' + t).classList.toggle('hidden', m !== t);
   }
@@ -59,6 +60,40 @@ $('topic-fetch')?.addEventListener('click', async () => {
     saveFormState();
   } catch (e) { st.textContent = e.message; }
 });
+
+// ── 카드뉴스: 주제 추천(기존 /api/topics 재사용) ──
+$('card-topic-fetch')?.addEventListener('click', async () => {
+  const st = $('card-topic-state'), list = $('card-topic-list');
+  st.textContent = '요즘 잘 되는 주제 찾는 중…'; list.innerHTML = '';
+  try {
+    const r = await fetch('/api/topics?preset=' + encodeURIComponent(selectedPreset || ''));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    if (!d.topics || !d.topics.length) { st.textContent = '추천 결과가 없어요.'; return; }
+    st.textContent = '마음에 드는 주제를 누르세요.';
+    list.innerHTML = (d.topics || []).map((t) =>
+      `<button class="topic-item" type="button" data-title="${(t.title || '').replace(/"/g, '&quot;')}">${t.title || ''}${t.why ? `<span class="topic-why">${t.why}</span>` : ''}</button>`).join('');
+    list.querySelectorAll('.topic-item').forEach((b) => b.addEventListener('click', () => {
+      list.querySelectorAll('.topic-item').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active'); $('card-topic').value = b.dataset.title;
+    }));
+  } catch (e) { st.textContent = e.message; }
+});
+// 카드 배경이 '업로드'일 때만 파일 선택 노출.
+$('card-bg')?.addEventListener('change', (e) => {
+  $('card-images').classList.toggle('hidden', e.target.value !== 'upload');
+  if (e.target.value !== 'upload') { cardImages = []; $('card-thumbs').innerHTML = ''; }
+});
+let cardImages = [];
+$('card-images').onchange = async (e) => {
+  const files = [...e.target.files].slice(0, 12);
+  cardImages = []; $('card-thumbs').innerHTML = '';
+  for (const f of files) {
+    const durl = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
+    cardImages.push(durl);
+    const img = document.createElement('img'); img.src = durl; $('card-thumbs').appendChild(img);
+  }
+};
 
 // ── 이미지 업로드 ──
 $('images').onchange = async (e) => {
@@ -190,9 +225,27 @@ $('character-new')?.addEventListener('click', async () => {
 // ── 영상 생성 ──
 $('generate').onclick = async () => {
   let endpoint, body;
-  if (mode === 'auto') {
-    const url = $('url').value.trim();
-    if (!url) { alert('링크를 입력하세요.'); return; }
+  if (mode === 'card') {
+    const topic = $('card-topic').value.trim();
+    if (!topic) { alert('카드뉴스 주제를 입력하세요.'); return; }
+    const bg = $('card-bg').value;
+    if (bg === 'upload' && !cardImages.length) { alert('배경으로 쓸 이미지를 올리거나 다른 배경을 고르세요.'); return; }
+    endpoint = '/api/generate-cards';
+    body = {
+      topic,
+      count: Number($('card-count').value),
+      bg,
+      images: bg === 'upload' ? cardImages : undefined,
+      narration: $('card-narration').checked,
+      bgm: $('card-bgm').checked,
+      presetId: selectedPreset,
+      voice: $('voice').value,
+      imageStyle: $('image-style') ? $('image-style').value : 'real',
+    };
+  } else if (mode === 'auto' || mode === 'topic') {
+    // 주제 추천 모드도 링크 대신 주제를 /api/generate로 보냄(url 자리에 주제).
+    const url = mode === 'topic' ? $('topic-input').value.trim() : $('url').value.trim();
+    if (!url) { alert(mode === 'topic' ? '주제를 입력하거나 추천에서 고르세요.' : '링크를 입력하세요.'); return; }
     endpoint = '/api/generate';
     body = {
       url,
@@ -237,6 +290,30 @@ $('generate').onclick = async () => {
 
   // SSE 진행로그 — 화면 내렸다 와도 이어지게 재연결 지원.
   attachProgress(id, true);
+};
+
+// ── 카드뉴스 생성(studio.js의 generate가 버튼을 덮으므로, 카드 모드는 이 함수로 처리) ──
+window.startCardGen = async function () {
+  const topic = $('card-topic').value.trim();
+  if (!topic) { alert('카드뉴스 주제를 입력하세요.'); return; }
+  const bg = $('card-bg').value;
+  if (bg === 'upload' && !cardImages.length) { alert('배경으로 쓸 이미지를 올리거나 다른 배경을 고르세요.'); return; }
+  const body = {
+    topic, count: Number($('card-count').value), bg,
+    images: bg === 'upload' ? cardImages : undefined,
+    narration: $('card-narration').checked, bgm: $('card-bgm').checked,
+    presetId: selectedPreset, voice: $('voice').value,
+    imageStyle: $('image-style') ? $('image-style').value : 'real',
+  };
+  $('progress-block').classList.remove('hidden');
+  $('result-block').classList.add('hidden');
+  if ($('log')) $('log').textContent = '';
+  try {
+    const r = await fetch('/api/generate-cards', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    attachProgress(d.id, true);
+  } catch (e) { addLog('[실패] ' + e.message, 'fail'); }
 };
 
 // ── 진행 로그 SSE(재연결 가능) — 화면 내림/백그라운드로 끊겨도 복귀 시 자동 이어짐 ──

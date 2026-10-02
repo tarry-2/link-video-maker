@@ -7,6 +7,7 @@ import path from 'node:path';
 import {randomUUID, createHmac, timingSafeEqual} from 'node:crypto';
 import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
+import {makeCardVideo} from './lib/card-pipeline';
 import {PRESETS} from './lib/presets';
 import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
@@ -905,6 +906,69 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       }
     })();
 
+    return json(res, 202, {id});
+  }
+
+  // ── 카드뉴스 생성 ──
+  if (p === '/api/generate-cards' && req.method === 'POST') {
+    const b = await readBody(req);
+    const topic = String(b.topic || '').trim();
+    if (!topic) return json(res, 400, {error: '주제를 입력하세요.'});
+    const k = pipelineKeys();
+    if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 Gemini 또는 OpenAI 키를 저장하세요.'});
+    const bg = ['ai', 'solid', 'upload'].includes(b.bg) ? b.bg : 'solid';
+    const narration = b.narration === true;
+    const bgm = b.bgm === true;
+    if ((narration || bgm) && !k.elevenlabs) return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다.'});
+    if (bg === 'ai' && !k.replicate) return json(res, 400, {error: 'AI 배경을 쓰려면 Replicate 키가 필요합니다.'});
+
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false};
+    jobs.set(id, job);
+    (async () => {
+      try {
+        // 업로드 배경(dataURL) 저장.
+        let uploads: string[] | undefined;
+        if (bg === 'upload' && Array.isArray(b.images) && b.images.length) {
+          const upDir = path.join(ROOT, 'public', 'uploads', 'card-' + id);
+          fs.mkdirSync(upDir, {recursive: true});
+          uploads = [];
+          b.images.slice(0, 12).forEach((durl: string, i: number) => {
+            const m = String(durl).match(/^data:(image\/\w+);base64,(.+)$/);
+            if (!m) return;
+            const ext = m[1] === 'image/png' ? 'png' : 'jpg';
+            fs.writeFileSync(path.join(upDir, `u-${i}.${ext}`), Buffer.from(m[2], 'base64'));
+            uploads!.push(`uploads/card-${id}/u-${i}.${ext}`);
+          });
+        }
+        const r = await makeCardVideo(k, {
+          topic,
+          count: Number(b.count) || 7,
+          presetId: b.presetId || undefined,
+          bg, uploads,
+          narration, bgm,
+          voice: b.voice || undefined,
+          imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real',
+          log: (m) => job.logs.push(m),
+        });
+        // 바탕화면 저장은 선택(로컬에서만, 실패해도 무시 — Railway엔 Desktop 없음).
+        try {
+          const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
+          const today = new Date().toLocaleDateString('sv-SE');
+          const folder = path.join(os.homedir(), 'Desktop', `온비디오 카드 ${today}`, safe);
+          fs.mkdirSync(folder, {recursive: true});
+          fs.copyFileSync(r.out, path.join(folder, `${safe}.mp4`));
+          job.logs.push(`[완료] 바탕화면에도 저장됨: ${folder}`);
+        } catch { /* Railway 등 Desktop 없는 환경 — 무시 */ }
+        job.file = path.basename(r.out);
+        job.title = r.title;
+        job.done = true;
+      } catch (e: any) {
+        job.error = e.message;
+        job.done = true;
+        job.logs.push('[실패] ' + e.message);
+      }
+    })();
     return json(res, 202, {id});
   }
 

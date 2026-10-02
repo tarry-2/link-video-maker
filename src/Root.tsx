@@ -2,7 +2,9 @@ import React from 'react';
 import {Composition} from 'remotion';
 import {Video, videoSchema} from './Video';
 import {Thumbnail, thumbnailSchema} from './Thumbnail';
+import {CardVideo, cardVideoSchema} from './CardVideo';
 import type {SceneData} from './Scene';
+import type {CardData} from './Card';
 
 const w = (parts: [string, number, number][]) =>
   parts.map(([t, s, e]) => ({t, s, e}));
@@ -71,6 +73,18 @@ const demoScenes: SceneData[] = [
   },
 ];
 
+// 카드뉴스 데모(8종 타입 전부 — 렌더 검증용).
+const demoCards: CardData[] = [
+  {type: 'cover', accent: '#FFD84D', bgColor: '#20223a', badge: '꿀팁', title: '아침마다 얼굴 붓는 사람\n꼭 보세요', body: '3분이면 빠지는 방법', durationInFrames: 75, index: 0, total: 8},
+  {type: 'number', accent: '#4FE0D0', bgColor: '#1a2a2a', title: '아침 부기, 사실은', number: '87', unit: '%', body: '잘못된 수면 자세 때문', durationInFrames: 75, index: 1, total: 8},
+  {type: 'list', accent: '#FF8ABf', bgColor: '#2a1a2a', title: '부기 빼는 3단계', items: ['미지근한 물 한 컵', '귀 뒤에서 쇄골로 마사지', '찬물 세수 30초'], durationInFrames: 90, index: 2, total: 8},
+  {type: 'quote', accent: '#FFD84D', bgColor: '#222', title: '부기는 습관이\n만든다', body: '피부과 전문의', durationInFrames: 75, index: 3, total: 8},
+  {type: 'compare', accent: '#6BE06B', bgColor: '#1a2230', title: '자기 전 이것만 바꿔도', before: '라면·짠 음식 야식', after: '물 한 컵 + 스트레칭', durationInFrames: 90, index: 4, total: 8},
+  {type: 'fix', accent: '#4FE0D0', bgColor: '#201a2a', title: '흔한 실수', wrong: '아침에 뜨거운 물로 세수', right: '찬물로 혈관 수축시키기', durationInFrames: 85, index: 5, total: 8},
+  {type: 'body', accent: '#FFD84D', bgColor: '#23201a', title: '꾸준함이 핵심', body: '하루 3분, 2주면 몸이 기억해요.', durationInFrames: 75, index: 6, total: 8},
+  {type: 'closing', accent: '#FF8ABf', bgColor: '#2a1a24', title: '오늘부터 시작해요', body: '내일 아침이 달라집니다', durationInFrames: 85, index: 7, total: 8},
+];
+
 export const RemotionRoot: React.FC = () => {
   const transitionFrames = 15;
   return (
@@ -97,6 +111,22 @@ export const RemotionRoot: React.FC = () => {
           width: landscape ? 1920 : 1080,
           height: landscape ? 1080 : 1920,
         };
+      }}
+    />
+    {/* 카드뉴스 영상 — 카드 8종 슬라이드 + 나레이션/BGM 토글 */}
+    <Composition
+      id="CardVideo"
+      component={CardVideo}
+      fps={30}
+      width={1080}
+      height={1920}
+      schema={cardVideoSchema}
+      defaultProps={{cards: demoCards, transitionFrames}}
+      calculateMetadata={({props}) => {
+        const total = props.cards.reduce((a, c) => a + c.durationInFrames, 0);
+        const overlap = props.transitionFrames * Math.max(0, props.cards.length - 1);
+        const landscape = props.orientation === 'landscape';
+        return {durationInFrames: total - overlap, width: landscape ? 1920 : 1080, height: landscape ? 1080 : 1920};
       }}
     />
     {/* 전용 썸네일(커버) — renderStill 전용 1프레임 컴포지션 */}

@@ -57,6 +57,7 @@
         <button id="tab-topic" class="tab" type="button">💡 주제 추천</button>
         <button id="tab-manual" class="tab" type="button">🖼 내 이미지로</button>
         <button id="tab-batch" class="tab" type="button">📚 여러 편 한 번에</button>
+        <button id="tab-card" class="tab" type="button">🎴 카드뉴스</button>
       </div>
 
       <div class="card">
@@ -97,6 +98,43 @@
           <button id="batch-start" class="primary-btn" type="button" style="margin-top:12px">📚 이 목록으로 순차 제작 시작</button>
           <div id="batch-status" class="batch-status" hidden></div>
           <p class="mini-state">한 편씩 차례로 자동 제작돼요(대본→영상). 완성되면 포트폴리오에 쌓이고, 창을 닫아도 서버가 계속 만들어요.</p>
+        </div>
+
+        <!-- 카드뉴스 모드: 글자 중심 카드 슬라이드 -->
+        <div id="pane-card" class="hidden">
+          <label class="field-label">1. 주제 <span class="hint">— 주제만 넣으면 AI가 표지·숫자·리스트·비교 등 다양한 카드로 구성해요</span></label>
+          <button id="card-topic-fetch" class="ghost-btn" type="button">✨ 요즘 잘 되는 주제 추천받기</button>
+          <p id="card-topic-state" class="mini-state"></p>
+          <div id="card-topic-list" class="topic-list"></div>
+          <input id="card-topic" class="input" style="margin-top:10px" placeholder="예: 아침마다 붓는 얼굴 3분이면 빠지는 법" />
+
+          <div class="row" style="margin-top:12px">
+            <div class="col">
+              <label class="field-label">카드 장수</label>
+              <select id="card-count" class="input">
+                <option value="5">5장 · 짧게</option>
+                <option value="7" selected>7장 · 표준</option>
+                <option value="9">9장</option>
+                <option value="12">12장 · 길게</option>
+              </select>
+            </div>
+            <div class="col">
+              <label class="field-label">배경</label>
+              <select id="card-bg" class="input">
+                <option value="solid" selected>🎨 단색·그라데이션 (빠름·무료)</option>
+                <option value="ai">🖼 AI 이미지 (카드마다 생성)</option>
+                <option value="upload">📁 내 이미지 업로드</option>
+              </select>
+            </div>
+          </div>
+          <input id="card-images" class="input hidden" type="file" accept="image/*" multiple style="margin-top:8px" />
+          <div id="card-thumbs" class="thumbs"></div>
+
+          <div class="row" style="margin-top:12px">
+            <label class="toggle col"><input type="checkbox" id="card-narration" /> 🎙 나레이션 (AI가 카드를 읽어줌)</label>
+            <label class="toggle col"><input type="checkbox" id="card-bgm" checked /> 🎵 배경음악</label>
+          </div>
+          <p class="mini-state">나레이션을 끄면 ‘카드만 집중’ 모드 — 글자 카드가 슬라이드로 넘어가고 배경음악만 깔려요(진짜 카드뉴스).</p>
         </div>
 
         <label class="field-label">2. 카테고리 <span class="hint">— 고르면 톤·이미지·목소리·배경음악이 자동으로 맞춰져요</span></label>

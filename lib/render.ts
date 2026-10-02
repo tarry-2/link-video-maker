@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {rm} from 'node:fs/promises';
 import type {SceneData} from '../src/Scene';
+import type {CardData} from '../src/Card';
 
 let cachedServeUrl: string | null = null;
 
@@ -100,6 +101,43 @@ export async function renderVideo(
     },
   });
   log?.(`[렌더] 완료 → ${outPath}`);
+  } finally {
+    if (publicDir) await rm(serveUrl, {recursive: true, force: true});
+  }
+}
+
+// 카드뉴스 영상 렌더 — Video와 동일 설정, 컴포지션만 CardVideo.
+export async function renderCardVideo(
+  cards: CardData[],
+  transitionFrames: number,
+  outPath: string,
+  log?: (m: string) => void,
+  bgmSrc?: string,
+  voiceSrc?: string,
+  publicDir?: string,
+  orientation: 'portrait' | 'landscape' = 'portrait',
+): Promise<void> {
+  const serveUrl = publicDir
+    ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
+    : await getServeUrl(log);
+  try {
+    const inputProps = {cards, transitionFrames, bgmSrc, voiceSrc, orientation};
+    const composition = await selectComposition({serveUrl, id: 'CardVideo', inputProps});
+    const memGB = containerMemGB();
+    const concurrency = pickConcurrency(memGB);
+    log?.(`[렌더] 카드 ${cards.length}장 · ${composition.durationInFrames}프레임 인코딩 (동시성 ${concurrency})`);
+    let lastPct = -1;
+    await renderMedia({
+      composition, serveUrl, codec: 'h264', outputLocation: outPath, inputProps, concurrency,
+      chromiumOptions: {gl: 'swiftshader', enableMultiProcessOnLinux: true},
+      imageFormat: 'jpeg', jpegQuality: 80,
+      offthreadVideoCacheSizeInBytes: 150 * 1024 * 1024,
+      onProgress: ({progress}) => {
+        const pct = Math.round(progress * 100);
+        if (pct !== lastPct && pct % 10 === 0) { lastPct = pct; log?.(`[렌더] ${pct}%`); }
+      },
+    });
+    log?.(`[렌더] 완료 → ${outPath}`);
   } finally {
     if (publicDir) await rm(serveUrl, {recursive: true, force: true});
   }
