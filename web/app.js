@@ -5,6 +5,12 @@ document.addEventListener('contextmenu', (e) => {
   if (e.target && /^(IMG|VIDEO)$/.test(e.target.tagName)) e.preventDefault();
 });
 
+// ★한 번에 영상 하나만 재생 — 카드 결과와 studio 편집기 영상이 동시에 돌아 BGM이 섞이는 문제 방지.
+document.addEventListener('play', (e) => {
+  if (e.target.tagName !== 'VIDEO') return;
+  document.querySelectorAll('video').forEach((v) => { if (v !== e.target && !v.paused) v.pause(); });
+}, true);
+
 let selectedPreset = null;
 let mode = 'auto'; // auto | topic | manual
 let uploadedImages = []; // dataURL 배열
