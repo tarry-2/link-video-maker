@@ -251,7 +251,7 @@ select.input { appearance: none; cursor: pointer; }
 }
 
 /* 상단 네비 탭(영상 만들기 · 목소리 듣기 · 포트폴리오) */
-.topnav { display: flex; gap: 6px; max-width: 1100px; margin: 0 auto; padding: 0 20px 12px; flex-wrap: wrap; }
+.topnav { display: flex; gap: 6px; max-width: 1280px; margin: 0 auto; padding: 0 32px 12px; flex-wrap: wrap; }
 .navtab {
   padding: 9px 16px; border-radius: 11px; background: var(--card); border: 1px solid var(--line);
   color: var(--muted); font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap;

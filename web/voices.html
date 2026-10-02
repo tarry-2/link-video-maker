@@ -15,6 +15,9 @@
     <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
     <style>
       .voice-groups { display: flex; flex-direction: column; gap: 26px; }
+      /* 넓은 PC 화면에서 목소리 카드가 휑하지 않게 여러 열로 꽉 채움(좁으면 자동 1열) */
+      .vgroup { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+      .vgroup .vg-title, .vgroup .vg-desc { grid-column: 1 / -1; }
       .vg-title { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
       .vg-desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
       .vcard {
@@ -126,7 +129,7 @@
       <a href="/voices?tab=pf" class="navtab" id="nav-pf">🎬 포트폴리오</a>
     </nav>
 
-    <main class="wrap">
+    <main class="wrap wide">
       <p class="eyebrow">VOICE GUIDE</p>
       <h1 class="hero">목소리 듣고 고르기</h1>
       <p class="sub">재생 버튼을 눌러 직접 들어보세요. 콘텐츠에 맞는 목소리를 쓰면 시청 시간이 확 늘어납니다.</p>
@@ -207,6 +210,7 @@
         for (const key of ['issue', 'info', 'sell', 'heal', 'anime']) {
           if (!groups[key]) continue;
           const box = document.createElement('div');
+          box.className = 'vgroup';
           box.innerHTML = `<div class="vg-title">${USE_LABEL[key].t}</div><div class="vg-desc">${USE_LABEL[key].d}</div>`;
           for (const v of groups[key]) {
             const card = document.createElement('div');
