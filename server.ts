@@ -257,6 +257,40 @@ const server = http.createServer(async (req, res) => {
     try { v = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || '?'; } catch {}
     return json(res, 200, {version: v});
   }
+  // ── BGM 진단(임시, 공개) — 서버가 자기 ElevenLabs 키로 실제 상태를 때려본다. 키 값은 노출 안 함. ──
+  // ?compose=1 이면 실제 music/compose 10초 테스트(약 900크레딧 소모). 평소엔 크레딧/구독만(무료).
+  if (p === '/api/debug/bgm') {
+    const e = loadEnv();
+    const key = e.ELEVENLABS_API_KEY || '';
+    if (!key) return json(res, 200, {error: 'ElevenLabs 키 미설정', keyPresent: false});
+    const out: any = {keyPresent: true, keyTail: key.slice(-4)};
+    // 1) 구독/크레딧(무료 조회) — 실제 잔량·티어 확인.
+    try {
+      const sr = await fetch('https://api.elevenlabs.io/v1/user/subscription', {headers: {'xi-api-key': key}, signal: AbortSignal.timeout(20000)});
+      const sd: any = await sr.json();
+      out.subscription = sr.ok
+        ? {tier: sd.tier, used: sd.character_count, limit: sd.character_limit, remaining: (sd.character_limit ?? 0) - (sd.character_count ?? 0), status: sd.status}
+        : {httpStatus: sr.status, body: JSON.stringify(sd).slice(0, 400)};
+    } catch (e2: any) { out.subscriptionError = e2.message; }
+    // 2) 실제 music/compose 테스트(compose=1일 때만).
+    if (u.searchParams.get('compose') === '1') {
+      try {
+        const r = await fetch('https://api.elevenlabs.io/v1/music/compose', {
+          method: 'POST',
+          headers: {'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg'},
+          body: JSON.stringify({prompt: 'calm cinematic background music', music_length_ms: 10000}),
+          signal: AbortSignal.timeout(60000),
+        });
+        const ct = r.headers.get('content-type') || '';
+        out.compose = {
+          status: r.status,
+          contentType: ct,
+          body: ct.includes('audio') ? `성공(audio ${r.headers.get('content-length') || '?'}B)` : (await r.text()).slice(0, 800),
+        };
+      } catch (e2: any) { out.composeError = e2.message; }
+    }
+    return json(res, 200, out);
+  }
   // ── 로그인 상태 확인 ──
   if (p === '/api/auth') return json(res, 200, {required: !!ADMIN_PASSWORD, ok: authed(req)});
   // ── 로그인 ──
@@ -517,17 +551,26 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/instagram/status' && req.method === 'GET') return json(res, 200, instagramStatus());
   // ── 성과 추적: 올린 인스타 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──
   if (p === '/api/instagram/stats' && req.method === 'GET') {
-    if (!instagramStatus().connected) return json(res, 200, {connected: false, items: [], summary: null});
+    const debug = u.searchParams.get('debug') === '1';
+    const diag: string[] | undefined = debug ? [] : undefined;
+    if (!instagramStatus().connected) return json(res, 200, {connected: false, items: [], summary: null, ...(debug ? {debug: ['연결 안 됨(status)']} : {})});
     const sampleIg = loadSampleInstagram();
     const all = [
       ...listPortfolio().map((it) => ({id: it.projectId, title: it.title, voice: it.voice, category: it.category, goal: it.goal, url: it.instagramUrl || readProjectInstagram(it.projectId)})),
       ...SAMPLES.map((s) => ({id: 'sample:' + s.file, title: s.title, voice: s.voice, category: s.category, goal: s.goal, url: sampleIg[s.file] || ''})),
     ];
     const withUrl = all.filter((x) => x.url);
-    if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null});
+    if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 instagramUrl(permalink) 저장된 게 없음']} : {})});
     let byPermalink: Record<string, {views: number; likes: number; comments: number}> = {};
-    try { byPermalink = await getInstaStats(); }
-    catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message}); }
+    try { byPermalink = await getInstaStats(diag); }
+    catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message, ...(debug ? {debug: [...(diag || []), '예외: ' + e.message]} : {})}); }
+    if (diag) {
+      const apiKeys = Object.keys(byPermalink);
+      diag.push(`우리가 저장한 permalink ${withUrl.length}개: ${withUrl.map((x) => x.url).slice(0, 5).join(' , ')}`);
+      diag.push(`Meta가 돌려준 permalink ${apiKeys.length}개: ${apiKeys.slice(0, 5).join(' , ')}`);
+      const matched = withUrl.filter((x) => byPermalink[x.url]).length;
+      diag.push(`permalink 매칭 성공 ${matched}/${withUrl.length}개 (0이면 키 불일치)`);
+    }
     const items = withUrl
       .map((x) => ({...x, ...(byPermalink[x.url] || {views: 0, likes: 0, comments: 0})}))
       .sort((a, b) => b.views - a.views || b.likes - a.likes);
@@ -546,7 +589,7 @@ const server = http.createServer(async (req, res) => {
       byVoice: avgBy('voice').slice(0, 5),
       byCategory: avgBy('category').slice(0, 5),
     };
-    return json(res, 200, {connected: true, items, summary});
+    return json(res, 200, {connected: true, items, summary, ...(debug ? {debug: diag} : {})});
   }
   // 인스타 연결(계정 ID + 토큰 저장, 유효성 검증)
   if (p === '/api/instagram/connect' && req.method === 'POST') {

@@ -59,11 +59,13 @@ export const studioProviders: StudioDependencies = {
     if (!align?.length) throw new Error('음성 타이밍을 받지 못했습니다. 해당 장면을 다시 시도하세요.');
     return {words: alignToWords(align, 30), frames: Math.max(30, Math.ceil(align[align.length - 1].end * 30) + 6)};
   },
+  // BGM ON으로 만든 영상은 음악이 핵심 — 실패하면 generateBgm이 사유를 담아 throw하고,
+  // 그 에러가 작업을 'failed'로 만들어 화면에 사유를 보여준다(영상만 뱉지 않는다).
   async music(p, file, log) {
     const k = pipelineKeys();
+    if (!k.elevenlabs) throw new Error('키 설정에서 ElevenLabs 키를 저장하세요.');
     const ms = p.scenes.reduce((n, s) => n + (s.voice?.frames || 0), 0) / 30 * 1000;
-    if (!k.elevenlabs || !await generateBgm(k.elevenlabs, p.musicPrompt, ms, file, log))
-      throw new Error('배경음악 생성에 실패했습니다. 이어서 재시작하면 이미지·음성을 재사용합니다.');
+    await generateBgm(k.elevenlabs, p.musicPrompt, ms, file, log);
   },
   async render(p, dir, output, log, thumbOut) {
     // Fresh public folder per render: cached bundles must never serve an older scene.

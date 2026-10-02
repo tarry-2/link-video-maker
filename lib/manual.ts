@@ -219,11 +219,11 @@ export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Pro
   // BGM (통짜라 전환 0)
   const transitionFrames = 0;
   const totalFrames = scenes.reduce((a, s) => a + s.durationInFrames, 0);
-  let bgmSrc: string | undefined;
   const bgmRel = `${pubRel}/bgm.mp3`;
   log('[BGM] 배경음악 생성 중…');
-  if (await generateBgm(keys.elevenlabs, plan.musicPrompt || preset?.musicMood || '', (totalFrames / FPS) * 1000, abs(bgmRel), log))
-    bgmSrc = bgmRel;
+  // BGM 실패 시 throw(사유 포함) → 제작 중단. 웹/CLI/수동 동일 정책.
+  await generateBgm(keys.elevenlabs, plan.musicPrompt || preset?.musicMood || '', (totalFrames / FPS) * 1000, abs(bgmRel), log);
+  const bgmSrc: string = bgmRel;
 
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `${id}.mp4`);

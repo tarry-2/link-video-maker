@@ -142,13 +142,12 @@ export async function makeVideo(
   const transitionFrames = 0;
   const totalFrames = scenes.reduce((a, s) => a + s.durationInFrames, 0);
   const totalMs = (totalFrames / FPS) * 1000;
-  let bgmSrc: string | undefined;
   const bgmRel = `${pubRel}/bgm.mp3`;
   log('[BGM] 배경음악 생성 중…');
   const musicMood = sb.musicPrompt || preset?.musicMood || '';
-  if (await generateBgm(keys.elevenlabs, musicMood, totalMs, abs(bgmRel), log)) {
-    bgmSrc = bgmRel;
-  }
+  // BGM 실패 시 throw(사유 포함) → 제작 중단. 웹/CLI 동일 정책.
+  await generateBgm(keys.elevenlabs, musicMood, totalMs, abs(bgmRel), log);
+  const bgmSrc: string = bgmRel;
 
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `${id}.mp4`);

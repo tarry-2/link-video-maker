@@ -289,6 +289,7 @@ export class Studio {
       if (p.input.music && !p.bgm) {
         p.phase = '배경음악'; this.save(p);
         const file = `music-${randomUUID()}.mp3`;
+        // 실패 시 music()이 throw → 작업이 'failed'가 되고 사유가 화면에 뜬다(영상만 뱉지 않음).
         await this.deps.music(p, path.join(this.directory(id), file), log);
         p.bgm = {signature: p.musicPrompt, file}; this.save(p);
       }

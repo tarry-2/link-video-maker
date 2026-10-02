@@ -174,11 +174,16 @@ export async function maybeRefreshInstagram(log?: (m: string) => void): Promise<
 
 // 성과 추적: 내 인스타 미디어의 조회수·좋아요·댓글을 permalink 키로 반환.
 // 좋아요/댓글은 미디어 목록 fields로 1콜(확실), 조회수(릴스 재생)는 미디어별 insights(views).
-export async function getInstaStats(): Promise<Record<string, {views: number; likes: number; comments: number}>> {
+// diag(옵션): 진단 로그 배열을 넘기면 Meta API 실제 응답/에러를 담아준다(삼키지 않음). debug=1 용.
+export async function getInstaStats(
+  diag?: string[],
+): Promise<Record<string, {views: number; likes: number; comments: number}>> {
   const c = loadInstagram();
   const byPermalink: Record<string, {views: number; likes: number; comments: number}> = {};
-  if (!c.igUserId || !c.accessToken) return byPermalink;
+  if (!c.igUserId || !c.accessToken) { diag?.push('연결 안 됨: igUserId 또는 accessToken 없음'); return byPermalink; }
   const base = host(c), token = c.accessToken;
+  const tokAge = c.tokenSavedAt ? Math.round((Date.now() - c.tokenSavedAt) / 86400000) + '일' : '미기록';
+  diag?.push(`base=${base} · igUserId=${c.igUserId} · 토큰나이=${tokAge}`);
   // 1) 최근 미디어 목록(permalink + 좋아요/댓글) — 최대 3페이지.
   const media: {id: string; permalink: string; likes: number; comments: number}[] = [];
   let url = `${base}/${API}/${c.igUserId}/media?fields=id,permalink,like_count,comments_count,media_type&limit=100&access_token=${encodeURIComponent(token)}`;
@@ -186,19 +191,31 @@ export async function getInstaStats(): Promise<Record<string, {views: number; li
     try {
       const r = await fetch(url, {cache: 'no-store'});
       const d: any = await r.json();
-      if (!r.ok) break;
+      if (!r.ok) {
+        const err = d?.error || d;
+        diag?.push(`❌ media 호출 실패 HTTP ${r.status} (code=${err?.code ?? '?'}): ${String(err?.message || JSON.stringify(err)).slice(0, 300)}`);
+        break;
+      }
+      diag?.push(`media 페이지${pg + 1}: ${(d.data || []).length}개 반환`);
       for (const m of (d.data || [])) media.push({id: m.id, permalink: m.permalink, likes: Number(m.like_count || 0), comments: Number(m.comments_count || 0)});
       url = d.paging?.next || '';
-    } catch { break; }
+    } catch (e: any) { diag?.push(`❌ media fetch 예외: ${e.message}`); break; }
   }
-  // 2) 각 미디어 조회수(insights views) — 실패해도 좋아요/댓글은 유지.
+  diag?.push(`총 미디어 ${media.length}개 · 첫 permalink=${media[0]?.permalink || '(없음)'} · 첫 좋아요=${media[0]?.likes ?? '?'}`);
+  // 2) 각 미디어 조회수(insights views) — 실패해도 좋아요/댓글은 유지. 첫 실패만 진단 기록.
+  let insightNoted = false;
   for (const m of media) {
     let views = 0;
     try {
       const ir = await fetch(`${base}/${API}/${m.id}/insights?metric=views&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
       const idata: any = await ir.json();
       if (ir.ok) views = Number(idata.data?.[0]?.values?.[0]?.value ?? idata.data?.[0]?.total_value?.value ?? 0);
-    } catch {}
+      else if (!insightNoted) {
+        const err = idata?.error || idata;
+        diag?.push(`⚠️ insights(views) 실패 HTTP ${ir.status} (code=${err?.code ?? '?'}): ${String(err?.message || JSON.stringify(err)).slice(0, 300)}`);
+        insightNoted = true;
+      }
+    } catch (e: any) { if (!insightNoted) { diag?.push(`⚠️ insights 예외: ${e.message}`); insightNoted = true; } }
     if (m.permalink) byPermalink[m.permalink] = {views, likes: m.likes, comments: m.comments};
   }
   return byPermalink;
