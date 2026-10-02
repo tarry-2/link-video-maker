@@ -1,6 +1,6 @@
 // OnVideo 웹 서버 — 브라우저에서 링크→카테고리→영상 생성. 단일 사용자 로컬 앱.
 import http from 'node:http';
-import {handleStudio} from './lib/studio-http';
+import {handleStudio, todayProducedCount} from './lib/studio-http';
 import {dirSize} from './lib/cleanup';
 import {execSync} from 'node:child_process';
 import fs from 'node:fs';
@@ -15,7 +15,7 @@ import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
-import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats} from './lib/youtube';
+import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
@@ -595,6 +595,16 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/instagram/status' && req.method === 'GET') return json(res, 200, instagramStatus());
   // ── 인스타 업로드 현황(오늘 몇 개·마지막 게시 시각) — 페이스 모니터 ──
   if (p === '/api/instagram/activity' && req.method === 'GET') return json(res, 200, await getUploadActivity());
+  // ── 오늘의 활동(제작·유튜브·인스타 각각 분리) — 대시보드 ──
+  if (p === '/api/activity/today' && req.method === 'GET') {
+    const sampleYt = loadSampleYouTube();
+    const ytIds = [
+      ...listPortfolio().map((it) => it.youtubeUrl || readProjectYouTube(it.projectId)),
+      ...SAMPLES.map((s) => sampleYt[s.file] || ''),
+    ].filter(Boolean).map((u) => extractVideoId(u)).filter(Boolean);
+    const [youtube, instagram] = await Promise.all([getYtActivity(ytIds), getUploadActivity()]);
+    return json(res, 200, {produced: todayProducedCount(), youtube, instagram});
+  }
   // ── 성과 추적: 올린 인스타 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──
   if (p === '/api/instagram/stats' && req.method === 'GET') {
     const debug = u.searchParams.get('debug') === '1';

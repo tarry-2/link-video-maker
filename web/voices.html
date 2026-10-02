@@ -126,6 +126,9 @@
       <h1 class="hero">목소리 듣고 고르기</h1>
       <p class="sub">재생 버튼을 눌러 직접 들어보세요. 콘텐츠에 맞는 목소리를 쓰면 시청 시간이 확 늘어납니다.</p>
 
+      <!-- 📊 오늘의 활동: 제작·유튜브·인스타 각각 분리(한국시간) -->
+      <div id="today-activity" class="yt-stats" hidden></div>
+
       <!-- 포트폴리오: 드롭다운 선택 + 큰 미리보기 + 썸네일 목록 -->
       <section class="portfolio" id="my-videos" hidden>
         <div class="portfolio-head">
@@ -480,9 +483,40 @@
           renderPerf('ig-stats', d, '📷 인스타 성과');
         } catch (e) {}
       }
+      // ── 📊 오늘의 활동(제작·유튜브·인스타 각각) ──
+      function fmtLast(x) {
+        if (!x || !x.lastAt) return '없음';
+        const d = new Date(x.lastAt);
+        const hhmm = d.toLocaleTimeString('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit'});
+        const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+        const ago = mins < 1 ? '방금' : mins < 60 ? mins + '분 전' : mins < 1440 ? Math.floor(mins / 60) + '시간 전' : Math.floor(mins / 1440) + '일 전';
+        return hhmm + ' (' + ago + ')';
+      }
+      async function loadActivity() {
+        const el = document.getElementById('today-activity'); if (!el) return;
+        try {
+          const a = await (await fetch('/api/activity/today')).json();
+          const yt = a.youtube || {}, ig = a.instagram || {};
+          const col = (emoji, label, x, isProduce) => {
+            const num = isProduce ? (a.produced || 0) : (x.error ? '–' : (x.today || 0));
+            const sub = isProduce ? '완성' : (x.error ? esc(x.error) : '마지막 ' + fmtLast(x));
+            return `<div class="yt-kpi"><div class="num">${num}</div><div class="lbl">${emoji} ${label}<br><span style="font-size:11px;color:var(--muted);font-weight:600">${sub}</span></div></div>`;
+          };
+          el.hidden = false;
+          el.innerHTML = `
+            <div class="yt-stats-head">📊 오늘의 활동 <span style="font-size:12px;color:var(--muted);font-weight:600">· 한국시간 기준</span></div>
+            <div class="yt-kpis">
+              ${col('🎬', '제작', null, true)}
+              ${col('▶️', '유튜브 올림', yt, false)}
+              ${col('📷', '인스타 올림', ig, false)}
+            </div>`;
+        } catch (e) {}
+      }
       loadMyVideos();
       loadYtStats();
       loadIgStats();
+      loadActivity();
+      setInterval(loadActivity, 60000); // "N분 전" 실시간 갱신
     </script>
   </body>
 </html>

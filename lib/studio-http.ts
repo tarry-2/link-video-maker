@@ -11,6 +11,15 @@ export const studio = new Studio(path.join(process.env.STUDIO_DATA_DIR || path.j
 export const batch = new BatchQueue(studio);
 // 서버 부팅 시 중단됐던 큐를 이어서 진행(재배포/재시작 복구).
 batch.tick();
+
+// 오늘(한국시간) 완성한 영상 수 — 업로드와 별개로 "제작량" 모니터용. 완성 시각 근사=updatedAt.
+export function todayProducedCount(): number {
+  const todayKst = new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'});
+  try {
+    return studio.list().filter((p) => p.status === 'completed' && p.updatedAt &&
+      new Date(p.updatedAt).toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'}) === todayKst).length;
+  } catch { return 0; }
+}
 function json(res: ServerResponse, code: number, body: unknown) {
   res.writeHead(code, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'});
   res.end(JSON.stringify(body));

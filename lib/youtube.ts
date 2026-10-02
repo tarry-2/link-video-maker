@@ -123,6 +123,31 @@ export async function getVideoStats(ids: string[]): Promise<Record<string, {view
   return out;
 }
 
+// 업로드 현황: 주어진 영상 id들의 실제 게시 시각(snippet.publishedAt) 기준으로
+// "오늘(한국시간) 몇 개 · 마지막 게시 시각 · 총 개수" 반환. 업로드 페이스 모니터용.
+export async function getUploadActivity(ids: string[]): Promise<{today: number; lastAt: string | null; total: number; error?: string}> {
+  if (!youtubeStatus().connected) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (!uniq.length) return {today: 0, lastAt: null, total: 0};
+  try {
+    const token = await accessToken();
+    const times: string[] = [];
+    for (let i = 0; i < uniq.length; i += 50) {
+      const batch = uniq.slice(i, i + 50);
+      const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${batch.join(',')}`, {
+        headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
+      });
+      const d: any = await r.json();
+      if (!r.ok) return {today: 0, lastAt: null, total: 0, error: d?.error?.message || `API 오류(${r.status})`};
+      for (const it of (d.items || [])) if (it.snippet?.publishedAt) times.push(it.snippet.publishedAt);
+    }
+    times.sort().reverse();
+    const todayKst = new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'});
+    const today = times.filter((t) => new Date(t).toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'}) === todayKst).length;
+    return {today, lastAt: times[0] || null, total: times.length};
+  } catch (e: any) { return {today: 0, lastAt: null, total: 0, error: e.message}; }
+}
+
 async function fetchChannelTitle(token: string): Promise<string> {
   const r = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', {
     headers: {Authorization: 'Bearer ' + token},
