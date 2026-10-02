@@ -481,7 +481,12 @@ function showResult(file, title, projectId) {
   $('result-block').classList.remove('hidden');
   $('result-title').textContent = title || '';
   const src = '/api/video/' + file;
-  $('result-video').src = src;
+  const v = $('result-video');
+  v.src = src;
+  // ★재생 전 미리보기가 빈 화면(카드영상은 첫 프레임=글자 애니 전 배경만)으로 보이는 문제 →
+  //   우리 커버 썸네일(글자+그림)을 poster로 깔아 재생 전에도 내용이 보이게.
+  if (projectId) { v.setAttribute('poster', '/portfolio-thumb/' + projectId + '.png'); v.setAttribute('preload', 'metadata'); }
+  else v.removeAttribute('poster');
   $('download').href = src;
   $('download').setAttribute('download', (title || 'onvideo') + '.mp4');
   cardVidUpId = projectId || null;
