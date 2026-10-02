@@ -29,6 +29,10 @@ function applyMode(m) {
   }
   // 배치 모드에선 단일 제작 버튼 숨기고, 배치 현황 폴링 시작.
   const gen = $('generate'); if (gen) gen.classList.toggle('hidden', m === 'batch');
+  // 카드 모드일 땐 오른쪽 studio 편집기를 숨긴다(카드는 studio 시스템을 안 쓰므로 혼란 방지).
+  document.querySelector('.app-grid')?.classList.toggle('card-mode', m === 'card');
+  // 카드 모드는 대본 검토 단계가 없어 버튼 라벨을 바로 제작으로.
+  if (gen) gen.textContent = m === 'card' ? '🎴 카드뉴스 만들기' : '1. 대본 먼저 만들기';
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
 }
 function setMode(m) { applyMode(m); saveFormState(); }
