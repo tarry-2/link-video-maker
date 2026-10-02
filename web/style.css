@@ -345,6 +345,11 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 @media (prefers-reduced-motion: reduce) { .confetti { display: none; } .energy-fill.anim { animation: none; } }
 /* 카드뉴스 모드 — 오른쪽 studio 편집기·미리보기 힌트 숨김(카드는 studio 미사용). 진행/결과만 노출. */
 .app-grid.card-mode #studio-editor { display: none !important; }
+/* 카드 모드: 일반 안내는 숨기고 카드 전용 안내 노출. 진행/결과 뜨면 안내 숨김. */
+#card-hint { display: none; }
+.app-grid.card-mode #preview-hint { display: none !important; }
+.app-grid.card-mode #card-hint { display: block; }
+.app-grid.card-mode .app-right:has(> section:not(.hidden):not(#preview-hint):not(#card-hint)) #card-hint { display: none; }
 /* 카드 출력 토글(영상/게시물) */
 .seg { display: flex; gap: 8px; background: var(--card2); border-radius: 12px; padding: 5px; }
 .seg-btn { flex: 1; border: none; background: transparent; color: var(--muted); font-weight: 700; font-size: 13.5px; padding: 11px 8px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
