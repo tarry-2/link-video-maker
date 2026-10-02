@@ -345,6 +345,8 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 @media (prefers-reduced-motion: reduce) { .confetti { display: none; } .energy-fill.anim { animation: none; } }
 /* 카드뉴스 모드 — 오른쪽 studio 편집기·미리보기 힌트 숨김(카드는 studio 미사용). 진행/결과만 노출. */
 .app-grid.card-mode #studio-editor { display: none !important; }
+/* 카드 모드: 영상 전용 옵션(상품 정보 고정·AI 배경음악 생성·예상 비용)은 카드뉴스에 미사용 → 숨김. 카드 오디오는 pane-card의 card-audio-row가 담당. */
+.app-grid.card-mode .studio-options { display: none !important; }
 /* 카드 모드: 일반 안내는 숨기고 카드 전용 안내 노출. 진행/결과 뜨면 안내 숨김. */
 #card-hint { display: none; }
 .app-grid.card-mode #preview-hint { display: none !important; }
