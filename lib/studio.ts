@@ -59,22 +59,28 @@ export class Studio {
   }
 
   // 유지해야 할 에셋 파일 목록(보안 서빙 + 청소 기준의 단일 소스).
+  // 작업이 참조하는 유효 파일 전체. ★서빙·접근 화이트리스트로도 쓰인다(asset/assetLocation) →
+  //   여기서 output 등을 빼면 완성영상 서빙이 404 난다. 절대 축소 금지.
   private allowedFiles(p: Project): string[] {
-    // ★완성되어 R2에 올라간 작업은 로컬 중간 산출물(이미지·음성·BGM·원본·캐릭터참조·영상)이 더 필요없다.
-    //   (재생성·이어서만들기는 완성 전 작업에만 해당). 영상·썸네일이 R2에 있으면 로컬은 삭제 가능.
-    //   이걸 안 지워서 볼륨 500MB가 금방 차 ENOSPC가 났었다 → 완성작업은 R2에 없는 썸네일만 보존.
+    return [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output, p.characterRef, p.thumb]
+      .filter((x): x is string => typeof x === 'string');
+  }
+
+  // ★디스크(볼륨)에 "보존"할 파일만. 삭제 전용(pruneDir) — 서빙 목록(allowedFiles)과 분리한다.
+  //   완성(output)되어 R2에 올라간 작업은 로컬 중간 잔재(이미지·음성·BGM·원본·영상)가 불필요
+  //   (영상은 R2에서 서빙). 안 지워서 볼륨이 차 ENOSPC가 났었다 → R2에 없는 썸네일만 로컬 보존.
+  private keepOnDisk(p: Project): string[] {
     if (p.output && p.outputR2) {
       return [p.thumbR2 ? undefined : p.thumb].filter((x): x is string => typeof x === 'string');
     }
-    return [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output, p.characterRef, p.thumb]
-      .filter((x): x is string => typeof x === 'string');
+    return this.allowedFiles(p);
   }
 
   // 한 작업 폴더에서 project.json + 현재 쓰는 에셋 외 고아 파일(재시도로 쌓인 옛 video-*/music-* 등)을 삭제.
   pruneProject(id: string): {removed: number; bytes: number} {
     let p: Project;
     try { p = this.get(id); } catch { return {removed: 0, bytes: 0}; }
-    return pruneDir(this.directory(id), ['project.json', ...this.allowedFiles(p)]);
+    return pruneDir(this.directory(id), ['project.json', ...this.keepOnDisk(p)]);
   }
 
   // 전체 청소: 포트폴리오 등록분 + 최근 keepRecent개 작업만 보존, 나머지는 폴더째 삭제.
@@ -88,7 +94,7 @@ export class Studio {
     let delJobs = 0, prunedFiles = 0, freed = 0;
     for (const p of projects) {
       if (protectedIds.has(p.id)) {
-        const r = pruneDir(this.directory(p.id), ['project.json', ...this.allowedFiles(p)]);
+        const r = pruneDir(this.directory(p.id), ['project.json', ...this.keepOnDisk(p)]);
         prunedFiles += r.removed; freed += r.bytes;
       } else {
         try {

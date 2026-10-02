@@ -1,6 +1,6 @@
 // OnVideo 웹 서버 — 브라우저에서 링크→카테고리→영상 생성. 단일 사용자 로컬 앱.
 import http from 'node:http';
-import {handleStudio, studio} from './lib/studio-http';
+import {handleStudio} from './lib/studio-http';
 import {dirSize} from './lib/cleanup';
 import {execSync} from 'node:child_process';
 import fs from 'node:fs';
@@ -305,11 +305,6 @@ const server = http.createServer(async (req, res) => {
     jobs.sort((a, b) => b.mb - a.mb);
     const out: any = {studioRoot: root, jobCount: jobs.length, studioTotalMb: Math.round(jobs.reduce((n, j) => n + j.mb, 0) * 10) / 10, topJobs: jobs.slice(0, 15)};
     try { out.df = execSync(`df -h ${STUDIO_DATA_DIR} 2>/dev/null || df -h .`).toString().trim(); } catch (e: any) { out.dfError = e.message; }
-    if (u.searchParams.get('clean') === '1') {
-      const logs: string[] = [];
-      const r = studio.cleanup({keepRecent: 3, log: (s) => logs.push(s)});
-      out.cleaned = {freedMb: Math.round(r.freed / 1048576 * 10) / 10, logs};
-    }
     return json(res, 200, out);
   }
   // ── 인스타 성과 진단(임시, 공개) — getInstaStats 실제 결과·Meta 에러·permalink 매칭. 토큰 노출 없음. ──
