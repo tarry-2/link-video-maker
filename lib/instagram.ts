@@ -91,7 +91,7 @@ JSON만 출력: {"hook":"...","blocks":["...","...","..."],"hashtags":["...","..
 // 릴스/피드 영상 게시. kind: 'reels'(세로 쇼츠) | 'feed'(일반 게시물 영상).
 // videoUrl = 공개 접근 가능한 영상 URL(R2 presigned). caption = 글.
 export async function publishVideo(
-  videoUrl: string, caption: string, kind: 'reels' | 'feed', log?: (m: string) => void,
+  videoUrl: string, caption: string, kind: 'reels' | 'feed', log?: (m: string) => void, coverUrl?: string,
 ): Promise<{permalink: string; id: string}> {
   const c = loadInstagram();
   if (!c.igUserId || !c.accessToken) throw new Error('인스타가 연결되지 않았습니다. 키 설정에서 연결하세요.');
@@ -100,13 +100,17 @@ export async function publishVideo(
 
   // 1) 미디어 컨테이너 생성(릴스=REELS, 피드 영상도 현재는 REELS 처리가 표준).
   log?.('[인스타] 업로드 컨테이너 생성 중…');
-  const createBody = new URLSearchParams({
+  const createParams: Record<string, string> = {
     media_type: 'REELS',
     video_url: videoUrl,
     caption: caption.slice(0, 2200),
     share_to_feed: kind === 'feed' ? 'true' : 'true', // 릴스를 피드에도 노출
     access_token: token,
-  });
+  };
+  // ★커버(썸네일) 지정 — 없으면 IG가 영상 0프레임(글자 애니 전=어두운 빈 화면)을 집어가 미리보기가 빈다.
+  //   우리 썸네일(글자+그림 있는 cover)을 공개 JPEG URL로 넘겨 미리보기가 항상 내용 보이게.
+  if (coverUrl) createParams.cover_url = coverUrl;
+  const createBody = new URLSearchParams(createParams);
   const cr = await fetch(`${base}/${API}/${c.igUserId}/media`, {method: 'POST', body: createBody});
   const cd: any = await cr.json();
   if (!cr.ok || !cd.id) throw new Error('컨테이너 생성 실패: ' + (cd?.error?.message || JSON.stringify(cd).slice(0, 200)));

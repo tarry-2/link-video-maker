@@ -238,6 +238,33 @@ async function ensureCarouselJpegUrls(id: string, log: (m: string) => void): Pro
   return urls;
 }
 function jgSafeUnlink(p: string) { try { fs.rmSync(p, {force: true}); } catch {} }
+// 썸네일(커버)을 JPEG 공개 URL로 — 인스타 릴스 cover_url용. 우리 썸네일 PNG를 JPEG 변환·R2·presign(캐시).
+async function ensureThumbJpegUrl(id: string): Promise<string> {
+  if (!r2Enabled() || !/^[0-9a-f-]{36}$/.test(id)) return '';
+  const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
+  const pjPath = path.join(dir, 'project.json');
+  let proj: any;
+  try { proj = JSON.parse(fs.readFileSync(pjPath, 'utf8')); } catch { return ''; }
+  if (!proj.thumb && !proj.thumbR2) return '';
+  if (!proj.thumbJpgR2) {
+    const tmpPng = path.join(os.tmpdir(), `cover-${id}.png`);
+    const localPng = proj.thumb ? path.join(dir, proj.thumb) : '';
+    if (localPng && fs.existsSync(localPng)) fs.copyFileSync(localPng, tmpPng);
+    else if (proj.thumbR2) {
+      const got = await getStream(proj.thumbR2);
+      if (!got) return '';
+      await new Promise<void>((resolve, reject) => { const w = fs.createWriteStream(tmpPng); got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject); });
+    } else return '';
+    const tmpJpg = path.join(os.tmpdir(), `cover-${id}.jpg`);
+    await pngToJpeg(tmpPng, tmpJpg);
+    const key = videoKey(id, 'cover.jpg');
+    if (!(await uploadFile(key, tmpJpg, 'image/jpeg'))) { jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg); return ''; }
+    jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg);
+    proj.thumbJpgR2 = key;
+    fs.writeFileSync(pjPath, JSON.stringify(proj));
+  }
+  return (await presignGet(proj.thumbJpgR2, 3600)) || '';
+}
 // R2 완성영상 스트리밍(Range 지원). 포트폴리오 전시용.
 async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse, key: string) {
   const h = await getStream(key);
@@ -710,7 +737,10 @@ const server = http.createServer(async (req, res) => {
     try {
       const url = await presignGet(r2key, 3600);
       if (!url) return json(res, 502, {error: '영상 임시 링크 생성 실패.'});
-      const r = await publishVideo(url, caption, kind as 'reels' | 'feed');
+      // ★커버 지정(내 완성작만) — 빈 썸네일 방지. 실패해도 업로드는 진행.
+      let coverUrl: string | undefined;
+      if (!isSample) { try { coverUrl = (await ensureThumbJpegUrl(id)) || undefined; } catch {} }
+      const r = await publishVideo(url, caption, kind as 'reels' | 'feed', undefined, coverUrl);
       // ★배지: 게시 성공 시 permalink 기록(어느 경로든 IG 배지 뜨게). 샘플/내작품 분기.
       if (r.permalink) {
         if (isSample) setSampleInstagram(path.basename(id.slice('sample:'.length)), r.permalink);
