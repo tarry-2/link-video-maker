@@ -37,6 +37,12 @@
       </div>
     </header>
 
+    <nav class="topnav">
+      <a href="/" class="navtab active">✏️ 영상 만들기</a>
+      <a href="/voices?tab=voice" class="navtab">🎙 목소리 듣기</a>
+      <a href="/voices?tab=pf" class="navtab">🎬 포트폴리오</a>
+    </nav>
+
     <main id="main" class="wrap wide">
       <div class="page-head">
         <p class="eyebrow">LINK → VIDEO</p>
@@ -115,10 +121,9 @@
             <p id="format-note" class="mini-state">쇼츠 = 세로 9:16 · 롱폼 = 가로 16:9 (유튜브 기준 자동)</p>
           </div>
           <div class="col">
-            <label class="field-label">4. 목소리 <span class="hint">(비우면 카테고리 추천)</span> <a href="/voices" target="_blank" style="color:var(--teal);font-size:12px;text-decoration:none;float:right">🎙 다 들어보기 →</a></label>
+            <label class="field-label">4. 목소리 <span class="hint">(비우면 카테고리 추천)</span> <a href="/voices?tab=voice" target="_blank" style="color:var(--teal);font-size:12px;text-decoration:none;float:right">🎙 들어보기 →</a></label>
             <div class="voice-row">
               <select id="voice" class="input"></select>
-              <button id="voice-preview" class="ghost-btn small" type="button">▶ 듣기</button>
             </div>
             <div id="voice-state" class="mini-state"></div>
           </div>

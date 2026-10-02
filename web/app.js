@@ -185,31 +185,7 @@ $('character-new')?.addEventListener('click', async () => {
   finally { btn.disabled = false; btn.textContent = old; }
 });
 
-// ── 목소리 미리듣기 ──
-let previewAudio = null;
-$('voice-preview').onclick = async () => {
-  // 목소리 선택 안 했으면(카테고리 추천) 그 카테고리의 추천 목소리로 미리듣기
-  let voice = $('voice').value;
-  if (!voice && selectedPreset) {
-    const p = (window.__presets || []).find((x) => x.id === selectedPreset);
-    voice = p ? p.voice : 'jaewon';
-  }
-  if (!voice) voice = 'jaewon';
-  const st = $('voice-state');
-  if (previewAudio) { previewAudio.pause(); previewAudio = null; }
-  st.textContent = '목소리 준비 중…';
-  try {
-    const r = await fetch('/api/voice-preview?voice=' + encodeURIComponent(voice));
-    if (!r.ok) throw new Error((await r.json()).error || '실패');
-    const url = URL.createObjectURL(await r.blob());
-    previewAudio = new Audio(url);
-    previewAudio.onended = () => { st.textContent = ''; URL.revokeObjectURL(url); };
-    await previewAudio.play();
-    st.textContent = '▶ 재생 중…';
-  } catch (e) {
-    st.textContent = e.message;
-  }
-};
+// 목소리 미리듣기는 '🎙 목소리 듣기' 탭(/voices)으로 분리됨 — 생성화면은 선택만.
 
 // ── 영상 생성 ──
 $('generate').onclick = async () => {

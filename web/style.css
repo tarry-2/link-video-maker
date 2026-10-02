@@ -250,12 +250,22 @@ select.input { appearance: none; cursor: pointer; }
   .pf-grid { grid-template-columns: 1fr; }
 }
 
-/* 탭 */
+/* 상단 네비 탭(영상 만들기 · 목소리 듣기 · 포트폴리오) */
+.topnav { display: flex; gap: 6px; max-width: 1100px; margin: 0 auto; padding: 0 20px 12px; flex-wrap: wrap; }
+.navtab {
+  padding: 9px 16px; border-radius: 11px; background: var(--card); border: 1px solid var(--line);
+  color: var(--muted); font-weight: 700; font-size: 14px; text-decoration: none; white-space: nowrap;
+}
+.navtab.active { background: var(--grad); border-color: transparent; color: #fff; }
+@media (max-width: 560px) { .navtab { flex: 1; text-align: center; padding: 9px 8px; font-size: 13px; } }
+
+/* 탭(생성 모드) */
 .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
 .tab {
   flex: 1; background: var(--card); border: 1px solid var(--line); color: var(--muted);
-  border-radius: 12px; padding: 12px 8px; font-size: 14px; font-weight: 700; cursor: pointer;
-  white-space: nowrap; text-align: center; min-width: 0;
+  border-radius: 12px; padding: 11px 6px; font-size: 13px; font-weight: 700; cursor: pointer;
+  /* 글자가 버튼 밖으로 삐지지 않게: 줄바꿈 허용 + 한국어 어절 단위 */
+  white-space: normal; word-break: keep-all; line-height: 1.25; text-align: center; min-width: 0;
 }
 .tab.active { background: var(--grad); border-color: transparent; color: #fff; }
 /* 모바일: 탭 4개가 한 줄에 안 들어가 지저분하게 깨짐 → 2×2 그리드로 가지런히 */

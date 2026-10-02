@@ -117,15 +117,22 @@
       </div>
       <div style="display:flex; gap:8px; align-items:center">
         <button id="theme-btn" class="ghost-btn small" title="밝게/어둡게">🌙</button>
-        <a href="/" class="back-link">← 영상 만들기</a>
       </div>
     </header>
+
+    <nav class="topnav">
+      <a href="/" class="navtab">✏️ 영상 만들기</a>
+      <a href="/voices?tab=voice" class="navtab" id="nav-voice">🎙 목소리 듣기</a>
+      <a href="/voices?tab=pf" class="navtab" id="nav-pf">🎬 포트폴리오</a>
+    </nav>
 
     <main class="wrap">
       <p class="eyebrow">VOICE GUIDE</p>
       <h1 class="hero">목소리 듣고 고르기</h1>
       <p class="sub">재생 버튼을 눌러 직접 들어보세요. 콘텐츠에 맞는 목소리를 쓰면 시청 시간이 확 늘어납니다.</p>
 
+      <!-- pane: 포트폴리오(오늘의 활동 + 포폴 + 성과) -->
+      <div id="pane-pf" hidden>
       <!-- 📊 오늘의 활동: 제작·유튜브·인스타 각각 분리(한국시간) -->
       <div id="today-activity" class="yt-stats" hidden></div>
 
@@ -153,10 +160,13 @@
         <div id="mypf-grid" class="mypf-grid"></div>
         <div style="text-align:center; margin-top:18px"><button id="mypf-more" class="ghost-btn" hidden>더 보기</button></div>
       </section>
+      </div><!-- /pane-pf -->
 
-
-      <h2 class="pf-title" style="margin-top:36px">🔊 전체 목소리 미리듣기</h2>
+      <!-- pane: 목소리 듣기 -->
+      <div id="pane-voice">
+      <h2 class="pf-title">🔊 전체 목소리 미리듣기</h2>
       <div id="groups" class="voice-groups"></div>
+      </div><!-- /pane-voice -->
     </main>
 
     <script>
@@ -512,6 +522,22 @@
             </div>`;
         } catch (e) {}
       }
+      // ── 상단 탭(목소리 듣기 / 포트폴리오) 전환 ──
+      function applyVoicesTab(t) {
+        const isPf = t === 'pf';
+        if ($('pane-voice')) $('pane-voice').hidden = isPf;
+        if ($('pane-pf')) $('pane-pf').hidden = !isPf;
+        if ($('nav-voice')) $('nav-voice').classList.toggle('active', !isPf);
+        if ($('nav-pf')) $('nav-pf').classList.toggle('active', isPf);
+        const eb = document.querySelector('.eyebrow'), h = document.querySelector('.hero'), sb = document.querySelector('.sub');
+        if (eb) eb.textContent = isPf ? 'MY PORTFOLIO' : 'VOICE GUIDE';
+        if (h) h.textContent = isPf ? '내 포트폴리오' : '목소리 듣고 고르기';
+        if (sb) sb.textContent = isPf
+          ? '만든 영상을 보고, 유튜브·인스타에 올리고 성과를 확인하세요.'
+          : '재생 버튼을 눌러 직접 들어보세요. 콘텐츠에 맞는 목소리를 쓰면 시청 시간이 확 늘어납니다.';
+      }
+      applyVoicesTab(new URLSearchParams(location.search).get('tab') || 'voice');
+
       loadMyVideos();
       loadYtStats();
       loadIgStats();
