@@ -60,6 +60,12 @@ export class Studio {
 
   // 유지해야 할 에셋 파일 목록(보안 서빙 + 청소 기준의 단일 소스).
   private allowedFiles(p: Project): string[] {
+    // ★완성되어 R2에 올라간 작업은 로컬 중간 산출물(이미지·음성·BGM·원본·캐릭터참조·영상)이 더 필요없다.
+    //   (재생성·이어서만들기는 완성 전 작업에만 해당). 영상·썸네일이 R2에 있으면 로컬은 삭제 가능.
+    //   이걸 안 지워서 볼륨 500MB가 금방 차 ENOSPC가 났었다 → 완성작업은 R2에 없는 썸네일만 보존.
+    if (p.output && p.outputR2) {
+      return [p.thumbR2 ? undefined : p.thumb].filter((x): x is string => typeof x === 'string');
+    }
     return [...p.sources, ...p.scenes.flatMap(s => [s.image?.file, s.voice?.file]), p.bgm?.file, p.output, p.characterRef, p.thumb]
       .filter((x): x is string => typeof x === 'string');
   }

@@ -7,7 +7,7 @@ import {studioProviders} from './studio-providers';
 import {getStream} from './storage';
 import {BatchQueue, type BatchConfig} from './batch';
 
-const studio = new Studio(path.join(process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data'), 'studio'), studioProviders);
+export const studio = new Studio(path.join(process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data'), 'studio'), studioProviders);
 export const batch = new BatchQueue(studio);
 // 서버 부팅 시 중단됐던 큐를 이어서 진행(재배포/재시작 복구).
 batch.tick();

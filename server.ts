@@ -1,6 +1,8 @@
 // OnVideo 웹 서버 — 브라우저에서 링크→카테고리→영상 생성. 단일 사용자 로컬 앱.
 import http from 'node:http';
-import {handleStudio} from './lib/studio-http';
+import {handleStudio, studio} from './lib/studio-http';
+import {dirSize} from './lib/cleanup';
+import {execSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -290,6 +292,39 @@ const server = http.createServer(async (req, res) => {
       } catch (e2: any) { out.composeError = e2.message; }
     }
     return json(res, 200, out);
+  }
+  // ── 디스크 진단(임시, 공개) — 볼륨 잔재 현황. ?clean=1 이면 즉시 청소(완성+R2 작업 잔재 삭제). ──
+  if (p === '/api/debug/disk') {
+    const root = path.join(STUDIO_DATA_DIR, 'studio');
+    const jobs: {id: string; mb: number}[] = [];
+    try {
+      for (const e of fs.readdirSync(root, {withFileTypes: true})) {
+        if (e.isDirectory()) jobs.push({id: e.name, mb: Math.round(dirSize(path.join(root, e.name)) / 1048576 * 10) / 10});
+      }
+    } catch (e: any) { /* 폴더 없음 */ }
+    jobs.sort((a, b) => b.mb - a.mb);
+    const out: any = {studioRoot: root, jobCount: jobs.length, studioTotalMb: Math.round(jobs.reduce((n, j) => n + j.mb, 0) * 10) / 10, topJobs: jobs.slice(0, 15)};
+    try { out.df = execSync(`df -h ${STUDIO_DATA_DIR} 2>/dev/null || df -h .`).toString().trim(); } catch (e: any) { out.dfError = e.message; }
+    if (u.searchParams.get('clean') === '1') {
+      const logs: string[] = [];
+      const r = studio.cleanup({keepRecent: 3, log: (s) => logs.push(s)});
+      out.cleaned = {freedMb: Math.round(r.freed / 1048576 * 10) / 10, logs};
+    }
+    return json(res, 200, out);
+  }
+  // ── 인스타 성과 진단(임시, 공개) — getInstaStats 실제 결과·Meta 에러·permalink 매칭. 토큰 노출 없음. ──
+  if (p === '/api/debug/insta') {
+    const diag: string[] = [];
+    let byPermalink: Record<string, {views: number; likes: number; comments: number}> = {};
+    try { byPermalink = await getInstaStats(diag); } catch (e: any) { diag.push('예외: ' + e.message); }
+    const sampleIg = loadSampleInstagram();
+    const urls = [
+      ...listPortfolio().map((it) => it.instagramUrl || readProjectInstagram(it.projectId)),
+      ...SAMPLES.map((s) => sampleIg[s.file] || ''),
+    ].filter(Boolean);
+    const apiKeys = Object.keys(byPermalink);
+    const matched = urls.filter((x) => byPermalink[x]).length;
+    return json(res, 200, {connected: instagramStatus().connected, diag, savedUrls: urls.slice(0, 8), apiPermalinks: apiKeys.slice(0, 8), matched, totalSaved: urls.length});
   }
   // ── 로그인 상태 확인 ──
   if (p === '/api/auth') return json(res, 200, {required: !!ADMIN_PASSWORD, ok: authed(req)});
