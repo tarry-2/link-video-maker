@@ -359,23 +359,55 @@ window.showPostResult = function (title, images, zip, projectId) {
 // ── 진행 로그 SSE(재연결 가능) — 화면 내림/백그라운드로 끊겨도 복귀 시 자동 이어짐 ──
 //   제작은 서버에서 계속 돌고, /api/progress는 재접속 시 그동안의 로그를 처음부터 다시 준다.
 let curJobId = null, curES = null, reconnTries = 0;
+// ── 카드 진행 UX(영상과 동일): 경과시간 ⏱ · 에너지바 · 완성 폭죽 ──
+let cardStartTs = 0, cardTimer = null, cardPct = 0, cardJobStart = null;
+function cardElapsedText() { if (!cardStartTs) return ''; const s = Math.floor((Date.now() - cardStartTs) / 1000); const m = Math.floor(s / 60); return '⏱ ' + (m ? m + '분 ' : '') + (s % 60) + '초'; }
+function cardTick() { clearTimeout(cardTimer); const n = $('card-elapsed'); if (!n) return; n.textContent = cardElapsedText(); cardTimer = setTimeout(cardTick, 1000); }
+function setCardEnergy(pct, label) { cardPct = Math.max(cardPct, pct); const f = $('card-energy'); if (f) f.style.width = cardPct + '%'; const l = $('card-energy-label'); if (l && label) l.textContent = label; }
+function cardEnergyFromLog(line) {
+  const ph = $('card-phase'); const set = (t) => { if (ph) ph.textContent = t; };
+  const im = line.match(/\[배경 (\d+)\/(\d+)\]/) || line.match(/카드 (\d+)\/(\d+) 이미지/);
+  if (/\[대본\]/.test(line)) { setCardEnergy(14, '대본 짜는 중…'); set('대본'); }
+  else if (/\[디자인\]/.test(line)) { setCardEnergy(18, '디자인 고르는 중…'); set('디자인'); }
+  else if (im) { const i = +im[1], N = +im[2]; setCardEnergy(Math.round(20 + (i / N) * 48), `이미지 ${i}/${N} 만드는 중…`); set('이미지'); }
+  else if (/\[음성\]/.test(line)) { setCardEnergy(74, '나레이션 만드는 중…'); set('나레이션'); }
+  else if (/\[BGM\]/.test(line)) { setCardEnergy(80, '배경음악 만드는 중…'); set('배경음악'); }
+  else if (/\[렌더\]/.test(line)) { setCardEnergy(88, '영상 합치는 중…'); set('렌더'); }
+  else if (/\[게시물\]/.test(line)) { setCardEnergy(90, '카드 이미지 만드는 중…'); set('게시물'); }
+  else if (/\[저장\]/.test(line)) { setCardEnergy(95, '클라우드 저장 중…'); set('저장'); }
+}
+function cardCelebrate() {
+  const c = document.createElement('div'); c.className = 'confetti';
+  const colors = ['#17b5a4', '#7c5cff', '#ff4d8d', '#FFE24B', '#ff8a5c', '#4fe0d0'];
+  for (let i = 0; i < 90; i++) { const bit = document.createElement('i'); bit.style.left = Math.random() * 100 + '%'; bit.style.background = colors[i % colors.length]; bit.style.animationDelay = (Math.random() * 0.5).toFixed(2) + 's'; bit.style.animationDuration = (2.2 + Math.random() * 1.3).toFixed(2) + 's'; c.appendChild(bit); }
+  document.body.appendChild(c); setTimeout(() => c.remove(), 4200);
+}
 function attachProgress(id, freshLog) {
   curJobId = id;
   try { localStorage.setItem('onvideo-genjob', id); } catch {}
   if (curES) { try { curES.close(); } catch {} curES = null; }
   if (freshLog && $('log')) $('log').textContent = ''; // 재연결 시 서버가 전체 재전송하므로 중복 방지
+  // 새 작업이면 경과시간·진행률 리셋(재연결이면 유지).
+  if (cardJobStart !== id) { cardJobStart = id; cardStartTs = Date.now(); cardPct = 0; setCardEnergy(6, '시작하는 중…'); }
   $('progress-block').classList.remove('hidden');
   $('generate').disabled = true;
+  cardTick();
   const es = new EventSource('/api/progress?id=' + id);
   curES = es;
   es.onmessage = (ev) => {
     reconnTries = 0;
     const m = JSON.parse(ev.data);
-    if (m.log) addLog(m.log, m.log.includes('[완료]') ? 'done' : m.log.includes('[실패]') ? 'fail' : '');
+    if (m.log) { addLog(m.log, m.log.includes('[완료]') ? 'done' : m.log.includes('[실패]') ? 'fail' : ''); cardEnergyFromLog(m.log); }
     if (m.done) {
       es.close(); curES = null; curJobId = null;
+      clearTimeout(cardTimer);
       try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
+      if (m.error) { setCardEnergy(cardPct, '실패'); }
+      else {
+        cardPct = 100; setCardEnergy(100, '완성! 🎉'); const f = $('card-energy'); if (f) f.classList.remove('anim');
+        cardCelebrate();
+      }
       if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
       else if (m.file) showResult(m.file, m.title, m.projectId);
     }

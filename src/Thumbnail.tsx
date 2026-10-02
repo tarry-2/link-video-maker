@@ -76,13 +76,14 @@ export const Thumbnail: React.FC<ThumbnailData> = ({image, big, small, badge, ac
         </div>
       ) : null}
 
-      {/* 메인 문구 블록 — 세로는 하단 1/3, 가로는 좌측. 삐딱하게 + 초대형 */}
+      {/* 메인 문구 블록 — ★유튜브 썸네일은 하단이 재생시간·제목에 가리므로 세로는 상단(뱃지 아래)에 둔다.
+          가로(16:9)는 세로 중앙-좌측(여기도 하단 UI 회피). */}
       <div
         style={{
           position: 'absolute',
           left: 0,
-          bottom: land ? 'auto' : height * 0.08,
-          top: land ? '50%' : 'auto',
+          bottom: 'auto',
+          top: land ? '50%' : height * 0.17,
           transform: land ? 'translateY(-50%) rotate(-2deg)' : 'rotate(-2deg)',
           width: land ? '58%' : '100%',
           padding: land ? '0 4% 0 5%' : '0 5%',

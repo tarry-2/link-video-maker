@@ -37,6 +37,7 @@ export const cardSchema = z.object({
   theme: z.enum(['light', 'dark']).optional(),
   motion: z.enum(['auto', 'pop', 'slide', 'type', 'zoom', 'flip']).optional(),
   skin: z.string().optional(),     // ★덱 디자인 시스템 id(skins.ts). 없으면 기본 스킨.
+  thumbTop: z.boolean().optional(), // ★썸네일 렌더 전용: cover/closing 글자를 상단 정렬(유튜브 썸네일 하단 가림 방지).
   kicker: z.string().optional(),
   brand: z.string().optional(),
   badge: z.string().optional(),
@@ -474,7 +475,7 @@ const Body: React.FC<BodyProps> = (c) => {
       const ol = Math.max(5, Math.round(bigSize * 0.05));
       const words = (c.big || c.title || '').split(/\s+/).filter(Boolean);
       return (
-        <div style={{height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: Math.round(w * 0.03), paddingBottom: w * 0.04}}>
+        <div style={{height: '100%', display: 'flex', flexDirection: 'column', justifyContent: c.thumbTop ? 'flex-start' : 'flex-end', gap: Math.round(w * 0.03), paddingBottom: c.thumbTop ? 0 : w * 0.04, paddingTop: c.thumbTop ? w * 0.03 : 0}}>
           {c.badge ? <Reveal delay={2} motion="pop"><span style={{...chip('linear-gradient(160deg,#FF3A3A,#D40000)'), transform: 'rotate(-4deg)', fontSize: Math.round(w * 0.05), border: '3px solid #fff', boxShadow: '0 8px 26px rgba(0,0,0,.55)'}}>{c.badge}</span></Reveal> : null}
           {c.small ? <Reveal delay={6} motion="slide"><div style={{...sub(0.05, '#fff'), fontWeight: 800, textShadow: outline(Math.max(2, Math.round(w * 0.004)))}}>{c.small}</div></Reveal> : null}
           <div style={{display: 'flex', flexWrap: 'wrap', gap: `${bigSize * 0.04}px ${bigSize * 0.1}px`}}>
@@ -628,7 +629,7 @@ const Body: React.FC<BodyProps> = (c) => {
 
     case 'closing':
       return (
-        <div style={{height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: Math.round(w * 0.03), paddingBottom: w * 0.04}}>
+        <div style={{height: '100%', display: 'flex', flexDirection: 'column', justifyContent: c.thumbTop ? 'flex-start' : 'flex-end', gap: Math.round(w * 0.03), paddingBottom: c.thumbTop ? 0 : w * 0.04, paddingTop: c.thumbTop ? w * 0.03 : 0}}>
           <Kinetic text={c.title || ''} delay={2} stagger={stg} entrance={ent} style={{...big(0.1, '#fff'), textShadow: outline(Math.max(3, Math.round(w * 0.004)))}} accent={c.accent} highlight={c.accent} />
           {c.body ? <Reveal delay={12} motion="slide"><div style={{...sub(0.048, '#fff'), textShadow: outline(Math.max(2, Math.round(w * 0.0035)))}}>{c.body}</div></Reveal> : null}
           <Reveal delay={18} motion="type" style={{display: 'block'}}>

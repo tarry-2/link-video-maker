@@ -64,7 +64,8 @@ export async function registerCardDeck(reg: CardRegister): Promise<string> {
     const coverIdx = Math.max(0, reg.cards.findIndex((c) => c.type === 'cover'));
     const thumbName = 'thumb.png';
     const thumbAbs = path.join(dir, thumbName);
-    try { await renderCardStills([reg.cards[coverIdx]], [thumbAbs], log); }
+    // ★썸네일은 글자를 상단 정렬(thumbTop) — 유튜브가 하단을 재생시간·제목으로 가리기 때문.
+    try { await renderCardStills([{...reg.cards[coverIdx], thumbTop: true}], [thumbAbs], log); }
     catch (e: any) { log('[썸네일] 생성 건너뜀: ' + (e?.message || e)); }
 
     proj.output = output;
