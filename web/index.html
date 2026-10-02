@@ -137,6 +137,27 @@
           <input id="card-images" class="input hidden" type="file" accept="image/*" multiple style="margin-top:8px" />
           <div id="card-thumbs" class="thumbs"></div>
 
+          <div class="row" style="margin-top:12px">
+            <div class="col">
+              <label class="field-label">카드 효과 <span class="hint">— 글자·요소 등장 방식</span></label>
+              <select id="card-motion" class="input">
+                <option value="auto" selected>✨ 자동 (타입별 최적)</option>
+                <option value="pop">🫧 팝업 (톡 튀어나옴)</option>
+                <option value="slide">➡️ 슬라이드 (옆에서)</option>
+                <option value="type">⌨️ 타이핑 (아래서)</option>
+                <option value="zoom">🔍 줌인 (확대)</option>
+                <option value="flip">🔄 플립 (회전)</option>
+              </select>
+            </div>
+            <div class="col">
+              <label class="field-label">카드 톤 <span class="hint">— 전체 비주얼</span></label>
+              <select id="card-theme" class="input">
+                <option value="light" selected>🤍 밝은 매거진</option>
+                <option value="dark">🖤 다크 프리미엄</option>
+              </select>
+            </div>
+          </div>
+
           <div id="card-audio-row" class="row" style="margin-top:12px">
             <label class="toggle col"><input type="checkbox" id="card-narration" /> 🎙 나레이션 (AI가 카드를 읽어줌)</label>
             <label class="toggle col"><input type="checkbox" id="card-bgm" checked /> 🎵 배경음악</label>

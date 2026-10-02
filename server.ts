@@ -950,6 +950,8 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           narration, bgm,
           voice: b.voice || undefined,
           imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real',
+          cardTheme: b.cardTheme === 'dark' ? 'dark' : 'light',
+          motion: ['pop', 'slide', 'type', 'zoom', 'flip'].includes(b.motion) ? b.motion : 'auto',
           log: (m) => job.logs.push(m),
         });
         // 바탕화면 저장은 선택(로컬에서만, 실패해도 무시 — Railway엔 Desktop 없음).

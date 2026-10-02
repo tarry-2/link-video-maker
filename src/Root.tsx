@@ -76,14 +76,14 @@ const demoScenes: SceneData[] = [
 
 // 카드뉴스 데모(8종 타입 전부 — 렌더 검증용).
 const demoCards: CardData[] = [
-  {type: 'cover', accent: '#FFD84D', bgColor: '#20223a', badge: '꿀팁', title: '아침마다 얼굴 붓는 사람\n꼭 보세요', body: '3분이면 빠지는 방법', durationInFrames: 75, index: 0, total: 8},
-  {type: 'number', accent: '#4FE0D0', bgColor: '#1a2a2a', title: '아침 부기, 사실은', number: '87', unit: '%', body: '잘못된 수면 자세 때문', durationInFrames: 75, index: 1, total: 8},
-  {type: 'list', accent: '#FF8ABf', bgColor: '#2a1a2a', title: '부기 빼는 3단계', items: ['미지근한 물 한 컵', '귀 뒤에서 쇄골로 마사지', '찬물 세수 30초'], durationInFrames: 90, index: 2, total: 8},
-  {type: 'quote', accent: '#FFD84D', bgColor: '#222', title: '부기는 습관이\n만든다', body: '피부과 전문의', durationInFrames: 75, index: 3, total: 8},
-  {type: 'compare', accent: '#6BE06B', bgColor: '#1a2230', title: '자기 전 이것만 바꿔도', before: '라면·짠 음식 야식', after: '물 한 컵 + 스트레칭', durationInFrames: 90, index: 4, total: 8},
-  {type: 'fix', accent: '#4FE0D0', bgColor: '#201a2a', title: '흔한 실수', wrong: '아침에 뜨거운 물로 세수', right: '찬물로 혈관 수축시키기', durationInFrames: 85, index: 5, total: 8},
-  {type: 'body', accent: '#FFD84D', bgColor: '#23201a', title: '꾸준함이 핵심', body: '하루 3분, 2주면 몸이 기억해요.', durationInFrames: 75, index: 6, total: 8},
-  {type: 'closing', accent: '#FF8ABf', bgColor: '#2a1a24', title: '오늘부터 시작해요', body: '내일 아침이 달라집니다', durationInFrames: 85, index: 7, total: 8},
+  {type: 'cover', accent: '#FFD84D', bg: 'news1.jpg', badge: '꿀팁', small: '매일 아침 붓는 당신께', big: '아침 부기 3분 컷', body: '딱 3가지만 바꾸면 끝', durationInFrames: 75, index: 0, total: 8},
+  {type: 'number', accent: '#12A998', theme: 'light', kicker: '건강 꿀팁', title: '아침 부기, 사실은', number: '87', unit: '%', body: '잘못된 수면 자세와 야식 때문이에요.', durationInFrames: 75, index: 1, total: 8},
+  {type: 'list', accent: '#E8609A', theme: 'light', kicker: '건강 꿀팁', title: '부기 빼는 3단계', items: ['일어나자마자 미지근한 물 한 컵', '귀 뒤에서 쇄골로 쓸어내리기 10번', '찬물 세수 30초로 혈관 수축'], durationInFrames: 90, index: 2, total: 8},
+  {type: 'quote', accent: '#12A998', theme: 'light', title: '부기는 습관이\n만든다', body: '피부과 전문의', durationInFrames: 75, index: 3, total: 8},
+  {type: 'compare', accent: '#2Bb673', theme: 'light', title: '자기 전 이것만 바꿔도', before: '라면·짠 음식 야식 → 다음날 얼굴 땡땡', after: '물 한 컵 + 종아리 스트레칭 → 아침 개운', durationInFrames: 90, index: 4, total: 8},
+  {type: 'fix', accent: '#12A998', theme: 'light', title: '흔한 실수', wrong: '아침에 뜨거운 물로 세수한다', right: '찬물로 혈관을 수축시킨다', durationInFrames: 85, index: 5, total: 8},
+  {type: 'body', accent: '#E8609A', theme: 'light', kicker: '건강 꿀팁', title: '꾸준함이 핵심', body: '하루 딱 3분. 2주만 지나면 몸이 기억해서 아침마다 반복할 필요도 없어요.', durationInFrames: 75, index: 6, total: 8},
+  {type: 'closing', accent: '#FFD84D', bg: 'news4.jpg', title: '오늘부터 시작해요', body: '내일 아침이 달라집니다', durationInFrames: 85, index: 7, total: 8},
 ];
 
 export const RemotionRoot: React.FC = () => {

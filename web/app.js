@@ -330,6 +330,8 @@ window.startCardGen = async function () {
     narration: $('card-narration').checked, bgm: $('card-bgm').checked,
     presetId: selectedPreset, voice: $('voice').value,
     imageStyle: $('image-style') ? $('image-style').value : 'real',
+    motion: $('card-motion') ? $('card-motion').value : 'auto',
+    cardTheme: $('card-theme') ? $('card-theme').value : 'light',
   };
   $('progress-block').classList.remove('hidden');
   $('result-block').classList.add('hidden');

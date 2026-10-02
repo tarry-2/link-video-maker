@@ -12,7 +12,7 @@ import {generateBgm} from './music';
 import {renderCardVideo, renderCardStills} from './render';
 import {buildZip} from './zip';
 import {writeFile} from 'node:fs/promises';
-import type {CardData} from '../src/Card';
+import type {CardData, MotionStyle} from '../src/Card';
 
 const FPS = 30;
 
@@ -30,12 +30,16 @@ export type CardOpts = {
   bgm?: boolean;           // 배경음악 ON/OFF (video만)
   voice?: string;          // 나레이션 목소리 키
   imageStyle?: 'real' | 'anime';
+  cardTheme?: 'light' | 'dark'; // 본문 카드 톤(기본 light=매거진). cover/closing은 항상 사진 위 다크.
+  motion?: MotionStyle;    // 등장 효과(auto/pop/slide/type/zoom/flip)
   log?: (m: string) => void;
 };
 
 // 카드 → 나레이션용 텍스트(타입별로 자연스럽게 읽히게 조합).
 function cardSpeech(c: CardPlan): string {
   const parts: string[] = [];
+  if (c.small) parts.push(c.small);
+  if (c.big) parts.push(c.big);
   if (c.title) parts.push(c.title);
   if (c.number) parts.push(c.number + (c.unit || ''));
   if (c.items?.length) parts.push(c.items.join('. '));
@@ -112,12 +116,16 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
       const sec = Math.min(6, Math.max(2.5, cardLen(c) / 11));
       durationInFrames = Math.round(sec * FPS);
     }
+    const isHero = c.type === 'cover' || c.type === 'closing';
     return {
       type: c.type,
       bg: bgRel[i],
       bgColor: bgColors[i % bgColors.length],
       accent: c.accent || palette[i % palette.length],
-      badge: c.badge, title: c.title, body: c.body,
+      theme: isHero ? 'dark' : (opts.cardTheme || 'light'),
+      motion: opts.motion || 'auto',
+      kicker: isHero ? undefined : (preset?.label || undefined),
+      badge: c.badge, big: c.big, small: c.small, title: c.title, body: c.body,
       number: c.number, unit: c.unit, items: c.items,
       before: c.before, after: c.after, wrong: c.wrong, right: c.right,
       durationInFrames, index: i, total: sb.cards.length,
