@@ -17,7 +17,8 @@ import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, l
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
-import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
+import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
+import {pngToJpeg} from './lib/img-util';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -188,6 +189,55 @@ async function ensureInstaVideoR2(id: string): Promise<string> {
   setSampleR2(base, key);
   return key;
 }
+// 카드 게시물(캐러셀) 메타 — project.json에서 제목·나레이션(캡션 생성용) 읽기.
+function cardPostMeta(id: string): {title: string; narrations: string[]} | null {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+  try {
+    const proj = JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', id, 'project.json'), 'utf8'));
+    if (proj.cardKind !== 'card-post') return null;
+    const narrations = (proj.scenes || []).map((s: any) => s.narration || '').filter(Boolean);
+    return {title: proj.title || '카드뉴스', narrations: narrations.length ? narrations : [proj.title || '']};
+  } catch { return null; }
+}
+// 캐러셀 업로드용 JPEG 공개 URL 확보 — 카드 PNG를 JPEG로 변환해 R2에 올리고 presign. (인스타는 JPEG만 허용)
+//   변환본 키는 project.json.imagesJpgR2에 캐시해 재업로드 때 재사용.
+async function ensureCarouselJpegUrls(id: string, log: (m: string) => void): Promise<string[]> {
+  if (!r2Enabled()) throw new Error('클라우드 저장소(R2)가 꺼져 있어 캐러셀 공개 링크를 만들 수 없습니다.');
+  const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
+  const pjPath = path.join(dir, 'project.json');
+  const proj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
+  const names: string[] = proj.images || [];
+  const pngR2: string[] = proj.imagesR2 || [];
+  const jpgR2: string[] = proj.imagesJpgR2 || [];
+  const urls: string[] = [];
+  for (let i = 0; i < names.length; i++) {
+    if (!jpgR2[i]) {
+      // 원본 PNG 확보(로컬 or R2) → 임시 파일.
+      const tmpPng = path.join(os.tmpdir(), `card-${id}-${i}.png`);
+      const localPng = path.join(dir, names[i]);
+      if (fs.existsSync(localPng)) fs.copyFileSync(localPng, tmpPng);
+      else if (pngR2[i]) {
+        const got = await getStream(pngR2[i]);
+        if (!got) throw new Error(`이미지 ${i + 1}을 가져오지 못했습니다.`);
+        await new Promise<void>((resolve, reject) => { const w = fs.createWriteStream(tmpPng); got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject); });
+      } else throw new Error(`이미지 ${i + 1} 파일이 없습니다.`);
+      const tmpJpg = path.join(os.tmpdir(), `card-${id}-${i}.jpg`);
+      log(`[인스타] 이미지 ${i + 1}/${names.length} JPEG 변환…`);
+      await pngToJpeg(tmpPng, tmpJpg);
+      const key = videoKey(id, `carousel-${i + 1}.jpg`);
+      if (!(await uploadFile(key, tmpJpg, 'image/jpeg'))) throw new Error(`이미지 ${i + 1} 업로드 실패`);
+      jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg);
+      jpgR2[i] = key;
+    }
+    const url = await presignGet(jpgR2[i], 3600);
+    if (!url) throw new Error(`이미지 ${i + 1} 링크 생성 실패`);
+    urls.push(url);
+  }
+  proj.imagesJpgR2 = jpgR2;
+  fs.writeFileSync(pjPath, JSON.stringify(proj));
+  return urls;
+}
+function jgSafeUnlink(p: string) { try { fs.rmSync(p, {force: true}); } catch {} }
 // R2 완성영상 스트리밍(Range 지원). 포트폴리오 전시용.
 async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse, key: string) {
   const h = await getStream(key);
@@ -613,14 +663,31 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {connected: true, username});
     } catch (e: any) { return json(res, 400, {error: e.message}); }
   }
-  // 인스타 캡션 자동 생성(영상 제목·나레이션 기반, 해시태그 포함)
+  // 카드 게시물(캐러셀) 인스타 업로드 — JPEG 변환 후 publishCarousel.
+  if (p.startsWith('/api/instagram/upload-carousel/') && req.method === 'POST') {
+    const id = decodeURIComponent(p.slice('/api/instagram/upload-carousel/'.length));
+    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '올릴 수 없는 항목입니다.'});
+    const item = listPortfolio().find((x) => x.projectId === id && x.kind === 'card-post');
+    if (!item) return json(res, 404, {error: '카드 게시물을 찾을 수 없습니다.'});
+    if (!instagramStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 인스타 계정을 연결하세요.'});
+    const b = await readBody(req);
+    const caption = String(b.caption || '').trim();
+    try {
+      const urls = await ensureCarouselJpegUrls(id, () => {});
+      const r = await publishCarousel(urls, caption);
+      if (r.permalink) { setPortfolioInstagram(id, r.permalink); saveProjectInstagram(id, r.permalink); }
+      return json(res, 200, r);
+    } catch (e: any) { return json(res, 502, {error: e.message}); }
+  }
+  // 인스타 캡션 자동 생성(영상 제목·나레이션 기반, 해시태그 포함) — 카드 게시물도 지원.
   if (p.startsWith('/api/instagram/caption/') && req.method === 'GET') {
     const id = decodeURIComponent(p.slice('/api/instagram/caption/'.length));
     const src = resolveVideo(id);
-    if (!src) return json(res, 404, {error: '영상을 찾을 수 없습니다.'});
+    const meta = src ? {title: src.title, narrations: src.narrations} : cardPostMeta(id);
+    if (!meta) return json(res, 404, {error: '항목을 찾을 수 없습니다.'});
     const k = pipelineKeys();
     try {
-      const caption = await generateCaption({gemini: k.gemini, openai: k.openai}, src.title, src.narrations);
+      const caption = await generateCaption({gemini: k.gemini, openai: k.openai}, meta.title, meta.narrations);
       return json(res, 200, {caption});
     } catch (e: any) { return json(res, 502, {error: '캡션 생성 실패: ' + e.message}); }
   }

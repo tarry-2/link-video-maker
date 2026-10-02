@@ -275,7 +275,12 @@
         <p id="result-title" class="result-title"></p>
         <video id="result-video" class="result-video" controls></video>
         <a id="download" class="primary-btn" download>⬇ 다운로드</a>
-        <p class="mini-state">바탕화면 "온비디오 날짜" 폴더에도 자동 저장됐어요.</p>
+        <!-- 카드영상(쇼츠)도 영상처럼 유튜브·인스타 올리기 -->
+        <div id="cv-actions" class="result-actions hidden">
+          <button class="btn-yt" id="cv-yt">📺 유튜브 올리기</button>
+          <button class="btn-ig" id="cv-ig">📷 인스타 올리기</button>
+        </div>
+        <p class="mini-state">바탕화면 "온비디오 날짜" 폴더에도 자동 저장됐어요. 포트폴리오엔 자동 등록돼요.</p>
       </section>
 
       <!-- 카드 게시물(캐러셀) 결과 -->
@@ -284,7 +289,10 @@
         <p id="post-title" class="result-title"></p>
         <div id="post-grid" class="post-grid"></div>
         <a id="post-zip" class="primary-btn" download>⬇ 전체 이미지 ZIP 다운로드</a>
-        <p class="mini-state">이미지를 인스타 게시물로 올리면 손가락으로 넘기는 카드뉴스가 돼요. (앱에서 꾹 눌러 저장하거나 ZIP 받기)</p>
+        <div id="cp-actions" class="result-actions hidden">
+          <button class="btn-ig" id="cp-ig">📷 인스타 캐러셀 올리기</button>
+        </div>
+        <p class="mini-state">인스타 캐러셀로 올리면 손가락으로 넘기는 카드뉴스가 돼요. 포트폴리오엔 자동 등록돼요.</p>
       </section>
 
           <!-- 카드뉴스 모드 전용 안내(오른쪽이 비지 않게) -->

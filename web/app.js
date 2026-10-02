@@ -345,13 +345,15 @@ window.startCardGen = async function () {
   } catch (e) { addLog('[실패] ' + e.message, 'fail'); }
 };
 // 게시물 결과 렌더(이미지 그리드 + ZIP).
-window.showPostResult = function (title, images, zip) {
+window.showPostResult = function (title, images, zip, projectId) {
   $('post-result').classList.remove('hidden');
   $('post-title').textContent = title || '';
   $('post-grid').innerHTML = (images || []).map((rel, i) =>
     `<div class="post-card"><img src="/api/card-img/${encodeURIComponent(rel)}" alt="카드 ${i + 1}" /><span>${i + 1}</span></div>`).join('');
   if (zip) { $('post-zip').href = '/api/cards-zip/' + zip; $('post-zip').classList.remove('hidden'); }
   else $('post-zip').classList.add('hidden');
+  cardUpId = projectId || null;
+  $('cp-actions').classList.toggle('hidden', !cardUpId);
 };
 
 // ── 진행 로그 SSE(재연결 가능) — 화면 내림/백그라운드로 끊겨도 복귀 시 자동 이어짐 ──
@@ -374,8 +376,8 @@ function attachProgress(id, freshLog) {
       es.close(); curES = null; curJobId = null;
       try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
-      if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip); }
-      else if (m.file) showResult(m.file, m.title);
+      if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
+      else if (m.file) showResult(m.file, m.title, m.projectId);
     }
   };
   es.onerror = () => {
@@ -405,16 +407,85 @@ function addLog(text, cls) {
   $('log').scrollTop = $('log').scrollHeight;
 }
 
-function showResult(file, title) {
+function showResult(file, title, projectId) {
   $('result-block').classList.remove('hidden');
   $('result-title').textContent = title || '';
   const src = '/api/video/' + file;
   $('result-video').src = src;
   $('download').href = src;
   $('download').setAttribute('download', (title || 'onvideo') + '.mp4');
+  cardVidUpId = projectId || null;
+  $('cv-actions').classList.toggle('hidden', !cardVidUpId);
   syncFormat();
   $('result-block').scrollIntoView({ behavior: 'smooth' });
 }
+
+// ── 카드 완료 화면 업로드(영상처럼) — projectId로 유튜브/인스타. 포폴과 같은 엔드포인트 재사용 ──
+let cardVidUpId = null, cardUpId = null;
+function cardModal(innerHtml, wire) {
+  let box = document.getElementById('card-up-modal');
+  if (!box) { box = document.createElement('div'); box.id = 'card-up-modal'; document.body.appendChild(box); }
+  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60';
+  box.innerHTML = `<div style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">${innerHtml}</div>`;
+  const close = () => box.remove();
+  box.onclick = (e) => { if (e.target === box || e.target.closest('[data-x="close"]')) close(); };
+  wire(box, close);
+  return box;
+}
+const esc2 = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function cardYouTube(btn) {
+  const id = cardVidUpId; if (!id) return;
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '📺 준비 중…';
+  try {
+    const st = await (await fetch('/api/youtube/status')).json();
+    if (!st.connected) { alert('먼저 ⚙ 키 설정에서 유튜브 계정을 연결하세요.'); return; }
+    btn.textContent = '📺 제목·설명 만드는 중…';
+    const r = await fetch('/api/youtube/meta/' + encodeURIComponent(id)); const meta = await r.json();
+    if (!r.ok) throw new Error(meta.error || '메타 생성 실패');
+    cardModal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>📺 유튜브 올리기</h2><button class="ghost-btn" data-x="close">✕</button></div>
+      <label class="field-label">제목<input id="cu-t" class="input" maxlength="100" value="${esc2(meta.title || '')}"></label>
+      <label class="field-label">설명<textarea id="cu-d" class="input" rows="5" maxlength="4900">${esc2(meta.description || '')}</textarea></label>
+      <label class="field-label">태그<input id="cu-tags" class="input" value="${esc2((meta.tags || []).join(', '))}"></label>
+      <label class="field-label">공개<select id="cu-p" class="input"><option value="public">바로 공개</option><option value="unlisted">미등록</option><option value="private">비공개</option></select></label>
+      <button class="primary-btn" data-up="1">유튜브에 올리기</button><p id="cu-msg" class="mini-state"></p>`,
+      (box) => { box.querySelector('[data-up]').onclick = async (ev) => {
+        const up = ev.target; up.disabled = true; up.textContent = '올리는 중…';
+        try {
+          const rr = await fetch('/api/youtube/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: box.querySelector('#cu-t').value, description: box.querySelector('#cu-d').value, tags: box.querySelector('#cu-tags').value.split(',').map(s => s.trim()).filter(Boolean), privacy: box.querySelector('#cu-p').value }) });
+          const d = await rr.json(); if (!rr.ok) throw new Error(d.error || '업로드 실패');
+          box.querySelector('#cu-msg').innerHTML = `✅ 완료! <a href="${d.url}" target="_blank" style="color:var(--teal)">${d.url}</a>`; up.textContent = '완료 🎉';
+        } catch (e) { box.querySelector('#cu-msg').textContent = '실패: ' + e.message; up.disabled = false; up.textContent = '유튜브에 올리기'; }
+      }; });
+  } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = orig; }
+}
+async function cardInstagram(btn, id, carousel) {
+  if (!id) return;
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '📷 준비 중…';
+  try {
+    const st = await (await fetch('/api/instagram/status')).json();
+    if (!st.connected) { alert('먼저 ⚙ 키 설정에서 인스타 계정을 연결하세요.'); return; }
+    btn.textContent = '📷 캡션 만드는 중…';
+    const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id)); const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '캡션 생성 실패');
+    cardModal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>📷 인스타 ${carousel ? '캐러셀 올리기' : '올리기'}</h2><button class="ghost-btn" data-x="close">✕</button></div>
+      ${carousel ? '<p class="sub small">🎴 손가락으로 넘기는 게시물(캐러셀)로 올라갑니다.</p>' : `<label class="field-label">방식<select id="cu-k" class="input"><option value="reels">릴스(세로 쇼츠)</option><option value="feed">피드 영상</option></select></label>`}
+      <label class="field-label">캡션·해시태그<textarea id="cu-c" class="input" rows="7" maxlength="2200">${esc2(d.caption || '')}</textarea></label>
+      <button class="primary-btn" data-up="1">인스타에 올리기</button><p id="cu-msg" class="mini-state">${carousel ? '이미지 변환·업로드에 잠시 걸려요.' : '릴스는 1~2분 걸릴 수 있어요.'}</p>`,
+      (box) => { box.querySelector('[data-up]').onclick = async (ev) => {
+        const up = ev.target; up.disabled = true; up.textContent = '올리는 중…'; box.querySelector('#cu-msg').textContent = '처리 중…';
+        try {
+          const rr = carousel
+            ? await fetch('/api/instagram/upload-carousel/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: box.querySelector('#cu-c').value }) })
+            : await fetch('/api/instagram/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: box.querySelector('#cu-k').value, caption: box.querySelector('#cu-c').value }) });
+          const dd = await rr.json(); if (!rr.ok) throw new Error(dd.error || '업로드 실패');
+          box.querySelector('#cu-msg').innerHTML = dd.permalink ? `✅ 완료! <a href="${dd.permalink}" target="_blank" style="color:var(--teal)">인스타에서 열기</a>` : '✅ 게시 완료!'; up.textContent = '완료 🎉';
+        } catch (e) { box.querySelector('#cu-msg').textContent = '실패: ' + e.message; up.disabled = false; up.textContent = '인스타에 올리기'; }
+      }; });
+  } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = orig; }
+}
+$('cv-yt')?.addEventListener('click', (e) => cardYouTube(e.currentTarget));
+$('cv-ig')?.addEventListener('click', (e) => cardInstagram(e.currentTarget, cardVidUpId, false));
+$('cp-ig')?.addEventListener('click', (e) => cardInstagram(e.currentTarget, cardUpId, true));
 
 // ── 화면비 UI 동기화: 쇼츠(<90초)=세로 9:16 / 롱폼(≥90초)=가로 16:9 ──
 //   미리보기 프레임·배지·결과영상의 비율을 길이 선택에 맞춰 바꾼다(.land 클래스=가로).

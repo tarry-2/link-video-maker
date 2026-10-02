@@ -143,6 +143,65 @@ export async function publishVideo(
   return {permalink, id: pd.id};
 }
 
+// 카드 게시물(캐러셀) 게시 — 이미지 2~10장. ★인스타 API는 JPEG만 허용(PNG 거부)하므로 imageUrls는
+// 반드시 JPEG 공개 URL(R2 presigned)이어야 한다. 자식 컨테이너(is_carousel_item)→CAROUSEL 부모→publish.
+export async function publishCarousel(
+  imageUrls: string[], caption: string, log?: (m: string) => void,
+): Promise<{permalink: string; id: string}> {
+  const c = loadInstagram();
+  if (!c.igUserId || !c.accessToken) throw new Error('인스타가 연결되지 않았습니다. 키 설정에서 연결하세요.');
+  const base = host(c); const token = c.accessToken;
+  const urls = imageUrls.filter(Boolean).slice(0, 10);
+  if (urls.length < 2) throw new Error('캐러셀은 이미지가 2장 이상이어야 합니다.');
+
+  // 1) 이미지별 자식 컨테이너.
+  const childIds: string[] = [];
+  for (let i = 0; i < urls.length; i++) {
+    log?.(`[인스타] 캐러셀 이미지 ${i + 1}/${urls.length} 등록 중…`);
+    const cr = await fetch(`${base}/${API}/${c.igUserId}/media`, {
+      method: 'POST',
+      body: new URLSearchParams({image_url: urls[i], is_carousel_item: 'true', access_token: token}),
+    });
+    const cd: any = await cr.json();
+    if (!cr.ok || !cd.id) throw new Error(`이미지 ${i + 1} 등록 실패: ` + (cd?.error?.message || JSON.stringify(cd).slice(0, 160)));
+    childIds.push(cd.id);
+  }
+
+  // 2) CAROUSEL 부모 컨테이너(캡션은 부모에만).
+  log?.('[인스타] 캐러셀 묶는 중…');
+  const pr = await fetch(`${base}/${API}/${c.igUserId}/media`, {
+    method: 'POST',
+    body: new URLSearchParams({media_type: 'CAROUSEL', children: childIds.join(','), caption: caption.slice(0, 2200), access_token: token}),
+  });
+  const pd: any = await pr.json();
+  if (!pr.ok || !pd.id) throw new Error('캐러셀 묶기 실패: ' + (pd?.error?.message || JSON.stringify(pd).slice(0, 160)));
+
+  // 2.5) 부모 컨테이너 처리 대기(FINISHED).
+  for (let i = 0; i < 24; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const sr = await fetch(`${base}/${API}/${pd.id}?fields=status_code&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+    const sd: any = await sr.json();
+    if (sd.status_code === 'FINISHED') break;
+    if (sd.status_code === 'ERROR') throw new Error('캐러셀 처리 실패(인스타).');
+  }
+
+  // 3) 게시.
+  log?.('[인스타] 게시 중…');
+  const pub = await fetch(`${base}/${API}/${c.igUserId}/media_publish`, {
+    method: 'POST', body: new URLSearchParams({creation_id: pd.id, access_token: token}),
+  });
+  const pubd: any = await pub.json();
+  if (!pub.ok || !pubd.id) throw new Error('게시 실패: ' + (pubd?.error?.message || JSON.stringify(pubd).slice(0, 160)));
+
+  let permalink = '';
+  try {
+    const lr = await fetch(`${base}/${API}/${pubd.id}?fields=permalink&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+    const ld: any = await lr.json(); permalink = ld.permalink || '';
+  } catch {}
+  log?.('[인스타] 캐러셀 게시 완료!');
+  return {permalink, id: pubd.id};
+}
+
 // 60일 long-lived 토큰을 ig_refresh_token으로 갱신(또 60일 연장). Instagram 로그인(graph.instagram.com) 토큰만 가능.
 export async function refreshInstagram(log?: (m: string) => void): Promise<boolean> {
   const c = loadInstagram();
