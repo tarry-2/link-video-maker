@@ -102,6 +102,13 @@
 
         <!-- 카드뉴스 모드: 글자 중심 카드 슬라이드 -->
         <div id="pane-card" class="hidden">
+          <label class="field-label">만들 형태</label>
+          <div class="seg">
+            <button type="button" id="card-out-video" class="seg-btn active" data-out="video">🎬 영상 (릴스·쇼츠)</button>
+            <button type="button" id="card-out-post" class="seg-btn" data-out="post">🖼 게시물 (넘기는 카드)</button>
+          </div>
+          <p class="mini-state" id="card-out-hint">자동으로 넘어가는 세로 영상 1개 → 릴스/쇼츠에 올려요.</p>
+
           <label class="field-label">1. 주제 <span class="hint">— 주제만 넣으면 AI가 표지·숫자·리스트·비교 등 다양한 카드로 구성해요</span></label>
           <button id="card-topic-fetch" class="ghost-btn" type="button">✨ 요즘 잘 되는 주제 추천받기</button>
           <p id="card-topic-state" class="mini-state"></p>
@@ -130,11 +137,11 @@
           <input id="card-images" class="input hidden" type="file" accept="image/*" multiple style="margin-top:8px" />
           <div id="card-thumbs" class="thumbs"></div>
 
-          <div class="row" style="margin-top:12px">
+          <div id="card-audio-row" class="row" style="margin-top:12px">
             <label class="toggle col"><input type="checkbox" id="card-narration" /> 🎙 나레이션 (AI가 카드를 읽어줌)</label>
             <label class="toggle col"><input type="checkbox" id="card-bgm" checked /> 🎵 배경음악</label>
           </div>
-          <p class="mini-state">나레이션을 끄면 ‘카드만 집중’ 모드 — 글자 카드가 슬라이드로 넘어가고 배경음악만 깔려요(진짜 카드뉴스).</p>
+          <p id="card-audio-hint" class="mini-state">나레이션을 끄면 ‘카드만 집중’ 모드 — 글자 카드가 슬라이드로 넘어가고 배경음악만 깔려요(진짜 카드뉴스).</p>
         </div>
 
         <label class="field-label">2. 카테고리 <span class="hint">— 고르면 톤·이미지·목소리·배경음악이 자동으로 맞춰져요</span></label>
@@ -248,6 +255,15 @@
         <video id="result-video" class="result-video" controls></video>
         <a id="download" class="primary-btn" download>⬇ 다운로드</a>
         <p class="mini-state">바탕화면 "온비디오 날짜" 폴더에도 자동 저장됐어요.</p>
+      </section>
+
+      <!-- 카드 게시물(캐러셀) 결과 -->
+      <section id="post-result" class="card hidden">
+        <h3 class="block-title">카드 게시물 완성 🎉</h3>
+        <p id="post-title" class="result-title"></p>
+        <div id="post-grid" class="post-grid"></div>
+        <a id="post-zip" class="primary-btn" download>⬇ 전체 이미지 ZIP 다운로드</a>
+        <p class="mini-state">이미지를 인스타 게시물로 올리면 손가락으로 넘기는 카드뉴스가 돼요. (앱에서 꾹 눌러 저장하거나 ZIP 받기)</p>
       </section>
 
           <section id="preview-hint" class="card preview-hint">

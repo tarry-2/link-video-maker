@@ -143,6 +143,33 @@ export async function renderCardVideo(
   }
 }
 
+// 카드 캐러셀(게시물) — 카드 N장을 각각 4:5 PNG로. 인스타 피드 넘기는 게시물용.
+export async function renderCardStills(
+  cards: CardData[],
+  outPaths: string[],
+  log?: (m: string) => void,
+  publicDir?: string,
+): Promise<void> {
+  const serveUrl = publicDir
+    ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
+    : await getServeUrl(log);
+  try {
+    for (let i = 0; i < cards.length; i++) {
+      const composition = await selectComposition({serveUrl, id: 'CardStill', inputProps: cards[i]});
+      log?.(`[게시물] 카드 ${i + 1}/${cards.length} 이미지 생성…`);
+      await renderStill({
+        composition, serveUrl, output: outPaths[i], inputProps: cards[i],
+        frame: 45, // 등장 애니 정착 후 프레임
+        imageFormat: 'png',
+        chromiumOptions: {gl: 'swiftshader', enableMultiProcessOnLinux: true},
+      });
+    }
+    log?.('[게시물] 모든 카드 이미지 완성');
+  } finally {
+    if (publicDir) await rm(serveUrl, {recursive: true, force: true});
+  }
+}
+
 export type ThumbInput = {image: string; big: string; small: string; badge: string; accentColor: string};
 
 // 전용 썸네일(커버) 1장 생성 — 영상 프레임 재활용이 아니라 독립 디자인(Thumbnail 컴포지션).

@@ -3,6 +3,7 @@ import {Composition} from 'remotion';
 import {Video, videoSchema} from './Video';
 import {Thumbnail, thumbnailSchema} from './Thumbnail';
 import {CardVideo, cardVideoSchema} from './CardVideo';
+import {Card, cardSchema} from './Card';
 import type {SceneData} from './Scene';
 import type {CardData} from './Card';
 
@@ -128,6 +129,17 @@ export const RemotionRoot: React.FC = () => {
         const landscape = props.orientation === 'landscape';
         return {durationInFrames: total - overlap, width: landscape ? 1920 : 1080, height: landscape ? 1080 : 1920};
       }}
+    />
+    {/* 카드 1장 스틸(게시물/캐러셀용) — 인스타 피드 비율 4:5(1080×1350). 애니 정착 프레임에서 렌더. */}
+    <Composition
+      id="CardStill"
+      component={Card}
+      durationInFrames={60}
+      fps={30}
+      width={1080}
+      height={1350}
+      schema={cardSchema}
+      defaultProps={demoCards[1]}
     />
     {/* 전용 썸네일(커버) — renderStill 전용 1프레임 컴포지션 */}
     <Composition

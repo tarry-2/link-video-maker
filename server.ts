@@ -210,7 +210,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; file?: string; title?: string; error?: string};
+type Job = {id: string; logs: string[]; done: boolean; file?: string; title?: string; error?: string; kind?: 'video' | 'post'; images?: string[]; zip?: string};
 const jobs = new Map<string, Job>();
 
 function json(res: http.ServerResponse, code: number, data: unknown) {
@@ -916,9 +916,10 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     if (!topic) return json(res, 400, {error: '주제를 입력하세요.'});
     const k = pipelineKeys();
     if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 Gemini 또는 OpenAI 키를 저장하세요.'});
+    const output = b.output === 'post' ? 'post' : 'video';
     const bg = ['ai', 'solid', 'upload'].includes(b.bg) ? b.bg : 'solid';
-    const narration = b.narration === true;
-    const bgm = b.bgm === true;
+    const narration = output === 'video' && b.narration === true;
+    const bgm = output === 'video' && b.bgm === true;
     if ((narration || bgm) && !k.elevenlabs) return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다.'});
     if (bg === 'ai' && !k.replicate) return json(res, 400, {error: 'AI 배경을 쓰려면 Replicate 키가 필요합니다.'});
 
@@ -945,7 +946,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           topic,
           count: Number(b.count) || 7,
           presetId: b.presetId || undefined,
-          bg, uploads,
+          output, bg, uploads,
           narration, bgm,
           voice: b.voice || undefined,
           imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real',
@@ -957,10 +958,12 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           const today = new Date().toLocaleDateString('sv-SE');
           const folder = path.join(os.homedir(), 'Desktop', `온비디오 카드 ${today}`, safe);
           fs.mkdirSync(folder, {recursive: true});
-          fs.copyFileSync(r.out, path.join(folder, `${safe}.mp4`));
+          fs.copyFileSync(r.out, path.join(folder, path.basename(r.out)));
           job.logs.push(`[완료] 바탕화면에도 저장됨: ${folder}`);
         } catch { /* Railway 등 Desktop 없는 환경 — 무시 */ }
-        job.file = path.basename(r.out);
+        job.kind = r.kind;
+        if (r.kind === 'post') { job.zip = path.basename(r.out); job.images = r.images; }
+        else job.file = path.basename(r.out);
         job.title = r.title;
         job.done = true;
       } catch (e: any) {
@@ -990,7 +993,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       }
       if (job.done) {
         res.write(
-          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error})}\n\n`,
+          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip})}\n\n`,
         );
         clearInterval(timer);
         res.end();
@@ -1006,6 +1009,26 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     if (!fs.existsSync(file)) return json(res, 404, {error: 'not found'});
     const buf = fs.readFileSync(file);
     res.writeHead(200, {'Content-Type': 'video/mp4', 'Content-Length': buf.length});
+    return res.end(buf);
+  }
+  // ── 카드 캐러셀 ZIP 다운로드 ──
+  if (p.startsWith('/api/cards-zip/')) {
+    const name = path.basename(p);
+    if (!/^cards-[\w-]+\.zip$/.test(name)) { res.writeHead(404); return res.end('not found'); }
+    const file = path.join(OUT_DIR, name);
+    if (!fs.existsSync(file)) return json(res, 404, {error: 'not found'});
+    const buf = fs.readFileSync(file);
+    res.writeHead(200, {'Content-Type': 'application/zip', 'Content-Length': buf.length, 'Content-Disposition': `attachment; filename="${name}"`});
+    return res.end(buf);
+  }
+  // ── 카드 이미지 미리보기(게시물) — public/jobs/card-*/card-N.png ──
+  if (p.startsWith('/api/card-img/')) {
+    const rel = decodeURIComponent(p.replace('/api/card-img/', ''));
+    if (!/^jobs\/card-[\w-]+\/card-\d+\.png$/.test(rel)) { res.writeHead(404); return res.end('not found'); }
+    const file = path.join(ROOT, 'public', rel);
+    if (!fs.existsSync(file)) { res.writeHead(404); return res.end('not found'); }
+    const buf = fs.readFileSync(file);
+    res.writeHead(200, {'Content-Type': 'image/png', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=3600'});
     return res.end(buf);
   }
 

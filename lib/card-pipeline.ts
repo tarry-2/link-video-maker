@@ -9,21 +9,25 @@ import {generateImageFlux} from './image';
 import {ttsElevenJoined} from './tts';
 import {VOICES, pickVoice} from './tts';
 import {generateBgm} from './music';
-import {renderCardVideo} from './render';
+import {renderCardVideo, renderCardStills} from './render';
+import {buildZip} from './zip';
+import {writeFile} from 'node:fs/promises';
 import type {CardData} from '../src/Card';
 
 const FPS = 30;
 
 export type CardKeys = {gemini: string[]; openai?: string; elevenlabs?: string; replicate?: string};
 export type CardBg = 'ai' | 'solid' | 'upload';
+export type CardOutput = 'video' | 'post';
 export type CardOpts = {
   topic: string;
   count?: number;          // 카드 장수(3~12)
   presetId?: string;
+  output?: CardOutput;     // video=릴스 MP4 / post=캐러셀 PNG N장+ZIP
   bg?: CardBg;             // 배경: ai 이미지 / 단색 그라데이션 / 업로드
   uploads?: string[];      // bg=upload일 때 public 상대경로들(카드순)
-  narration?: boolean;     // 나레이션 ON/OFF
-  bgm?: boolean;           // 배경음악 ON/OFF
+  narration?: boolean;     // 나레이션 ON/OFF (video만)
+  bgm?: boolean;           // 배경음악 ON/OFF (video만)
   voice?: string;          // 나레이션 목소리 키
   imageStyle?: 'real' | 'anime';
   log?: (m: string) => void;
@@ -48,7 +52,7 @@ function cardLen(c: CardPlan): number {
   return cardSpeech(c).length;
 }
 
-export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{out: string; title: string; dir: string}> {
+export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{out: string; title: string; dir: string; kind: CardOutput; images?: string[]}> {
   const log = opts.log || (() => {});
   const id = randomUUID().slice(0, 8);
   const pubRel = `jobs/card-${id}`;
@@ -56,6 +60,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   await mkdir(abs(pubRel), {recursive: true});
   const preset = opts.presetId ? getPreset(opts.presetId) : undefined;
   const bgMode: CardBg = opts.bg || 'solid';
+  const output: CardOutput = opts.output === 'post' ? 'post' : 'video';
   const count = Math.max(3, Math.min(12, opts.count || 7));
 
   log('[대본] 카드 구성 중…');
@@ -82,7 +87,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   // 나레이션(토글) — ON이면 통짜 TTS + 카드별 구간으로 길이 산정.
   let voiceSrc: string | undefined;
   let ranges: [number, number][] = [];
-  if (opts.narration) {
+  if (opts.narration && output === 'video') {
     if (!keys.elevenlabs) throw new Error('나레이션을 쓰려면 ElevenLabs 키가 필요합니다.');
     const voiceKey = pickVoice(opts.voice, preset?.voice, opts.imageStyle);
     const voiceId = VOICES[voiceKey]?.id || VOICES.adam.id;
@@ -119,7 +124,22 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
     };
   });
 
-  // BGM(토글).
+  await mkdir(path.join(process.cwd(), 'out'), {recursive: true});
+
+  // ── 게시물(캐러셀) 모드: 카드 N장을 4:5 PNG로 뽑고 ZIP으로 묶는다(오디오 없음). ──
+  if (output === 'post') {
+    const pngAbs = cards.map((_, i) => abs(`${pubRel}/card-${i + 1}.png`));
+    log('[게시물] 카드 이미지 생성 중…');
+    await renderCardStills(cards, pngAbs, log);
+    const files = pngAbs.map((p, i) => ({name: `${String(i + 1).padStart(2, '0')}.png`, path: p}));
+    const zipAbs = path.join(process.cwd(), 'out', `cards-${id}.zip`);
+    await writeFile(zipAbs, buildZip(files));
+    log(`[완료] 게시물 카드 ${cards.length}장 완성! (ZIP + 개별 이미지)`);
+    // images = 웹에서 미리보기할 public 상대경로.
+    return {out: zipAbs, title: sb.title, dir: abs(pubRel), kind: 'post', images: cards.map((_, i) => `${pubRel}/card-${i + 1}.png`)};
+  }
+
+  // ── 영상(릴스) 모드 ──
   let bgmSrc: string | undefined;
   if (opts.bgm) {
     if (!keys.elevenlabs) throw new Error('배경음악을 쓰려면 ElevenLabs 키가 필요합니다.');
@@ -132,9 +152,8 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
 
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `card-${id}.mp4`);
-  await mkdir(path.join(process.cwd(), 'out'), {recursive: true});
   const transitionFrames = 12;
   await renderCardVideo(cards, transitionFrames, out, log, bgmSrc, voiceSrc, undefined, 'portrait');
   log('[완료] 카드뉴스 영상 완성!');
-  return {out, title: sb.title, dir: abs(pubRel)};
+  return {out, title: sb.title, dir: abs(pubRel), kind: 'video'};
 }

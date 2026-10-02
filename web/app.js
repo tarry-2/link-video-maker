@@ -302,6 +302,22 @@ $('generate').onclick = async () => {
   attachProgress(id, true);
 };
 
+// 카드 출력 형태 토글(영상/게시물).
+let cardOutput = 'video';
+function setCardOutput(o) {
+  cardOutput = o;
+  $('card-out-video').classList.toggle('active', o === 'video');
+  $('card-out-post').classList.toggle('active', o === 'post');
+  // 게시물은 오디오(나레이션·BGM) 불필요 → 숨김.
+  $('card-audio-row').classList.toggle('hidden', o === 'post');
+  $('card-audio-hint').classList.toggle('hidden', o === 'post');
+  $('card-out-hint').textContent = o === 'post'
+    ? '카드별 이미지 여러 장 → 인스타 게시물(손가락으로 넘기는 카드뉴스)로 올려요.'
+    : '자동으로 넘어가는 세로 영상 1개 → 릴스/쇼츠에 올려요.';
+}
+$('card-out-video')?.addEventListener('click', () => setCardOutput('video'));
+$('card-out-post')?.addEventListener('click', () => setCardOutput('post'));
+
 // ── 카드뉴스 생성(studio.js의 generate가 버튼을 덮으므로, 카드 모드는 이 함수로 처리) ──
 window.startCardGen = async function () {
   const topic = $('card-topic').value.trim();
@@ -309,7 +325,7 @@ window.startCardGen = async function () {
   const bg = $('card-bg').value;
   if (bg === 'upload' && !cardImages.length) { alert('배경으로 쓸 이미지를 올리거나 다른 배경을 고르세요.'); return; }
   const body = {
-    topic, count: Number($('card-count').value), bg,
+    topic, count: Number($('card-count').value), output: cardOutput, bg,
     images: bg === 'upload' ? cardImages : undefined,
     narration: $('card-narration').checked, bgm: $('card-bgm').checked,
     presetId: selectedPreset, voice: $('voice').value,
@@ -317,6 +333,7 @@ window.startCardGen = async function () {
   };
   $('progress-block').classList.remove('hidden');
   $('result-block').classList.add('hidden');
+  $('post-result').classList.add('hidden');
   if ($('log')) $('log').textContent = '';
   try {
     const r = await fetch('/api/generate-cards', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
@@ -324,6 +341,15 @@ window.startCardGen = async function () {
     if (!r.ok) throw new Error(d.error || '실패');
     attachProgress(d.id, true);
   } catch (e) { addLog('[실패] ' + e.message, 'fail'); }
+};
+// 게시물 결과 렌더(이미지 그리드 + ZIP).
+window.showPostResult = function (title, images, zip) {
+  $('post-result').classList.remove('hidden');
+  $('post-title').textContent = title || '';
+  $('post-grid').innerHTML = (images || []).map((rel, i) =>
+    `<div class="post-card"><img src="/api/card-img/${encodeURIComponent(rel)}" alt="카드 ${i + 1}" /><span>${i + 1}</span></div>`).join('');
+  if (zip) { $('post-zip').href = '/api/cards-zip/' + zip; $('post-zip').classList.remove('hidden'); }
+  else $('post-zip').classList.add('hidden');
 };
 
 // ── 진행 로그 SSE(재연결 가능) — 화면 내림/백그라운드로 끊겨도 복귀 시 자동 이어짐 ──
@@ -346,7 +372,8 @@ function attachProgress(id, freshLog) {
       es.close(); curES = null; curJobId = null;
       try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
-      if (m.file) showResult(m.file, m.title);
+      if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip); }
+      else if (m.file) showResult(m.file, m.title);
     }
   };
   es.onerror = () => {
