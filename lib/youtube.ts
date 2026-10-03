@@ -39,7 +39,7 @@ export function youtubeStatus() {
   };
 }
 
-const SCOPE = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly';
+const SCOPE = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly';
 
 // 1) 구글 동의 화면 URL — 사용자가 여기서 채널 접근을 허용한다.
 export function authUrl(redirectUri: string): string {
@@ -102,12 +102,16 @@ export function extractVideoId(url: string): string {
   return m ? m[1] : '';
 }
 
-// 영상 통계(조회수·좋아요·댓글). 본인 채널 영상, OAuth 토큰으로 조회. 50개씩 배치.
-export async function getVideoStats(ids: string[]): Promise<Record<string, {views: number; likes: number; comments: number}>> {
-  const out: Record<string, {views: number; likes: number; comments: number}> = {};
+// 영상 통계(조회·좋아요·댓글·공유). 본인 채널, OAuth 토큰.
+// ★정확도: 공개 Data API 통계는 유튜브 스튜디오보다 지연·반올림되고 '공유수'가 아예 없다.
+//   → Analytics API(스튜디오와 동일 집계 + shares)로 덮어쓴다. 스코프 미승인/실패 시 Data API 값 유지(무회귀).
+export async function getVideoStats(ids: string[]): Promise<Record<string, {views: number; likes: number; comments: number; shares: number}>> {
+  type Stat = {views: number; likes: number; comments: number; shares: number};
+  const out: Record<string, Stat> = {};
   const uniq = [...new Set(ids.filter(Boolean))];
   if (!uniq.length) return out;
   const token = await accessToken();
+  // 1) Data API — 존재 보장(조회·좋아요·댓글). 공유수는 없음(0).
   for (let i = 0; i < uniq.length; i += 50) {
     const batch = uniq.slice(i, i + 50);
     const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${batch.join(',')}`, {
@@ -117,9 +121,33 @@ export async function getVideoStats(ids: string[]): Promise<Record<string, {view
     if (!r.ok) throw new Error('유튜브 통계 조회 실패: ' + (d?.error?.message || ''));
     for (const it of (d.items || [])) {
       const s = it.statistics || {};
-      out[it.id] = {views: Number(s.viewCount || 0), likes: Number(s.likeCount || 0), comments: Number(s.commentCount || 0)};
+      out[it.id] = {views: Number(s.viewCount || 0), likes: Number(s.likeCount || 0), comments: Number(s.commentCount || 0), shares: 0};
     }
   }
+  // 2) Analytics API — 스튜디오와 동일 집계로 덮어쓰기 + 공유수 채우기.
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    for (let i = 0; i < uniq.length; i += 200) {
+      const batch = uniq.slice(i, i + 200);
+      const u = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel%3D%3DMINE&startDate=2005-02-14&endDate=${today}&metrics=views,likes,comments,shares&dimensions=video&filters=video%3D%3D${batch.join(',')}&maxResults=500`;
+      const r = await fetch(u, {headers: {Authorization: `Bearer ${token}`}, cache: 'no-store'});
+      const d: any = await r.json();
+      if (!r.ok) continue; // 스코프 미승인(재로그인 필요) 등 → Data API 값 유지
+      const cols: string[] = (d.columnHeaders || []).map((c: any) => c.name);
+      const ci = (n: string) => cols.indexOf(n);
+      for (const row of (d.rows || [])) {
+        const id = row[ci('video')];
+        if (!id) continue;
+        const prev = out[id] || {views: 0, likes: 0, comments: 0, shares: 0};
+        out[id] = {
+          views: ci('views') >= 0 ? Number(row[ci('views')]) : prev.views,
+          likes: ci('likes') >= 0 ? Number(row[ci('likes')]) : prev.likes,
+          comments: ci('comments') >= 0 ? Number(row[ci('comments')]) : prev.comments,
+          shares: ci('shares') >= 0 ? Number(row[ci('shares')]) : prev.shares,
+        };
+      }
+    }
+  } catch { /* Analytics 실패 → Data API 값 사용 */ }
   return out;
 }
 

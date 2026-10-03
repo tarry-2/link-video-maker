@@ -380,7 +380,7 @@
           <h3 class="pf-stage-title">${esc(it.title)}</h3>
           <p class="pf-voice-note">${isPost ? '🎴 ' + ((it.images || []).length) + '장 카드뉴스' : '🎙 ' + esc(it.voice)}</p>
           <p class="pf-clip">${createdTxt}</p>
-          ${(() => { const st = (window.__ytStats || {})[it.id]; return st && (st.views || st.likes || st.comments) ? `<div class="pf-stage-stats"><div class="pf-stat"><b>${fmtNum(st.views)}</b><span>조회수</span></div><div class="pf-stat"><b>${fmtNum(st.likes)}</b><span>좋아요</span></div><div class="pf-stat"><b>${fmtNum(st.comments)}</b><span>댓글</span></div></div>` : ''; })()}
+          ${(() => { const st = (window.__ytStats || {})[it.id]; return st && (st.views || st.likes || st.comments || st.shares) ? `<div class="pf-stage-stats"><div class="pf-stat"><b>${fmtNum(st.views)}</b><span>조회수</span></div><div class="pf-stat"><b>${fmtNum(st.likes)}</b><span>좋아요</span></div><div class="pf-stat"><b>${fmtNum(st.comments)}</b><span>댓글</span></div>${st.shares ? `<div class="pf-stat"><b>${fmtNum(st.shares)}</b><span>공유</span></div>` : ''}</div>` : ''; })()}
           ${it.youtubeUrl ? `<a class="pf-yt-link" href="${esc(it.youtubeUrl)}" target="_blank">▶ 유튜브에서 보기</a>` : ''}
           ${it.instagramUrl ? `<a class="pf-ig-link" href="${esc(it.instagramUrl)}" target="_blank">▶ 인스타에서 보기</a>` : ''}
           <div class="pf-actions">${actions}</div>`;
@@ -549,6 +549,7 @@
           <div class="yt-kpis">
             <div class="yt-kpi"><div class="num">${fmtNum(s.totalViews)}</div><div class="lbl">총 조회수</div></div>
             <div class="yt-kpi"><div class="num">${fmtNum(s.totalLikes)}</div><div class="lbl">총 좋아요</div></div>
+            ${s.totalShares != null ? `<div class="yt-kpi"><div class="num">${fmtNum(s.totalShares)}</div><div class="lbl">총 공유수</div></div>` : ''}
             <div class="yt-kpi"><div class="num">${s.total}</div><div class="lbl">올린 영상</div></div>
           </div>
           <div class="yt-sec-title">🏆 조회수 TOP 3</div>

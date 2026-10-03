@@ -573,11 +573,11 @@ const server = http.createServer(async (req, res) => {
     ];
     const withId = all.map((x) => ({...x, videoId: extractVideoId(x.url)})).filter((x) => x.videoId);
     if (!withId.length) return json(res, 200, {connected: true, items: [], summary: null});
-    let stats: Record<string, {views: number; likes: number; comments: number}> = {};
+    let stats: Record<string, {views: number; likes: number; comments: number; shares: number}> = {};
     try { stats = await getVideoStats(withId.map((x) => x.videoId)); }
     catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message}); }
     const items = withId
-      .map((x) => ({...x, ...(stats[x.videoId] || {views: 0, likes: 0, comments: 0})}))
+      .map((x) => ({...x, ...(stats[x.videoId] || {views: 0, likes: 0, comments: 0, shares: 0})}))
       .sort((a, b) => b.views - a.views);
     const avgBy = (key: 'voice' | 'category') => {
       const m: Record<string, number[]> = {};
@@ -590,6 +590,7 @@ const server = http.createServer(async (req, res) => {
       total: items.length,
       totalViews: items.reduce((n, x) => n + x.views, 0),
       totalLikes: items.reduce((n, x) => n + x.likes, 0),
+      totalShares: items.reduce((n, x) => n + (x.shares || 0), 0),
       top3: items.slice(0, 3),
       byVoice: avgBy('voice').slice(0, 5),
       byCategory: avgBy('category').slice(0, 5),
