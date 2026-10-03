@@ -335,10 +335,15 @@
         </div><!-- /.app-right -->
       </div><!-- /.app-grid -->
 
-      <section class="card" aria-label="작업 내역">
-        <div class="modal-head"><h2 class="block-title">작업 내역</h2><button id="history-refresh" class="ghost-btn">새로고침</button></div>
-        <p class="hint">새 편집 기능으로 만든 작업이 저장됩니다. 실패한 작업은 열어서 이어서 재시작할 수 있습니다.</p>
+      <section id="video-history-section" class="card" aria-label="영상 작업 내역">
+        <div class="modal-head"><h2 class="block-title">🎬 영상 작업 내역</h2><button id="history-refresh" class="ghost-btn">새로고침</button></div>
+        <p class="hint">영상 제작(대본 편집) 작업이 저장됩니다. 실패한 작업은 열어서 이어서 재시작할 수 있습니다.</p>
         <div id="studio-history" aria-live="polite">로그인 후 작업 내역을 불러옵니다.</div>
+      </section>
+      <section id="card-history-section" class="card hidden" aria-label="카드 작업 내역">
+        <div class="modal-head"><h2 class="block-title">🎴 카드 작업 내역</h2><button id="card-history-refresh" class="ghost-btn">새로고침</button></div>
+        <p class="hint">만든 카드(영상·게시물)가 저장됩니다. 다운로드·유튜브·인스타 업로드는 포트폴리오에서도 관리할 수 있어요.</p>
+        <div id="card-history" aria-live="polite">로그인 후 카드 작업 내역을 불러옵니다.</div>
       </section>
     </main>
 

@@ -31,6 +31,10 @@ function applyMode(m) {
   const gen = $('generate'); if (gen) gen.classList.toggle('hidden', m === 'batch');
   // 카드 모드일 땐 오른쪽 studio 편집기를 숨긴다(카드는 studio 시스템을 안 쓰므로 혼란 방지).
   document.querySelector('.app-grid')?.classList.toggle('card-mode', m === 'card');
+  // 작업 내역 완전 분리 — 영상 모드=영상 내역 / 카드 모드=카드 내역(서로 숨김).
+  $('video-history-section')?.classList.toggle('hidden', m === 'card');
+  $('card-history-section')?.classList.toggle('hidden', m !== 'card');
+  if (m === 'card') loadCardHistory();
   // 카드 모드는 대본 검토 단계가 없어 버튼 라벨을 바로 제작으로.
   if (gen) gen.textContent = m === 'card' ? '🎴 카드뉴스 만들기' : '1. 대본 먼저 만들기';
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
@@ -245,6 +249,31 @@ function updateStyleCurrent() {
 $('style-open')?.addEventListener('click', () => $('style-modal')?.classList.remove('hidden'));
 $('style-close')?.addEventListener('click', () => $('style-modal')?.classList.add('hidden'));
 $('style-modal')?.addEventListener('click', (e) => { if (e.target.id === 'style-modal') $('style-modal').classList.add('hidden'); });
+
+// 🎴 카드 작업 내역 — 영상 내역과 완전 분리. 내가 만든 카드(영상·게시물)만 포트폴리오에서 추려 보여줌.
+async function loadCardHistory() {
+  const box = $('card-history');
+  if (!box) return;
+  try {
+    const d = await (await fetch('/api/portfolio', {cache: 'no-store'})).json();
+    const items = (Array.isArray(d.items) ? d.items : [])
+      .filter((it) => it.kind === 'mine' && (it.media === 'card' || it.media === 'card-post'));
+    box.innerHTML = items.length ? items.map((it) => {
+      const isPost = it.media === 'card-post';
+      const badge = isPost ? '🖼 카드 게시물' : '🎬 카드 영상';
+      const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
+      const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
+      const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
+      const action = isPost
+        ? `<a class="ghost-btn small" href="/voices?tab=pf" target="_blank" rel="noopener">📂 포트폴리오</a>`
+        : `<a class="ghost-btn small" href="${esc2(it.video)}" download="${esc2(it.title)}.mp4">⬇ 다운로드</a>`;
+      return `<div class="history-item"><span><strong>${esc2(it.title)}</strong><small>${esc2(when)} · ${badge}${yt}${ig}</small></span>${action}</div>`;
+    }).join('') : '<p class="mini-state">아직 만든 카드가 없어요. 카드뉴스를 만들어보세요.</p>';
+  } catch {
+    box.innerHTML = '<p class="mini-state">카드 작업 내역을 불러오지 못했어요.</p>';
+  }
+}
+$('card-history-refresh')?.addEventListener('click', () => loadCardHistory());
 
 // ── 캐릭터 풀(애니 주인공) ──
 async function loadCharacters() {
@@ -493,6 +522,7 @@ function attachProgress(id, freshLog) {
       }
       if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
       else if (m.file) showResult(m.file, m.title, m.projectId);
+      if (!m.error) loadCardHistory(); // 완성된 카드가 카드 작업 내역에 바로 뜨게
     }
   };
   es.onerror = () => {
