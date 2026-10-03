@@ -34,9 +34,10 @@ function applyMode(m) {
   // 작업 내역 완전 분리 — 영상 모드=영상 내역 / 카드 모드=카드 내역(서로 숨김).
   $('video-history-section')?.classList.toggle('hidden', m === 'card');
   $('card-history-section')?.classList.toggle('hidden', m !== 'card');
+  if (m !== 'card') $('card-editor')?.classList.add('hidden'); // 카드모드 벗어나면 편집창 닫기
   if (m === 'card') loadCardHistory();
   // 카드 모드는 대본 검토 단계가 없어 버튼 라벨을 바로 제작으로.
-  if (gen) gen.textContent = m === 'card' ? '🎴 카드뉴스 만들기' : '1. 대본 먼저 만들기';
+  if (gen) gen.textContent = m === 'card' ? '🎴 카드 대본 만들기' : '1. 대본 먼저 만들기';
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
 }
 function setMode(m) { applyMode(m); saveFormState(); }
@@ -438,6 +439,7 @@ $('card-out-video')?.addEventListener('click', () => { setCardOutput('video'); s
 $('card-out-post')?.addEventListener('click', () => { setCardOutput('post'); saveFormState(); });
 
 // ── 카드뉴스 생성(studio.js의 generate가 버튼을 덮으므로, 카드 모드는 이 함수로 처리) ──
+let cardPlanBody = null, cardEditStoryboard = null;
 window.startCardGen = async function () {
   const topic = $('card-topic').value.trim();
   if (!topic) { alert('카드뉴스 주제를 입력하세요.'); return; }
@@ -452,14 +454,63 @@ window.startCardGen = async function () {
     motion: $('card-motion') ? $('card-motion').value : 'auto',
     cardTheme: $('card-theme') ? $('card-theme').value : 'light',
   };
-  return runCardGen(body);
+  cardPlanBody = body;
+  // 1단계: 대본만 생성 → 편집(렌더 전에 문구 수정). 이미지·디자인은 제작 때 자동.
+  const ed = $('card-editor');
+  $('generate').disabled = true;
+  if (ed) { ed.classList.remove('hidden'); ed.innerHTML = '<p class="mini-state">카드 대본 만드는 중… ✍️</p>'; ed.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+  try {
+    const r = await fetch('/api/card-plan', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({topic, count: body.count, presetId: body.presetId, imageStyle: body.imageStyle})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '대본 생성 실패');
+    renderCardEditor(d.storyboard);
+  } catch (e) {
+    if (ed) ed.innerHTML = `<p class="mini-state">대본 생성 실패: ${esc2(e.message)}</p>`;
+  } finally { $('generate').disabled = false; }
 };
+const CARD_TYPE_NAME = {cover: '표지', number: '큰 숫자', list: '리스트', quote: '인용', compare: '비교', fix: '실수vs해결', body: '본문', closing: '마무리', checklist: '체크리스트', step: '단계', qa: 'Q&A', stat: '통계'};
+const CARD_EDIT_FIELDS = [['badge', '뱃지'], ['big', '큰 제목'], ['small', '작은 윗줄'], ['number', '숫자'], ['unit', '단위'], ['title', '제목'], ['before', '전(Before)'], ['after', '후(After)'], ['wrong', '흔한 실수'], ['right', '올바른 방법'], ['body', '본문']];
+// 카드 대본 편집 화면 렌더(타입별로 있는 문구만 수정 가능하게).
+function renderCardEditor(sb) {
+  cardEditStoryboard = sb;
+  const ed = $('card-editor'); if (!ed || !sb) return;
+  const cardsHtml = (sb.cards || []).map((c, i) => {
+    const fields = CARD_EDIT_FIELDS.filter(([k]) => c[k] != null && c[k] !== '').map(([k, label]) => {
+      const val = esc2(c[k]);
+      return k === 'body'
+        ? `<label class="ce-field"><span>${label}</span><textarea data-ci="${i}" data-ck="${k}" rows="2">${val}</textarea></label>`
+        : `<label class="ce-field"><span>${label}</span><input data-ci="${i}" data-ck="${k}" value="${val}" /></label>`;
+    }).join('');
+    const itemsHtml = Array.isArray(c.items) && c.items.length
+      ? `<label class="ce-field"><span>리스트(줄바꿈으로 구분)</span><textarea data-ci="${i}" data-ck="items" rows="${c.items.length}">${esc2(c.items.join('\n'))}</textarea></label>` : '';
+    return `<div class="ce-card"><div class="ce-type">${i + 1}. ${CARD_TYPE_NAME[c.type] || c.type}</div>${fields}${itemsHtml}</div>`;
+  }).join('');
+  ed.innerHTML = `<div class="modal-head"><h3 class="block-title">✍️ 카드 대본 편집</h3><span class="badge">${(sb.cards || []).length}장</span></div>
+    <p class="hint">문구를 고친 뒤 제작하세요. 이미지·디자인·배경음악은 제작할 때 자동으로 입혀져요.</p>
+    ${cardsHtml}
+    <button id="card-make" class="primary-btn" type="button" style="margin-top:14px">✅ 이대로 카드 제작</button>`;
+  $('card-make').onclick = () => { if (cardPlanBody) runCardGen({...cardPlanBody, storyboard: collectCardEditor()}); };
+  ed.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+// 편집 입력값을 대본 객체로 되모으기(type·accent·visualPrompt 등은 원본 유지).
+function collectCardEditor() {
+  const sb = JSON.parse(JSON.stringify(cardEditStoryboard));
+  document.querySelectorAll('#card-editor [data-ci]').forEach((el) => {
+    const i = Number(el.dataset.ci), k = el.dataset.ck;
+    if (!sb.cards[i]) return;
+    if (k === 'items') sb.cards[i].items = el.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    else sb.cards[i][k] = el.value;
+  });
+  return sb;
+}
 // ★이어서 다시 만들기 — 마지막 카드 생성 설정을 저장(새로고침에도)해두고, 멈추거나 실패하면 그대로 재생성.
 //   (카드는 영상 studio처럼 '완료단계부터'가 아니라, 같은 설정으로 다시 돌리는 방식)
 function saveLastCardBody(body) { try { localStorage.setItem('onvideo-lastcard', JSON.stringify(body)); } catch {} }
 function loadLastCardBody() { try { return JSON.parse(localStorage.getItem('onvideo-lastcard') || 'null'); } catch { return null; } }
 async function runCardGen(body) {
   saveLastCardBody(body);
+  $('card-editor')?.classList.add('hidden'); // 제작 시작하면 편집창 닫기
   $('progress-block').classList.remove('hidden');
   $('result-block').classList.add('hidden');
   $('post-result').classList.add('hidden');

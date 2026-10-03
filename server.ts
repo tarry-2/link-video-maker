@@ -8,8 +8,9 @@ import {randomUUID, createHmac, timingSafeEqual} from 'node:crypto';
 import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
-import {PRESETS, RECOMMEND_STYLE} from './lib/presets';
-import {STYLES} from './lib/styles';
+import {generateCardStoryboard} from './lib/cards';
+import {PRESETS, RECOMMEND_STYLE, getPreset} from './lib/presets';
+import {STYLES, STYLE_IDS} from './lib/styles';
 import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
@@ -34,6 +35,28 @@ const SESSION_SECRET = process.env.APP_SECRET || 'onvideo-dev-secret-change-me';
 const COOKIE = 'onvideo_sess';
 function sign(v: string) {
   return createHmac('sha256', SESSION_SECRET).update(v).digest('hex');
+}
+
+// 대본편집: 클라이언트가 보낸 편집 카드 대본을 안전하게 정리(길이·개수 제한, 타입/문자열만). 유효치 않으면 undefined→AI 생성.
+function sanitizeCardStoryboard(raw: any): any {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.cards) || !raw.cards.length) return undefined;
+  const s = (v: any, max = 400) => (typeof v === 'string' ? v.slice(0, max) : undefined);
+  const cards = raw.cards.slice(0, 12).map((c: any) => ({
+    type: typeof c?.type === 'string' ? c.type : 'body',
+    accent: typeof c?.accent === 'string' && /^#[0-9a-f]{6}$/i.test(c.accent) ? c.accent : undefined,
+    badge: s(c?.badge, 20), big: s(c?.big, 60), small: s(c?.small, 80),
+    title: s(c?.title, 80), body: s(c?.body, 400),
+    number: s(c?.number, 20), unit: s(c?.unit, 20),
+    items: Array.isArray(c?.items) ? c.items.map((x: any) => String(x).slice(0, 120)).slice(0, 6) : undefined,
+    before: s(c?.before, 120), after: s(c?.after, 120), wrong: s(c?.wrong, 120), right: s(c?.right, 120),
+    visualPrompt: s(c?.visualPrompt, 600),
+  }));
+  return {
+    title: s(raw.title, 80) || '카드뉴스',
+    musicPrompt: s(raw.musicPrompt, 200) || 'upbeat bright cheerful light background music',
+    subject: s(raw.subject, 200) || '',
+    cards,
+  };
 }
 function makeToken() {
   const exp = String(Date.now() + 12 * 3600e3);
@@ -1063,6 +1086,28 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
   }
 
   // ── 카드뉴스 생성 ──
+  // ── 카드 대본만 생성(편집용) — 렌더 전에 문구를 고칠 수 있게 텍스트만 빠르게 반환 ──
+  if (p === '/api/card-plan' && req.method === 'POST') {
+    const b = await readBody(req);
+    const topic = String(b.topic || '').trim();
+    if (!topic) return json(res, 400, {error: '주제를 입력하세요.'});
+    const k = pipelineKeys();
+    if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 Gemini 또는 OpenAI 키를 저장하세요.'});
+    const style = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
+    try {
+      const sb = await generateCardStoryboard(
+        {gemini: k.gemini, openai: k.openai},
+        topic,
+        Number(b.count) || 7,
+        b.presetId ? getPreset(String(b.presetId)) : undefined,
+        style,
+      );
+      return json(res, 200, {storyboard: sb});
+    } catch (e: any) {
+      return json(res, 502, {error: '카드 대본 생성 실패: ' + e.message});
+    }
+  }
+
   if (p === '/api/generate-cards' && req.method === 'POST') {
     const b = await readBody(req);
     const topic = String(b.topic || '').trim();
@@ -1103,9 +1148,11 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           output, bg, uploads,
           narration, bgm,
           voice: b.voice || undefined,
-          imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real',
+          imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
           cardTheme: b.cardTheme === 'dark' ? 'dark' : 'light',
           motion: ['pop', 'slide', 'type', 'zoom', 'flip'].includes(b.motion) ? b.motion : 'auto',
+          // 대본편집: 사용자가 고친 대본이 오면 그대로 제작(검증 후).
+          storyboard: sanitizeCardStoryboard(b.storyboard),
           log: (m) => jlog(job, m),
         });
         // 바탕화면 저장은 선택(로컬에서만, 실패해도 무시 — Railway엔 Desktop 없음).

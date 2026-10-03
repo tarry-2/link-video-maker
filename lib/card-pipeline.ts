@@ -3,7 +3,7 @@
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {mkdir} from 'node:fs/promises';
-import {generateCardStoryboard, type CardPlan} from './cards';
+import {generateCardStoryboard, type CardPlan, type CardStoryboard} from './cards';
 import {getPreset} from './presets';
 import {generateImageFlux} from './image';
 import {ttsElevenJoined} from './tts';
@@ -35,6 +35,7 @@ export type CardOpts = {
   cardTheme?: 'light' | 'dark'; // 본문 카드 톤(기본 light=매거진). cover/closing은 항상 사진 위 다크.
   motion?: MotionStyle;    // 등장 효과(auto/pop/slide/type/zoom/flip)
   skin?: string;           // 디자인 시스템 id(skins.ts). 미지정=주제로 자동 선택.
+  storyboard?: CardStoryboard; // ★대본편집: 사용자가 고친 카드 대본(있으면 AI 재생성 안 하고 이걸로 제작).
   log?: (m: string) => void;
 };
 
@@ -70,8 +71,10 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   const output: CardOutput = opts.output === 'post' ? 'post' : 'video';
   const count = Math.max(3, Math.min(12, opts.count || 7));
 
-  log('[대본] 카드 구성 중…');
-  const sb = await generateCardStoryboard({gemini: keys.gemini, openai: keys.openai}, opts.topic, count, preset, opts.imageStyle);
+  // 대본편집: 편집된 대본이 오면 그대로 사용(AI 재생성·비용 없음), 없으면 AI로 생성.
+  const sb = opts.storyboard && Array.isArray(opts.storyboard.cards) && opts.storyboard.cards.length
+    ? (log('[대본] 편집한 대본으로 제작'), opts.storyboard)
+    : await generateCardStoryboard({gemini: keys.gemini, openai: keys.openai}, opts.topic, count, preset, opts.imageStyle);
   log(`[대본] "${sb.title}" · 카드 ${sb.cards.length}장 (${sb.cards.map(c => c.type).join('/')})`);
 
   // ★스킨 자동 선택 — 주제/카테고리로 어울리는 디자인 시스템을 고른다(덱마다 폰트·배경·색·장식·모션이
