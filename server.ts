@@ -573,9 +573,11 @@ const server = http.createServer(async (req, res) => {
     ];
     const withId = all.map((x) => ({...x, videoId: extractVideoId(x.url)})).filter((x) => x.videoId);
     if (!withId.length) return json(res, 200, {connected: true, items: [], summary: null});
+    const debug = u.searchParams.get('debug');
+    const diag: string[] | undefined = debug ? [] : undefined;
     let stats: Record<string, {views: number; likes: number; comments: number; shares: number}> = {};
-    try { stats = await getVideoStats(withId.map((x) => x.videoId)); }
-    catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message}); }
+    try { stats = await getVideoStats(withId.map((x) => x.videoId), diag); }
+    catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message, ...(diag ? {debug: [...diag, '예외:' + e.message]} : {})}); }
     const items = withId
       .map((x) => ({...x, ...(stats[x.videoId] || {views: 0, likes: 0, comments: 0, shares: 0})}))
       .sort((a, b) => b.views - a.views);
@@ -595,7 +597,7 @@ const server = http.createServer(async (req, res) => {
       byVoice: avgBy('voice').slice(0, 5),
       byCategory: avgBy('category').slice(0, 5),
     };
-    return json(res, 200, {connected: true, items, summary});
+    return json(res, 200, {connected: true, items, summary, ...(diag ? {debug: diag} : {})});
   }
   // ── 유튜브: Client ID/Secret 저장 ──
   if (p === '/api/youtube/config' && req.method === 'POST') {

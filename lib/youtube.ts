@@ -105,11 +105,12 @@ export function extractVideoId(url: string): string {
 // 영상 통계(조회·좋아요·댓글·공유). 본인 채널, OAuth 토큰.
 // ★정확도: 공개 Data API 통계는 유튜브 스튜디오보다 지연·반올림되고 '공유수'가 아예 없다.
 //   → Analytics API(스튜디오와 동일 집계 + shares)로 덮어쓴다. 스코프 미승인/실패 시 Data API 값 유지(무회귀).
-export async function getVideoStats(ids: string[]): Promise<Record<string, {views: number; likes: number; comments: number; shares: number}>> {
+export async function getVideoStats(ids: string[], diag?: string[]): Promise<Record<string, {views: number; likes: number; comments: number; shares: number}>> {
   type Stat = {views: number; likes: number; comments: number; shares: number};
   const out: Record<string, Stat> = {};
   const uniq = [...new Set(ids.filter(Boolean))];
   if (!uniq.length) return out;
+  const uniqSet = new Set(uniq);
   const token = await accessToken();
   // 1) Data API — 존재 보장(조회·좋아요·댓글). 공유수는 없음(0).
   for (let i = 0; i < uniq.length; i += 50) {
@@ -124,20 +125,22 @@ export async function getVideoStats(ids: string[]): Promise<Record<string, {view
       out[it.id] = {views: Number(s.viewCount || 0), likes: Number(s.likeCount || 0), comments: Number(s.commentCount || 0), shares: 0};
     }
   }
-  // 2) Analytics API — 스튜디오와 동일 집계로 덮어쓰기 + 공유수 채우기.
+  diag?.push(`Data API ${Object.keys(out).length}개 조회`);
+  // 2) Analytics API — 스튜디오와 동일 집계로 덮어쓰기 + 공유수. 필터 없이 전체 영상 집계(콤마필터 미사용).
   try {
     const today = new Date().toISOString().slice(0, 10);
-    for (let i = 0; i < uniq.length; i += 200) {
-      const batch = uniq.slice(i, i + 200);
-      const u = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel%3D%3DMINE&startDate=2005-02-14&endDate=${today}&metrics=views,likes,comments,shares&dimensions=video&filters=video%3D%3D${batch.join(',')}&maxResults=500`;
+    let start = 1, overlaid = 0;
+    for (let page = 0; page < 10; page++) {
+      const u = `https://youtubeanalytics.googleapis.com/v2/reports?ids=channel%3D%3DMINE&startDate=2005-02-14&endDate=${today}&metrics=views,likes,comments,shares&dimensions=video&maxResults=200&startIndex=${start}&sort=-views`;
       const r = await fetch(u, {headers: {Authorization: `Bearer ${token}`}, cache: 'no-store'});
       const d: any = await r.json();
-      if (!r.ok) continue; // 스코프 미승인(재로그인 필요) 등 → Data API 값 유지
+      if (!r.ok) { diag?.push('⚠️ Analytics 실패(재연결 필요?): ' + (d?.error?.message || r.status)); break; }
       const cols: string[] = (d.columnHeaders || []).map((c: any) => c.name);
       const ci = (n: string) => cols.indexOf(n);
-      for (const row of (d.rows || [])) {
+      const rows: any[] = d.rows || [];
+      for (const row of rows) {
         const id = row[ci('video')];
-        if (!id) continue;
+        if (!id || !uniqSet.has(id)) continue; // 내가 추적하는 영상만 덮어쓰기
         const prev = out[id] || {views: 0, likes: 0, comments: 0, shares: 0};
         out[id] = {
           views: ci('views') >= 0 ? Number(row[ci('views')]) : prev.views,
@@ -145,9 +148,12 @@ export async function getVideoStats(ids: string[]): Promise<Record<string, {view
           comments: ci('comments') >= 0 ? Number(row[ci('comments')]) : prev.comments,
           shares: ci('shares') >= 0 ? Number(row[ci('shares')]) : prev.shares,
         };
+        overlaid++;
       }
+      if (rows.length < 200) { diag?.push(`✅ Analytics 적용 ${overlaid}개(스튜디오 집계·공유수 포함)`); break; }
+      start += 200;
     }
-  } catch { /* Analytics 실패 → Data API 값 사용 */ }
+  } catch (e: any) { diag?.push('⚠️ Analytics 예외: ' + (e?.message || e)); }
   return out;
 }
 
