@@ -295,5 +295,23 @@ export function getPreset(id: string): Preset | undefined {
   return PRESETS.find((p) => p.id === id);
 }
 
+// 카테고리 → 어울리는 아트스타일 추천(lib/styles.ts의 id). 카테고리 고르면 이미지 스타일이 이걸로 자동 세팅되고
+// 갤러리에 ✨추천 배지가 뜬다. "고르면 톤·이미지·목소리·BGM이 자동으로 맞춰져요" 약속을 스타일에도 적용.
+export const RECOMMEND_STYLE: Record<string, string> = {
+  health: 'chalkboard',   // 교육 설명 최강
+  money: 'infographic',   // 숫자·도표
+  tip: 'whiteboard',      // How-to 깔끔
+  tech: 'cinema',         // 세련·미래
+  fact: 'cinema',         // 놀라움·몰입
+  food: 'real',           // 군침 도는 실사
+  animal: 'real',         // 귀여운 실사
+  travel: 'cinema',       // 절경 시네마틱
+  mystery: 'cinema',      // 무드·긴장
+  healing: 'watercolor',  // 잔잔 감성
+  product: 'ugc',         // 진짜 후기 톤
+  business: 'infographic',// 전문·데이터
+  kids_story: 'anime', kids_safety: 'anime', kids_wisdom: 'anime', // 애니 전용
+};
+
 // 화면 그룹핑용(UI에서 그룹별로 카테고리 나열)
 export const PRESET_GROUPS = ['정보성', '유익재미', '판매성'] as const;

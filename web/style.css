@@ -140,8 +140,11 @@ select.input { appearance: none; cursor: pointer; }
 .chip:active { transform: scale(0.96); }
 .chip.active { background: var(--grad); border-color: transparent; color: #fff; font-weight: 700; }
 
-/* 이미지 스타일 갤러리(느낌 골라쓰기) — 카드마다 이름+느낌 설명 */
-.style-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 8px 0 4px; }
+/* 이미지 스타일 갤러리(느낌 골라쓰기) — 그룹별 + 카드마다 이름+느낌 설명 */
+.style-gallery { margin: 8px 0 4px; }
+.style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+.sc-rec { font-size: 10px; font-weight: 800; color: var(--teal); margin-left: 6px; white-space: nowrap; }
+.style-card.active .sc-rec { color: #fff; }
 .style-card {
   text-align: left; background: var(--card2); border: 1.5px solid var(--line); color: var(--text);
   border-radius: 14px; padding: 12px 13px; cursor: pointer; transition: all 0.15s;

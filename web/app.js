@@ -173,8 +173,9 @@ async function loadCategories() {
         document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
         b.classList.add('active');
         selectedPreset = p.id;
-        // 애니 카테고리면 이미지 스타일을 애니로 자동 전환(동화·안전교육은 애니가 기본).
-        if (p.anime) setStyle('anime');
+        // 카테고리 고르면 어울리는 이미지 스타일 자동 선택(애니 카테고리=애니 등). ✨추천 배지도 갱신.
+        if (p.recommendStyle) setStyle(p.recommendStyle);
+        renderStyleGallery();
         syncCharacterRow();
         saveFormState();
       };
@@ -191,20 +192,34 @@ async function loadCategories() {
   loadCharacters();
 }
 
-// 스타일 카드 갤러리 렌더(이름+느낌). 클릭 시 hidden #image-style 값 세팅.
+// 스타일 카드 갤러리 렌더(그룹별 + 이름+느낌 + 카테고리 추천 ✨배지). 클릭 시 hidden #image-style 값 세팅.
 function renderStyleGallery() {
   const wrap = $('style-gallery');
   if (!wrap || !window.__styles || !window.__styles.length) return;
   const cur = $('image-style') ? $('image-style').value : 'real';
+  const preset = (window.__presets || []).find((p) => p.id === selectedPreset);
+  const rec = preset && preset.recommendStyle; // 선택한 카테고리가 추천하는 스타일
   wrap.innerHTML = '';
-  for (const s of window.__styles) {
-    const b = document.createElement('button');
-    b.className = 'style-card' + (s.id === cur ? ' active' : '');
-    b.type = 'button';
-    b.dataset.style = s.id;
-    b.innerHTML = `<span class="sc-name">${s.emoji} ${s.name}</span><span class="sc-desc">${s.desc}</span>`;
-    b.onclick = () => setStyle(s.id);
-    wrap.appendChild(b);
+  const groups = {};
+  for (const s of window.__styles) (groups[s.group] = groups[s.group] || []).push(s);
+  for (const [g, items] of Object.entries(groups)) {
+    const title = document.createElement('div');
+    title.className = 'cat-group-title';
+    title.textContent = g;
+    wrap.appendChild(title);
+    const grid = document.createElement('div');
+    grid.className = 'style-grid';
+    for (const s of items) {
+      const b = document.createElement('button');
+      b.className = 'style-card' + (s.id === cur ? ' active' : '');
+      b.type = 'button';
+      b.dataset.style = s.id;
+      const recTag = s.id === rec ? '<span class="sc-rec">✨추천</span>' : '';
+      b.innerHTML = `<span class="sc-name">${s.emoji} ${s.name}${recTag}</span><span class="sc-desc">${s.desc}</span>`;
+      b.onclick = () => setStyle(s.id);
+      grid.appendChild(b);
+    }
+    wrap.appendChild(grid);
   }
 }
 // 스타일 선택 — hidden input 값 세팅 + 카드 하이라이트 + change 발생(캐릭터행·저장 트리거).
@@ -873,6 +888,7 @@ function restoreFormState() {
     selectedPreset = s.selectedPreset;
     const chip = document.querySelector('.chip[data-preset="' + s.selectedPreset + '"]');
     if (chip) { document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active')); chip.classList.add('active'); }
+    renderStyleGallery(); // 복원된 카테고리의 ✨추천 배지 반영
   }
   const v = (window.__voices || []).find((x) => x.id === ($('voice')?.value));
   if (v) $('voice-state').textContent = v.tip;

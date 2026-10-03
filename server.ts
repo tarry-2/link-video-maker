@@ -8,7 +8,7 @@ import {randomUUID, createHmac, timingSafeEqual} from 'node:crypto';
 import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
-import {PRESETS} from './lib/presets';
+import {PRESETS, RECOMMEND_STYLE} from './lib/presets';
 import {STYLES} from './lib/styles';
 import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
@@ -873,6 +873,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         goal: x.goal,
         voice: x.voice,
         anime: x.anime || false,
+        recommendStyle: RECOMMEND_STYLE[x.id] || 'real',
       })),
       styles: STYLES.map((s) => ({id: s.id, name: s.name, emoji: s.emoji, desc: s.desc, group: s.group})),
       voices: Object.entries(VOICES).map(([k, v]) => ({
