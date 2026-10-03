@@ -2,19 +2,9 @@
 // 애니 시리즈는 nano-banana(google, Replicate)로 캐릭터 참조 생성 → 장면·편이 바뀌어도 같은 주인공.
 import {writeFile, readFile} from 'node:fs/promises';
 import fs from 'node:fs';
+import {getStyle, type ImageStyle} from './styles';
+export type {ImageStyle} from './styles'; // 스타일 id(레지스트리) — 과거 'real'|'anime' 호환.
 
-export type ImageStyle = 'real' | 'anime';
-
-// 실사: 현실성 강화 + 사람 절제(얼굴/군중 지양, 사물·장소·현장 중심).
-const REAL_STYLE =
-  ', ultra-realistic photograph, shot on DSLR, sharp focus, high detail, 8k, professional photography, authentic real-world scene, natural available light, photojournalism, 35mm, realistic skin and textures, natural depth of field, subtle cinematic color grade, indistinguishable from a real photo, no illustration, no CGI, no 3D render, no AI look';
-const REAL_NO_PEOPLE =
-  ', avoid people, no crowds, no close-up faces, no portraits — focus on objects, places, environments and meaningful details; if a person is unavoidable show only hands, silhouette or back view, small in frame';
-// 애니: 귀여운 일러스트/웹툰 톤(파스텔·부드러운 셀셰이딩). 캐릭터/마스코트 허용.
-const ANIME_STYLE =
-  ', charming 2D anime illustration, soft cel shading, clean crisp linework, vibrant pastel color palette, modern Korean webtoon and Studio Ghibli inspired, wholesome and cute, expressive, warm soft lighting, high quality digital art, no photorealism, no 3D render';
-const ANIME_PEOPLE =
-  ', cute characters and mascots are welcome, appealing and friendly';
 const NEG_TEXT =
   ', absolutely no text, no letters, no words, no numbers, no captions, no charts, no tables, no documents, no price tags, no signage, no watermark';
 
@@ -52,7 +42,8 @@ async function fluxOnce(
 ): Promise<void> {
   const high = quality !== 'fast';
   const model = high ? 'flux-dev' : 'flux-schnell';
-  const styleStr = style === 'anime' ? ANIME_STYLE + ANIME_PEOPLE : REAL_STYLE + REAL_NO_PEOPLE;
+  const st = getStyle(style); // 레지스트리에서 스타일 레시피(프롬프트·사람정책·guidance)
+  const styleStr = st.promptAdd + st.peopleAdd;
   const input: Record<string, unknown> = {
     prompt: prompt + styleStr + NEG_TEXT,
     aspect_ratio: landscape ? '16:9' : '9:16', // ★롱폼=가로 16:9 / 쇼츠=세로 9:16 네이티브
@@ -61,8 +52,8 @@ async function fluxOnce(
     output_quality: high ? 95 : 90,
   };
   if (high) {
-    // flux-dev 품질 파라미터(실사=guidance 낮게 밸런스, 애니=조금 높여 스타일 강조)
-    input.guidance = style === 'anime' ? 3.5 : 3;
+    // flux-dev 품질 파라미터(실사=guidance 낮게 밸런스, 일러스트=조금 높여 스타일 강조) — 스타일별 지정.
+    input.guidance = st.guidance;
     input.num_inference_steps = 32; // 스텝↑=디테일↑
   }
   const body = {input};

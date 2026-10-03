@@ -50,7 +50,7 @@ export type PipelineOpts = {
   purpose?: string;
   presetId?: string; // ★카테고리 프리셋 id (있으면 톤·이미지·목소리·BGM 자동)
   quality?: 'fast' | 'high'; // 이미지 화질(fast=schnell 싸게 / high=dev 실사)
-  imageStyle?: 'real' | 'anime'; // 이미지 스타일(real=실사 / anime=애니 일러스트)
+  imageStyle?: string; // 이미지 스타일 id(레지스트리 lib/styles.ts. real·anime·chalkboard 등)
   aiClips?: number; // Veo 움직이는 클립 개수(0=안씀, 기본 0)
   transitionFrames?: number;
   log?: (m: string) => void;

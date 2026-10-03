@@ -6,6 +6,7 @@ import {Studio, StudioError} from './studio';
 import {studioProviders} from './studio-providers';
 import {getStream} from './storage';
 import {BatchQueue, type BatchConfig} from './batch';
+import {STYLE_IDS} from './styles';
 
 export const studio = new Studio(path.join(process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data'), 'studio'), studioProviders);
 export const batch = new BatchQueue(studio);
@@ -98,7 +99,7 @@ export async function handleStudio(req: IncomingMessage, res: ServerResponse, pa
         const cfg: BatchConfig = {
           presetId: String(b.presetId || ''), duration: Number(b.duration) || 40,
           voice: String(b.voice || ''), quality: b.quality === 'fast' ? 'fast' : 'high',
-          imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real', music: !!b.music,
+          imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real', music: !!b.music,
           characterId: String(b.characterId || ''),
         };
         if (!topics.filter(t => t.trim()).length) throw new StudioError('주제를 한 줄에 하나씩 입력하세요.');

@@ -1,5 +1,6 @@
 // 음성 — ElevenLabs eleven_v4(최신·최고 자연스러움) with-timestamps. 글자별 타이밍 → 단어별 자막 타이밍(Remotion words).
 import {writeFile} from 'node:fs/promises';
+import {getStyle} from './styles';
 
 // 목소리 목록 — 실제 ElevenLabs 한국어 보이스를 용도별로 큐레이션.
 // use: 어떤 콘텐츠에 어울리는지(issue=이슈/경고/미스터리 진중, info=정보/건강 신뢰,
@@ -48,7 +49,9 @@ export const DEFAULT_VOICE = 'jaewon';
 // 목소리 키 결정 — 단일 소스. 사용자가 고른 게 있으면 그걸, 없으면 애니면 애니 목소리, 아니면 카테고리 추천,
 // 최후엔 DEFAULT_VOICE. ★항상 VOICES에 존재하는 키를 반환(없는 키면 DEFAULT로 보정). 모든 경로가 이걸 써야 일관.
 export function pickVoice(voice: string | undefined, presetVoice: string | undefined, imageStyle?: string): string {
-  const pick = voice || (imageStyle === 'anime' ? ANIME_DEFAULT_VOICE : (presetVoice || DEFAULT_VOICE));
+  // 스타일이 애니 보이스 계열(키즈 동화)일 때만 애니 기본 목소리로. 칠판·인포 등 신규 일러스트는 카테고리 추천 유지.
+  const animeVoice = getStyle(imageStyle).animeVoice;
+  const pick = voice || (animeVoice ? ANIME_DEFAULT_VOICE : (presetVoice || DEFAULT_VOICE));
   return VOICES[pick] ? pick : DEFAULT_VOICE;
 }
 

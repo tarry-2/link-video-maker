@@ -140,6 +140,21 @@ select.input { appearance: none; cursor: pointer; }
 .chip:active { transform: scale(0.96); }
 .chip.active { background: var(--grad); border-color: transparent; color: #fff; font-weight: 700; }
 
+/* 이미지 스타일 갤러리(느낌 골라쓰기) — 카드마다 이름+느낌 설명 */
+.style-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 8px 0 4px; }
+.style-card {
+  text-align: left; background: var(--card2); border: 1.5px solid var(--line); color: var(--text);
+  border-radius: 14px; padding: 12px 13px; cursor: pointer; transition: all 0.15s;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.style-card:hover { border-color: var(--teal); transform: translateY(-2px); box-shadow: 0 6px 16px rgba(18, 169, 152, 0.16); }
+.style-card:active { transform: scale(0.98); }
+.style-card .sc-name { font-size: 13.5px; font-weight: 800; letter-spacing: -0.2px; }
+.style-card .sc-desc { font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+.style-card.active { border-color: transparent; background: var(--grad); }
+.style-card.active .sc-name, .style-card.active .sc-desc { color: #fff; }
+.style-card.active .sc-desc { opacity: 0.92; }
+
 .primary-btn {
   display: block; width: 100%; text-align: center; margin-top: 24px;
   background: var(--grad); color: #fff; border: none; border-radius: 12px;

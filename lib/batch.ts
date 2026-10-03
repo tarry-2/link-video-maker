@@ -17,7 +17,7 @@ export type BatchItem = {
 // 큐에 공유되는 제작 설정(한 번 정하면 모든 주제에 동일 적용).
 export type BatchConfig = {
   presetId: string; duration: number; voice: string;
-  quality: 'fast' | 'high'; imageStyle: 'real' | 'anime'; music: boolean;
+  quality: 'fast' | 'high'; imageStyle: string; music: boolean; // 스타일 id(레지스트리)
   characterId?: string;
 };
 type BatchState = {items: BatchItem[]; config: BatchConfig | null; running: boolean};

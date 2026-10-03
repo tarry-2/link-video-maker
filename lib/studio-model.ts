@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {createHash} from 'node:crypto';
+import {STYLE_IDS} from './styles';
 
 const text = (max: number) => z.string().max(max);
 const rate = z.number().finite().min(0).max(1000000).nullable().default(null);
@@ -16,7 +17,7 @@ export const createSchema = z.object({
   voice: text(60).default(''), presetId: text(80).default(''),
   characterId: text(40).default(''), // 애니: 지정 캐릭터(비우면 랜덤 생성)
   quality: z.enum(['fast', 'high']).default('high'),
-  imageStyle: z.enum(['real', 'anime']).default('real'),
+  imageStyle: z.enum(STYLE_IDS as [string, ...string[]]).default('real'),
   music: z.boolean().default(false),
   product: productSchema.nullable().default(null),
   rates: ratesSchema.default({draft: null, image: null, voice: null, music: null}),

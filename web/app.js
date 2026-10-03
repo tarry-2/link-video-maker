@@ -174,7 +174,7 @@ async function loadCategories() {
         b.classList.add('active');
         selectedPreset = p.id;
         // 애니 카테고리면 이미지 스타일을 애니로 자동 전환(동화·안전교육은 애니가 기본).
-        if (p.anime) { const sel = $('image-style'); if (sel) sel.value = 'anime'; }
+        if (p.anime) setStyle('anime');
         syncCharacterRow();
         saveFormState();
       };
@@ -183,8 +183,37 @@ async function loadCategories() {
     box.appendChild(chips);
     wrap.appendChild(box);
   }
+  // 이미지 스타일 갤러리(느낌 골라쓰기) — 서버 레지스트리(real·anime·칠판·화이트보드·인포·클레이…)
+  window.__styles = Array.isArray(d.styles) ? d.styles : [];
+  renderStyleGallery();
+
   restoreFormState(); // 카테고리·목소리가 채워진 뒤 저장된 입력 복원
   loadCharacters();
+}
+
+// 스타일 카드 갤러리 렌더(이름+느낌). 클릭 시 hidden #image-style 값 세팅.
+function renderStyleGallery() {
+  const wrap = $('style-gallery');
+  if (!wrap || !window.__styles || !window.__styles.length) return;
+  const cur = $('image-style') ? $('image-style').value : 'real';
+  wrap.innerHTML = '';
+  for (const s of window.__styles) {
+    const b = document.createElement('button');
+    b.className = 'style-card' + (s.id === cur ? ' active' : '');
+    b.type = 'button';
+    b.dataset.style = s.id;
+    b.innerHTML = `<span class="sc-name">${s.emoji} ${s.name}</span><span class="sc-desc">${s.desc}</span>`;
+    b.onclick = () => setStyle(s.id);
+    wrap.appendChild(b);
+  }
+}
+// 스타일 선택 — hidden input 값 세팅 + 카드 하이라이트 + change 발생(캐릭터행·저장 트리거).
+function setStyle(id) {
+  const inp = $('image-style');
+  if (!inp) return;
+  inp.value = id;
+  document.querySelectorAll('#style-gallery .style-card').forEach((c) => c.classList.toggle('active', c.dataset.style === id));
+  inp.dispatchEvent(new Event('change'));
 }
 
 // ── 캐릭터 풀(애니 주인공) ──
@@ -831,7 +860,7 @@ function restoreFormState() {
   if (Array.isArray(s.topics) && s.topics.length) renderTopics(s.topics, s.selectedTopic);
   if (s.duration) $('duration').value = s.duration;
   if (s.voice != null && $('voice')) $('voice').value = s.voice;
-  if (s.imageStyle && $('image-style')) $('image-style').value = s.imageStyle;
+  if (s.imageStyle && $('image-style')) { $('image-style').value = s.imageStyle; renderStyleGallery(); }
   syncCharacterRow();
   if (s.characterId != null && $('character-select')) { $('character-select').value = s.characterId; updateCharacterThumb(); }
   if (s.quality && $('quality')) $('quality').value = s.quality;
@@ -866,7 +895,7 @@ function resetForm() {
   if ($('keywords')) $('keywords').value = '';
   if ($('facts')) $('facts').value = '';
   if ($('duration')) $('duration').value = '30';
-  if ($('image-style')) $('image-style').value = 'real';
+  if ($('image-style')) { $('image-style').value = 'real'; renderStyleGallery(); }
   if ($('quality')) $('quality').value = 'high';
   if ($('studio-music')) $('studio-music').checked = false;
   if ($('product-lock')) { $('product-lock').checked = false; $('product-fields').classList.add('hidden'); }

@@ -4,6 +4,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createSchema, editSchema, estimate, signatures, resolveProduct, assertTokens, type Project, type Scene, type Media} from './studio-model';
 import {getPreset} from './presets';
+import {getStyle} from './styles';
 import {VOICES, pickVoice} from './tts';
 import {addPortfolio, listPortfolio} from './portfolio';
 import {pruneDir, dirSize, cleanTmpRemotion, mb} from './cleanup';
@@ -25,7 +26,7 @@ function settingsLines(p: Project): string[] {
     `[설정] 카테고리: ${preset ? `${preset.emoji} ${preset.label}` : '자동/없음'}`,
     `[설정] 길이: ${inp.duration}초`,
     `[설정] 목소리: ${voiceLabel}${inp.voice ? '' : ' (카테고리 추천)'}`,
-    `[설정] 이미지: ${inp.quality === 'high' ? '고퀄' : '빠르게'} · ${inp.imageStyle === 'anime' ? '애니' : '실사'}`,
+    `[설정] 이미지: ${inp.quality === 'high' ? '고퀄' : '빠르게'} · ${getStyle(inp.imageStyle).name}`,
     `[설정] 배경음악: ${inp.music ? 'ON' : 'OFF'}`,
     inp.product ? `[설정] 상품 고정: ${inp.product.name}` : '[설정] 상품 고정: 없음',
     '[설정] ────────────────────────────',
@@ -202,7 +203,7 @@ export class Studio {
     });
     fs.mkdirSync(this.directory(id), {recursive: true});
     // 애니 캐릭터 지정: 고른 캐릭터의 기준 이미지를 작업에 복사 → 첫 장면부터 그 캐릭터로 생성(없으면 랜덤).
-    if (input.imageStyle === 'anime' && input.characterId) {
+    if (getStyle(input.imageStyle).characterRef && input.characterId) {
       const src = characterImagePath(input.characterId);
       if (src) { const ref = 'character-ref.jpg'; fs.copyFileSync(src, path.join(this.directory(id), ref)); p.characterRef = ref; }
     }
