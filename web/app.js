@@ -267,13 +267,44 @@ async function loadCardHistory() {
       const action = isPost
         ? `<a class="ghost-btn small" href="/voices?tab=pf" target="_blank" rel="noopener">📂 포트폴리오</a>`
         : `<a class="ghost-btn small" href="${esc2(it.video)}" download="${esc2(it.title)}.mp4">⬇ 다운로드</a>`;
-      return `<div class="history-item"><span><strong>${esc2(it.title)}</strong><small>${esc2(when)} · ${badge}${yt}${ig}</small></span>${action}</div>`;
+      return `<div class="history-item" data-card-id="${esc2(it.id)}" data-title="${esc2(it.title)}" data-media="${esc2(it.media)}"><span><strong>${esc2(it.title)}</strong><small>${esc2(when)} · ${badge}${yt}${ig}</small></span><span class="hi-actions"><button type="button" class="ghost-btn small" data-reset="${esc2(it.id)}">⟳ 다시 세팅</button>${action}</span></div>`;
     }).join('') : '<p class="mini-state">아직 만든 카드가 없어요. 카드뉴스를 만들어보세요.</p>';
   } catch {
     box.innerHTML = '<p class="mini-state">카드 작업 내역을 불러오지 못했어요.</p>';
   }
 }
 $('card-history-refresh')?.addEventListener('click', () => loadCardHistory());
+// 카드 작업 내역 클릭 → 그 카드를 만든 설정으로 폼 '다시 세팅'(영상 작업내역처럼 다시 만들 수 있게).
+$('card-history')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-reset]');
+  if (!btn) return;
+  const row = btn.closest('[data-card-id]');
+  applyCardSettings(btn.dataset.reset, row?.dataset.title || '', row?.dataset.media || '');
+});
+// 저장된 카드 설정(projectId별)을 폼에 복원. 없으면 제목·출력종류만이라도 채워 다시 만들 수 있게.
+function applyCardSettings(id, title, media) {
+  setMode('card');
+  let body = null;
+  try { body = JSON.parse(localStorage.getItem('onvideo-card-' + id) || 'null'); } catch {}
+  if (!body) body = {topic: title, output: media === 'card-post' ? 'post' : 'video'};
+  if ($('card-topic')) $('card-topic').value = body.topic || title || '';
+  if (body.count && $('card-count')) $('card-count').value = body.count;
+  setCardOutput(body.output || (media === 'card-post' ? 'post' : 'video'));
+  if (body.bg && $('card-bg')) { $('card-bg').value = body.bg; $('card-bg').dispatchEvent(new Event('change')); }
+  if ($('card-narration') && typeof body.narration === 'boolean') $('card-narration').checked = body.narration;
+  if ($('card-bgm') && typeof body.bgm === 'boolean') $('card-bgm').checked = body.bgm;
+  if (body.motion && $('card-motion')) $('card-motion').value = body.motion;
+  if (body.cardTheme && $('card-theme')) $('card-theme').value = body.cardTheme;
+  if (body.voice != null && $('voice')) $('voice').value = body.voice;
+  if (body.imageStyle) setStyle(body.imageStyle);
+  if (body.presetId) {
+    selectedPreset = body.presetId;
+    const chip = document.querySelector('.chip[data-preset="' + body.presetId + '"]');
+    if (chip) { document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active')); chip.classList.add('active'); }
+  }
+  saveFormState();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
 
 // ── 캐릭터 풀(애니 주인공) ──
 async function loadCharacters() {
@@ -522,7 +553,11 @@ function attachProgress(id, freshLog) {
       }
       if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
       else if (m.file) showResult(m.file, m.title, m.projectId);
-      if (!m.error) loadCardHistory(); // 완성된 카드가 카드 작업 내역에 바로 뜨게
+      if (!m.error) {
+        // 이 카드를 만든 설정을 projectId로 저장 → 작업 내역에서 '다시 세팅'으로 복원.
+        if (m.projectId) { try { const lb = loadLastCardBody(); if (lb) localStorage.setItem('onvideo-card-' + m.projectId, JSON.stringify(lb)); } catch {} }
+        loadCardHistory(); // 완성된 카드가 카드 작업 내역에 바로 뜨게
+      }
     }
   };
   es.onerror = () => {
