@@ -4,6 +4,7 @@
 import {geminiGenerate} from './gemini';
 import {openaiJson} from './openai';
 import type {Preset} from './presets';
+import {getStyle} from './styles';
 
 export type CardType = 'cover' | 'number' | 'list' | 'quote' | 'compare' | 'fix' | 'body' | 'closing' | 'checklist' | 'step' | 'qa' | 'stat';
 export type CardPlan = {
@@ -40,7 +41,8 @@ const TYPE_GUIDE = `카드 타입(역할이 달라야 다채롭다. 내용에 �
 - stat: 수치 비교 막대. title + items(2~4개, 반드시 '라벨|숫자' 형식. 예: "단백질|30","지방|12"). 숫자는 순수 숫자만.
 - closing: 마지막 장. title(여운 한마디) + body(저장/실천 유도).`;
 
-function buildPrompt(topic: string, count: number, preset?: Preset) {
+function buildPrompt(topic: string, count: number, preset?: Preset, imageStyle?: string) {
+  const style = getStyle(imageStyle);
   const tone = preset ? preset.toneGuide : '친근하고 쉽게, 전문용어는 풀어서, 일상어로.';
   const palette = preset?.accentColors?.join(', ') || '#FFD84D, #4FE0D0, #FF8ABf';
   const cat = preset ? `[카테고리] ${preset.label} (${preset.group})` : '';
@@ -65,13 +67,13 @@ ${TYPE_GUIDE}
 
 ★★이미지(배경 사진) — 영상과 똑같이 AI가 제대로 지시한다(이게 생명):
 - subject: 이 카드뉴스 전체를 관통하는 핵심 피사체를 영어로 구체적으로(예: "a cluster of fresh purple grapes and a glass of grape juice on a wooden table"). 모든 카드 이미지가 이 소재를 벗어나면 안 된다.
-- 각 카드 visualPrompt(영어): 그 카드 내용에 맞는 장면을 "실제 취재 보도사진 리얼리즘"(자연광·실제 질감·얕은 심도)으로 구체적으로. 세로 9:16. 반드시 subject를 영어로 포함시켜라. 카드 뒤에 깔리는 배경이므로 한쪽이 비어 글이 들어갈 여백이 느껴지는 깔끔한 구도로.
+- 각 카드 visualPrompt(영어): 그 카드 내용에 맞는 장면의 "내용"만 구체적으로(피사체·구도·배경·분위기). 세로 9:16. 반드시 subject를 영어로 포함. 카드 뒤 배경이므로 한쪽이 비어 글 들어갈 여백이 느껴지는 깔끔한 구도. ★★화풍·매체 단어 절대 금지('photo, realistic, illustration, anime, 3D, render, painting, style' 등) — 비주얼 스타일은 렌더 단계에서 사용자가 고른 "${style.name}" 스타일이 자동 적용된다.
   ★절대 금지: 글자·간판·메뉴판·문서·표·가격표·신분증이 주요 피사체인 장면(AI가 글자를 깨뜨린다). 대신 실제 사물·재료·현장·행동·질감으로 보여줘라. 거리·상점 간판이 보이는 장면 금지.
 
 [BGM 무드] musicPrompt는 반드시 밝고 경쾌하게(upbeat, bright, cheerful, positive). 카드뉴스는 나레이션 없이 음악만 깔릴 때가 많으니 분위기가 중요하다. 어둡거나 무섭거나 긴장되는 무드(dark, horror, suspense, sad)는 절대 쓰지 마라.
 
 JSON만 출력(각 카드에 visualPrompt 필수):
-{"title":"콘텐츠 제목","subject":"core subject in English","musicPrompt":"upbeat bright cheerful background music","cards":[{"type":"cover","accent":"#..","badge":"충격","big":"육즙 팡! 삼겹살 혁명","small":"냉동실에 쟁여둔 삼겹살","body":"딱 3가지만 바꾸면 끝","visualPrompt":"a thick juicy pork belly searing on a hot cast-iron pan, close-up, natural light, shallow depth of field, authentic food photography"}, {"type":"body","accent":"#..","title":"..","body":"..","visualPrompt":".."}, ...]}`;
+{"title":"콘텐츠 제목","subject":"core subject in English","musicPrompt":"upbeat bright cheerful background music","cards":[{"type":"cover","accent":"#..","badge":"충격","big":"육즙 팡! 삼겹살 혁명","small":"냉동실에 쟁여둔 삼겹살","body":"딱 3가지만 바꾸면 끝","visualPrompt":"a thick juicy pork belly searing on a hot cast-iron pan, close-up, steam rising, empty space on one side for text"}, {"type":"body","accent":"#..","title":"..","body":"..","visualPrompt":".."}, ...]}`;
 }
 
 function normalize(j: Record<string, unknown>, count: number, palette: string[]): CardStoryboard {
@@ -107,10 +109,11 @@ export async function generateCardStoryboard(
   topic: string,
   count = 7,
   preset?: Preset,
+  imageStyle?: string,
 ): Promise<CardStoryboard> {
   const n = Math.max(3, Math.min(12, count));
   const palette = preset?.accentColors?.length ? preset.accentColors : ['#FFD84D', '#4FE0D0', '#FF8ABf'];
-  const prompt = buildPrompt(topic, n, preset);
+  const prompt = buildPrompt(topic, n, preset, imageStyle);
   let raw = '';
   if (keys.gemini?.length) {
     try { raw = await geminiGenerate(keys.gemini, prompt, {json: true, maxTokens: 2048, temperature: 0.95}); } catch { /* openai 폴백 */ }

@@ -31,7 +31,7 @@ export type CardOpts = {
   narration?: boolean;     // 나레이션 ON/OFF (video만)
   bgm?: boolean;           // 배경음악 ON/OFF (video만)
   voice?: string;          // 나레이션 목소리 키
-  imageStyle?: 'real' | 'anime';
+  imageStyle?: string; // 아트스타일 id(레지스트리 lib/styles.ts)
   cardTheme?: 'light' | 'dark'; // 본문 카드 톤(기본 light=매거진). cover/closing은 항상 사진 위 다크.
   motion?: MotionStyle;    // 등장 효과(auto/pop/slide/type/zoom/flip)
   skin?: string;           // 디자인 시스템 id(skins.ts). 미지정=주제로 자동 선택.
@@ -71,7 +71,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   const count = Math.max(3, Math.min(12, opts.count || 7));
 
   log('[대본] 카드 구성 중…');
-  const sb = await generateCardStoryboard({gemini: keys.gemini, openai: keys.openai}, opts.topic, count, preset);
+  const sb = await generateCardStoryboard({gemini: keys.gemini, openai: keys.openai}, opts.topic, count, preset, opts.imageStyle);
   log(`[대본] "${sb.title}" · 카드 ${sb.cards.length}장 (${sb.cards.map(c => c.type).join('/')})`);
 
   // ★스킨 자동 선택 — 주제/카테고리로 어울리는 디자인 시스템을 고른다(덱마다 폰트·배경·색·장식·모션이

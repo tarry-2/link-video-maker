@@ -2,6 +2,7 @@
 import {geminiGenerate} from './gemini';
 import {openaiJson} from './openai';
 import type {Preset} from './presets';
+import {getStyle, stylePeopleWelcome} from './styles';
 
 export type StoryScene = {
   narration: string; // 나레이션(음성으로 읽힘)
@@ -53,6 +54,7 @@ export async function generateStoryboard(
     duration: number;
     purpose?: string;
     preset?: Preset; // ★카테고리 프리셋(있으면 톤·후킹·마무리를 이걸로)
+    imageStyle?: string; // ★사용자가 고른 아트스타일 id(visualPrompt를 이 스타일에 맞게 생성)
     openaiKey?: string;
     log?: (m: string) => void;
   },
@@ -67,6 +69,8 @@ export async function generateStoryboard(
   const perScene = Math.round((duration * 5.6) / n); // ★실측보정 5.6: dry-run으로 목표길이에 중심 맞춤(v4 통짜 rate 6.0자/초). "약 N자"만 지시(문장수 지시 금지=폭주). Gemini가 ±25% 널뛰어도 평균은 목표에 근접.
 
   const preset = opts.preset;
+  const style = getStyle(opts.imageStyle); // 사용자가 고른 아트스타일(visualPrompt를 여기에 맞춤)
+  const wantsPeople = stylePeopleWelcome(style); // 실사·시네마=절제 / 애니·칠판·UGC 등=사람·캐릭터 허용
   const isSell = preset
     ? preset.goal === 'sell'
     : /판매|세일|구매|홍보|광고|프로모/.test(opts.purpose || '');
@@ -118,9 +122,11 @@ ${catLine}
 - hookTop: 상단 후킹 첫 줄(흰색, 맥락/셋업). 공백 포함 12자 이내.
 - hookAccent: 상단 후킹 둘째 줄(강조색, 펀치라인). 10자 이내. 임팩트 있게.
 - accentColor: 이 장면 강조색 hex 하나. 장면마다 다르게 골라라(${preset ? preset.accentColors.join(', ') : PALETTE}) — 내용 분위기에 맞게.
-- visualPrompt: 이미지 생성용 영어 프롬프트. ${landscape ? '16:9 landscape wide shot(가로 와이드 구도: 풍경·전경·넓은 현장을 담되 핵심 피사체는 중앙~좌우 3분할점에)' : '9:16 세로'}. ${preset ? `이 카테고리의 비주얼 느낌: "${preset.imageStyle}".` : '"실제 취재 보도사진 리얼리즘"(자연광·실제 질감).'} 나레이션의 핵심 사물·장소·상황을 구체적으로.
+- visualPrompt: 이미지 생성용 영어 프롬프트. ${landscape ? '16:9 landscape wide shot(가로 와이드 구도: 풍경·전경·넓은 현장을 담되 핵심 피사체는 중앙~좌우 3분할점에)' : '9:16 세로'}. 나레이션의 핵심 사물·장소·상황·행동을 구체적으로 묘사하라(피사체·구도·배경·조명 분위기). ★★화풍·매체 단어 절대 금지 — 'photo, photograph, realistic, illustration, anime, 3D, render, painting, cartoon, style' 같은 단어를 쓰지 마라. 비주얼 스타일은 렌더 단계에서 사용자가 고른 스타일("${style.name}")이 자동 적용된다. visualPrompt엔 "무엇이 어떻게 보이는지"(내용)만 담아라.
   ★★핵심 소재 일관성(매우 중요): 모든 장면의 visualPrompt는 반드시 위 [핵심 소재 subject]와 같은 대상을 보여줘야 한다. 예를 들어 주제가 '간장계란볶음밥'이면 모든 장면이 볶음밥이어야 하고, 절대 파스타·면·다른 음식으로 바뀌면 안 된다. 각 visualPrompt 안에 subject를 영어로 명시적으로 포함시켜라.
-  ★사람(특히 얼굴·군중)은 절제하고 사물·장소·현장·상징물 위주. 사람이 꼭 필요하면 손·뒷모습·실루엣만 작게. ★글자·문서·표가 주요 피사체인 장면 금지. no text.
+  ${wantsPeople
+    ? '★주제에 어울리는 사람·캐릭터를 장면의 주인공으로 적극 등장시켜라(표정·행동이 드러나게). 상품·체험 주제면 그 사람이 상품을 쓰거나 보여주는 장면으로.'
+    : '★사람(특히 얼굴·군중)은 절제하고 사물·장소·현장·상징물 위주. 사람이 꼭 필요하면 손·뒷모습·실루엣만 작게.'} ★글자·문서·표가 주요 피사체인 장면 금지. no text.
 - comment(선택): 4~6개 장면 중 딱 1개 장면에만, 인기 쇼츠에 흔한 가짜 시청자 댓글 {"user":"한국이름","text":"공감/놀람 한마디","likes":"4.2천"}.
 
 [전체]

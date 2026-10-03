@@ -29,7 +29,7 @@ export const studioProviders: StudioDependencies = {
       ? `아래 주제로 사람들이 끝까지 볼 만한 쇼츠 영상 대본을 창작하라. 사실에 기반하되 흥미롭게.\n주제: ${p.input.topic}`
       : await fetchSource([p.input.url], log);
     return generateStoryboard(k.gemini, source, {duration: p.input.duration, openaiKey: k.openai,
-      preset: getPreset(p.input.presetId), log});
+      preset: getPreset(p.input.presetId), imageStyle: p.input.imageStyle, log});
   },
   async image(p, s, file, log) {
     const k = pipelineKeys();

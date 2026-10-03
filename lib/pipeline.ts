@@ -81,6 +81,7 @@ export async function makeVideo(
     duration: opts.duration,
     purpose: opts.purpose,
     preset,
+    imageStyle: opts.imageStyle,
     openaiKey: keys.openai,
     log,
   });

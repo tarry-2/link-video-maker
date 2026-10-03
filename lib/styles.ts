@@ -15,8 +15,14 @@ export interface ArtStyle {
   peopleAdd: string;       // 사람/캐릭터 정책(실사=절제 / 일러스트=허용)
   guidance: number;        // flux-dev guidance(실사=낮게 밸런스, 일러스트=조금 높여 스타일 강조)
   illustration: boolean;   // 일러스트 계열(사진 아님)
+  peopleWelcome?: boolean;  // 사람·캐릭터 장면 허용 여부(생략 시 illustration 값 사용). 대본 visualPrompt가 이걸로 사람 묘사 허용/절제.
   animeVoice?: boolean;    // 기본 목소리를 애니 보이스로(키즈 동화 전용)
   characterRef?: boolean;  // nano-banana 캐릭터 참조 사용(주인공 일관)
+}
+
+// 이 스타일이 사람/캐릭터를 장면에 넣길 원하는가 — 생략 시 일러스트 계열이면 허용. (실사=절제, UGC=사람 필요)
+export function stylePeopleWelcome(s: ArtStyle): boolean {
+  return s.peopleWelcome ?? s.illustration;
 }
 
 // 기존 image.ts와 100% 동일한 레시피(회귀 방지).
@@ -131,7 +137,7 @@ export const STYLES: ArtStyle[] = [
     promptAdd:
       ', authentic user-generated content photo, handheld smartphone camera look, natural indoor lighting, casual candid everyday realism, slightly imperfect framing, relatable and trustworthy',
     peopleAdd: ', a natural everyday person using or showing the product is welcome, candid and genuine',
-    guidance: 3, illustration: false,
+    guidance: 3, illustration: false, peopleWelcome: true,
   },
   {
     id: 'cinema', name: '시네마 무드', emoji: '🎞️',
