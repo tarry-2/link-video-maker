@@ -84,6 +84,93 @@ export const STYLES: ArtStyle[] = [
     peopleAdd: ', cute chunky clay characters are welcome, expressive',
     guidance: 3.5, illustration: true,
   },
+  {
+    id: 'pixar3d', name: 'Pixar 3D', emoji: '🧸',
+    desc: '둥글둥글 3D 캐릭터, 큰 눈·표정. 공감 가고 사랑스러움 — 캐릭터·반려동물·스토리에.',
+    group: '3D·입체',
+    promptAdd:
+      ', Pixar-style 3D render, expressive big eyes, soft global illumination, subsurface scattering, polished rounded shapes, Disney Pixar animated movie aesthetic, high quality 3D',
+    peopleAdd: ', charming 3D characters and mascots are welcome, appealing and friendly',
+    guidance: 3.5, illustration: true,
+  },
+
+  // ── 레트로·텍스처 ──
+  {
+    id: 'riso', name: '리소그래프', emoji: '🟠',
+    desc: '거친 잉크·형광 스팟컬러·오프셋 어긋남. 힙한 인디 감성 — 문화·디자인·전시에.',
+    group: '레트로·텍스처',
+    promptAdd:
+      ', risograph print aesthetic, grainy ink texture, bold fluorescent spot colors, offset misregistration layers, limited two or three color palette, visible halftone grain, indie zine printmaking look',
+    peopleAdd: ', simple stylized figures are welcome',
+    guidance: 3.5, illustration: true,
+  },
+  {
+    id: 'halftone', name: '하프톤 만화', emoji: '💥',
+    desc: '옛 만화책 점묘·굵은 라인·팝아트 음영. 복고 임팩트 — 썰·미스터리·레트로에.',
+    group: '레트로·텍스처',
+    promptAdd:
+      ', vintage comic book illustration, bold black ink outlines, Ben-Day halftone dots shading, retro pop-art color palette, dramatic graphic contrast, 1960s comic print look',
+    peopleAdd: ', bold comic-style characters are welcome, expressive',
+    guidance: 3.5, illustration: true,
+  },
+  {
+    id: 'collage', name: '콜라주 믹스미디어', emoji: '✂️',
+    desc: '사진+종이질감+손글씨 오려붙인 아날로그. 감각적·큐레이션 — 트렌드·에세이에.',
+    group: '레트로·텍스처',
+    promptAdd:
+      ', mixed-media collage illustration, cut-out paper textures with torn edges, layered scraps and scanned objects, handwritten marks and tape, analog scrapbook aesthetic, tactile and artistic',
+    peopleAdd: ', cut-out figures and hand-drawn elements are welcome',
+    guidance: 3.5, illustration: true,
+  },
+
+  // ── 실사·시네마틱(추가) ──
+  {
+    id: 'ugc', name: 'UGC 리뷰', emoji: '🤳',
+    desc: '손에 든 폰으로 찍은 ‘진짜 후기’ 느낌. 자연스럽고 솔직 — 상품 광고·뷰티·체험에.',
+    group: '실사·시네마틱',
+    promptAdd:
+      ', authentic user-generated content photo, handheld smartphone camera look, natural indoor lighting, casual candid everyday realism, slightly imperfect framing, relatable and trustworthy',
+    peopleAdd: ', a natural everyday person using or showing the product is welcome, candid and genuine',
+    guidance: 3, illustration: false,
+  },
+  {
+    id: 'cinema', name: '시네마 무드', emoji: '🎞️',
+    desc: '얕은 심도·영화 색감·분위기 조명. 몰입감 있는 감성 — 감성 스토리·브랜드·여행에.',
+    group: '실사·시네마틱',
+    promptAdd:
+      ', cinematic film still, shallow depth of field, anamorphic lens look, moody cinematic color grade, atmospheric volumetric lighting, movie-like composition, filmic grain',
+    peopleAdd: ', if a person appears keep them cinematic and atmospheric, often silhouette or back view',
+    guidance: 3, illustration: false,
+  },
+
+  // ── 3D·입체 / 재미·감성(3차) ──
+  {
+    id: 'papercut', name: '페이퍼컷', emoji: '📄',
+    desc: '겹친 종이·부드러운 그림자, 수공예 입체. 아기자기 — 동화·브랜드·명절에.',
+    group: '3D·입체',
+    promptAdd:
+      ', layered papercut craft illustration, cut paper shapes with soft drop shadows, handmade paper texture, sense of depth from stacked layers, tactile paper-art diorama',
+    peopleAdd: ', cute papercut characters are welcome',
+    guidance: 3.5, illustration: true,
+  },
+  {
+    id: 'meme', name: '밈·브레인롯', emoji: '😂',
+    desc: '과장·강렬한 색·중독성. B급 유머 — 엔터·트렌드·바이럴에.',
+    group: '재미·감성',
+    promptAdd:
+      ', absurdist internet meme aesthetic, over-the-top exaggerated expression, bold saturated colors, chaotic playful energy, deep-fried comic punch, highly shareable',
+    peopleAdd: ', exaggerated goofy characters are welcome',
+    guidance: 3.5, illustration: true,
+  },
+  {
+    id: 'watercolor', name: '수채 감성', emoji: '🎨',
+    desc: '번지는 물감·파스텔·종이결. 잔잔하고 따뜻 — 명상·수면·시·감성에.',
+    group: '재미·감성',
+    promptAdd:
+      ', soft watercolor painting, bleeding pigment washes, delicate pastel palette, visible paper grain, dreamy and gentle, hand-painted illustration',
+    peopleAdd: ', soft painterly figures are welcome, gentle',
+    guidance: 3.5, illustration: true,
+  },
 ];
 
 export type ImageStyle = string; // 스타일 id(레지스트리 키). 과거 'real'|'anime' 호환.
