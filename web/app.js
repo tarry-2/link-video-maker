@@ -221,15 +221,30 @@ function renderStyleGallery() {
     }
     wrap.appendChild(grid);
   }
+  updateStyleCurrent();
 }
-// 스타일 선택 — hidden input 값 세팅 + 카드 하이라이트 + change 발생(캐릭터행·저장 트리거).
+// 스타일 선택 — hidden input 값 세팅 + 카드 하이라이트 + 트리거 라벨 갱신 + 모달 닫기 + change 발생.
 function setStyle(id) {
   const inp = $('image-style');
   if (!inp) return;
   inp.value = id;
   document.querySelectorAll('#style-gallery .style-card').forEach((c) => c.classList.toggle('active', c.dataset.style === id));
+  updateStyleCurrent();
   inp.dispatchEvent(new Event('change'));
+  $('style-modal')?.classList.add('hidden'); // 고르면 팝업 닫기
 }
+// 폼의 "현재 스타일" 트리거 라벨을 선택값으로 갱신(세로로 안 늘어지게 갤러리는 팝업에만).
+function updateStyleCurrent() {
+  const el = $('style-current');
+  if (!el) return;
+  const id = $('image-style') ? $('image-style').value : 'real';
+  const s = (window.__styles || []).find((x) => x.id === id);
+  el.textContent = s ? `${s.emoji} ${s.name}` : '📷 실사';
+}
+// 스타일 팝업 열고/닫기(네 UI 취향=기능을 팝업으로 분산).
+$('style-open')?.addEventListener('click', () => $('style-modal')?.classList.remove('hidden'));
+$('style-close')?.addEventListener('click', () => $('style-modal')?.classList.add('hidden'));
+$('style-modal')?.addEventListener('click', (e) => { if (e.target.id === 'style-modal') $('style-modal').classList.add('hidden'); });
 
 // ── 캐릭터 풀(애니 주인공) ──
 async function loadCharacters() {

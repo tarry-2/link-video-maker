@@ -196,8 +196,17 @@
         </div>
 
         <label class="field-label">이미지 스타일 <span class="hint">— 느낌을 골라요 (자동 모드만)</span></label>
-        <div id="style-gallery" class="style-gallery"></div>
+        <button type="button" id="style-open" class="style-trigger">
+          <span id="style-current">📷 실사</span>
+          <span class="style-trigger-edit">✏️ 바꾸기</span>
+        </button>
         <input type="hidden" id="image-style" value="real" />
+        <div id="style-modal" class="modal hidden">
+          <div class="modal-box">
+            <div class="modal-head"><h2 class="block-title">🎨 이미지 스타일</h2><button type="button" id="style-close" class="ghost-btn">✕</button></div>
+            <div id="style-gallery" class="style-gallery"></div>
+          </div>
+        </div>
 
         <div class="row">
           <div class="col">
