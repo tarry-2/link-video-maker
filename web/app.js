@@ -40,6 +40,12 @@ function applyMode(m) {
   if (gen) gen.textContent = m === 'card' ? '🎴 카드 대본 만들기' : '🎬 영상 만들기';
   // 공용 세부설정은 영상계열(auto/topic/manual/batch)에서만. 카드는 자체 설정이 있어 숨김.
   $('detail-settings')?.classList.toggle('hidden', m === 'card');
+  // 오른쪽 안내: 카드 모드=카드 안내, 그 외=영상 안내(preview-hint). 서로 숨겨 :has()가 꼬이지 않게.
+  $('card-hint')?.classList.toggle('hidden', m !== 'card');
+  $('preview-hint')?.classList.toggle('hidden', m === 'card');
+  // 영상 종류(움직임)·오디오 토글은 카드 모드에선 숨김(카드는 자체 설정).
+  $('advanced-row')?.classList.toggle('hidden', m === 'card');
+  $('audio-row')?.classList.toggle('hidden', m === 'card');
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
 }
 function setMode(m) { applyMode(m); saveFormState(); }

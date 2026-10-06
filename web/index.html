@@ -239,21 +239,22 @@
           <label class="toggle col"><input type="checkbox" id="v-bgm" checked /> 🎵 배경음악 <span class="hint">(분위기 음악 깔림)</span></label>
         </div>
 
-        <div class="row" id="advanced-row">
+        </details><!-- /#detail-settings -->
+
+        <!-- ★중요 선택이라 세부 설정 밖, 버튼 바로 위에 크게 노출 -->
+        <div class="row" id="advanced-row" style="margin-top:14px">
           <div class="col">
-            <label class="field-label">화면이 움직일까요?</label>
-            <p class="hint" style="margin:2px 0 8px">그림이 살아 움직이는 영상으로 만들지 고르세요. 움직이면 더 생생하지만 시간·비용이 들어요.</p>
+            <label class="field-label">🎥 영상 종류</label>
             <select id="aiClips" class="input">
-              <option value="0" selected>📷 사진처럼 (그림 + 움직임 효과) · 무료·빠름</option>
-              <option value="1">🎬 살아 움직이는 영상 · 첫 장면만 (약 1,000원)</option>
-              <option value="2">🎬 살아 움직이는 영상 · 2장면 (약 1,500원)</option>
-              <option value="3">🎬 살아 움직이는 영상 · 3장면 (약 2,000원)</option>
+              <option value="0" selected>📷 사진 영상 (그림 + 움직임 효과) · 무료·빠름</option>
+              <option value="1">🎬 움직이는 영상 · 첫 장면만 (약 1,000원)</option>
+              <option value="2">🎬 움직이는 영상 · 2장면 (약 1,500원)</option>
+              <option value="3">🎬 움직이는 영상 · 3장면 (약 2,000원)</option>
             </select>
+            <p class="hint" style="margin:4px 0 0">📷 사진 영상 = AI 그림에 움직임 효과(빠르고 무료). 🎬 움직이는 영상 = 그림이 실제로 살아 움직임(더 생생, 유료·시간 걸림).</p>
             <label id="auto-shutdown-row" class="field-label hidden" style="margin-top:8px"><input type="checkbox" id="auto-shutdown" checked /> 만들고 나면 자동으로 비용 끄기 <span class="hint">(권장 — 켜두면 추가 요금이 계속 나가요)</span></label>
           </div>
         </div>
-
-        </details><!-- /#detail-settings -->
 
         <details class="studio-options">
           <summary>상품 정보 고정 (판매 영상용)</summary>
@@ -322,8 +323,9 @@
           <!-- 카드 대본 편집(제작 전 문구 수정) -->
           <section id="card-editor" class="card hidden" aria-label="카드 대본 편집"></section>
 
-          <!-- 카드뉴스 모드 전용 안내(오른쪽이 비지 않게) -->
-          <section id="card-hint" class="card">
+          <!-- 카드뉴스 모드 전용 안내(오른쪽이 비지 않게). 기본 숨김 — 카드 모드일 때만 app.js가 보여준다.
+               (안 숨기면 :has() 선택자가 '다른 섹션이 떠있다'고 판단해 영상 모드의 preview-hint를 가려버림) -->
+          <section id="card-hint" class="card hidden">
             <div class="ph-frame"><span class="ph-badge">카드 · 9:16 / 4:5</span><span class="ph-emoji">🎴</span></div>
             <h3 class="block-title">여기에서 카드뉴스가 만들어져요</h3>
             <p class="hint">주제만 넣으면 AI가 내용을 보고 <b>다양한 카드</b>를 자동으로 구성해요. 완성되면 이 자리에서 미리보기 + 다운로드.</p>
