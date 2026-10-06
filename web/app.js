@@ -13,7 +13,6 @@ document.addEventListener('play', (e) => {
 
 let selectedPreset = null;
 let mode = 'auto'; // auto | topic | manual
-let logOwner = null; // 'studio'(영상·카드) | 'highlight' — 로그가 서로 섞이지 않게 소유자 구분
 let uploadedImages = []; // dataURL 배열
 
 // ── 탭 전환 ──
@@ -23,23 +22,13 @@ $('tab-manual').onclick = () => setMode('manual');
 $('tab-batch').onclick = () => setMode('batch');
 $('tab-card').onclick = () => setMode('card');
 function applyMode(m) {
-  // ★로그는 '하이라이트'와 '그 외 영상/카드'를 서로 다른 소유자로 본다.
-  //   모드가 그 경계를 넘고(예: 영상→하이라이트) 진행 중 작업이 없으면 로그를 비운다
-  //   → 영상 작업 로그가 하이라이트 탭에 섞여 보이던 버그 방지. (같은 소유자 안에선 초기화 전까지 유지)
-  const newOwner = m === 'highlight' ? 'highlight' : 'studio';
-  if (!curJobId && logOwner && logOwner !== newOwner && $('log')) {
-    $('log').textContent = ''; logJobId = null; logCount = 0;
-  }
-  logOwner = newOwner;
   mode = m;
   for (const t of ['auto', 'topic', 'manual', 'batch', 'card']) {
     $('tab-' + t)?.classList.toggle('active', m === t);
     $('pane-' + t)?.classList.toggle('hidden', m !== t);
   }
-  // 하이라이트 pane은 상단 네비(뷰)로만 켜짐 — 생성 소탭엔 없음.
-  $('pane-highlight')?.classList.toggle('hidden', m !== 'highlight');
-  // 배치·하이라이트 모드에선 공용 제작 버튼 숨김(자체 생성 버튼 사용).
-  const gen = $('generate'); if (gen) gen.classList.toggle('hidden', m === 'batch' || m === 'highlight');
+  // 배치 모드에선 공용 제작 버튼 숨김(자체 생성 버튼 사용).
+  const gen = $('generate'); if (gen) gen.classList.toggle('hidden', m === 'batch');
   // 카드 모드일 땐 오른쪽 studio 편집기를 숨긴다(카드는 studio 시스템을 안 쓰므로 혼란 방지).
   document.querySelector('.app-grid')?.classList.toggle('card-mode', m === 'card');
   // 작업 내역 완전 분리 — 영상 모드=영상 내역 / 카드 모드=카드 내역(서로 숨김).
@@ -49,50 +38,15 @@ function applyMode(m) {
   if (m === 'card') loadCardHistory();
   // 카드 모드는 대본 검토 단계가 없어 버튼 라벨을 바로 제작으로.
   if (gen) gen.textContent = m === 'card' ? '🎴 카드 대본 만들기' : '🎬 영상 만들기';
-  // 공용 세부설정은 영상계열(auto/topic/manual/batch)에서만. 카드·하이라이트는 자체 설정이라 숨김.
-  const selfSettings = m === 'card' || m === 'highlight';
-  $('detail-settings')?.classList.toggle('hidden', selfSettings);
+  // 공용 세부설정은 영상계열(auto/topic/manual/batch)에서만. 카드는 자체 설정이 있어 숨김.
+  $('detail-settings')?.classList.toggle('hidden', m === 'card');
   // 오른쪽 안내: 카드 모드=카드 안내, 그 외=영상 안내(preview-hint). 서로 숨겨 :has()가 꼬이지 않게.
   $('card-hint')?.classList.toggle('hidden', m !== 'card');
   $('preview-hint')?.classList.toggle('hidden', m === 'card');
-  // 영상 종류(움직임)·오디오 토글은 카드·하이라이트 모드에선 숨김(자체 설정).
-  $('advanced-row')?.classList.toggle('hidden', selfSettings);
-  $('audio-row')?.classList.toggle('hidden', selfSettings);
+  // 영상 종류(움직임)·오디오 토글은 카드 모드에선 숨김(자체 설정).
+  $('advanced-row')?.classList.toggle('hidden', m === 'card');
+  $('audio-row')?.classList.toggle('hidden', m === 'card');
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
-  // ★하이라이트는 상단 네비의 독립 '뷰' — 생성 소탭(.tabs)·히어로를 숨겨 전용 화면처럼 보인다.
-  //   🔴 app-right는 통째로 숨기면 진행상황·로그·결과(progress-block/result-block)까지 사라져 "생성해도 반응없음"이 됨.
-  //      → app-right는 두고, 그 안의 '미리보기 안내(preview-hint)'만 숨긴다. 진행/결과는 보여야 함.
-  const hl = m === 'highlight';
-  document.querySelector('.tabs')?.classList.toggle('hidden', hl);
-  document.querySelector('.app-grid')?.classList.toggle('highlight-mode', hl); // 왼쪽이 전체폭(카드 안 짜부라지게)
-  // 🔴 영상 만들기의 대본 편집기·상품고정·예상비용은 하이라이트와 무관 → 하이라이트 뷰에선 숨긴다.
-  //   (안 숨기면 "상품 정보 고정/대본 만들기" 폼이 하이라이트 화면에 겹쳐 보이고 studio 흐름이 간섭함)
-  document.querySelector('.studio-options')?.classList.toggle('hidden', hl);
-  $('studio-message')?.classList.toggle('hidden', hl);
-  $('create-estimate')?.classList.toggle('hidden', hl);
-  if (hl) $('studio-editor')?.classList.add('hidden'); // 하이라이트에선 대본 편집기 무조건 숨김
-  if (hl) {
-    $('preview-hint')?.classList.add('hidden'); // 하이라이트는 영상 미리보기 안내 불필요
-    // 진행 중 작업이 없으면, 이전 영상/카드 작업의 결과(변비약 영상 등)가 하이라이트에 섞여 보이지 않게 숨긴다.
-    if (!curJobId) { $('result-block')?.classList.add('hidden'); document.getElementById('hl-result-block')?.classList.add('hidden'); }
-    $('progress-block')?.classList.remove('hidden'); // 로그 패널 처음부터 보이게(생성 전부터)
-    // 처음 진입 시 안내 로그 한 줄(이미 로그가 있으면 건드리지 않음 = 초기화 전까지 유지)
-    if ($('log') && !$('log').children.length) { setCardEnergy(0, '준비됨 — 나라·주제를 고르고 영상을 선택하세요'); hlLog('🎬 유튜브 하이라이트 준비됨. 나라와 주제를 골라 재사용 영상을 찾아보세요.'); }
-  } else {
-    // 영상/카드 뷰로 돌아오면 하이라이트 결과 블록 숨김(반대 방향 섞임 방지)
-    document.getElementById('hl-result-block')?.classList.add('hidden');
-  }
-  // ★작업내역 완전 이원화: 영상(studio)·카드·하이라이트 각각 자기 모드에서만 보인다.
-  $('video-history-section')?.classList.toggle('hidden', hl || m === 'card'); // 하이라이트·카드 뷰에선 영상 내역 숨김
-  $('card-history-section')?.classList.toggle('hidden', m !== 'card');
-  $('hl-history-section')?.classList.toggle('hidden', !hl); // 하이라이트 내역은 하이라이트 뷰에서만
-  if (hl) loadHlHistory();
-  $('nav-make')?.classList.toggle('active', !hl);
-  $('nav-highlight')?.classList.toggle('active', hl);
-  const hero = document.querySelector('.page-head .hero');
-  if (hero) hero.textContent = hl ? '유튜브 하이라이트' : '주제나 링크만 넣으면 영상이 완성돼요';
-  const sub = document.querySelector('.page-head .sub');
-  if (sub) sub.textContent = hl ? '저작권 걱정 없는 재사용 영상에서 터질 순간만 뽑아 숏폼으로. 상단 후킹·자동 업로드까지.' : '대본·이미지·음성·자막·배경음악까지 자동으로. 세부 설정은 안 건드려도 됩니다.';
 }
 function setMode(m) { applyMode(m); saveFormState(); }
 
@@ -248,8 +202,6 @@ async function loadCategories() {
   renderStyleGallery();
 
   restoreFormState(); // 카테고리·목소리가 채워진 뒤 저장된 입력 복원
-  // 상단 네비 '유튜브 하이라이트'로 들어오면(?view=highlight) 저장된 모드보다 우선해 하이라이트 뷰로.
-  try { if (new URLSearchParams(location.search).get('view') === 'highlight') setModeSilent('highlight'); } catch {}
   loadCharacters();
 }
 
@@ -332,45 +284,6 @@ async function loadCardHistory() {
 }
 $('card-history-refresh')?.addEventListener('click', () => loadCardHistory());
 
-// 🎬 하이라이트 작업 내역 — 영상·카드 내역과 완전 분리(이원화). 내가 만든 하이라이트(kind=highlight)만.
-//   한 영상에서 뽑은 여러 편이 각각 저장됨. 미리보기·유튜브·인스타·삭제를 여기서 시간차로 관리.
-async function loadHlHistory() {
-  const box = $('hl-history');
-  if (!box) return;
-  try {
-    const d = await (await fetch('/api/portfolio', {cache: 'no-store'})).json();
-    const items = (Array.isArray(d.items) ? d.items : [])
-      .filter((it) => it.kind === 'mine' && it.media === 'highlight');
-    box.innerHTML = items.length ? items.map((it) => {
-      const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
-      const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
-      const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
-      return `<div class="history-item hl-hist-item" data-id="${esc2(it.id)}" data-title="${esc2(it.title)}">
-        <span><strong>${esc2(it.title)}</strong><small>${esc2(when)} · 🎬 하이라이트${yt}${ig}</small></span>
-        <span class="hi-actions">
-          <a class="ghost-btn small" href="${esc2(it.video)}" download="${esc2(it.title)}.mp4">⬇</a>
-          <button type="button" class="ghost-btn small hlh-yt" data-id="${esc2(it.id)}">📺</button>
-          <button type="button" class="ghost-btn small hlh-ig" data-id="${esc2(it.id)}">📷</button>
-          <button type="button" class="ghost-btn small hlh-del" data-id="${esc2(it.id)}">🗑</button>
-        </span></div>`;
-    }).join('') : '<p class="mini-state">아직 만든 하이라이트가 없어요. 위에서 재사용 영상을 골라 만들어보세요.</p>';
-    // 버튼 바인딩(기존 projectId 기반 업로드·삭제 재사용)
-    box.querySelectorAll('.hlh-yt').forEach((b) => b.onclick = () => { cardVidUpId = b.dataset.id; cardYouTube(b); });
-    box.querySelectorAll('.hlh-ig').forEach((b) => b.onclick = () => cardInstagram(b, b.dataset.id, false));
-    box.querySelectorAll('.hlh-del').forEach((b) => b.onclick = () => deleteHlItem(b.dataset.id));
-  } catch {
-    box.innerHTML = '<p class="mini-state">하이라이트 작업 내역을 불러오지 못했어요.</p>';
-  }
-}
-$('hl-history-refresh')?.addEventListener('click', () => loadHlHistory());
-async function deleteHlItem(id) {
-  if (!confirm('이 하이라이트를 삭제할까요? (되돌릴 수 없어요)')) return;
-  try {
-    const r = await fetch('/api/portfolio/' + encodeURIComponent(id), {method: 'DELETE'});
-    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || '삭제 실패'); }
-    loadHlHistory();
-  } catch (e) { alert('삭제 실패: ' + e.message); }
-}
 // 카드 작업 내역 클릭 → 그 카드를 만든 설정으로 폼 '다시 세팅'(영상 작업내역처럼 다시 만들 수 있게).
 $('card-history')?.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-reset]');
@@ -626,28 +539,12 @@ async function runCardGen(body) {
   } catch (e) { addLog('[실패] ' + e.message, 'fail'); showCardResume(); }
 }
 // 실패/중단 시 '이어서 다시 만들기' 버튼 노출.
-let lastHlBody = null; // 하이라이트 마지막 설정(이어서하기용)
 function showCardResume() {
   const b = $('card-resume'); if (!b) return;
-  if (!lastHlBody && !loadLastCardBody()) return; // 하이라이트·카드 둘 중 재시작할 게 있어야 표시
+  if (!loadLastCardBody()) return;
   b.classList.remove('hidden');
 }
-$('card-resume')?.addEventListener('click', () => {
-  // 하이라이트 작업이 마지막이면 그 설정으로 재시작, 아니면 카드 재시작.
-  if (lastHlBody) { runHighlightGen(lastHlBody); return; }
-  const b = loadLastCardBody(); if (b) runCardGen(b);
-});
-// 하이라이트 재시작(이어서하기) — 마지막 설정으로 다시 생성.
-async function runHighlightGen(body) {
-  if ($('card-resume')) $('card-resume').classList.add('hidden');
-  hlLog('⟳ 같은 설정으로 다시 시작합니다…');
-  setCardEnergy(8, '다시 시작하는 중…');
-  try {
-    const d = await (await fetch('/api/generate-highlights', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})).json();
-    if (d.error) { hlLog('[실패] ' + d.error, 'fail'); showCardResume(); return; }
-    if (d.id) attachProgress(d.id, true);
-  } catch (e) { hlLog('[실패] ' + e.message, 'fail'); showCardResume(); }
-}
+$('card-resume')?.addEventListener('click', () => { const b = loadLastCardBody(); if (b) runCardGen(b); });
 // 게시물 결과 렌더(이미지 그리드 + ZIP).
 window.showPostResult = function (title, images, zip, projectId) {
   $('post-result').classList.remove('hidden');
@@ -700,7 +597,7 @@ function attachProgress(id, freshLog) {
   //   전체를 재전송하므로) 아래 recv 카운터로 중복만 걸러 이어붙인다 → 끊김/재연결에도 로그가 안 사라진다.
   //   (freshLog 인자는 더 이상 로그 삭제에 쓰지 않는다. 테리 지시: 로그는 수동 초기화 전엔 절대 사라지면 안 됨.)
   //   단 하이라이트 모드는 생성 전 프론트 로그(검색·선택)를 이미 쌓아놨으므로 비우지 않고 이어붙인다.
-  if (id !== logJobId) { logJobId = id; logCount = 0; if ($('log') && mode !== 'highlight') $('log').textContent = ''; }
+  if (id !== logJobId) { logJobId = id; logCount = 0; if ($('log')) $('log').textContent = ''; }
   // 새 작업이면 경과시간·진행률 리셋(재연결이면 유지).
   if (cardJobStart !== id) { cardJobStart = id; cardStartTs = Date.now(); cardPct = 0; setCardEnergy(6, '시작하는 중…'); }
   $('progress-block').classList.remove('hidden');
@@ -734,8 +631,7 @@ function attachProgress(id, freshLog) {
         cardPct = 100; setCardEnergy(100, '완성! 🎉'); const f = $('card-energy'); if (f) f.classList.remove('anim');
         cardCelebrate();
       }
-      if (m.kind === 'highlight') { showHighlightResults(m.clips || []); loadHlHistory(); }
-      else if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
+      if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
       else if (m.file) showResult(m.file, m.title, m.projectId);
       if (!m.error) {
         // 이 카드를 만든 설정을 projectId로 저장 → 작업 내역에서 '다시 세팅'으로 복원.
@@ -797,39 +693,6 @@ function addLog(text, cls) {
   $('log').appendChild(line);
   $('log').scrollTop = $('log').scrollHeight;
 }
-// 하이라이트 프론트 동작 로그 — 생성 누르기 전(검색·선택 등)부터 실시간으로 쌓인다. 초기화 전까지 유지.
-function hlLog(text, cls) {
-  $('progress-block')?.classList.remove('hidden'); // 로그 패널 항상 보이게
-  addLog(text, cls);
-}
-
-// 유튜브 하이라이트 여러 편 결과 — 각 편 미리보기 + 유튜브/인스타 업로드(포폴 엔드포인트 재사용).
-function showHighlightResults(clips) {
-  let box = document.getElementById('hl-result-block');
-  if (!box) {
-    box = document.createElement('div'); box.id = 'hl-result-block'; box.className = 'card';
-    box.style.marginTop = '16px';
-    $('result-block').parentNode.insertBefore(box, $('result-block'));
-  }
-  box.classList.remove('hidden');
-  if (!clips.length) { box.innerHTML = '<p class="mini-state">완성된 클립이 없어요.</p>'; return; }
-  box.innerHTML = `<h2 style="margin:0 0 4px">🎬 하이라이트 ${clips.length}편 완성!</h2>
-    <p class="mini-state" style="margin-bottom:12px">각 편을 확인하고 유튜브·인스타로 바로 올릴 수 있어요. (원작자 출처는 자동 표기됩니다)</p>
-    <div class="hl-result-grid">${clips.map((c, i) => `
-      <div class="hl-result-item">
-        <video src="/portfolio-item/${c.projectId}.mp4#t=0.5" controls playsinline preload="metadata" style="width:100%;border-radius:12px;background:#000"></video>
-        <b style="display:block;margin:6px 0">${(c.title || ('하이라이트 ' + (i + 1)))}</b>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <a class="ghost-btn small" href="/portfolio-item/${c.projectId}.mp4" download="${(c.title || 'highlight')}.mp4">⬇ 다운로드</a>
-          <button class="ghost-btn small hl-yt" data-id="${c.projectId}">📺 유튜브</button>
-          <button class="ghost-btn small hl-ig" data-id="${c.projectId}">📷 인스타</button>
-        </div>
-      </div>`).join('')}</div>`;
-  box.querySelectorAll('.hl-yt').forEach((b) => b.onclick = () => { cardVidUpId = b.dataset.id; cardYouTube(b); });
-  box.querySelectorAll('.hl-ig').forEach((b) => b.onclick = () => cardInstagram(b, b.dataset.id, false));
-  box.scrollIntoView({behavior: 'smooth'});
-}
-
 function showResult(file, title, projectId) {
   $('result-block').classList.remove('hidden');
   $('result-title').textContent = title || '';
@@ -928,172 +791,6 @@ $('duration')?.addEventListener('change', syncFormat);
 $('duration')?.addEventListener('input', syncFormat);
 syncFormat();
 
-// ── 유튜브 하이라이트: 나라·주제 선택 → CC 영상 쫙 → 선택 → 편수·길이 → 하이라이트 숏폼 ──
-let hlPicked = null;       // 선택한 영상 {videoId, title, channel, durationSec}
-let hlRegion = 'kr';       // kr | global
-let hlOrder = 'viewCount'; // viewCount | date | relevance
-let hlCat = '';            // 현재 선택된 카테고리 라벨(검색어 표시용)
-let hlCount = 3, hlSec = 30;
-function fmtDur(s) { const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; }
-
-// 나라별 카테고리 — {라벨, 한국검색어, 해외검색어}. 아주 다양하게(좁으면 툴이 쪼그라듦).
-const HL_CATS = [
-  {ko: '연예·스타', kq: '연예인 인터뷰', gq: 'celebrity interview'},
-  {ko: '예능·토크쇼', kq: '예능 토크쇼', gq: 'talk show funny'},
-  {ko: '드라마·영화', kq: '드라마 명장면', gq: 'movie scene'},
-  {ko: 'K-pop·음악', kq: '케이팝 무대', gq: 'music performance live'},
-  {ko: '스포츠', kq: '스포츠 하이라이트', gq: 'sports highlights'},
-  {ko: '경제·재테크', kq: '경제 뉴스 재테크', gq: 'economy finance explained'},
-  {ko: '시사·뉴스', kq: '뉴스 이슈', gq: 'news report'},
-  {ko: 'IT·테크', kq: 'IT 리뷰 테크', gq: 'tech review'},
-  {ko: '게임', kq: '게임 플레이', gq: 'gaming highlights'},
-  {ko: '먹방·음식', kq: '먹방 맛집', gq: 'food mukbang'},
-  {ko: '여행', kq: '여행 브이로그', gq: 'travel vlog'},
-  {ko: '교육·지식', kq: '지식 교양', gq: 'educational documentary'},
-  {ko: '역사', kq: '역사 이야기', gq: 'history documentary'},
-  {ko: '과학', kq: '과학 다큐', gq: 'science documentary'},
-  {ko: '동물·펫', kq: '동물 반려동물', gq: 'animals pets funny'},
-  {ko: '자동차', kq: '자동차 리뷰', gq: 'car review'},
-];
-function renderHlCats() {
-  const box = $('hl-cats'); if (!box) return;
-  box.innerHTML = HL_CATS.map((c) => `<button type="button" class="hl-cat" data-kq="${c.kq}" data-gq="${c.gq}" data-ko="${c.ko}">${c.ko}</button>`).join('');
-  box.querySelectorAll('.hl-cat').forEach((b) => b.addEventListener('click', () => {
-    box.querySelectorAll('.hl-cat').forEach((x) => x.classList.remove('active'));
-    b.classList.add('active');
-    hlCat = b.dataset.ko;
-    const q = hlRegion === 'global' ? b.dataset.gq : b.dataset.kq;
-    $('hl-query').value = ''; // 칩 선택 시 직접검색칸 비움
-    hlLog(`📂 주제 선택: ${hlCat} (${hlRegion === 'global' ? '해외' : '한국'})`);
-    hlSearch(q);
-  }));
-}
-// 영상 길이로 뽑을 수 있는 최대 편수 제안(한 편 길이 기준). 재미없는 구간까지 긁지 않게 보수적으로.
-function hlMaxClips(durationSec, clipSec) {
-  // 전체의 ~40%만 하이라이트감이라 보고, 한 편 간격은 clipSec*2로 띄움. 1~10편.
-  const usable = durationSec * 0.4;
-  return Math.max(1, Math.min(10, Math.floor(usable / Math.max(clipSec, 20))));
-}
-function renderHlCountSeg() {
-  const seg = $('hl-count-seg'); if (!seg || !hlPicked) return;
-  const max = hlMaxClips(hlPicked.durationSec, hlSec);
-  if (hlCount > max) hlCount = max;
-  const opts = [];
-  for (const n of [1, 2, 3, 5, 8, 10]) if (n <= max) opts.push(n);
-  if (!opts.includes(max)) opts.push(max);
-  seg.innerHTML = opts.map((n) => `<button type="button" class="seg-btn hl-count ${n === hlCount ? 'active' : ''}" data-n="${n}">${n}편</button>`).join('');
-  seg.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => {
-    seg.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); hlCount = Number(b.dataset.n);
-  }));
-  const note = $('hl-maxnote');
-  if (note) note.textContent = `— 이 영상(${fmtDur(hlPicked.durationSec)})에서 최대 ${max}편까지 추천`;
-}
-let hlQuery = '';          // 현재 검색어(더보기용)
-let hlPageToken = '';      // 다음 페이지 토큰
-let hlLoadedCount = 0;     // 지금까지 로드한 개수
-// 영상 카드 하나의 HTML
-function hlCardHtml(v) {
-  return `<button type="button" class="hl-card" data-id="${v.videoId}" data-title="${(v.title || '').replace(/"/g, '&quot;')}" data-channel="${(v.channel || '').replace(/"/g, '&quot;')}" data-dur="${v.durationSec}">
-    <img src="${v.thumb}" alt="" loading="lazy" />
-    <div class="hl-meta"><b>${v.title || ''}</b><span>${v.channel || ''} · ${fmtDur(v.durationSec)} · 조회 ${Number(v.views).toLocaleString('ko-KR')}</span></div>
-  </button>`;
-}
-// 카드 클릭(선택) 바인딩 — 추가된 카드에도 적용.
-function wireHlCards(scope) {
-  scope.querySelectorAll('.hl-card:not([data-wired])').forEach((b) => {
-    b.setAttribute('data-wired', '1');
-    b.addEventListener('click', () => {
-      $('hl-results').querySelectorAll('.hl-card').forEach((x) => x.classList.remove('active'));
-      b.classList.add('active');
-      hlPicked = {videoId: b.dataset.id, title: b.dataset.title, channel: b.dataset.channel, durationSec: Number(b.dataset.dur) || 300};
-      $('hl-options').classList.remove('hidden');
-      $('hl-picked').textContent = `선택: ${hlPicked.title}`;
-      renderHlCountSeg();
-      hlLog(`🎥 영상 선택: ${hlPicked.title} (${fmtDur(hlPicked.durationSec)} · ${hlPicked.channel})`);
-      $('hl-options').scrollIntoView({behavior: 'smooth', block: 'nearest'});
-    });
-  });
-}
-async function hlSearch(forcedQuery, append) {
-  const box = $('hl-results'), st = $('hl-search-state');
-  if (!append) {
-    const q = (forcedQuery != null ? forcedQuery : $('hl-query').value).trim();
-    if (!q) { alert('주제를 고르거나 검색어를 입력하세요.'); return; }
-    hlQuery = q; hlPageToken = ''; hlLoadedCount = 0;
-    box.innerHTML = ''; $('hl-options').classList.add('hidden'); hlPicked = null;
-    st.textContent = `${hlRegion === 'global' ? '해외' : '한국'} 재사용 영상을 찾는 중…`;
-  } else {
-    st.textContent = '더 불러오는 중…';
-  }
-  // 기존 더보기 버튼 제거(다시 그린다)
-  document.getElementById('hl-more')?.remove();
-  try {
-    const url = `/api/yt-search?q=${encodeURIComponent(hlQuery)}&region=${hlRegion}&order=${hlOrder}` + (hlPageToken ? `&pageToken=${hlPageToken}` : '');
-    const d = await (await fetch(url)).json();
-    if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
-    const vids = d.videos || [];
-    $('hl-sort-row').classList.remove('hidden');
-    hlPageToken = d.nextPageToken || '';
-    hlLoadedCount += vids.length;
-    if (!append && !vids.length) { st.textContent = '결과가 없어요. 다른 주제나 검색어로 시도해보세요.'; return; }
-    box.insertAdjacentHTML('beforeend', vids.map(hlCardHtml).join(''));
-    wireHlCards(box);
-    st.textContent = `${hlLoadedCount}개 표시 중${hlPageToken ? ' — 더 있어요' : ' (끝)'} · 하나 고르세요`;
-    hlLog(append ? `➕ ${vids.length}개 더 불러옴 (총 ${hlLoadedCount}개)` : `🔎 "${hlQuery}" 검색 완료 — ${hlLoadedCount}개 (${hlOrder === 'viewCount' ? '조회수순' : hlOrder === 'date' ? '최신순' : '관련도순'})`);
-    // '더 보기' 버튼 — 다음 페이지 있으면 결과 목록 바로 아래에(스크롤 영역 바깥).
-    if (hlPageToken) {
-      const more = document.createElement('button');
-      more.id = 'hl-more'; more.type = 'button'; more.className = 'ghost-btn'; more.style.cssText = 'width:100%;margin-top:10px';
-      more.textContent = `▼ 더 보기 (지금 ${hlLoadedCount}개)`;
-      more.onclick = () => { more.disabled = true; more.textContent = '불러오는 중…'; hlSearch(null, true); };
-      box.parentNode.insertBefore(more, box.nextSibling);
-    }
-  } catch { st.textContent = '검색에 실패했어요. 유튜브 연결(설정)이 되어 있는지 확인하세요.'; }
-}
-document.querySelectorAll('.hl-region').forEach((b) => b.addEventListener('click', () => {
-  document.querySelectorAll('.hl-region').forEach((x) => x.classList.remove('active')); b.classList.add('active');
-  hlRegion = b.dataset.region;
-  hlLog(`🌍 나라 선택: ${hlRegion === 'global' ? '해외' : '한국'}`);
-  // 나라 바꾸면 선택된 카테고리로 다시 검색(있으면).
-  const activeCat = document.querySelector('.hl-cat.active');
-  if (activeCat) hlSearch(hlRegion === 'global' ? activeCat.dataset.gq : activeCat.dataset.kq);
-}));
-document.querySelectorAll('.hl-order').forEach((b) => b.addEventListener('click', () => {
-  document.querySelectorAll('.hl-order').forEach((x) => x.classList.remove('active')); b.classList.add('active');
-  hlOrder = b.dataset.order;
-  // 정렬 바꾸면 현재 검색어로 재검색.
-  const activeCat = document.querySelector('.hl-cat.active');
-  const q = activeCat ? (hlRegion === 'global' ? activeCat.dataset.gq : activeCat.dataset.kq) : $('hl-query').value.trim();
-  if (q) hlSearch(q);
-}));
-$('hl-search')?.addEventListener('click', () => { document.querySelector('.hl-cat.active')?.classList.remove('active'); hlSearch(); });
-$('hl-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.querySelector('.hl-cat.active')?.classList.remove('active'); hlSearch(); } });
-document.querySelectorAll('.hl-sec').forEach((b) => b.addEventListener('click', () => {
-  document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); hlSec = Number(b.dataset.s);
-  renderHlCountSeg(); // 길이 바뀌면 최대 편수 재계산
-}));
-renderHlCats();
-$('hl-generate')?.addEventListener('click', async () => {
-  if (!hlPicked) { alert('먼저 영상을 고르세요.'); return; }
-  const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
-  // ★설정 요약 로그(테리 요구: 뭘 어떻게 만드는지 다 보이게)
-  hlLog('──────── 하이라이트 제작 시작 ────────', 'done');
-  hlLog(`• 나라: ${hlRegion === 'global' ? '해외' : '한국'}`);
-  hlLog(`• 주제: ${hlCat || '직접 검색'}`);
-  hlLog(`• 원본 영상: ${hlPicked.title}`);
-  hlLog(`• 원본 길이: ${fmtDur(hlPicked.durationSec)} → 클립 ${hlSec}초짜리`);
-  hlLog(`• 만들 편수: ${hlCount}편`);
-  hlLog('────────────────────────────');
-  setCardEnergy(8, '하이라이트 제작을 시작합니다…');
-  lastHlBody = {videoId: hlPicked.videoId, title: hlPicked.title, channel: hlPicked.channel, count: hlCount, clipSec: hlSec}; // 이어서하기용
-  try {
-    const d = await (await fetch('/api/generate-highlights', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(lastHlBody)})).json();
-    if (d.error) { hlLog('[실패] ' + d.error, 'fail'); showCardResume(); alert(d.error); return; }
-    if (d.id) attachProgress(d.id, true);
-  } catch (e) { hlLog('[실패] 시작 실패: ' + e.message, 'fail'); showCardResume(); alert('시작 실패: ' + e.message); }
-  finally { btn.disabled = false; btn.textContent = '🎬 하이라이트 숏폼 만들기'; }
-});
 
 // 영상 종류 = 버튼(세그먼트)으로 고른다. 네이티브 select가 일부 브라우저에서 안 열려서 버튼으로 교체.
 // aiClips 는 숨은 input(값: 0=사진영상, 1~3=움직이는 장면 수). '움직이는 영상'을 골랐을 때만 장면수·자동끄기 노출.
@@ -1397,7 +1094,7 @@ function saveFormState() {
   try {
     const activeTopic = document.querySelector('.topic-item.active');
     const s = {
-      mode: mode === 'highlight' ? 'auto' : mode, selectedPreset, // 하이라이트는 URL 뷰라 저장 모드엔 안 남김
+      mode, selectedPreset,
       url: $('url')?.value || '',
       topicInput: $('topic-input')?.value || '',
       topics: window.__topics || [],

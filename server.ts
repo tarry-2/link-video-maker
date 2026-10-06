@@ -389,6 +389,12 @@ const server = http.createServer(async (req, res) => {
   if (p === '/voices')
     return serveFile(res, path.join(ROOT, 'web', 'voices.html'), 'text/html; charset=utf-8');
 
+  // ── 유튜브 하이라이트 전용 페이지(영상 만들기와 완전 분리) ──
+  if (p === '/highlight' || p === '/highlight.html')
+    return serveFile(res, path.join(ROOT, 'web', 'highlight.html'), 'text/html; charset=utf-8');
+  if (p === '/highlight.js')
+    return serveFile(res, path.join(ROOT, 'web', 'highlight.js'), 'application/javascript; charset=utf-8');
+
   // ── 정적 ──
   if (p === '/' || p === '/index.html')
     return serveFile(res, path.join(ROOT, 'web', 'index.html'), 'text/html; charset=utf-8');

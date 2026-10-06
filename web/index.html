@@ -41,7 +41,7 @@
 
     <nav class="topnav">
       <a href="/" class="navtab active" id="nav-make">✏️ 영상 만들기</a>
-      <a href="/?view=highlight" class="navtab" id="nav-highlight">🎬 유튜브 하이라이트</a>
+      <a href="/highlight" class="navtab" id="nav-highlight">🎬 유튜브 하이라이트</a>
       <a href="/voices?tab=voice" class="navtab">🎙 목소리 듣기</a>
       <a href="/voices?tab=pf" class="navtab">🎬 포트폴리오</a>
     </nav>
@@ -101,51 +101,6 @@
           <button id="batch-start" class="primary-btn" type="button" style="margin-top:12px">📚 이 목록으로 순차 제작 시작</button>
           <div id="batch-status" class="batch-status" hidden></div>
           <p class="mini-state">한 편씩 차례로 자동 제작돼요(대본→영상). 완성되면 포트폴리오에 쌓이고, 창을 닫아도 서버가 계속 만들어요.</p>
-        </div>
-
-        <!-- 유튜브 하이라이트 모드: 재사용 가능(CC) 영상에서 하이라이트 숏폼 뽑기 -->
-        <div id="pane-highlight" class="hidden">
-          <!-- ① 한국 / 해외 -->
-          <label class="field-label">① 어느 나라 영상에서 찾을까요</label>
-          <div class="seg" style="margin-top:6px">
-            <button type="button" class="seg-btn hl-region active" data-region="kr">🇰🇷 한국</button>
-            <button type="button" class="seg-btn hl-region" data-region="global">🌍 해외</button>
-          </div>
-
-          <!-- ② 주제 카테고리 -->
-          <label class="field-label" style="margin-top:14px">② 주제 <span class="hint">— 고르면 그 분야 인기 영상이 쫙 떠요 (직접 검색도 가능)</span></label>
-          <div id="hl-cats" class="hl-cats"></div>
-          <div class="voice-row" style="margin-top:8px">
-            <input id="hl-query" class="input" placeholder="또는 직접 검색 (예: 손흥민, 뉴진스, 백종원…)" />
-            <button id="hl-search" class="ghost-btn" type="button">🔎 검색</button>
-          </div>
-
-          <!-- 정렬 -->
-          <div id="hl-sort-row" class="hidden" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span class="hint">정렬:</span>
-            <div class="seg" style="flex:1;min-width:200px">
-              <button type="button" class="seg-btn hl-order active" data-order="viewCount">🔥 조회수순</button>
-              <button type="button" class="seg-btn hl-order" data-order="date">🆕 최신순</button>
-              <button type="button" class="seg-btn hl-order" data-order="relevance">🎯 관련도</button>
-            </div>
-          </div>
-          <p id="hl-search-state" class="mini-state"></p>
-          <div id="hl-results" class="hl-results"></div>
-
-          <div id="hl-options" class="hidden" style="margin-top:14px">
-            <label class="field-label">③ 이 영상으로 몇 편 만들까요 <span id="hl-maxnote" class="hint"></span></label>
-            <div id="hl-count-seg" class="seg" style="margin-top:6px;flex-wrap:wrap"></div>
-            <label class="field-label" style="margin-top:12px">한 편 길이</label>
-            <div class="seg" style="margin-top:6px;flex-wrap:wrap">
-              <button type="button" class="seg-btn hl-sec" data-s="15">15초</button>
-              <button type="button" class="seg-btn hl-sec active" data-s="30">30초</button>
-              <button type="button" class="seg-btn hl-sec" data-s="45">45초</button>
-              <button type="button" class="seg-btn hl-sec" data-s="60">60초</button>
-            </div>
-            <p class="mini-state" id="hl-picked"></p>
-            <button id="hl-generate" class="primary-btn" type="button" style="margin-top:12px">🎬 하이라이트 숏폼 만들기</button>
-            <p class="mini-state">AI가 영상에서 터질 만한 순간을 골라 세로 숏폼으로 자릅니다. 상단 후킹 자막이 자동으로 얹혀요. 완성되면 유튜브·인스타로 바로 올릴 수 있어요. <b>원작자 출처는 자동 표기됩니다(CC BY).</b></p>
-          </div>
         </div>
 
         <!-- 카드뉴스 모드: 글자 중심 카드 슬라이드 -->
@@ -425,11 +380,6 @@
         <div class="modal-head"><h2 class="block-title">🎴 카드 작업 내역</h2><button id="card-history-refresh" class="ghost-btn">새로고침</button></div>
         <p class="hint">만든 카드(영상·게시물)가 저장됩니다. 다운로드·유튜브·인스타 업로드는 포트폴리오에서도 관리할 수 있어요.</p>
         <div id="card-history" aria-live="polite">로그인 후 카드 작업 내역을 불러옵니다.</div>
-      </section>
-      <section id="hl-history-section" class="card hidden" aria-label="하이라이트 작업 내역">
-        <div class="modal-head"><h2 class="block-title">🎬 하이라이트 작업 내역</h2><button id="hl-history-refresh" class="ghost-btn">새로고침</button></div>
-        <p class="hint">재사용 영상으로 만든 하이라이트 숏폼이 저장됩니다. 여러 편을 시간차로 유튜브·인스타에 올리거나 삭제할 수 있어요.</p>
-        <div id="hl-history" aria-live="polite">로그인 후 하이라이트 작업 내역을 불러옵니다.</div>
       </section>
     </main>
 
