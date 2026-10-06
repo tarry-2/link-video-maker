@@ -182,16 +182,20 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
 
 // 한 구간을 잘라낸다. orientation='portrait'=세로9:16(블러레터박스) / 'landscape'=가로16:9(원본 그대로).
 async function cutClip(videoPath: string, h: Highlight, outPath: string, orientation: 'portrait' | 'landscape', log: (m: string) => void): Promise<void> {
+  // ★남 채널 워터마크(보통 모서리) 지우기: 입력을 6% 확대 크롭해 가장자리를 화면 밖으로 밀어낸다.
+  //   화질 손상 거의 없음(1080p 기준 ~6%). 중앙 큰 워터마크는 못 지움(드묾).
+  const dewm = 'crop=iw/1.12:ih/1.12'; // 12% 확대 크롭 — 모서리 워터마크 대부분 제거(상하좌우 ~6%씩 잘림)
   let args: string[];
   if (orientation === 'landscape') {
-    // 가로: 원본 비율 그대로 16:9(1920x1080)에 맞춤. 자막 안 잘리고 화질 손실 거의 없음(쇼츠 아닌 일반 영상용).
-    const vf = 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black';
+    // 가로: 워터마크 크롭 후 16:9(1920x1080)에 맞춤(레터박스). 자막 보존·화질 손실 거의 없음.
+    const vf = `${dewm},scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black`;
     args = ['-vf', vf];
   } else {
-    // 세로: 가로 영상을 강제 크롭하면 양옆(자막) 잘림 → 원본 안 자르고 세로 중앙에 통째로 + 위아래 블러배경.
+    // 세로: 워터마크 크롭 후 원본 안 자르고 세로 중앙에 통째로 + 위아래 블러배경(자막 안 잘림).
     const vf = [
-      '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=28:2,eq=brightness=-0.12[bg]',
-      '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg]',
+      `[0:v]${dewm},split=2[a][b]`,
+      '[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=28:2,eq=brightness=-0.12[bg]',
+      '[b]scale=1080:1920:force_original_aspect_ratio=decrease[fg]',
       '[bg][fg]overlay=(W-w)/2:(H-h)/2',
     ].join(';');
     args = ['-filter_complex', vf];
