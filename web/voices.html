@@ -163,11 +163,12 @@
           <p class="pf-sub">고르면 아래에서 크게 보고, 유튜브·인스타에 올리거나 내려받을 수 있어요.</p>
         </div>
 
-        <!-- 작업내역 분리 필터(영상 / 카드) -->
+        <!-- 작업내역 분리 필터(영상 / 카드 / 유튜브 하이라이트) -->
         <div class="pf-filter" id="pf-filter" role="tablist">
           <button data-media="all" class="on">전체</button>
           <button data-media="video">🎬 영상</button>
           <button data-media="card">🎴 카드</button>
+          <button data-media="highlight">🎬 하이라이트</button>
         </div>
 
         <!-- 📊 성과(올린 영상의 조회수·반응 집계) -->
@@ -284,7 +285,8 @@
       let allItems = [], myItems = [], myShown = 0, canDelete = false, curIdx = 0, mediaFilter = 'all';
       const PAGE = 12;
       const isCard = it => it.media === 'card' || it.media === 'card-post';
-      const isVideo = it => it.media === 'video' || !it.media; // 레거시=영상
+      const isHighlight = it => it.media === 'highlight'; // 유튜브 하이라이트(별도 보관)
+      const isVideo = it => it.media === 'video' || !it.media; // 레거시=영상(하이라이트·카드 제외)
       async function loadMyVideos(keepIdx) {
         try {
           const a = await (await fetch('/api/auth')).json();
@@ -299,9 +301,9 @@
         const sec = $('my-videos');
         if (!allItems.length) { sec.hidden = true; return; }
         sec.hidden = false;
-        const nV = allItems.filter(isVideo).length, nC = allItems.length - nV;
-        $('mypf-count').textContent = `(영상 ${nV} · 카드 ${nC})`;
-        myItems = allItems.filter(it => mediaFilter === 'all' ? true : mediaFilter === 'card' ? isCard(it) : isVideo(it));
+        const nV = allItems.filter(isVideo).length, nC = allItems.filter(isCard).length, nH = allItems.filter(isHighlight).length;
+        $('mypf-count').textContent = `(영상 ${nV} · 카드 ${nC}${nH ? ` · 하이라이트 ${nH}` : ''})`;
+        myItems = allItems.filter(it => mediaFilter === 'all' ? true : mediaFilter === 'card' ? isCard(it) : mediaFilter === 'highlight' ? isHighlight(it) : isVideo(it));
         if (!myItems.length) {
           $('pf-select').innerHTML = '';
           $('mypf-grid').innerHTML = '<p class="pf-sub" style="padding:24px 4px">이 분류엔 아직 없어요.</p>';

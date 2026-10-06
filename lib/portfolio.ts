@@ -17,8 +17,8 @@ export type PortfolioItem = {
   youtubeUrl?: string; // 유튜브 업로드 완료 시 링크
   instagramUrl?: string; // 인스타 업로드 완료 시 permalink
   orientation?: 'portrait' | 'landscape'; // 화면비(롱폼=landscape). 없으면 세로 폴백(레거시).
-  // ★작업내역 분리: 영상(video) / 카드영상(card) / 카드게시물=캐러셀(card-post). 없으면 video(레거시).
-  kind?: 'video' | 'card' | 'card-post';
+  // ★작업내역 분리: 영상(video) / 카드영상(card) / 카드게시물=캐러셀(card-post) / 유튜브하이라이트(highlight). 없으면 video(레거시).
+  kind?: 'video' | 'card' | 'card-post' | 'highlight';
   images?: string[]; // card-post: data/studio/{projectId}/{name} PNG 파일명들(캐러셀 순서).
 };
 

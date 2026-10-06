@@ -79,7 +79,7 @@ export async function makeHighlights(
       addPortfolio({
         projectId, title, output,
         voice: '원본 음성(CC)', category: '🎬 유튜브 하이라이트', goal: 'info',
-        createdAt: new Date().toISOString(), orientation: 'portrait', kind: 'video',
+        createdAt: new Date().toISOString(), orientation: 'portrait', kind: 'highlight',
       });
     } catch (e: any) { log('[하이라이트] 포트폴리오 등록 건너뜀: ' + (e?.message || '')); }
     // 출처(attribution)를 프로젝트 폴더에 남겨 업로드 설명에 쓸 수 있게.

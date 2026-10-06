@@ -82,6 +82,11 @@ body {
   .hl-card img { width: 104px; height: 60px; }
   .hl-cat { padding: 6px 11px; font-size: 12.5px; }
   .hl-result-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  /* 헤더 꽉 참 방지: 패딩·간격 축소, GPU배지 글자 작게(아이콘 위주) */
+  .topbar { padding: 12px 14px; gap: 6px; }
+  .topbar .ghost-btn { padding: 7px 9px; font-size: 12.5px; }
+  .gpu-badge { padding: 4px 8px; font-size: 10.5px; }
+  .wordmark { font-size: 20px; }
 }
 @keyframes livePulse {
   0% { box-shadow: 0 0 0 0 rgba(255,77,141,0.6); opacity: 1; }
