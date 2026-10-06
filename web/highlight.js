@@ -179,10 +179,10 @@
       btn.textContent = '📷 캡션 만드는 중…';
       const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id)); const d = await r.json();
       if (!r.ok) throw new Error(d.error || '캡션 생성 실패');
-      // 가로 영상은 릴스(세로 전용) 불가 → '일반 영상(피드)' 고정. 세로면 릴스/피드 선택.
-      const methodField = isLandscape
-        ? `<label class="field-label">방식<input class="input" value="📺 일반 영상(가로) — 피드 게시물" disabled></label><input type="hidden" id="cu-k" value="feed">`
-        : `<label class="field-label">방식<select id="cu-k" class="input"><option value="reels">릴스(세로 쇼츠)</option><option value="feed">피드 영상</option></select></label>`;
+      // ★방식은 방향에 따라 자동 결정(고르지 않음). 세로(9:16)=릴스, 가로(16:9)=피드 게시물.
+      //   세로를 피드로 올리면 인스타가 종횡비(9:16)를 거부해 "컨테이너 생성 실패"가 난다 → 세로는 릴스 고정.
+      const igKind = isLandscape ? 'feed' : 'reels';
+      const methodField = `<label class="field-label">방식<input class="input" value="${isLandscape ? '🖥 가로 → 피드 게시물(자동)' : '📱 세로 → 릴스(자동)'}" disabled></label><input type="hidden" id="cu-k" value="${igKind}">`;
       modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>📷 인스타 올리기</h2><button class="ghost-btn" data-x="close">✕</button></div>
         ${methodField}
         <label class="field-label">캡션·해시태그<textarea id="cu-c" class="input" rows="7" maxlength="2200">${esc(d.caption || '')}</textarea></label>

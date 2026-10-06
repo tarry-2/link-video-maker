@@ -111,7 +111,9 @@ export async function publishVideo(
   };
   if (isReels) createParams.share_to_feed = 'true'; // 릴스를 피드에도 노출(가로 VIDEO는 이미 피드글)
   // ★커버(썸네일) 지정 — 없으면 IG가 영상 0프레임(어두운 빈 화면)을 집어가 미리보기가 빈다.
-  if (coverUrl) createParams.cover_url = coverUrl;
+  //   🔴cover_url은 REELS 전용 파라미터다. 피드(VIDEO)에 보내면 "Invalid parameter"로 컨테이너 생성이 실패한다.
+  //   → 릴스일 때만 보낸다(가로 피드 게시물이 안 올라가던 진짜 원인).
+  if (coverUrl && isReels) createParams.cover_url = coverUrl;
   const createBody = new URLSearchParams(createParams);
   const cr = await fetch(`${base}/${API}/${c.igUserId}/media`, {method: 'POST', body: createBody});
   const cd: any = await cr.json();
