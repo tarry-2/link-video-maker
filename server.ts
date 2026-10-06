@@ -921,6 +921,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         openai: !!e.OPENAI_API_KEY,
         elevenlabs: !!e.ELEVENLABS_API_KEY,
         replicate: !!e.REPLICATE_API_TOKEN,
+        runpod: !!e.RUNPOD_API_KEY,
       },
       geminiCount: (e.GEMINI_KEYS || '').split(/[,\n]+/).filter(Boolean).length,
     });
@@ -932,6 +933,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       OPENAI_API_KEY: maskKey(e.OPENAI_API_KEY),
       ELEVENLABS_API_KEY: maskKey(e.ELEVENLABS_API_KEY),
       REPLICATE_API_TOKEN: maskKey(e.REPLICATE_API_TOKEN),
+      RUNPOD_API_KEY: maskKey(e.RUNPOD_API_KEY),
     });
   }
   if (p === '/api/settings' && req.method === 'POST') {

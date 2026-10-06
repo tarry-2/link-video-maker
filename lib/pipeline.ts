@@ -8,6 +8,8 @@ import {ttsElevenJoined, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from '.
 import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {renderVideo, buildRenderPublic} from './render';
+import {getStyle} from './styles';
+import {ensureWanPod, wanT2V} from './runpod-wan';
 import type {SceneData} from '../src/Scene';
 
 const FPS = 30;
@@ -42,6 +44,7 @@ export type PipelineKeys = {
   openai?: string;
   elevenlabs: string;
   replicate: string;
+  runpod?: string; // RunPod 키(움직이는 AI 영상, 선택)
 };
 
 export type PipelineOpts = {
@@ -51,7 +54,7 @@ export type PipelineOpts = {
   presetId?: string; // ★카테고리 프리셋 id (있으면 톤·이미지·목소리·BGM 자동)
   quality?: 'fast' | 'high'; // 이미지 화질(fast=schnell 싸게 / high=dev 실사)
   imageStyle?: string; // 이미지 스타일 id(레지스트리 lib/styles.ts. real·anime·chalkboard 등)
-  aiClips?: number; // Veo 움직이는 클립 개수(0=안씀, 기본 0)
+  aiClips?: number; // 움직이는 AI 영상(Wan2.2) 클립 개수(0=안씀, 기본 0). 앞에서부터 N개 장면에 적용.
   transitionFrames?: number;
   log?: (m: string) => void;
 };
@@ -102,6 +105,19 @@ export async function makeVideo(
     voiceId,
   );
 
+  // ★움직이는 AI 영상(Wan2.2) — 앞에서부터 aiClips개 장면을 RunPod에서 영상 클립으로 만든다.
+  //   이미지는 항상 먼저 만들어 폴백/썸네일로 두고, 클립 성공 시 scene.video로 교체(Scene.tsx가 video 우선 렌더).
+  const aiClips = Math.max(0, Math.min(sb.scenes.length, Math.floor(opts.aiClips || 0)));
+  const style = getStyle(opts.imageStyle);
+  let wanPod: string | undefined;
+  if (aiClips > 0) {
+    if (!keys.runpod) log('[영상] RunPod 키가 없어 움직이는 영상을 건너뜁니다(이미지로 진행).');
+    else {
+      try { wanPod = await ensureWanPod(keys.runpod, log); }
+      catch (e: any) { log(`[영상] 움직이는 영상 준비 실패(${e.message}) → 이미지로 진행`); }
+    }
+  }
+
   for (let i = 0; i < sb.scenes.length; i++) {
     const s = sb.scenes[i];
     const imgRel = `${pubRel}/img-${i}.jpg`;
@@ -118,6 +134,23 @@ export async function makeVideo(
       await writeFile(abs(imgRel), Buffer.from(await r.arrayBuffer()));
     }
 
+    // 앞 N개 장면: 움직이는 영상 클립 생성(실패하면 조용히 이미지 유지).
+    let videoRel: string | undefined;
+    if (wanPod && i < aiClips) {
+      videoRel = `${pubRel}/clip-${i}.mp4`;
+      // visualPrompt(영어·매체중립) + 선택 스타일 + 자연스러운 모션/카메라 묘사로 영상 프롬프트 구성.
+      const wanPrompt = `${vp}. ${style.promptAdd}. natural lifelike motion, subtle cinematic camera movement, smooth and fluid`;
+      try {
+        log(`[장면 ${i + 1}] 🎬 움직이는 영상 생성…`);
+        await wanT2V(wanPod, wanPrompt, abs(videoRel), {
+          width: landscape ? 832 : 480, height: landscape ? 480 : 832, length: 81, interpolate: true, log,
+        });
+      } catch (e: any) {
+        log(`[장면 ${i + 1}] ⚠️ 움직이는 영상 실패(${e.message}) → 이미지 사용`);
+        videoRel = undefined;
+      }
+    }
+
     const [startSec, endSec] = sceneRanges[i] || [0, 0];
     const words = alignToWords(align, FPS, startSec, [startSec, endSec]);
     const durSec = endSec > startSec ? endSec - startSec : s.narration.length / 3.9;
@@ -127,6 +160,7 @@ export async function makeVideo(
 
     scenes.push({
       image: imgRel,
+      video: videoRel,
       hookTop: s.hookTop,
       hookAccent: s.hookAccent,
       accentColor: s.accentColor || '#FFE24B',

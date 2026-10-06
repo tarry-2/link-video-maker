@@ -756,6 +756,7 @@ const KEY_META = [
   { k: 'REPLICATE_API_TOKEN', label: 'Replicate (Flux 이미지)', desc: '9:16 이미지 생성용.', link: 'https://replicate.com/account/api-tokens' },
   { k: 'ELEVENLABS_API_KEY', label: 'ElevenLabs (음성·배경음악)', desc: '나레이션과 BGM 생성.', link: 'https://elevenlabs.io/app/settings/api-keys' },
   { k: 'OPENAI_API_KEY', label: 'OpenAI (폴백 대본)', desc: 'Gemini 실패 시 대본 폴백.', link: 'https://platform.openai.com/api-keys' },
+  { k: 'RUNPOD_API_KEY', label: 'RunPod (움직이는 AI 영상)', desc: 'Wan2.2 영상 클립 생성용 클라우드 GPU. "움직이는 AI 영상" 켤 때만 필요.', link: 'https://www.runpod.io/console/user/settings' },
 ];
 
 $('settings-btn').onclick = async () => {

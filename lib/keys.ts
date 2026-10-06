@@ -9,6 +9,7 @@ export type StoredKeys = {
   OPENAI_API_KEY?: string;
   ELEVENLABS_API_KEY?: string;
   REPLICATE_API_TOKEN?: string;
+  RUNPOD_API_KEY?: string;
 };
 
 const KEY_NAMES = [
@@ -16,6 +17,7 @@ const KEY_NAMES = [
   'OPENAI_API_KEY',
   'ELEVENLABS_API_KEY',
   'REPLICATE_API_TOKEN',
+  'RUNPOD_API_KEY',
 ];
 
 export function loadEnv(): Record<string, string> {
@@ -62,6 +64,7 @@ export function pipelineKeys() {
     openai: env.OPENAI_API_KEY || undefined,
     elevenlabs: env.ELEVENLABS_API_KEY || '',
     replicate: env.REPLICATE_API_TOKEN || '',
+    runpod: env.RUNPOD_API_KEY || '',
   };
 }
 
