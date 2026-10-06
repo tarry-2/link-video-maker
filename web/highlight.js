@@ -133,7 +133,7 @@
           </div>
         </div>`).join('')}</div>`;
     box.querySelectorAll('.hl-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
-    box.querySelectorAll('.hl-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id));
+    box.querySelectorAll('.hl-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, orient === 'landscape'));
     box.scrollIntoView({behavior: 'smooth'});
   }
 
@@ -171,7 +171,7 @@
         }; });
     } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = orig; }
   }
-  async function uploadInstagram(btn, id) {
+  async function uploadInstagram(btn, id, isLandscape) {
     const orig = btn.textContent; btn.disabled = true; btn.textContent = '📷 준비 중…';
     try {
       const st = await (await fetch('/api/instagram/status')).json();
@@ -179,10 +179,14 @@
       btn.textContent = '📷 캡션 만드는 중…';
       const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id)); const d = await r.json();
       if (!r.ok) throw new Error(d.error || '캡션 생성 실패');
+      // 가로 영상은 릴스(세로 전용) 불가 → '일반 영상(피드)' 고정. 세로면 릴스/피드 선택.
+      const methodField = isLandscape
+        ? `<label class="field-label">방식<input class="input" value="📺 일반 영상(가로) — 피드 게시물" disabled></label><input type="hidden" id="cu-k" value="feed">`
+        : `<label class="field-label">방식<select id="cu-k" class="input"><option value="reels">릴스(세로 쇼츠)</option><option value="feed">피드 영상</option></select></label>`;
       modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>📷 인스타 올리기</h2><button class="ghost-btn" data-x="close">✕</button></div>
-        <label class="field-label">방식<select id="cu-k" class="input"><option value="reels">릴스(세로 쇼츠)</option><option value="feed">피드 영상</option></select></label>
+        ${methodField}
         <label class="field-label">캡션·해시태그<textarea id="cu-c" class="input" rows="7" maxlength="2200">${esc(d.caption || '')}</textarea></label>
-        <button class="primary-btn" data-up="1">인스타에 올리기</button><p id="cu-msg" class="mini-state">릴스는 1~2분 걸릴 수 있어요.</p>`,
+        <button class="primary-btn" data-up="1">인스타에 올리기</button><p id="cu-msg" class="mini-state">업로드 인코딩에 1~2분 걸릴 수 있어요.</p>`,
         (box) => { box.querySelector('[data-up]').onclick = async (ev) => {
           const up = ev.target; up.disabled = true; up.textContent = '올리는 중…'; box.querySelector('#cu-msg').textContent = '처리 중…';
           try {
@@ -208,12 +212,12 @@
           <span class="hi-actions">
             <a class="ghost-btn small" href="${esc(it.video)}" download="${esc(it.title)}.mp4">⬇</a>
             <button type="button" class="ghost-btn small hh-yt" data-id="${esc(it.id)}">📺</button>
-            <button type="button" class="ghost-btn small hh-ig" data-id="${esc(it.id)}">📷</button>
+            <button type="button" class="ghost-btn small hh-ig" data-id="${esc(it.id)}" data-land="${it.orientation === 'landscape' ? '1' : ''}">📷</button>
             <button type="button" class="ghost-btn small hh-del" data-id="${esc(it.id)}">🗑</button>
           </span></div>`;
       }).join('') : '<p class="mini-state">아직 만든 하이라이트가 없어요. 위에서 재사용 영상을 골라 만들어보세요.</p>';
       box.querySelectorAll('.hh-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
-      box.querySelectorAll('.hh-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id));
+      box.querySelectorAll('.hh-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, !!b.dataset.land));
       box.querySelectorAll('.hh-del').forEach((b) => b.onclick = () => del(b.dataset.id));
     } catch { box.innerHTML = '<p class="mini-state">작업 내역을 불러오지 못했어요.</p>'; }
   }

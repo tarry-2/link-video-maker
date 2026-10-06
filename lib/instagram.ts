@@ -98,17 +98,19 @@ export async function publishVideo(
   const base = host(c);
   const token = c.accessToken;
 
-  // 1) 미디어 컨테이너 생성(릴스=REELS, 피드 영상도 현재는 REELS 처리가 표준).
-  log?.('[인스타] 업로드 컨테이너 생성 중…');
+  // 1) 미디어 컨테이너 생성.
+  //   ★세로(9:16)=REELS(릴스), 가로(16:9)=VIDEO(일반 피드 영상). 가로를 REELS로 올리면 인스타가
+  //     세로로 강제하거나 거부하므로 반드시 구분(2026 IG Graph API). kind='reels'=세로, 'feed'=가로.
+  const isReels = kind === 'reels';
+  log?.(`[인스타] 업로드 컨테이너 생성 중…(${isReels ? '릴스 세로' : '일반 영상 가로'})`);
   const createParams: Record<string, string> = {
-    media_type: 'REELS',
+    media_type: isReels ? 'REELS' : 'VIDEO',
     video_url: videoUrl,
     caption: caption.slice(0, 2200),
-    share_to_feed: kind === 'feed' ? 'true' : 'true', // 릴스를 피드에도 노출
     access_token: token,
   };
-  // ★커버(썸네일) 지정 — 없으면 IG가 영상 0프레임(글자 애니 전=어두운 빈 화면)을 집어가 미리보기가 빈다.
-  //   우리 썸네일(글자+그림 있는 cover)을 공개 JPEG URL로 넘겨 미리보기가 항상 내용 보이게.
+  if (isReels) createParams.share_to_feed = 'true'; // 릴스를 피드에도 노출(가로 VIDEO는 이미 피드글)
+  // ★커버(썸네일) 지정 — 없으면 IG가 영상 0프레임(어두운 빈 화면)을 집어가 미리보기가 빈다.
   if (coverUrl) createParams.cover_url = coverUrl;
   const createBody = new URLSearchParams(createParams);
   const cr = await fetch(`${base}/${API}/${c.igUserId}/media`, {method: 'POST', body: createBody});

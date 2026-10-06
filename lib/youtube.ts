@@ -260,8 +260,10 @@ export async function generateMeta(
   title: string,
   narrations: string[],
   durationSec: number,
+  orientation?: 'portrait' | 'landscape',
 ): Promise<{title: string; description: string; tags: string[]}> {
-  const isShort = durationSec <= 60;
+  // 쇼츠는 세로(또는 미지정)+60초 이하만. 가로 영상은 60초 이하라도 쇼츠가 아니라 일반 영상(#Shorts 금지).
+  const isShort = durationSec <= 60 && orientation !== 'landscape';
   const body = narrations.join(' ').slice(0, 1500);
   const prompt = `너는 한국 유튜브 조회수 최적화 전문가다. 아래 영상의 유튜브 업로드용 메타데이터를 만들어라.
 영상 제목(초안): ${title}

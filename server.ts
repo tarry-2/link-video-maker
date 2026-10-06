@@ -659,8 +659,11 @@ const server = http.createServer(async (req, res) => {
     const src = resolveVideo(id);
     if (!src) return json(res, 404, {error: '영상을 찾을 수 없습니다.'});
     const k = pipelineKeys();
+    // 가로 영상이면 #Shorts 안 붙게 orientation 전달(포폴에서 조회).
+    const pf = src.kind === 'mine' ? listPortfolio().find((x) => x.projectId === id) : null;
+    const orientation = pf?.orientation === 'landscape' ? 'landscape' : 'portrait';
     try {
-      const meta = await generateMeta({gemini: k.gemini, openai: k.openai}, src.title, src.narrations, src.durSec);
+      const meta = await generateMeta({gemini: k.gemini, openai: k.openai}, src.title, src.narrations, src.durSec, orientation);
       return json(res, 200, meta);
     } catch (e: any) { return json(res, 502, {error: '메타 생성 실패: ' + e.message}); }
   }
