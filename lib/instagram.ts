@@ -88,8 +88,11 @@ JSON만 출력: {"hook":"...","blocks":["...","...","..."],"hashtags":["...","..
   return [hook, ...blocks, tags.join(' ')].filter(Boolean).join('\n\n').slice(0, 2200);
 }
 
-// 릴스/피드 영상 게시. kind: 'reels'(세로 쇼츠) | 'feed'(일반 게시물 영상).
+// 영상 게시. kind는 과거 호환용(reels/feed)이지만 실제로는 둘 다 REELS로 올린다.
 // videoUrl = 공개 접근 가능한 영상 URL(R2 presigned). caption = 글.
+//   🔴🔴2026: media_type=VIDEO(피드 영상)는 Meta가 폐기(subcode 2207067 "VIDEO value for media_type is
+//     deprecated. Use the REELS media type to publish a video to your Instagram feed."). 가로/세로 상관없이
+//     모든 영상은 REELS로 올려야 하며, share_to_feed=true면 피드에도 노출된다(가로 영상도 그대로 올라감).
 export async function publishVideo(
   videoUrl: string, caption: string, kind: 'reels' | 'feed', log?: (m: string) => void, coverUrl?: string,
 ): Promise<{permalink: string; id: string}> {
@@ -98,22 +101,17 @@ export async function publishVideo(
   const base = host(c);
   const token = c.accessToken;
 
-  // 1) 미디어 컨테이너 생성.
-  //   ★세로(9:16)=REELS(릴스), 가로(16:9)=VIDEO(일반 피드 영상). 가로를 REELS로 올리면 인스타가
-  //     세로로 강제하거나 거부하므로 반드시 구분(2026 IG Graph API). kind='reels'=세로, 'feed'=가로.
-  const isReels = kind === 'reels';
-  log?.(`[인스타] 업로드 컨테이너 생성 중…(${isReels ? '릴스 세로' : '일반 영상 가로'})`);
+  // 1) 미디어 컨테이너 생성 — 가로/세로 모두 REELS(VIDEO 폐기). share_to_feed로 피드에도 노출.
+  log?.(`[인스타] 업로드 컨테이너 생성 중…(${kind === 'feed' ? '가로 영상 → 피드(REELS)' : '릴스 세로'})`);
   const createParams: Record<string, string> = {
-    media_type: isReels ? 'REELS' : 'VIDEO',
+    media_type: 'REELS',
     video_url: videoUrl,
     caption: caption.slice(0, 2200),
+    share_to_feed: 'true', // 릴스를 피드에도 노출(가로 영상도 피드에 게시됨)
     access_token: token,
   };
-  if (isReels) createParams.share_to_feed = 'true'; // 릴스를 피드에도 노출(가로 VIDEO는 이미 피드글)
-  // ★커버(썸네일) 지정 — 없으면 IG가 영상 0프레임(어두운 빈 화면)을 집어가 미리보기가 빈다.
-  //   🔴cover_url은 REELS 전용 파라미터다. 피드(VIDEO)에 보내면 "Invalid parameter"로 컨테이너 생성이 실패한다.
-  //   → 릴스일 때만 보낸다(가로 피드 게시물이 안 올라가던 진짜 원인).
-  if (coverUrl && isReels) createParams.cover_url = coverUrl;
+  // ★커버(썸네일) 지정 — 없으면 IG가 영상 0프레임(어두운 빈 화면)을 집어가 미리보기가 빈다. REELS에서 유효.
+  if (coverUrl) createParams.cover_url = coverUrl;
   const createBody = new URLSearchParams(createParams);
   const cr = await fetch(`${base}/${API}/${c.igUserId}/media`, {method: 'POST', body: createBody});
   const cd: any = await cr.json();
