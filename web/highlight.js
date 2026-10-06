@@ -225,6 +225,51 @@
   // ── 검색/선택/설정 ──
   let picked = null, region = 'kr', order = 'viewCount', cat = '';
   let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0;
+
+  // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
+  const STATE_KEY = 'onvideo-hl-state';
+  function saveState() {
+    try {
+      localStorage.setItem(STATE_KEY, JSON.stringify({
+        region, order, cat, count, sec, query, pageToken, loadedCount, picked,
+        resultsHtml: $('hl-results')?.innerHTML || '',
+        moreVisible: !!$('hl-more'),
+        searchState: $('hl-search-state')?.textContent || '',
+        catActive: document.querySelector('.hl-cat.active')?.dataset.ko || '',
+      }));
+    } catch {}
+  }
+  function restoreState() {
+    let s; try { s = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch {}
+    if (!s) return false;
+    region = s.region || 'kr'; order = s.order || 'viewCount'; cat = s.cat || '';
+    count = s.count || 3; sec = s.sec || 30; query = s.query || ''; pageToken = s.pageToken || ''; loadedCount = s.loadedCount || 0;
+    picked = s.picked || null;
+    // 버튼 활성 복원
+    document.querySelectorAll('.hl-region').forEach((b) => b.classList.toggle('active', b.dataset.region === region));
+    document.querySelectorAll('.hl-order').forEach((b) => b.classList.toggle('active', b.dataset.order === order));
+    document.querySelectorAll('.hl-sec').forEach((b) => b.classList.toggle('active', Number(b.dataset.s) === sec));
+    if (s.catActive) document.querySelectorAll('.hl-cat').forEach((b) => b.classList.toggle('active', b.dataset.ko === s.catActive));
+    if (s.query) $('hl-query').value = s.query;
+    // 검색 결과 복원(카드 다시 클릭되게 바인딩)
+    if (s.resultsHtml) {
+      $('hl-results').innerHTML = s.resultsHtml;
+      wireCards($('hl-results'));
+      $('hl-sort-row').classList.remove('hidden');
+      if ($('hl-search-state')) $('hl-search-state').textContent = s.searchState;
+      // 선택됐던 카드 표시 + 더보기 버튼
+      if (picked) document.querySelectorAll('.hl-card').forEach((b) => b.classList.toggle('active', b.dataset.id === picked.videoId));
+      if (s.moreVisible && pageToken) {
+        const more = document.createElement('button');
+        more.id = 'hl-more'; more.type = 'button'; more.className = 'ghost-btn'; more.style.cssText = 'width:100%;margin-top:10px';
+        more.textContent = `▼ 더 보기 (지금 ${loadedCount}개)`;
+        more.onclick = () => { more.disabled = true; more.textContent = '불러오는 중…'; search(null, true); };
+        $('hl-results').parentNode.insertBefore(more, $('hl-results').nextSibling);
+      }
+    }
+    if (picked) $('hl-picked').textContent = `선택: ${picked.title}`;
+    return true;
+  }
   const CATS = [
     {ko:'연예·스타', kq:'연예인 인터뷰', gq:'celebrity interview'},
     {ko:'예능·토크쇼', kq:'예능 토크쇼', gq:'talk show funny'},
@@ -252,6 +297,7 @@
       addLog(`📂 주제 선택: ${cat} (${region === 'global' ? '해외' : '한국'})`);
       search(region === 'global' ? b.dataset.gq : b.dataset.kq);
     }));
+    // 작업 내역에서 쓰는 버튼 바인딩용(복원 시 wireCards 호출 전에 CATS 정의돼 있어야 함)
   }
   function maxClips(durationSec, clipSec) { return Math.max(1, Math.min(10, Math.floor((durationSec * 0.4) / Math.max(clipSec, 20)))); }
   function renderCountSeg() {
@@ -262,7 +308,7 @@
     const opts = []; for (const n of [1,2,3,5,8,10]) if (n <= max) opts.push(n);
     if (!opts.includes(max)) opts.push(max);
     seg.innerHTML = opts.map((n) => `<button type="button" class="seg-btn hl-count ${n === count ? 'active' : ''}" data-n="${n}">${n}편</button>`).join('');
-    seg.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => { seg.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); count = Number(b.dataset.n); }));
+    seg.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => { seg.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); count = Number(b.dataset.n); saveState(); }));
     if ($('hl-maxnote')) $('hl-maxnote').textContent = picked ? `— 이 영상(${fmtDur(picked.durationSec)})에서 최대 ${max}편까지 추천` : '— 영상을 고르면 그 길이에 맞게 추천해요';
   }
   function cardHtml(v) {
@@ -277,10 +323,9 @@
       b.addEventListener('click', () => {
         box.querySelectorAll('.hl-card').forEach((x) => x.classList.remove('active')); b.classList.add('active');
         picked = {videoId: b.dataset.id, title: b.dataset.title, channel: b.dataset.channel, durationSec: Number(b.dataset.dur) || 300};
-        $('hl-options').classList.remove('hidden'); $('hl-picked').textContent = `선택: ${picked.title}`;
-        renderCountSeg();
+        $('hl-picked').textContent = `선택: ${picked.title}`;
+        renderCountSeg(); saveState();
         addLog(`🎥 영상 선택: ${picked.title} (${fmtDur(picked.durationSec)} · ${picked.channel})`);
-        $('hl-options').scrollIntoView({behavior: 'smooth', block: 'nearest'});
       });
     });
   }
@@ -306,6 +351,7 @@
       wireCards(box);
       st.textContent = `${loadedCount}개 표시 중${pageToken ? ' — 더 있어요' : ' (끝)'} · 하나 고르세요`;
       addLog(append ? `➕ ${vids.length}개 더 불러옴 (총 ${loadedCount}개)` : `🔎 "${query}" 검색 완료 — ${loadedCount}개 (${order === 'viewCount' ? '조회수순' : order === 'date' ? '최신순' : '관련도순'})`);
+      saveState();
       if (pageToken) {
         const more = document.createElement('button');
         more.id = 'hl-more'; more.type = 'button'; more.className = 'ghost-btn'; more.style.cssText = 'width:100%;margin-top:10px';
@@ -328,9 +374,10 @@
   $('hl-search')?.addEventListener('click', () => { document.querySelector('.hl-cat.active')?.classList.remove('active'); search(); });
   $('hl-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.querySelector('.hl-cat.active')?.classList.remove('active'); search(); } });
   document.querySelectorAll('.hl-sec').forEach((b) => b.addEventListener('click', () => {
-    document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); sec = Number(b.dataset.s); renderCountSeg();
+    document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); sec = Number(b.dataset.s); renderCountSeg(); saveState();
   }));
   renderCats();
+  restoreState(); // 탭 나갔다 와도 선택·검색결과 유지(초기화 전까지)
   renderCountSeg(); // 편수 버튼을 처음부터 보이게(영상 고르기 전에도)
 
   // ── 생성 ──
