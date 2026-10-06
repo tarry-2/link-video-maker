@@ -50,11 +50,18 @@ function applyMode(m) {
   $('advanced-row')?.classList.toggle('hidden', selfSettings);
   $('audio-row')?.classList.toggle('hidden', selfSettings);
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
-  // ★하이라이트는 상단 네비의 독립 '뷰' — 생성 소탭(.tabs)·오른쪽 패널·히어로를 숨겨 전용 화면처럼 보인다.
+  // ★하이라이트는 상단 네비의 독립 '뷰' — 생성 소탭(.tabs)·히어로를 숨겨 전용 화면처럼 보인다.
+  //   🔴 app-right는 통째로 숨기면 진행상황·로그·결과(progress-block/result-block)까지 사라져 "생성해도 반응없음"이 됨.
+  //      → app-right는 두고, 그 안의 '미리보기 안내(preview-hint)'만 숨긴다. 진행/결과는 보여야 함.
   const hl = m === 'highlight';
   document.querySelector('.tabs')?.classList.toggle('hidden', hl);
-  document.querySelector('.app-right')?.classList.toggle('hidden', hl);
   document.querySelector('.app-grid')?.classList.toggle('highlight-mode', hl); // 왼쪽이 전체폭(카드 안 짜부라지게)
+  if (hl) {
+    $('preview-hint')?.classList.add('hidden'); // 하이라이트는 영상 미리보기 안내 불필요
+    $('progress-block')?.classList.remove('hidden'); // 로그 패널 처음부터 보이게(생성 전부터)
+    // 처음 진입 시 안내 로그 한 줄(이미 로그가 있으면 건드리지 않음 = 초기화 전까지 유지)
+    if ($('log') && !$('log').children.length) { setCardEnergy(0, '준비됨 — 나라·주제를 고르고 영상을 선택하세요'); hlLog('🎬 유튜브 하이라이트 준비됨. 나라와 주제를 골라 재사용 영상을 찾아보세요.'); }
+  }
   $('video-history-section')?.classList.toggle('hidden', hl || m === 'card'); // 하이라이트 뷰에선 영상 내역도 숨김
   $('nav-make')?.classList.toggle('active', !hl);
   $('nav-highlight')?.classList.toggle('active', hl);
@@ -555,12 +562,28 @@ async function runCardGen(body) {
   } catch (e) { addLog('[실패] ' + e.message, 'fail'); showCardResume(); }
 }
 // 실패/중단 시 '이어서 다시 만들기' 버튼 노출.
+let lastHlBody = null; // 하이라이트 마지막 설정(이어서하기용)
 function showCardResume() {
   const b = $('card-resume'); if (!b) return;
-  if (!loadLastCardBody()) return;
+  if (!lastHlBody && !loadLastCardBody()) return; // 하이라이트·카드 둘 중 재시작할 게 있어야 표시
   b.classList.remove('hidden');
 }
-$('card-resume')?.addEventListener('click', () => { const b = loadLastCardBody(); if (b) runCardGen(b); });
+$('card-resume')?.addEventListener('click', () => {
+  // 하이라이트 작업이 마지막이면 그 설정으로 재시작, 아니면 카드 재시작.
+  if (lastHlBody) { runHighlightGen(lastHlBody); return; }
+  const b = loadLastCardBody(); if (b) runCardGen(b);
+});
+// 하이라이트 재시작(이어서하기) — 마지막 설정으로 다시 생성.
+async function runHighlightGen(body) {
+  if ($('card-resume')) $('card-resume').classList.add('hidden');
+  hlLog('⟳ 같은 설정으로 다시 시작합니다…');
+  setCardEnergy(8, '다시 시작하는 중…');
+  try {
+    const d = await (await fetch('/api/generate-highlights', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})).json();
+    if (d.error) { hlLog('[실패] ' + d.error, 'fail'); showCardResume(); return; }
+    if (d.id) attachProgress(d.id, true);
+  } catch (e) { hlLog('[실패] ' + e.message, 'fail'); showCardResume(); }
+}
 // 게시물 결과 렌더(이미지 그리드 + ZIP).
 window.showPostResult = function (title, images, zip, projectId) {
   $('post-result').classList.remove('hidden');
@@ -612,7 +635,8 @@ function attachProgress(id, freshLog) {
   // ★로그는 '다른 작업'으로 바뀔 때만 비운다. 같은 작업 재연결에선 절대 지우지 않고(서버가 처음부터
   //   전체를 재전송하므로) 아래 recv 카운터로 중복만 걸러 이어붙인다 → 끊김/재연결에도 로그가 안 사라진다.
   //   (freshLog 인자는 더 이상 로그 삭제에 쓰지 않는다. 테리 지시: 로그는 수동 초기화 전엔 절대 사라지면 안 됨.)
-  if (id !== logJobId) { logJobId = id; logCount = 0; if ($('log')) $('log').textContent = ''; }
+  //   단 하이라이트 모드는 생성 전 프론트 로그(검색·선택)를 이미 쌓아놨으므로 비우지 않고 이어붙인다.
+  if (id !== logJobId) { logJobId = id; logCount = 0; if ($('log') && mode !== 'highlight') $('log').textContent = ''; }
   // 새 작업이면 경과시간·진행률 리셋(재연결이면 유지).
   if (cardJobStart !== id) { cardJobStart = id; cardStartTs = Date.now(); cardPct = 0; setCardEnergy(6, '시작하는 중…'); }
   $('progress-block').classList.remove('hidden');
@@ -702,9 +726,17 @@ setInterval(syncCurrentJob, 6000);
 function addLog(text, cls) {
   const line = document.createElement('div');
   if (cls) line.className = cls;
-  line.textContent = text;
+  // 모든 로그 줄에 실시간 시각[HH:MM:SS] 표시(테리 요구). 서버 로그도 이 함수로 들어오므로 전부 시각 찍힘.
+  const now = new Date();
+  const ts = `[${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}] `;
+  line.textContent = ts + text;
   $('log').appendChild(line);
   $('log').scrollTop = $('log').scrollHeight;
+}
+// 하이라이트 프론트 동작 로그 — 생성 누르기 전(검색·선택 등)부터 실시간으로 쌓인다. 초기화 전까지 유지.
+function hlLog(text, cls) {
+  $('progress-block')?.classList.remove('hidden'); // 로그 패널 항상 보이게
+  addLog(text, cls);
 }
 
 // 유튜브 하이라이트 여러 편 결과 — 각 편 미리보기 + 유튜브/인스타 업로드(포폴 엔드포인트 재사용).
@@ -868,6 +900,7 @@ function renderHlCats() {
     hlCat = b.dataset.ko;
     const q = hlRegion === 'global' ? b.dataset.gq : b.dataset.kq;
     $('hl-query').value = ''; // 칩 선택 시 직접검색칸 비움
+    hlLog(`📂 주제 선택: ${hlCat} (${hlRegion === 'global' ? '해외' : '한국'})`);
     hlSearch(q);
   }));
 }
@@ -912,6 +945,7 @@ function wireHlCards(scope) {
       $('hl-options').classList.remove('hidden');
       $('hl-picked').textContent = `선택: ${hlPicked.title}`;
       renderHlCountSeg();
+      hlLog(`🎥 영상 선택: ${hlPicked.title} (${fmtDur(hlPicked.durationSec)} · ${hlPicked.channel})`);
       $('hl-options').scrollIntoView({behavior: 'smooth', block: 'nearest'});
     });
   });
@@ -941,6 +975,7 @@ async function hlSearch(forcedQuery, append) {
     box.insertAdjacentHTML('beforeend', vids.map(hlCardHtml).join(''));
     wireHlCards(box);
     st.textContent = `${hlLoadedCount}개 표시 중${hlPageToken ? ' — 더 있어요' : ' (끝)'} · 하나 고르세요`;
+    hlLog(append ? `➕ ${vids.length}개 더 불러옴 (총 ${hlLoadedCount}개)` : `🔎 "${hlQuery}" 검색 완료 — ${hlLoadedCount}개 (${hlOrder === 'viewCount' ? '조회수순' : hlOrder === 'date' ? '최신순' : '관련도순'})`);
     // '더 보기' 버튼 — 다음 페이지 있으면 결과 목록 바로 아래에(스크롤 영역 바깥).
     if (hlPageToken) {
       const more = document.createElement('button');
@@ -954,6 +989,7 @@ async function hlSearch(forcedQuery, append) {
 document.querySelectorAll('.hl-region').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('.hl-region').forEach((x) => x.classList.remove('active')); b.classList.add('active');
   hlRegion = b.dataset.region;
+  hlLog(`🌍 나라 선택: ${hlRegion === 'global' ? '해외' : '한국'}`);
   // 나라 바꾸면 선택된 카테고리로 다시 검색(있으면).
   const activeCat = document.querySelector('.hl-cat.active');
   if (activeCat) hlSearch(hlRegion === 'global' ? activeCat.dataset.gq : activeCat.dataset.kq);
@@ -976,12 +1012,22 @@ renderHlCats();
 $('hl-generate')?.addEventListener('click', async () => {
   if (!hlPicked) { alert('먼저 영상을 고르세요.'); return; }
   const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
+  // ★설정 요약 로그(테리 요구: 뭘 어떻게 만드는지 다 보이게)
+  hlLog('──────── 하이라이트 제작 시작 ────────', 'done');
+  hlLog(`• 나라: ${hlRegion === 'global' ? '해외' : '한국'}`);
+  hlLog(`• 주제: ${hlCat || '직접 검색'}`);
+  hlLog(`• 원본 영상: ${hlPicked.title}`);
+  hlLog(`• 원본 길이: ${fmtDur(hlPicked.durationSec)} → 클립 ${hlSec}초짜리`);
+  hlLog(`• 만들 편수: ${hlCount}편`);
+  hlLog('────────────────────────────');
+  setCardEnergy(8, '하이라이트 제작을 시작합니다…');
+  lastHlBody = {videoId: hlPicked.videoId, title: hlPicked.title, channel: hlPicked.channel, count: hlCount, clipSec: hlSec}; // 이어서하기용
   try {
     const d = await (await fetch('/api/generate-highlights', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({videoId: hlPicked.videoId, title: hlPicked.title, channel: hlPicked.channel, count: hlCount, clipSec: hlSec})})).json();
-    if (d.error) { alert(d.error); return; }
+      body: JSON.stringify(lastHlBody)})).json();
+    if (d.error) { hlLog('[실패] ' + d.error, 'fail'); showCardResume(); alert(d.error); return; }
     if (d.id) attachProgress(d.id, true);
-  } catch (e) { alert('시작 실패: ' + e.message); }
+  } catch (e) { hlLog('[실패] 시작 실패: ' + e.message, 'fail'); showCardResume(); alert('시작 실패: ' + e.message); }
   finally { btn.disabled = false; btn.textContent = '🎬 하이라이트 숏폼 만들기'; }
 });
 
@@ -1258,6 +1304,13 @@ async function copyLog(btn) {
 }
 $('log-copy')?.addEventListener('click', (e) => copyLog(e.currentTarget));
 $('log-modal-copy')?.addEventListener('click', (e) => copyLog(e.currentTarget));
+// 로그 수동 초기화(테리 요구: 이거 누르기 전엔 로그가 사라지면 안 됨). 진행 중이면 막는다.
+$('log-clear')?.addEventListener('click', () => {
+  if (curJobId) { alert('제작이 진행 중일 땐 로그를 지울 수 없어요. 끝난 뒤에 초기화하세요.'); return; }
+  if (!confirm('로그를 모두 지울까요?')) return;
+  if ($('log')) $('log').textContent = '';
+  logJobId = null; logCount = 0;
+});
 let logMirror = null;
 $('log-expand')?.addEventListener('click', () => {
   const big = $('log-big'), src = $('log');
