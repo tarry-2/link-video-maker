@@ -17,7 +17,7 @@ import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
-import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity} from './lib/youtube';
+import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity, searchCreativeCommons} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
@@ -823,6 +823,18 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── 주제 추천(링크·이미지 없이): 카테고리별로 요즘 잘 되는 주제 후보 ──
+  // 재사용 가능한(크리에이티브 커먼즈) 유튜브 영상 검색 — 하이라이트 숏폼 소재용.
+  if (p === '/api/yt-search' && req.method === 'GET') {
+    const q = u.searchParams.get('q') || '';
+    if (!q.trim()) return json(res, 400, {error: '검색어를 입력하세요.'});
+    try {
+      // 하이라이트 소재로 적합한 길이만(2분~60분). 쇼츠·장편 제외.
+      const vids = await searchCreativeCommons(q, {max: 18, minSec: 120, maxSec: 3600});
+      return json(res, 200, {videos: vids});
+    } catch (e: any) {
+      return json(res, 502, {error: e?.message || '검색 실패'});
+    }
+  }
   if (p === '/api/topics' && req.method === 'GET') {
     const presetId = u.searchParams.get('preset') || '';
     const preset = PRESETS.find((x) => x.id === presetId);

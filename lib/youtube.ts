@@ -95,6 +95,57 @@ async function accessToken(): Promise<string> {
   return d.access_token;
 }
 
+// ── 재사용 가능한(크리에이티브 커먼즈) 영상만 검색 ──
+// CC BY 영상은 출처(원작자+링크)만 밝히면 잘라 쓰고 수익화까지 합법. videoLicense=creativeCommon으로만 거른다.
+// 기존 유튜브 OAuth 토큰을 그대로 써서(getVideoStats와 동일) 별도 API 키가 필요 없다.
+export type CcVideo = {
+  videoId: string; title: string; channel: string; channelId: string;
+  thumb: string; publishedAt: string; durationSec: number; views: number;
+};
+function iso8601ToSec(d: string): number {
+  const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d || '');
+  if (!m) return 0;
+  return (Number(m[1] || 0) * 3600) + (Number(m[2] || 0) * 60) + Number(m[3] || 0);
+}
+export async function searchCreativeCommons(query: string, opts: {max?: number; minSec?: number; maxSec?: number} = {}): Promise<CcVideo[]> {
+  if (!query.trim()) throw new Error('검색어를 입력하세요.');
+  const token = await accessToken();
+  const max = Math.min(25, Math.max(5, opts.max || 15));
+  // 1) search.list — CC 라이선스 + 영상만. (type=video 필수 when videoLicense set)
+  const sp = new URLSearchParams({
+    part: 'snippet', type: 'video', videoLicense: 'creativeCommon',
+    q: query, maxResults: String(max), order: 'relevance', safeSearch: 'moderate',
+  });
+  const sr = await fetch('https://www.googleapis.com/youtube/v3/search?' + sp.toString(), {
+    headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
+  });
+  const sd: any = await sr.json();
+  if (!sr.ok) throw new Error('유튜브 검색 실패: ' + (sd?.error?.message || sr.status));
+  const ids: string[] = (sd.items || []).map((it: any) => it.id?.videoId).filter(Boolean);
+  if (!ids.length) return [];
+  // 2) videos.list — 길이(duration)·조회수 가져와 필터/정렬에 사용.
+  const vp = new URLSearchParams({part: 'contentDetails,statistics,snippet', id: ids.join(',')});
+  const vr = await fetch('https://www.googleapis.com/youtube/v3/videos?' + vp.toString(), {
+    headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
+  });
+  const vd: any = await vr.json();
+  if (!vr.ok) throw new Error('영상 정보 조회 실패: ' + (vd?.error?.message || vr.status));
+  const minSec = opts.minSec ?? 0;
+  const maxSec = opts.maxSec ?? 3600;
+  const out: CcVideo[] = [];
+  for (const it of (vd.items || [])) {
+    const dur = iso8601ToSec(it.contentDetails?.duration || '');
+    if (dur < minSec || dur > maxSec) continue; // 너무 짧은(쇼츠)·너무 긴(장편) 건 제외
+    const sn = it.snippet || {};
+    out.push({
+      videoId: it.id, title: sn.title || '', channel: sn.channelTitle || '', channelId: sn.channelId || '',
+      thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || '',
+      publishedAt: sn.publishedAt || '', durationSec: dur, views: Number(it.statistics?.viewCount || 0),
+    });
+  }
+  return out;
+}
+
 // 유튜브 URL에서 video id 추출(youtu.be/ID · watch?v=ID).
 export function extractVideoId(url: string): string {
   if (!url) return '';
