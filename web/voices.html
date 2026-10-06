@@ -402,8 +402,10 @@
         const yt = e.target.closest('.pf-yt'); if (yt) { uploadToYouTube(yt); return; }
         const ig = e.target.closest('.pf-ig');
         if (ig) {
-          const isPost = myItems[curIdx] && myItems[curIdx].media === 'card-post';
-          uploadToInstagram(ig, isPost); return;
+          const cur = myItems[curIdx];
+          const isPost = cur && cur.media === 'card-post';
+          const isLandscape = cur && cur.orientation === 'landscape';
+          uploadToInstagram(ig, isPost, isLandscape); return;
         }
         const del = e.target.closest('.pf-del');
         if (del) { if (confirm('이 영상을 포트폴리오에서 삭제할까요? (원본 작업은 남아 있어요)')) fetch('/api/portfolio/' + encodeURIComponent(del.dataset.id), { method: 'DELETE' }).then(r => { if (r.ok) loadMyVideos(Math.max(0, curIdx - 1)); }); }
@@ -482,7 +484,7 @@
         };
       }
       // ── 포트폴리오에서 인스타 올리기(릴스/피드) ──
-      async function uploadToInstagram(btn, carousel) {
+      async function uploadToInstagram(btn, carousel, isLandscape) {
         const id = btn.dataset.id;
         const orig = btn.textContent; btn.disabled = true; btn.textContent = '📷 준비 중…';
         try {
@@ -492,20 +494,19 @@
           const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id));
           const d = await r.json();
           if (!r.ok) throw new Error(d.error || '캡션 생성 실패');
-          openIgPfModal(id, d.caption || '', st.username, carousel);
+          openIgPfModal(id, d.caption || '', st.username, carousel, isLandscape);
         } catch (e) { alert(e.message); }
         finally { btn.disabled = false; btn.textContent = orig; }
       }
-      function openIgPfModal(id, caption, username, carousel) {
+      function openIgPfModal(id, caption, username, carousel, isLandscape) {
         let box = $('ig-modal');
         if (!box) { box = document.createElement('div'); box.id = 'ig-modal'; box.className = 'modal'; document.body.appendChild(box); }
         box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50';
         box.innerHTML = `<div class="modal-box" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">
           <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>📷 인스타 ${carousel ? '캐러셀 올리기' : '올리기'}</h2><button class="ghost-btn" data-ig="close">✕</button></div>
           <p class="sub small">${username ? '계정: <b>@' + esc(username) + '</b> · ' : ''}캡션·해시태그는 수정할 수 있어요.</p>
-          ${carousel ? '<p class="sub small">🎴 여러 장 넘기는 게시물(캐러셀)로 올라갑니다.</p>' : `<label class="field-label">올릴 방식<select id="ig-kind" class="input">
-            <option value="reels" selected>릴스(세로 쇼츠)</option><option value="feed">게시물(피드 영상)</option>
-          </select></label>`}
+          ${carousel ? '<p class="sub small">🎴 여러 장 넘기는 게시물(캐러셀)로 올라갑니다.</p>'
+            : `<label class="field-label">올릴 방식<input class="input" value="${isLandscape ? '🖥 가로 → 게시물(피드)로 올라갑니다' : '📱 세로 → 릴스로 올라갑니다'}" disabled></label><input type="hidden" id="ig-kind" value="${isLandscape ? 'feed' : 'reels'}">`}
           <label class="field-label">캡션 · 해시태그<textarea id="ig-caption" class="input" rows="8" maxlength="2200">${esc(caption)}</textarea></label>
           <button class="primary-btn" data-ig="upload">인스타에 올리기</button>
           <p id="ig-up-msg" class="mini-state">${carousel ? '이미지 변환·업로드에 잠시 걸려요.' : '릴스는 인코딩 때문에 1~2분 걸릴 수 있어요.'}</p>
