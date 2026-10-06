@@ -8,6 +8,7 @@ import {randomUUID, createHmac, timingSafeEqual} from 'node:crypto';
 import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
+import {makeHighlights} from './lib/youtube-highlight';
 import {generateCardStoryboard} from './lib/cards';
 import {PRESETS, RECOMMEND_STYLE, getPreset} from './lib/presets';
 import {STYLES, STYLE_IDS} from './lib/styles';
@@ -312,7 +313,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post'; images?: string[]; zip?: string; projectId?: string};
+type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string}[]};
 // ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
 function jlog(job: Job, s: string) {
   const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
@@ -1232,6 +1233,35 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     return json(res, 202, {id});
   }
 
+  // ── 재사용(CC) 유튜브 영상 → 하이라이트 숏폼 여러 편 ──
+  if (p === '/api/generate-highlights' && req.method === 'POST') {
+    const b = await readBody(req);
+    const videoId = String(b.videoId || '').trim();
+    if (!/^[\w-]{11}$/.test(videoId)) return json(res, 400, {error: '영상을 선택하세요.'});
+    const title = String(b.title || '').slice(0, 200);
+    const channel = String(b.channel || '').slice(0, 120);
+    const count = Math.max(1, Math.min(5, Number(b.count) || 3));
+    const clipSec = Math.max(15, Math.min(60, Number(b.clipSec) || 30));
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false};
+    jobs.set(id, job);
+    currentGenJob = id;
+    (async () => {
+      try {
+        const clips = await makeHighlights(videoId, {title, channel}, {count, clipSec, log: (m) => jlog(job, m)});
+        job.kind = 'highlight';
+        job.clips = clips.map((c) => ({projectId: c.projectId, file: c.file, title: c.title}));
+        // 대표(첫 편)를 기본 미리보기로.
+        if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }
+        job.done = true; job.doneAt = Date.now();
+      } catch (e: any) {
+        job.error = e.message; job.done = true; job.doneAt = Date.now();
+        jlog(job, '[실패] ' + e.message);
+      }
+    })();
+    return json(res, 202, {id});
+  }
+
   // ── 현재 진행 중 작업(모바일↔PC 공유) — 어느 기기든 이걸 받아 같은 SSE에 붙어 실시간으로 같이 본다 ──
   if (p === '/api/jobs/current' && req.method === 'GET') {
     const j = currentGenJob ? jobs.get(currentGenJob) : undefined;
@@ -1269,7 +1299,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       else if (Date.now() - lastWrite > 15000) { res.write(': ping\n\n'); lastWrite = Date.now(); }
       if (job.done) {
         res.write(
-          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip, projectId: job.projectId})}\n\n`,
+          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip, projectId: job.projectId, clips: job.clips})}\n\n`,
         );
         clearInterval(timer);
         res.end();

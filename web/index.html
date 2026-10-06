@@ -59,6 +59,7 @@
         <button id="tab-topic" class="tab" type="button">💡 주제로</button>
         <button id="tab-card" class="tab" type="button">🎴 카드뉴스</button>
         <button id="tab-manual" class="tab" type="button">🖼 내 사진</button>
+        <button id="tab-highlight" class="tab" type="button">🎬 유튜브 하이라이트</button>
         <button id="tab-batch" class="tab" type="button">📚 여러 편</button>
       </div>
 
@@ -100,6 +101,42 @@
           <button id="batch-start" class="primary-btn" type="button" style="margin-top:12px">📚 이 목록으로 순차 제작 시작</button>
           <div id="batch-status" class="batch-status" hidden></div>
           <p class="mini-state">한 편씩 차례로 자동 제작돼요(대본→영상). 완성되면 포트폴리오에 쌓이고, 창을 닫아도 서버가 계속 만들어요.</p>
+        </div>
+
+        <!-- 유튜브 하이라이트 모드: 재사용 가능(CC) 영상에서 하이라이트 숏폼 뽑기 -->
+        <div id="pane-highlight" class="hidden">
+          <label class="field-label">1. 재사용 가능한 영상 찾기 <span class="hint">— 저작권 걱정 없는 '크리에이티브 커먼즈' 영상만 검색돼요</span></label>
+          <div class="voice-row">
+            <input id="hl-query" class="input" placeholder="예: korean street food, 뉴스, 다큐…" />
+            <button id="hl-search" class="ghost-btn" type="button">🔎 검색</button>
+          </div>
+          <p id="hl-search-state" class="mini-state"></p>
+          <div id="hl-results" class="hl-results"></div>
+
+          <div id="hl-options" class="hidden" style="margin-top:14px">
+            <label class="field-label">2. 설정</label>
+            <div class="row">
+              <div class="col">
+                <label class="field-label">몇 편 만들까요 <span class="hint">(한 영상에서)</span></label>
+                <div class="seg" style="margin-top:6px">
+                  <button type="button" class="seg-btn hl-count active" data-n="2">2편</button>
+                  <button type="button" class="seg-btn hl-count" data-n="3">3편</button>
+                  <button type="button" class="seg-btn hl-count" data-n="5">5편</button>
+                </div>
+              </div>
+              <div class="col">
+                <label class="field-label">한 편 길이</label>
+                <div class="seg" style="margin-top:6px">
+                  <button type="button" class="seg-btn hl-sec" data-s="20">20초</button>
+                  <button type="button" class="seg-btn hl-sec active" data-s="30">30초</button>
+                  <button type="button" class="seg-btn hl-sec" data-s="45">45초</button>
+                </div>
+              </div>
+            </div>
+            <p class="mini-state" id="hl-picked"></p>
+            <button id="hl-generate" class="primary-btn" type="button" style="margin-top:12px">🎬 하이라이트 숏폼 만들기</button>
+            <p class="mini-state">AI가 영상에서 터질 만한 순간을 골라 세로 숏폼으로 자릅니다. 상단 후킹 자막이 자동으로 얹혀요. 완성되면 포트폴리오에서 유튜브·인스타로 바로 올릴 수 있어요. <b>원작자 출처는 자동 표기됩니다(CC BY).</b></p>
+          </div>
         </div>
 
         <!-- 카드뉴스 모드: 글자 중심 카드 슬라이드 -->

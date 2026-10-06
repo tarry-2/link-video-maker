@@ -25,6 +25,7 @@ export const sceneSchema = z.object({
   voiceSrc: z.string().optional(),
   product: z.object({name: z.string(), price: z.string(), benefit: z.string(), url: z.string()}).optional(),
   video: z.string().optional(), // 배경 영상 클립(있으면 이미지 대신 사용)
+  fullBleed: z.boolean().optional(), // ★유튜브 하이라이트: 이미 9:16인 클립을 레터박스 없이 꽉 채우고 원본 소리 재생
   hookTop: z.string(),
   hookAccent: z.string(),
   accentColor: z.string(),
@@ -48,6 +49,7 @@ export const Scene: React.FC<SceneData> = ({
   voiceSrc,
   product,
   video,
+  fullBleed,
   hookTop,
   hookAccent,
   accentColor,
@@ -105,6 +107,26 @@ export const Scene: React.FC<SceneData> = ({
   const shakeX = Math.sin(frame / 8) * 0.35;
   const shakeY = Math.cos(frame / 9) * 0.3;
   const imgTransform = `scale(${zoom}) translate(${panX + shakeX}%, ${panY + shakeY}%)`;
+
+  // ★유튜브 하이라이트(fullBleed): 이미 9:16로 크롭된 클립을 화면 꽉 채우고 원본 소리 재생 + 상단 후킹띠만.
+  if (fullBleed && video) {
+    return (
+      <AbsoluteFill style={{backgroundColor: '#000'}}>
+        <OffthreadVideo src={staticFile(video)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        {(hookTop || hookAccent) && (
+          <div style={{
+            position: 'absolute', top: L.hookTop, left: 0, right: 0, padding: L.hookPad,
+            textAlign: 'center', transform: `translateY(${hookY}px)`, opacity: hookIn,
+          }}>
+            {hookTop && <div style={{fontFamily: 'BlackHanSans', fontSize: L.fsHookTop, color: '#fff',
+              lineHeight: 1.1, textShadow: outline(4), WebkitTextStroke: '2px #000'}}>{hookTop}</div>}
+            {hookAccent && <div style={{fontFamily: 'BlackHanSans', fontSize: L.fsHookAccent, color: accentColor,
+              lineHeight: 1.12, marginTop: 6, textShadow: outline(5), WebkitTextStroke: '2px #000'}}>{hookAccent}</div>}
+          </div>
+        )}
+      </AbsoluteFill>
+    );
+  }
 
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>

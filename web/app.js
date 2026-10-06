@@ -21,14 +21,15 @@ $('tab-topic').onclick = () => setMode('topic');
 $('tab-manual').onclick = () => setMode('manual');
 $('tab-batch').onclick = () => setMode('batch');
 $('tab-card').onclick = () => setMode('card');
+$('tab-highlight').onclick = () => setMode('highlight');
 function applyMode(m) {
   mode = m;
-  for (const t of ['auto', 'topic', 'manual', 'batch', 'card']) {
+  for (const t of ['auto', 'topic', 'manual', 'batch', 'card', 'highlight']) {
     $('tab-' + t).classList.toggle('active', m === t);
     $('pane-' + t).classList.toggle('hidden', m !== t);
   }
-  // 배치 모드에선 단일 제작 버튼 숨기고, 배치 현황 폴링 시작.
-  const gen = $('generate'); if (gen) gen.classList.toggle('hidden', m === 'batch');
+  // 배치·하이라이트 모드에선 공용 제작 버튼 숨김(자체 생성 버튼 사용).
+  const gen = $('generate'); if (gen) gen.classList.toggle('hidden', m === 'batch' || m === 'highlight');
   // 카드 모드일 땐 오른쪽 studio 편집기를 숨긴다(카드는 studio 시스템을 안 쓰므로 혼란 방지).
   document.querySelector('.app-grid')?.classList.toggle('card-mode', m === 'card');
   // 작업 내역 완전 분리 — 영상 모드=영상 내역 / 카드 모드=카드 내역(서로 숨김).
@@ -38,14 +39,15 @@ function applyMode(m) {
   if (m === 'card') loadCardHistory();
   // 카드 모드는 대본 검토 단계가 없어 버튼 라벨을 바로 제작으로.
   if (gen) gen.textContent = m === 'card' ? '🎴 카드 대본 만들기' : '🎬 영상 만들기';
-  // 공용 세부설정은 영상계열(auto/topic/manual/batch)에서만. 카드는 자체 설정이 있어 숨김.
-  $('detail-settings')?.classList.toggle('hidden', m === 'card');
+  // 공용 세부설정은 영상계열(auto/topic/manual/batch)에서만. 카드·하이라이트는 자체 설정이라 숨김.
+  const selfSettings = m === 'card' || m === 'highlight';
+  $('detail-settings')?.classList.toggle('hidden', selfSettings);
   // 오른쪽 안내: 카드 모드=카드 안내, 그 외=영상 안내(preview-hint). 서로 숨겨 :has()가 꼬이지 않게.
   $('card-hint')?.classList.toggle('hidden', m !== 'card');
   $('preview-hint')?.classList.toggle('hidden', m === 'card');
-  // 영상 종류(움직임)·오디오 토글은 카드 모드에선 숨김(카드는 자체 설정).
-  $('advanced-row')?.classList.toggle('hidden', m === 'card');
-  $('audio-row')?.classList.toggle('hidden', m === 'card');
+  // 영상 종류(움직임)·오디오 토글은 카드·하이라이트 모드에선 숨김(자체 설정).
+  $('advanced-row')?.classList.toggle('hidden', selfSettings);
+  $('audio-row')?.classList.toggle('hidden', selfSettings);
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
 }
 function setMode(m) { applyMode(m); saveFormState(); }
@@ -629,7 +631,8 @@ function attachProgress(id, freshLog) {
         cardPct = 100; setCardEnergy(100, '완성! 🎉'); const f = $('card-energy'); if (f) f.classList.remove('anim');
         cardCelebrate();
       }
-      if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
+      if (m.kind === 'highlight') { showHighlightResults(m.clips || []); }
+      else if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
       else if (m.file) showResult(m.file, m.title, m.projectId);
       if (!m.error) {
         // 이 카드를 만든 설정을 projectId로 저장 → 작업 내역에서 '다시 세팅'으로 복원.
@@ -687,6 +690,33 @@ function addLog(text, cls) {
   line.textContent = text;
   $('log').appendChild(line);
   $('log').scrollTop = $('log').scrollHeight;
+}
+
+// 유튜브 하이라이트 여러 편 결과 — 각 편 미리보기 + 유튜브/인스타 업로드(포폴 엔드포인트 재사용).
+function showHighlightResults(clips) {
+  let box = document.getElementById('hl-result-block');
+  if (!box) {
+    box = document.createElement('div'); box.id = 'hl-result-block'; box.className = 'card';
+    box.style.marginTop = '16px';
+    $('result-block').parentNode.insertBefore(box, $('result-block'));
+  }
+  box.classList.remove('hidden');
+  if (!clips.length) { box.innerHTML = '<p class="mini-state">완성된 클립이 없어요.</p>'; return; }
+  box.innerHTML = `<h2 style="margin:0 0 4px">🎬 하이라이트 ${clips.length}편 완성!</h2>
+    <p class="mini-state" style="margin-bottom:12px">각 편을 확인하고 유튜브·인스타로 바로 올릴 수 있어요. (원작자 출처는 자동 표기됩니다)</p>
+    <div class="hl-result-grid">${clips.map((c, i) => `
+      <div class="hl-result-item">
+        <video src="/portfolio-item/${c.projectId}.mp4#t=0.5" controls playsinline preload="metadata" style="width:100%;border-radius:12px;background:#000"></video>
+        <b style="display:block;margin:6px 0">${(c.title || ('하이라이트 ' + (i + 1)))}</b>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="ghost-btn small" href="/portfolio-item/${c.projectId}.mp4" download="${(c.title || 'highlight')}.mp4">⬇ 다운로드</a>
+          <button class="ghost-btn small hl-yt" data-id="${c.projectId}">📺 유튜브</button>
+          <button class="ghost-btn small hl-ig" data-id="${c.projectId}">📷 인스타</button>
+        </div>
+      </div>`).join('')}</div>`;
+  box.querySelectorAll('.hl-yt').forEach((b) => b.onclick = () => { cardVidUpId = b.dataset.id; cardYouTube(b); });
+  box.querySelectorAll('.hl-ig').forEach((b) => b.onclick = () => cardInstagram(b, b.dataset.id, false));
+  box.scrollIntoView({behavior: 'smooth'});
 }
 
 function showResult(file, title, projectId) {
@@ -786,6 +816,57 @@ function syncFormat() {
 $('duration')?.addEventListener('change', syncFormat);
 $('duration')?.addEventListener('input', syncFormat);
 syncFormat();
+
+// ── 유튜브 하이라이트: 재사용(CC) 영상 검색 → 선택 → 하이라이트 숏폼 생성 ──
+let hlPicked = null; // 선택한 영상 {videoId, title, channel}
+let hlCount = 2, hlSec = 30;
+function fmtDur(s) { const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; }
+async function hlSearch() {
+  const q = $('hl-query').value.trim();
+  const st = $('hl-search-state'), box = $('hl-results');
+  if (!q) { alert('검색어를 입력하세요.'); return; }
+  st.textContent = '재사용 가능한 영상을 찾는 중…'; box.innerHTML = '';
+  $('hl-options').classList.add('hidden'); hlPicked = null;
+  try {
+    const d = await (await fetch('/api/yt-search?q=' + encodeURIComponent(q))).json();
+    if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
+    const vids = d.videos || [];
+    if (!vids.length) { st.textContent = '결과가 없어요. 다른 검색어로 시도해보세요.'; return; }
+    st.textContent = `${vids.length}개 찾음 — 하나 고르세요`;
+    box.innerHTML = vids.map((v) => `
+      <button type="button" class="hl-card" data-id="${v.videoId}" data-title="${(v.title || '').replace(/"/g, '&quot;')}" data-channel="${(v.channel || '').replace(/"/g, '&quot;')}">
+        <img src="${v.thumb}" alt="" loading="lazy" />
+        <div class="hl-meta"><b>${v.title || ''}</b><span>${v.channel || ''} · ${fmtDur(v.durationSec)} · 조회 ${Number(v.views).toLocaleString('ko-KR')}</span></div>
+      </button>`).join('');
+    box.querySelectorAll('.hl-card').forEach((b) => b.addEventListener('click', () => {
+      box.querySelectorAll('.hl-card').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+      hlPicked = {videoId: b.dataset.id, title: b.dataset.title, channel: b.dataset.channel};
+      $('hl-options').classList.remove('hidden');
+      $('hl-picked').textContent = `선택: ${hlPicked.title}`;
+      $('hl-options').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    }));
+  } catch { st.textContent = '검색에 실패했어요. 유튜브 연결(설정)이 되어 있는지 확인하세요.'; }
+}
+$('hl-search')?.addEventListener('click', hlSearch);
+$('hl-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') hlSearch(); });
+document.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); hlCount = Number(b.dataset.n);
+}));
+document.querySelectorAll('.hl-sec').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); hlSec = Number(b.dataset.s);
+}));
+$('hl-generate')?.addEventListener('click', async () => {
+  if (!hlPicked) { alert('먼저 영상을 고르세요.'); return; }
+  const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
+  try {
+    const d = await (await fetch('/api/generate-highlights', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({videoId: hlPicked.videoId, title: hlPicked.title, channel: hlPicked.channel, count: hlCount, clipSec: hlSec})})).json();
+    if (d.error) { alert(d.error); return; }
+    if (d.id) attachProgress(d.id, true);
+  } catch (e) { alert('시작 실패: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = '🎬 하이라이트 숏폼 만들기'; }
+});
 
 // 영상 종류 = 버튼(세그먼트)으로 고른다. 네이티브 select가 일부 브라우저에서 안 열려서 버튼으로 교체.
 // aiClips 는 숨은 input(값: 0=사진영상, 1~3=움직이는 장면 수). '움직이는 영상'을 골랐을 때만 장면수·자동끄기 노출.
