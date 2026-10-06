@@ -107,51 +107,76 @@ async function durationOf(file: string): Promise<number> {
   } catch { return 0; }
 }
 
-// Gemini로 바이럴 하이라이트 N개 선정. 자막 있으면 그 내용 기반, 없으면 길이 기준 균등 분할 폴백.
+// 영상을 앞에서부터 N개 구간으로 나눈다(순차 분할). 하이라이트 모음 영상처럼 "이미 전체가 하이라이트"면
+//   굳이 베스트를 또 못 고르므로, 그냥 순서대로 N개를 쓴다. 후킹은 자막으로 나중에 붙인다.
+function splitEvenly(durationSec: number, n: number, clipSec: number): Highlight[] {
+  const hs: Highlight[] = [];
+  const usable = Math.max(0, durationSec - 2);
+  const gap = Math.max(clipSec, Math.floor(usable / n)); // 겹치지 않게 간격
+  for (let i = 0; i < n; i++) {
+    const start = Math.min(usable - clipSec, i * gap);
+    if (start < 0) break;
+    hs.push({start: Math.max(0, start), end: Math.min(durationSec, start + clipSec), hookTop: '', hookAccent: '', reason: ''});
+  }
+  return hs;
+}
+
+// 하이라이트 N개 선정. 자막 있으면 Gemini가 "터지는 순간"을 우선 고르고, 부족하면 순차 분할로 채워 N개 보장.
+//   자막 없어도 순차 분할로 진행(이미 하이라이트 모음인 영상도 많으니 실패시키지 않는다 — 테리 지시).
 async function pickHighlights(geminiKeys: string[], subText: string, durationSec: number, count: number, clipSec: number, log: (m: string) => void): Promise<Highlight[]> {
   const n = Math.max(1, Math.min(10, count));
-  // 🔴 진짜 하이라이트만 — 자막(내용)이 반드시 있어야 "터질 구간"을 고를 수 있다.
-  //   자막이 없으면 시간 균등분할(=그냥 이어붙이기)은 하지 않는다. 테리 지시: 시간 이어맞추기 하이라이트 금지.
+
+  // 자막이 없으면 바로 순차 분할(내용을 모르니 베스트를 고를 수 없음 — 그래도 진행).
   if (!subText || !geminiKeys.length) {
-    throw new Error('이 영상은 자막(대사) 정보가 없어 어디가 터지는 구간인지 알 수 없습니다. 자막이 있는 다른 영상을 골라주세요(시간 순서로 그냥 자르는 건 하지 않습니다).');
+    log('[하이라이트] 자막이 없어 영상을 앞에서부터 순서대로 나눕니다(이미 하이라이트인 영상에 적합).');
+    return splitEvenly(durationSec, n, clipSec);
   }
-  const prompt = `너는 유튜브 긴 영상에서 "쇼츠로 터질 순간"만 골라내는 최고의 편집자다. 아래는 한 영상의 자막(초 단위)이다.
 
-[가장 중요한 원칙]
-- 영상을 처음부터 순서대로 자르지 마라. 시간을 균등하게 나누지 마라. 그건 하이라이트가 아니다.
-- 자막 내용을 읽고, "이 부분은 혼자 떼어내도 사람들이 끝까지 보고 공유하겠다" 싶은 **독립적으로 완결되고 임팩트 있는 순간만** 골라라.
-- 반전/폭로/명대사/웃긴 순간/감동/충격 사실/핵심 정보처럼 **후킹 자막을 붙일 만한 구간만** 선택한다.
-- 밋밋한 설명·인사·늘어지는 부분·맥락 없는 중간은 절대 고르지 마라.
-- ★억지로 ${n}개를 채우지 마라. 진짜 터질 만한 게 ${n}개보다 적으면 적게 줘도 된다(품질 우선). 2~3개뿐이어도 그게 맞으면 그렇게.
-- 터질 구간이 하나도 없으면 빈 배열을 줘라.
+  const prompt = `너는 유튜브 영상에서 쇼츠로 쓸 구간을 고르는 편집자다. 아래는 한 영상의 자막(초 단위)이다.
+시청자가 좋아할 만한 순간 ${n}개를 각 약 ${clipSec}초 길이로 골라라.
 
-[형식 규칙]
-- start/end는 초(정수), end-start ≈ ${clipSec}초(±10초). 서로 겹치지 마라. 영상 길이 ${durationSec}초를 넘지 마라.
-- 구간은 "말이 시작되는 지점"부터 "완결되는 지점"까지 자연스럽게. 문장 중간에서 끊지 마라.
-- hookTop: 그 구간 상단에 넣을 궁금증 폭발 후킹(한국어 12자 내외, 과장·낚시톤 OK). 그 구간 내용과 반드시 맞아야 한다.
-- hookAccent: 후킹에서 강조할 핵심 단어(한국어 6자 내).
-- reason: 왜 터질지 15자 내(구체적으로).
+[원칙]
+- 명대사/반전/웃긴/감동/충격/핵심 정보처럼 **후킹 자막을 붙일 만한, 그 자체로 말이 되는 구간**을 우선.
+- 이 영상이 이미 '하이라이트 모음·명장면 모음'이면, 각 장면이 바뀌는 지점을 구간으로 잡아라.
+- 문장 중간에서 끊지 말고, 말이 시작되는 지점부터 완결되는 지점까지.
+- 겹치지 마라. 영상 길이 ${durationSec}초를 넘지 마라. 가능하면 ${n}개를 채워라(이 영상은 쇼츠 소재로 쓸 거다).
+
+[각 구간]
+- start/end: 초(정수), end-start ≈ ${clipSec}초(±10초).
+- hookTop: 상단 후킹(한국어 12자 내외, 그 구간 내용과 맞게, 궁금증·과장 OK).
+- hookAccent: 강조 단어(한국어 6자 내).
+- reason: 왜 좋은지 15자 내.
 
 자막:
 ${subText}
 
 JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hookAccent":"...","reason":"..."}]}`;
-  const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 2048, temperature: 0.7, log});
-  let j: any;
-  try { j = JSON.parse(raw.replace(/```json|```/g, '').trim()); }
-  catch { throw new Error('하이라이트 구간 분석에 실패했습니다. 다시 시도해 주세요.'); }
-  const hs: Highlight[] = (j.highlights || []).slice(0, n).map((h: any) => ({
-    start: Math.max(0, Math.floor(h.start || 0)),
-    end: Math.min(durationSec, Math.floor(h.end || (h.start + clipSec))),
-    hookTop: String(h.hookTop || '').slice(0, 24),
-    hookAccent: String(h.hookAccent || '').slice(0, 12),
-    reason: String(h.reason || '').slice(0, 24),
-  })).filter((h: Highlight) => h.end > h.start + 2);
-  if (!hs.length) {
-    throw new Error('이 영상에선 쇼츠로 터질 만한 하이라이트 구간을 찾지 못했어요. 다른 영상을 골라주세요(밋밋한 구간을 억지로 자르지 않습니다).');
+  let hs: Highlight[] = [];
+  try {
+    const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 2048, temperature: 0.7, log});
+    const j = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    hs = (j.highlights || []).slice(0, n).map((h: any) => ({
+      start: Math.max(0, Math.floor(h.start || 0)),
+      end: Math.min(durationSec, Math.floor(h.end || (h.start + clipSec))),
+      hookTop: String(h.hookTop || '').slice(0, 24),
+      hookAccent: String(h.hookAccent || '').slice(0, 12),
+      reason: String(h.reason || '').slice(0, 24),
+    })).filter((h: Highlight) => h.end > h.start + 2);
+  } catch (e: any) {
+    log('[하이라이트] 자막 분석 실패 → 순서대로 나눕니다: ' + (e?.message || '').slice(0, 80));
   }
-  log(`[하이라이트] AI가 진짜 터질 구간 ${hs.length}개 선정${hs.length < n ? ` (요청 ${n}개보다 적음 — 품질 우선)` : ''}`);
-  hs.forEach((h, i) => log(`[하이라이트]   ${i + 1}. ${h.start}~${h.end}초 · ${h.reason || h.hookTop}`));
+
+  // 부족하면(또는 0개면) 순차 분할로 N개까지 채운다(겹치지 않는 구간만 추가).
+  if (hs.length < n) {
+    const need = n - hs.length;
+    if (hs.length) log(`[하이라이트] AI가 ${hs.length}개 골랐고, ${need}개는 순서대로 채웁니다.`);
+    const extra = splitEvenly(durationSec, n, clipSec).filter((e) =>
+      !hs.some((h) => Math.abs(h.start - e.start) < clipSec)); // 기존 구간과 안 겹치는 것만
+    hs = hs.concat(extra).slice(0, n);
+  }
+  hs.sort((a, b) => a.start - b.start);
+  log(`[하이라이트] 구간 ${hs.length}개 확정`);
+  hs.forEach((h, i) => log(`[하이라이트]   ${i + 1}. ${h.start}~${h.end}초${h.reason ? ' · ' + h.reason : ''}`));
   return hs;
 }
 
@@ -179,6 +204,9 @@ export async function extractHighlights(
   stop();
   const {videoPath, subText} = await download(videoId, dir, log);
   stop();
+  // 자막 상태 로그(왜 구간을 못 찾았는지 바로 보이게).
+  if (subText) log(`[하이라이트] 자막 확보: ${subText.length}자 — 내용 기반으로 터질 구간을 고릅니다.`);
+  else log('[하이라이트] ⚠️ 자막이 없습니다. 자막(대사)이 있는 영상이라야 하이라이트를 고를 수 있어요.');
   const dur = await durationOf(videoPath);
   if (!dur) throw new Error('영상 길이를 읽지 못했습니다.');
   const highlights = await pickHighlights(geminiKeys, subText, dur, count, clipSec, log);
