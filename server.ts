@@ -1256,13 +1256,14 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const channel = String(b.channel || '').slice(0, 120);
     const count = Math.max(1, Math.min(10, Number(b.count) || 3));
     const clipSec = Math.max(15, Math.min(60, Number(b.clipSec) || 30));
+    const orientation = b.orientation === 'landscape' ? 'landscape' : 'portrait';
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
     currentGenJob = id;
     (async () => {
       try {
-        const clips = await makeHighlights(videoId, {title, channel}, {count, clipSec, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
+        const clips = await makeHighlights(videoId, {title, channel}, {count, clipSec, orientation, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
         job.kind = 'highlight';
         job.clips = clips.map((c) => ({projectId: c.projectId, file: c.file, title: c.title}));
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }

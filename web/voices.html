@@ -106,9 +106,10 @@
       }
       .mypf-count { font-weight: 700; color: var(--teal); }
       /* 작업내역 분리 필터(전체/영상/카드) */
-      .pf-filter { display: inline-flex; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 5px; margin: 6px 0 16px; }
-      .pf-filter button { border: none; background: transparent; color: var(--muted); font-weight: 800; font-size: 13px; padding: 8px 18px; border-radius: 999px; cursor: pointer; transition: all .15s ease; }
+      .pf-filter { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 5px; margin: 6px 0 16px; max-width: 100%; }
+      .pf-filter button { flex: 1; border: none; background: transparent; color: var(--muted); font-weight: 800; font-size: 13px; padding: 8px 10px; border-radius: 999px; cursor: pointer; transition: all .15s ease; white-space: nowrap; }
       .pf-filter button.on { background: linear-gradient(135deg, var(--teal), var(--purple)); color: #fff; box-shadow: 0 3px 12px rgba(107,76,240,.3); }
+      @media (max-width: 480px) { .pf-filter button { font-size: 12px; padding: 8px 6px; } }
       /* 카드 게시물(캐러셀) 미리보기 */
       .pf-stage-cards { width: 42%; max-width: 300px; flex-shrink: 0; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; border-radius: 12px; -webkit-overflow-scrolling: touch; }
       .pf-stage-cards img { width: 100%; aspect-ratio: 4/5; object-fit: cover; border-radius: 10px; flex: 0 0 100%; scroll-snap-align: center; background: #000; }

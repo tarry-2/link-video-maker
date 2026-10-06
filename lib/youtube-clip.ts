@@ -49,7 +49,7 @@ async function download(videoId: string, dir: string, log: (m: string) => void):
   for (const client of CLIENTS) {
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
-      await run(YTDLP, [...common, ...ca, '-f', 'bv*[height<=720]+ba/b[height<=720]/bv*+ba/b',
+      await run(YTDLP, [...common, ...ca, '-f', 'bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b',
         '--merge-output-format', 'mp4', '-o', base + '.%(ext)s', url], log, 420000);
       ok = true; log(`[하이라이트] 다운로드 성공(${client})`); break;
     } catch (e: any) {
@@ -180,30 +180,37 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
   return hs;
 }
 
-// 한 구간을 9:16 세로로 크롭해 잘라낸다(중앙 크롭). 반환 파일 경로.
-async function cutVertical(videoPath: string, h: Highlight, outPath: string, log: (m: string) => void): Promise<void> {
-  // scale→crop로 9:16(1080x1920) 중앙. -ss/-to로 구간. 오디오 포함.
-  // ★가로 영상을 세로로 강제 크롭하면 양옆(자막 포함)이 잘린다 → 블러 배경 + 레터박스.
-  //   원본을 안 자르고 세로 화면(1080x1920) 중앙에 통째로 넣고, 위아래 빈 곳은 같은 영상을 크게 블러처리해 채운다.
-  //   세로 원본이면 자동으로 꽉 차고(배경 거의 안 보임), 가로 원본이면 위아래 블러띠가 생겨 자막이 안 잘린다.
-  const vf = [
-    '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=28:2,eq=brightness=-0.12[bg]',
-    '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg]',
-    '[bg][fg]overlay=(W-w)/2:(H-h)/2',
-  ].join(';');
+// 한 구간을 잘라낸다. orientation='portrait'=세로9:16(블러레터박스) / 'landscape'=가로16:9(원본 그대로).
+async function cutClip(videoPath: string, h: Highlight, outPath: string, orientation: 'portrait' | 'landscape', log: (m: string) => void): Promise<void> {
+  let args: string[];
+  if (orientation === 'landscape') {
+    // 가로: 원본 비율 그대로 16:9(1920x1080)에 맞춤. 자막 안 잘리고 화질 손실 거의 없음(쇼츠 아닌 일반 영상용).
+    const vf = 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black';
+    args = ['-vf', vf];
+  } else {
+    // 세로: 가로 영상을 강제 크롭하면 양옆(자막) 잘림 → 원본 안 자르고 세로 중앙에 통째로 + 위아래 블러배경.
+    const vf = [
+      '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=28:2,eq=brightness=-0.12[bg]',
+      '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg]',
+      '[bg][fg]overlay=(W-w)/2:(H-h)/2',
+    ].join(';');
+    args = ['-filter_complex', vf];
+  }
+  // crf 20 = 선명(23보다 화질↑). preset medium = 화질/속도 균형.
   await run(FFMPEG, ['-y', '-ss', String(h.start), '-to', String(h.end), '-i', videoPath,
-    '-filter_complex', vf, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
-    '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', outPath], log, 240000);
+    ...args, '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+    '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], log, 300000);
 }
 
 // 전체: videoId → N개 세로 하이라이트 클립 생성. dir는 작업 폴더.
 export async function extractHighlights(
   videoId: string, dir: string, geminiKeys: string[],
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'} = {},
 ): Promise<ClipResult[]> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
   const stop = () => { if (cancelled()) throw new Error('사용자가 중단했습니다.'); };
+  const orientation = opts.orientation === 'landscape' ? 'landscape' : 'portrait';
   const count = Math.max(1, Math.min(10, opts.count || 3));
   const clipSec = Math.max(15, Math.min(60, opts.clipSec || 30));
   await fsp.mkdir(dir, {recursive: true});
@@ -223,9 +230,9 @@ export async function extractHighlights(
     stop();
     const h = highlights[i];
     const file = path.join(dir, `clip-${i}.mp4`);
-    log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${h.start}s~${h.end}s)…`);
+    log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${h.start}s~${h.end}s · ${orientation === 'landscape' ? '가로' : '세로'})…`);
     try {
-      await cutVertical(videoPath, h, file, log);
+      await cutClip(videoPath, h, file, orientation, log);
       results.push({file, start: h.start, end: h.end, hookTop: h.hookTop, hookAccent: h.hookAccent});
     } catch (e: any) { log(`[하이라이트] ${i + 1}번 컷 실패(건너뜀): ` + (e?.message || '').slice(0, 120)); }
   }

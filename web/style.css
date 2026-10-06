@@ -74,7 +74,8 @@ body {
 /* 완성본 그리드 */
 .hl-result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
 .hl-result-item { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--card2); }
-.hl-result-item video { width: 100%; border-radius: 10px; background: #000; aspect-ratio: 9/16; max-height: 380px; object-fit: cover; }
+.hl-result-item video { width: 100%; border-radius: 10px; background: #000; aspect-ratio: 9/16; max-height: 380px; object-fit: contain; }
+.hl-result-item.land video { aspect-ratio: 16/9; max-height: none; }
 /* 태블릿·PC: 검색 결과 여러 열 — 화면 넓으면 자동으로 2~3열(카드가 짜부라지지 않게 최소 280px 확보) */
 @media (min-width: 680px) { .hl-results { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); max-height: 620px; } }
 /* 모바일: 썸네일 조금 작게, 칩 가로 스크롤 방지(줄바꿈 유지) */
@@ -105,8 +106,6 @@ body {
 }
 .app-left { min-width: 0; }
 .app-right { min-width: 0; display: flex; flex-direction: column; gap: 22px; }
-/* ★하이라이트 뷰: 오른쪽 패널을 숨기므로 왼쪽이 전체 폭을 쓰게 1단으로(안 그러면 460px에 갇혀 카드가 짜부라짐) */
-.app-grid.highlight-mode { grid-template-columns: 1fr; }
 .app-right > section { margin-bottom: 0; }
 
 /* 미리보기 안내 패널 — 결과/진행/편집기 중 하나라도 뜨면 자동 숨김 */

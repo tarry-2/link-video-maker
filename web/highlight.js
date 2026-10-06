@@ -123,7 +123,7 @@
     box.innerHTML = `<h2 style="margin:0 0 4px">🎬 하이라이트 ${clips.length}편 완성!</h2>
       <p class="mini-state" style="margin-bottom:12px">각 편을 확인하고 유튜브·인스타로 바로 올릴 수 있어요. 작업 내역에도 저장됐어요.</p>
       <div class="hl-result-grid">${clips.map((c, i) => `
-        <div class="hl-result-item">
+        <div class="hl-result-item ${orient === 'landscape' ? 'land' : ''}">
           <video src="/portfolio-item/${c.projectId}.mp4#t=0.5" controls playsinline preload="metadata"></video>
           <b style="display:block;margin:6px 0">${esc(c.title || ('하이라이트 ' + (i+1)))}</b>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -227,14 +227,14 @@
 
   // ── 검색/선택/설정 ──
   let picked = null, region = 'kr', order = 'viewCount', cat = '';
-  let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0;
+  let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait';
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
   const STATE_KEY = 'onvideo-hl-state';
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, query, pageToken, loadedCount, picked,
+        region, order, cat, count, sec, orient, query, pageToken, loadedCount, picked,
         resultsHtml: $('hl-results')?.innerHTML || '',
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -245,7 +245,8 @@
   function restoreState() {
     let s; try { s = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch {}
     if (!s) return false;
-    region = s.region || 'kr'; order = s.order || 'viewCount'; cat = s.cat || '';
+    region = s.region || 'kr'; order = s.order || 'viewCount'; cat = s.cat || ''; orient = s.orient || 'portrait';
+    document.querySelectorAll('.hl-orient').forEach((b) => b.classList.toggle('active', b.dataset.o === orient));
     count = s.count || 3; sec = s.sec || 30; query = s.query || ''; pageToken = s.pageToken || ''; loadedCount = s.loadedCount || 0;
     picked = s.picked || null;
     // 버튼 활성 복원
@@ -379,6 +380,9 @@
   document.querySelectorAll('.hl-sec').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); sec = Number(b.dataset.s); renderCountSeg(); saveState();
   }));
+  document.querySelectorAll('.hl-orient').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-orient').forEach((x) => x.classList.remove('active')); b.classList.add('active'); orient = b.dataset.o; saveState();
+  }));
   // ── 유튜브 쿠키 등록(봇차단 뚫기) ──
   async function refreshCookieStatus() {
     try { const d = await (await fetch('/api/youtube-cookies')).json();
@@ -425,10 +429,11 @@
     addLog(`• 주제: ${cat || '직접 검색'}`);
     addLog(`• 원본 영상: ${picked.title}`);
     addLog(`• 원본 길이: ${fmtDur(picked.durationSec)} → 클립 ${sec}초짜리`);
+    addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}`);
     addLog(`• 만들 편수: ${count}편`);
     addLog('────────────────────────────');
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
-    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec};
+    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });

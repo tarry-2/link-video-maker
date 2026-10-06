@@ -22,16 +22,17 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
   const stopIfCancelled = () => { if (cancelled()) throw new Error('사용자가 중단했습니다.'); };
+  const orientation = opts.orientation === 'landscape' ? 'landscape' : 'portrait';
   const k = pipelineKeys();
-  // 1) 다운로드 + 하이라이트 구간 추출 + 9:16 크롭 (임시 폴더)
+  // 1) 다운로드 + 하이라이트 구간 추출 + 크롭(세로=블러레터박스 / 가로=원본) (임시 폴더)
   const workDir = path.join(os.tmpdir(), `onvideo-hl-${videoId}-${Date.now()}`);
-  log('[하이라이트] 재사용 영상에서 숏폼 소재를 뽑습니다…');
-  const clips = await extractHighlights(videoId, workDir, k.gemini, {count: opts.count, clipSec: opts.clipSec, log, isCancelled: cancelled});
+  log(`[하이라이트] 재사용 영상에서 숏폼 소재를 뽑습니다…(${orientation === 'landscape' ? '가로 16:9' : '세로 9:16'})`);
+  const clips = await extractHighlights(videoId, workDir, k.gemini, {count: opts.count, clipSec: opts.clipSec, log, isCancelled: cancelled, orientation});
   stopIfCancelled();
   log(`[하이라이트] ${clips.length}개 구간 확보 — 후킹 자막 얹어 완성합니다.`);
 
@@ -71,7 +72,7 @@ export async function makeHighlights(
     const publicDir = await buildRenderPublic(jobRel);
     try {
       log(`[하이라이트] ${i + 1}/${clips.length} 편 렌더…`);
-      await renderVideo([scene], 0, outAbs, log, undefined, undefined, publicDir, 'portrait');
+      await renderVideo([scene], 0, outAbs, log, undefined, undefined, publicDir, orientation);
     } finally {
       await fsp.rm(publicDir, {recursive: true, force: true});
       await fsp.rm(pubClipDir, {recursive: true, force: true}); // 렌더 끝났으니 public 클립 정리
@@ -83,7 +84,7 @@ export async function makeHighlights(
       addPortfolio({
         projectId, title, output,
         voice: '원본 음성(CC)', category: '🎬 유튜브 하이라이트', goal: 'info',
-        createdAt: new Date().toISOString(), orientation: 'portrait', kind: 'highlight',
+        createdAt: new Date().toISOString(), orientation, kind: 'highlight',
       });
     } catch (e: any) { log('[하이라이트] 포트폴리오 등록 건너뜀: ' + (e?.message || '')); }
     // 출처(attribution)를 프로젝트 폴더에 남겨 업로드 설명에 쓸 수 있게.
