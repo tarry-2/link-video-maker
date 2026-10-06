@@ -117,7 +117,12 @@ export async function publishVideo(
   const createBody = new URLSearchParams(createParams);
   const cr = await fetch(`${base}/${API}/${c.igUserId}/media`, {method: 'POST', body: createBody});
   const cd: any = await cr.json();
-  if (!cr.ok || !cd.id) throw new Error('컨테이너 생성 실패: ' + (cd?.error?.message || JSON.stringify(cd).slice(0, 200)));
+  if (!cr.ok || !cd.id) {
+    const e = cd?.error || {};
+    const detail = [e.message, e.error_user_title, e.error_user_msg, e.error_subcode && ('subcode ' + e.error_subcode)]
+      .filter(Boolean).join(' | ') || JSON.stringify(cd).slice(0, 300);
+    throw new Error('컨테이너 생성 실패: ' + detail);
+  }
   const creationId = cd.id;
 
   // 2) 영상 처리 대기(릴스는 인코딩 시간 필요). status_code=FINISHED까지 폴링(최대 5분).
