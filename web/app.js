@@ -546,7 +546,7 @@ window.showPostResult = function (title, images, zip, projectId) {
 
 // ── 진행 로그 SSE(재연결 가능) — 화면 내림/백그라운드로 끊겨도 복귀 시 자동 이어짐 ──
 //   제작은 서버에서 계속 돌고, /api/progress는 재접속 시 그동안의 로그를 처음부터 다시 준다.
-let curJobId = null, curES = null, reconnTries = 0, logJobId = null, logCount = 0;
+let curJobId = null, curES = null, reconnTries = 0, logJobId = null, logCount = 0, shownDoneId = null;
 // ── 카드 진행 UX(영상과 동일): 경과시간 ⏱ · 에너지바 · 완성 폭죽 ──
 let cardStartTs = 0, cardTimer = null, cardPct = 0, cardJobStart = null;
 function cardElapsedText() { if (!cardStartTs) return ''; const s = Math.floor((Date.now() - cardStartTs) / 1000); const m = Math.floor(s / 60); return '⏱ ' + (m ? m + '분 ' : '') + (s % 60) + '초'; }
@@ -605,6 +605,7 @@ function attachProgress(id, freshLog) {
     }
     if (m.done) {
       es.close(); curES = null; curJobId = null;
+      shownDoneId = id; // 이 결과는 이 기기에서 이미 표시함 → syncCurrentJob 중복표시 방지
       clearTimeout(cardTimer);
       try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
@@ -652,7 +653,13 @@ async function syncCurrentJob() {
     const r = await fetch('/api/jobs/current');
     if (!r.ok) return;
     const d = await r.json();
-    if (d.id) attachProgress(d.id, true); // 다른 기기(모바일/PC)가 시작한 작업을 그대로 이어 봄
+    if (d.id) { attachProgress(d.id, true); return; } // 다른 기기(모바일/PC)가 시작한 작업을 그대로 이어 봄
+    // ★다른 기기에서 방금 완성된 결과를 이 기기에도 표시(PC↔모바일 완성본 연동, 한 번만).
+    if (d.done && d.done.id && d.done.id !== shownDoneId) {
+      shownDoneId = d.done.id;
+      if (d.done.kind === 'post') { if (window.showPostResult) window.showPostResult(d.done.title, d.done.images, d.done.zip, d.done.projectId); }
+      else if (d.done.file) showResult(d.done.file, d.done.title, d.done.projectId);
+    }
   } catch {}
 }
 syncCurrentJob();

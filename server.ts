@@ -311,7 +311,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; file?: string; title?: string; error?: string; kind?: 'video' | 'post'; images?: string[]; zip?: string; projectId?: string};
+type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post'; images?: string[]; zip?: string; projectId?: string};
 // ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
 function jlog(job: Job, s: string) {
   const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
@@ -1022,11 +1022,11 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
             fs.copyFileSync(path.join(r.imageDir, f), path.join(folder, f));
         job.file = path.basename(r.out);
         job.title = r.title;
-        job.done = true;
+        job.done = true; job.doneAt = Date.now();
         jlog(job, `[완료] 바탕화면에도 저장됨: ${folder}`);
       } catch (e: any) {
         job.error = e.message;
-        job.done = true;
+        job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
     })();
@@ -1090,11 +1090,11 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         fs.copyFileSync(r.out, path.join(folder, `${safe}.mp4`));
         job.file = path.basename(r.out);
         job.title = r.title;
-        job.done = true;
+        job.done = true; job.doneAt = Date.now();
         jlog(job, `[완료] 바탕화면에도 저장됨: ${folder}`);
       } catch (e: any) {
         job.error = e.message;
-        job.done = true;
+        job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
     })();
@@ -1186,10 +1186,10 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         else job.file = path.basename(r.out);
         job.title = r.title;
         job.projectId = r.projectId; // 포트폴리오 등록 id(카드 작업내역·업로드에 사용)
-        job.done = true;
+        job.done = true; job.doneAt = Date.now();
       } catch (e: any) {
         job.error = e.message;
-        job.done = true;
+        job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
     })();
@@ -1199,7 +1199,14 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
   // ── 현재 진행 중 작업(모바일↔PC 공유) — 어느 기기든 이걸 받아 같은 SSE에 붙어 실시간으로 같이 본다 ──
   if (p === '/api/jobs/current' && req.method === 'GET') {
     const j = currentGenJob ? jobs.get(currentGenJob) : undefined;
-    return json(res, 200, {id: j && !j.done ? currentGenJob : null});
+    if (!j) return json(res, 200, {id: null});
+    if (!j.done) return json(res, 200, {id: currentGenJob});
+    // ★완료됐으면 최근(30분 내) 결과를 다른 기기도 바로 볼 수 있게 함께 넘긴다(PC↔모바일 완성본 연동).
+    const fresh = j.doneAt && Date.now() - j.doneAt < 30 * 60 * 1000;
+    return json(res, 200, {
+      id: null,
+      done: fresh && !j.error ? {id: j.id, file: j.file, title: j.title, projectId: j.projectId, kind: j.kind, images: j.images, zip: j.zip} : null,
+    });
   }
   // ── 진행 로그(SSE) ──
   if (p === '/api/progress') {
