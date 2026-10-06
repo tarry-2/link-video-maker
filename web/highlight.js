@@ -255,14 +255,15 @@
   }
   function maxClips(durationSec, clipSec) { return Math.max(1, Math.min(10, Math.floor((durationSec * 0.4) / Math.max(clipSec, 20)))); }
   function renderCountSeg() {
-    const seg = $('hl-count-seg'); if (!seg || !picked) return;
-    const max = maxClips(picked.durationSec, sec);
+    const seg = $('hl-count-seg'); if (!seg) return;
+    // 영상 선택 전엔 기본(1~10편) 다 보이고, 선택하면 그 영상 길이에 맞게 최대편수까지만.
+    const max = picked ? maxClips(picked.durationSec, sec) : 10;
     if (count > max) count = max;
     const opts = []; for (const n of [1,2,3,5,8,10]) if (n <= max) opts.push(n);
     if (!opts.includes(max)) opts.push(max);
     seg.innerHTML = opts.map((n) => `<button type="button" class="seg-btn hl-count ${n === count ? 'active' : ''}" data-n="${n}">${n}편</button>`).join('');
     seg.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => { seg.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); count = Number(b.dataset.n); }));
-    if ($('hl-maxnote')) $('hl-maxnote').textContent = `— 이 영상(${fmtDur(picked.durationSec)})에서 최대 ${max}편까지 추천`;
+    if ($('hl-maxnote')) $('hl-maxnote').textContent = picked ? `— 이 영상(${fmtDur(picked.durationSec)})에서 최대 ${max}편까지 추천` : '— 영상을 고르면 그 길이에 맞게 추천해요';
   }
   function cardHtml(v) {
     return `<button type="button" class="hl-card" data-id="${v.videoId}" data-title="${esc(v.title)}" data-channel="${esc(v.channel)}" data-dur="${v.durationSec}">
@@ -289,7 +290,7 @@
       const q = (forcedQuery != null ? forcedQuery : $('hl-query').value).trim();
       if (!q) { alert('주제를 고르거나 검색어를 입력하세요.'); return; }
       query = q; pageToken = ''; loadedCount = 0;
-      box.innerHTML = ''; $('hl-options').classList.add('hidden'); picked = null;
+      box.innerHTML = ''; picked = null; $('hl-picked').textContent = ''; renderCountSeg();
       st.textContent = `${region === 'global' ? '해외' : '한국'} 재사용 영상을 찾는 중…`;
     } else st.textContent = '더 불러오는 중…';
     $('hl-more')?.remove();
@@ -330,6 +331,7 @@
     document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); sec = Number(b.dataset.s); renderCountSeg();
   }));
   renderCats();
+  renderCountSeg(); // 편수 버튼을 처음부터 보이게(영상 고르기 전에도)
 
   // ── 생성 ──
   let lastBody = null;
@@ -359,10 +361,14 @@
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });
 
-  // 진행 중이던 작업 자동 복구(새로고침·다른 기기)
+  // 진행 중이던 하이라이트 작업만 자동 복구(이미 끝났거나 영상 만들기 작업이면 복구 안 함 → 화면 안 막힘).
   (async () => {
     let id = null; try { id = localStorage.getItem('onvideo-hljob'); } catch {}
-    if (id) { attachProgress(id); return; }
-    try { const d = await (await fetch('/api/jobs/current')).json(); if (d.id) attachProgress(d.id); } catch {}
+    if (!id) return;
+    try {
+      const d = await (await fetch('/api/jobs/current')).json();
+      if (d.id === id) attachProgress(id); // 지금도 진행 중인 그 작업일 때만
+      else { try { localStorage.removeItem('onvideo-hljob'); } catch {} } // 끝난 작업이면 흔적 지움
+    } catch {}
   })();
 })();
