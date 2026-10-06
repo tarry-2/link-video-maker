@@ -1045,7 +1045,7 @@ function saveFormState() {
       quality: $('quality')?.value,
       keywords: $('keywords')?.value || '',
       facts: $('facts')?.value || '',
-      music: $('studio-music')?.checked || false,
+
       productLock: $('product-lock')?.checked || false,
       product: ['name', 'price', 'benefit', 'url'].reduce((o, k) => { o[k] = $('product-' + k)?.value || ''; return o; }, {}),
       // 카드뉴스 입력(새로고침에도 유지, '초기화' 전까진 안 지움)
@@ -1078,7 +1078,7 @@ function restoreFormState() {
   if (s.quality && $('quality')) $('quality').value = s.quality;
   if (s.keywords != null) $('keywords').value = s.keywords;
   if (s.facts != null) $('facts').value = s.facts;
-  if ($('studio-music')) $('studio-music').checked = !!s.music;
+
   if ($('product-lock')) { $('product-lock').checked = !!s.productLock; $('product-fields').classList.toggle('hidden', !s.productLock); }
   if (s.product) ['name', 'price', 'benefit', 'url'].forEach((k) => { if ($('product-' + k)) $('product-' + k).value = s.product[k] || ''; });
   if (s.selectedPreset) {
@@ -1110,7 +1110,7 @@ function resetForm() {
   if ($('duration')) $('duration').value = '30';
   if ($('image-style')) { $('image-style').value = 'real'; renderStyleGallery(); }
   if ($('quality')) $('quality').value = 'high';
-  if ($('studio-music')) $('studio-music').checked = false;
+
   if ($('product-lock')) { $('product-lock').checked = false; $('product-fields').classList.add('hidden'); }
   ['name', 'price', 'benefit', 'url'].forEach((k) => { if ($('product-' + k)) $('product-' + k).value = ''; });
   selectedPreset = null; document.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
@@ -1137,7 +1137,7 @@ $('reset-form')?.addEventListener('click', () => {
 });
 ['url', 'topic-input', 'duration', 'quality', 'image-style', 'keywords', 'facts', 'product-name', 'product-price', 'product-benefit', 'product-url', 'card-topic']
   .forEach((id) => { const e = $(id); if (e) e.addEventListener('input', saveFormState); });
-['studio-music', 'product-lock', 'card-count', 'card-bg', 'card-motion', 'card-theme', 'card-narration', 'card-bgm'].forEach((id) => { const e = $(id); if (e) e.addEventListener('change', saveFormState); });
+['product-lock', 'card-count', 'card-bg', 'card-motion', 'card-theme', 'card-narration', 'card-bgm'].forEach((id) => { const e = $(id); if (e) e.addEventListener('change', saveFormState); });
 
 // 부트스트랩: 로그인 상태 확인 후, 인증된 경우에만 카테고리·목소리 로드(비로그인 시 401→throw 방지).
 (async () => {
