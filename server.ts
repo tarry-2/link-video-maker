@@ -832,10 +832,11 @@ const server = http.createServer(async (req, res) => {
     const region = u.searchParams.get('region') === 'global' ? 'US' : 'KR';
     const language = region === 'US' ? 'en' : 'ko';
     const order = u.searchParams.get('order') || 'viewCount'; // 조회수순 기본(잘나가는 것 위로)
+    const pageToken = u.searchParams.get('pageToken') || undefined; // 더보기(다음 페이지)
     try {
-      // 하이라이트 소재로 적합한 길이만(2분~60분). 쇼츠·장편 제외.
-      const vids = await searchCreativeCommons(q, {max: 18, minSec: 120, maxSec: 3600, region, language, order});
-      return json(res, 200, {videos: vids});
+      // 하이라이트 소재로 적합한 길이만(2분~60분). 쇼츠·장편 제외. 한 페이지 40개씩.
+      const r = await searchCreativeCommons(q, {max: 40, minSec: 120, maxSec: 3600, region, language, order, pageToken});
+      return json(res, 200, {videos: r.videos, nextPageToken: r.nextPageToken});
     } catch (e: any) {
       return json(res, 502, {error: e?.message || '검색 실패'});
     }

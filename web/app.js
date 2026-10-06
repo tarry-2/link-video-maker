@@ -891,33 +891,64 @@ function renderHlCountSeg() {
   const note = $('hl-maxnote');
   if (note) note.textContent = `— 이 영상(${fmtDur(hlPicked.durationSec)})에서 최대 ${max}편까지 추천`;
 }
-async function hlSearch(forcedQuery) {
-  const q = (forcedQuery != null ? forcedQuery : $('hl-query').value).trim();
-  const st = $('hl-search-state'), box = $('hl-results');
-  if (!q) { alert('주제를 고르거나 검색어를 입력하세요.'); return; }
-  st.textContent = `${hlRegion === 'global' ? '해외' : '한국'} 재사용 영상을 찾는 중…`; box.innerHTML = '';
-  $('hl-options').classList.add('hidden'); hlPicked = null;
-  try {
-    const d = await (await fetch(`/api/yt-search?q=${encodeURIComponent(q)}&region=${hlRegion}&order=${hlOrder}`)).json();
-    if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
-    const vids = d.videos || [];
-    $('hl-sort-row').classList.remove('hidden');
-    if (!vids.length) { st.textContent = '결과가 없어요. 다른 주제나 검색어로 시도해보세요.'; return; }
-    st.textContent = `${vids.length}개 찾음 — 하나 고르세요`;
-    box.innerHTML = vids.map((v) => `
-      <button type="button" class="hl-card" data-id="${v.videoId}" data-title="${(v.title || '').replace(/"/g, '&quot;')}" data-channel="${(v.channel || '').replace(/"/g, '&quot;')}" data-dur="${v.durationSec}">
-        <img src="${v.thumb}" alt="" loading="lazy" />
-        <div class="hl-meta"><b>${v.title || ''}</b><span>${v.channel || ''} · ${fmtDur(v.durationSec)} · 조회 ${Number(v.views).toLocaleString('ko-KR')}</span></div>
-      </button>`).join('');
-    box.querySelectorAll('.hl-card').forEach((b) => b.addEventListener('click', () => {
-      box.querySelectorAll('.hl-card').forEach((x) => x.classList.remove('active'));
+let hlQuery = '';          // 현재 검색어(더보기용)
+let hlPageToken = '';      // 다음 페이지 토큰
+let hlLoadedCount = 0;     // 지금까지 로드한 개수
+// 영상 카드 하나의 HTML
+function hlCardHtml(v) {
+  return `<button type="button" class="hl-card" data-id="${v.videoId}" data-title="${(v.title || '').replace(/"/g, '&quot;')}" data-channel="${(v.channel || '').replace(/"/g, '&quot;')}" data-dur="${v.durationSec}">
+    <img src="${v.thumb}" alt="" loading="lazy" />
+    <div class="hl-meta"><b>${v.title || ''}</b><span>${v.channel || ''} · ${fmtDur(v.durationSec)} · 조회 ${Number(v.views).toLocaleString('ko-KR')}</span></div>
+  </button>`;
+}
+// 카드 클릭(선택) 바인딩 — 추가된 카드에도 적용.
+function wireHlCards(scope) {
+  scope.querySelectorAll('.hl-card:not([data-wired])').forEach((b) => {
+    b.setAttribute('data-wired', '1');
+    b.addEventListener('click', () => {
+      $('hl-results').querySelectorAll('.hl-card').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
       hlPicked = {videoId: b.dataset.id, title: b.dataset.title, channel: b.dataset.channel, durationSec: Number(b.dataset.dur) || 300};
       $('hl-options').classList.remove('hidden');
       $('hl-picked').textContent = `선택: ${hlPicked.title}`;
       renderHlCountSeg();
       $('hl-options').scrollIntoView({behavior: 'smooth', block: 'nearest'});
-    }));
+    });
+  });
+}
+async function hlSearch(forcedQuery, append) {
+  const box = $('hl-results'), st = $('hl-search-state');
+  if (!append) {
+    const q = (forcedQuery != null ? forcedQuery : $('hl-query').value).trim();
+    if (!q) { alert('주제를 고르거나 검색어를 입력하세요.'); return; }
+    hlQuery = q; hlPageToken = ''; hlLoadedCount = 0;
+    box.innerHTML = ''; $('hl-options').classList.add('hidden'); hlPicked = null;
+    st.textContent = `${hlRegion === 'global' ? '해외' : '한국'} 재사용 영상을 찾는 중…`;
+  } else {
+    st.textContent = '더 불러오는 중…';
+  }
+  // 기존 더보기 버튼 제거(다시 그린다)
+  document.getElementById('hl-more')?.remove();
+  try {
+    const url = `/api/yt-search?q=${encodeURIComponent(hlQuery)}&region=${hlRegion}&order=${hlOrder}` + (hlPageToken ? `&pageToken=${hlPageToken}` : '');
+    const d = await (await fetch(url)).json();
+    if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
+    const vids = d.videos || [];
+    $('hl-sort-row').classList.remove('hidden');
+    hlPageToken = d.nextPageToken || '';
+    hlLoadedCount += vids.length;
+    if (!append && !vids.length) { st.textContent = '결과가 없어요. 다른 주제나 검색어로 시도해보세요.'; return; }
+    box.insertAdjacentHTML('beforeend', vids.map(hlCardHtml).join(''));
+    wireHlCards(box);
+    st.textContent = `${hlLoadedCount}개 표시 중${hlPageToken ? ' — 더 있어요' : ' (끝)'} · 하나 고르세요`;
+    // '더 보기' 버튼 — 다음 페이지 있으면 결과 목록 바로 아래에(스크롤 영역 바깥).
+    if (hlPageToken) {
+      const more = document.createElement('button');
+      more.id = 'hl-more'; more.type = 'button'; more.className = 'ghost-btn'; more.style.cssText = 'width:100%;margin-top:10px';
+      more.textContent = `▼ 더 보기 (지금 ${hlLoadedCount}개)`;
+      more.onclick = () => { more.disabled = true; more.textContent = '불러오는 중…'; hlSearch(null, true); };
+      box.parentNode.insertBefore(more, box.nextSibling);
+    }
   } catch { st.textContent = '검색에 실패했어요. 유튜브 연결(설정)이 되어 있는지 확인하세요.'; }
 }
 document.querySelectorAll('.hl-region').forEach((b) => b.addEventListener('click', () => {
