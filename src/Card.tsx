@@ -52,6 +52,8 @@ export const cardSchema = z.object({
   after: z.string().optional(),
   wrong: z.string().optional(),
   right: z.string().optional(),
+  // ★나레이션 카라오케 — 영상과 동일하게 읽는 단어가 커지며 강조색으로 바뀐다(나레이션 ON일 때만).
+  words: z.array(z.object({t: z.string(), s: z.number(), e: z.number()})).optional(),
   durationInFrames: z.number(),
   index: z.number(),
   total: z.number(),
@@ -258,6 +260,32 @@ export const Card: React.FC<CardData> = (c) => {
       <AbsoluteFill style={{padding: pad, paddingTop: pad * 1.7, paddingBottom: pad * 1.5, zIndex: 3, width: imgCol ? '58%' : '100%', transform: `translateY(${enterY}px) scale(${breathe})`, transformOrigin: 'center'}}>
         <Body {...c} width={width} height={height} theme={theme} motion={motion} palette={P} accent2={accent2} head={head} headWeight={headWeight} skin={skin} />
       </AbsoluteFill>
+
+      {/* ★나레이션 카라오케 캡션 — 영상과 동일(읽는 단어가 커지며 강조색). 7단어씩 윈도우로 advance. */}
+      {c.words && c.words.length ? (() => {
+        const CHUNK = 7;
+        let cur = c.words.findIndex((wd) => frame >= wd.s && frame < wd.e);
+        if (cur < 0) cur = frame < c.words[0].s ? 0 : c.words.length - 1;
+        const start = Math.floor(cur / CHUNK) * CHUNK;
+        const chunk = c.words.slice(start, start + CHUNK);
+        return (
+          <div style={{position: 'absolute', left: '6%', right: '6%', bottom: '13%', zIndex: 6,
+            display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: width * 0.012,
+            padding: `${width * 0.022}px ${width * 0.03}px`, borderRadius: width * 0.03,
+            background: 'rgba(8,8,10,0.6)'}}>
+            {chunk.map((wd, i) => {
+              const active = frame >= wd.s && frame < wd.e;
+              return (
+                <span key={start + i} style={{fontFamily: notoFont, fontWeight: 800, fontSize: width * 0.05,
+                  color: active ? c.accent : '#fff', textShadow: outline(active ? 5 : 4),
+                  transform: active ? 'scale(1.14)' : 'scale(1)', display: 'inline-block', lineHeight: 1.18}}>
+                  {wd.t}
+                </span>
+              );
+            })}
+          </div>
+        );
+      })() : null}
 
       {/* 하단 워터마크 */}
       <div style={{position: 'absolute', bottom: pad * 0.6, left: pad, right: pad, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: isHero ? '#ffffffcc' : P.sub, fontSize: Math.round(width * 0.028), fontWeight: 700, zIndex: 4}}>

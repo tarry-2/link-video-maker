@@ -6,8 +6,9 @@ import {mkdir, rm} from 'node:fs/promises';
 import {generateCardStoryboard, type CardPlan, type CardStoryboard} from './cards';
 import {getPreset} from './presets';
 import {generateImageFlux} from './image';
-import {ttsElevenJoined} from './tts';
+import {ttsElevenJoined, alignToWords} from './tts';
 import {VOICES, pickVoice, DEFAULT_VOICE} from './tts';
+import type {CharAlign} from './tts';
 import {generateBgm} from './music';
 import {renderCardVideo, renderCardStills, buildRenderPublic} from './render';
 import {buildZip} from './zip';
@@ -113,15 +114,17 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   // 나레이션(토글) — ON이면 통짜 TTS + 카드별 구간으로 길이 산정.
   let voiceSrc: string | undefined;
   let ranges: [number, number][] = [];
+  let alignData: CharAlign | null = null; // 카라오케 단어 타이밍 원본
   if (opts.narration && output === 'video') {
     if (!keys.elevenlabs) throw new Error('나레이션을 쓰려면 ElevenLabs 키가 필요합니다.');
     const voiceKey = pickVoice(opts.voice, preset?.voice, opts.imageStyle);
     const voiceId = VOICES[voiceKey]?.id || VOICES[DEFAULT_VOICE].id;
     log('[음성] 나레이션 생성 중…');
     const voiceRel = `${pubRel}/voice.mp3`;
-    const {sceneRanges} = await ttsElevenJoined(keys.elevenlabs, sb.cards.map(cardSpeech), abs(voiceRel), voiceId);
+    const {sceneRanges, align} = await ttsElevenJoined(keys.elevenlabs, sb.cards.map(cardSpeech), abs(voiceRel), voiceId);
     voiceSrc = voiceRel;
     ranges = sceneRanges;
+    alignData = align;
   }
 
   // 카드 데이터 조립 + 길이.
@@ -151,6 +154,8 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
       badge: c.badge, big: c.big, small: c.small, title: c.title, body: c.body,
       number: c.number, unit: c.unit, items: c.items,
       before: c.before, after: c.after, wrong: c.wrong, right: c.right,
+      // ★카라오케 단어 타이밍(카드 시작 기준 프레임). 나레이션 ON일 때만.
+      words: (opts.narration && alignData && ranges[i]) ? alignToWords(alignData, FPS, ranges[i][0], ranges[i]) : undefined,
       durationInFrames, index: i, total: sb.cards.length,
     };
   });
@@ -204,7 +209,8 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
 
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `card-${id}.mp4`);
-  const transitionFrames = 12;
+  // ★나레이션 ON이면 전환 0(컷) — 슬라이드 전환이 겹치면 카라오케·오디오 싱크가 밀린다(영상과 동일 정책).
+  const transitionFrames = voiceSrc ? 0 : 12;
   // 전용 public 폴더로 렌더 — 이 작업의 bg/음성/BGM이 담긴 번들을 새로 만들어 staticFile이 전부 찾게 한다.
   const renderPublic = await buildRenderPublic(pubRel);
   try {
