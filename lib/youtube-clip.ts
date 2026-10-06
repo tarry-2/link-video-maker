@@ -183,9 +183,16 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
 // 한 구간을 9:16 세로로 크롭해 잘라낸다(중앙 크롭). 반환 파일 경로.
 async function cutVertical(videoPath: string, h: Highlight, outPath: string, log: (m: string) => void): Promise<void> {
   // scale→crop로 9:16(1080x1920) 중앙. -ss/-to로 구간. 오디오 포함.
-  const vf = `scale=-2:1920:force_original_aspect_ratio=increase,crop=1080:1920`;
+  // ★가로 영상을 세로로 강제 크롭하면 양옆(자막 포함)이 잘린다 → 블러 배경 + 레터박스.
+  //   원본을 안 자르고 세로 화면(1080x1920) 중앙에 통째로 넣고, 위아래 빈 곳은 같은 영상을 크게 블러처리해 채운다.
+  //   세로 원본이면 자동으로 꽉 차고(배경 거의 안 보임), 가로 원본이면 위아래 블러띠가 생겨 자막이 안 잘린다.
+  const vf = [
+    '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=28:2,eq=brightness=-0.12[bg]',
+    '[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg]',
+    '[bg][fg]overlay=(W-w)/2:(H-h)/2',
+  ].join(';');
   await run(FFMPEG, ['-y', '-ss', String(h.start), '-to', String(h.end), '-i', videoPath,
-    '-vf', vf, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+    '-filter_complex', vf, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
     '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', outPath], log, 240000);
 }
 
