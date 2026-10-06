@@ -13,6 +13,7 @@ document.addEventListener('play', (e) => {
 
 let selectedPreset = null;
 let mode = 'auto'; // auto | topic | manual
+let logOwner = null; // 'studio'(영상·카드) | 'highlight' — 로그가 서로 섞이지 않게 소유자 구분
 let uploadedImages = []; // dataURL 배열
 
 // ── 탭 전환 ──
@@ -22,6 +23,14 @@ $('tab-manual').onclick = () => setMode('manual');
 $('tab-batch').onclick = () => setMode('batch');
 $('tab-card').onclick = () => setMode('card');
 function applyMode(m) {
+  // ★로그는 '하이라이트'와 '그 외 영상/카드'를 서로 다른 소유자로 본다.
+  //   모드가 그 경계를 넘고(예: 영상→하이라이트) 진행 중 작업이 없으면 로그를 비운다
+  //   → 영상 작업 로그가 하이라이트 탭에 섞여 보이던 버그 방지. (같은 소유자 안에선 초기화 전까지 유지)
+  const newOwner = m === 'highlight' ? 'highlight' : 'studio';
+  if (!curJobId && logOwner && logOwner !== newOwner && $('log')) {
+    $('log').textContent = ''; logJobId = null; logCount = 0;
+  }
+  logOwner = newOwner;
   mode = m;
   for (const t of ['auto', 'topic', 'manual', 'batch', 'card']) {
     $('tab-' + t)?.classList.toggle('active', m === t);
@@ -58,11 +67,20 @@ function applyMode(m) {
   document.querySelector('.app-grid')?.classList.toggle('highlight-mode', hl); // 왼쪽이 전체폭(카드 안 짜부라지게)
   if (hl) {
     $('preview-hint')?.classList.add('hidden'); // 하이라이트는 영상 미리보기 안내 불필요
+    // 진행 중 작업이 없으면, 이전 영상/카드 작업의 결과(변비약 영상 등)가 하이라이트에 섞여 보이지 않게 숨긴다.
+    if (!curJobId) { $('result-block')?.classList.add('hidden'); document.getElementById('hl-result-block')?.classList.add('hidden'); }
     $('progress-block')?.classList.remove('hidden'); // 로그 패널 처음부터 보이게(생성 전부터)
     // 처음 진입 시 안내 로그 한 줄(이미 로그가 있으면 건드리지 않음 = 초기화 전까지 유지)
     if ($('log') && !$('log').children.length) { setCardEnergy(0, '준비됨 — 나라·주제를 고르고 영상을 선택하세요'); hlLog('🎬 유튜브 하이라이트 준비됨. 나라와 주제를 골라 재사용 영상을 찾아보세요.'); }
+  } else {
+    // 영상/카드 뷰로 돌아오면 하이라이트 결과 블록 숨김(반대 방향 섞임 방지)
+    document.getElementById('hl-result-block')?.classList.add('hidden');
   }
-  $('video-history-section')?.classList.toggle('hidden', hl || m === 'card'); // 하이라이트 뷰에선 영상 내역도 숨김
+  // ★작업내역 완전 이원화: 영상(studio)·카드·하이라이트 각각 자기 모드에서만 보인다.
+  $('video-history-section')?.classList.toggle('hidden', hl || m === 'card'); // 하이라이트·카드 뷰에선 영상 내역 숨김
+  $('card-history-section')?.classList.toggle('hidden', m !== 'card');
+  $('hl-history-section')?.classList.toggle('hidden', !hl); // 하이라이트 내역은 하이라이트 뷰에서만
+  if (hl) loadHlHistory();
   $('nav-make')?.classList.toggle('active', !hl);
   $('nav-highlight')?.classList.toggle('active', hl);
   const hero = document.querySelector('.page-head .hero');
@@ -307,6 +325,46 @@ async function loadCardHistory() {
   }
 }
 $('card-history-refresh')?.addEventListener('click', () => loadCardHistory());
+
+// 🎬 하이라이트 작업 내역 — 영상·카드 내역과 완전 분리(이원화). 내가 만든 하이라이트(kind=highlight)만.
+//   한 영상에서 뽑은 여러 편이 각각 저장됨. 미리보기·유튜브·인스타·삭제를 여기서 시간차로 관리.
+async function loadHlHistory() {
+  const box = $('hl-history');
+  if (!box) return;
+  try {
+    const d = await (await fetch('/api/portfolio', {cache: 'no-store'})).json();
+    const items = (Array.isArray(d.items) ? d.items : [])
+      .filter((it) => it.kind === 'mine' && it.media === 'highlight');
+    box.innerHTML = items.length ? items.map((it) => {
+      const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
+      const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
+      const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
+      return `<div class="history-item hl-hist-item" data-id="${esc2(it.id)}" data-title="${esc2(it.title)}">
+        <span><strong>${esc2(it.title)}</strong><small>${esc2(when)} · 🎬 하이라이트${yt}${ig}</small></span>
+        <span class="hi-actions">
+          <a class="ghost-btn small" href="${esc2(it.video)}" download="${esc2(it.title)}.mp4">⬇</a>
+          <button type="button" class="ghost-btn small hlh-yt" data-id="${esc2(it.id)}">📺</button>
+          <button type="button" class="ghost-btn small hlh-ig" data-id="${esc2(it.id)}">📷</button>
+          <button type="button" class="ghost-btn small hlh-del" data-id="${esc2(it.id)}">🗑</button>
+        </span></div>`;
+    }).join('') : '<p class="mini-state">아직 만든 하이라이트가 없어요. 위에서 재사용 영상을 골라 만들어보세요.</p>';
+    // 버튼 바인딩(기존 projectId 기반 업로드·삭제 재사용)
+    box.querySelectorAll('.hlh-yt').forEach((b) => b.onclick = () => { cardVidUpId = b.dataset.id; cardYouTube(b); });
+    box.querySelectorAll('.hlh-ig').forEach((b) => b.onclick = () => cardInstagram(b, b.dataset.id, false));
+    box.querySelectorAll('.hlh-del').forEach((b) => b.onclick = () => deleteHlItem(b.dataset.id));
+  } catch {
+    box.innerHTML = '<p class="mini-state">하이라이트 작업 내역을 불러오지 못했어요.</p>';
+  }
+}
+$('hl-history-refresh')?.addEventListener('click', () => loadHlHistory());
+async function deleteHlItem(id) {
+  if (!confirm('이 하이라이트를 삭제할까요? (되돌릴 수 없어요)')) return;
+  try {
+    const r = await fetch('/api/portfolio/' + encodeURIComponent(id), {method: 'DELETE'});
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || '삭제 실패'); }
+    loadHlHistory();
+  } catch (e) { alert('삭제 실패: ' + e.message); }
+}
 // 카드 작업 내역 클릭 → 그 카드를 만든 설정으로 폼 '다시 세팅'(영상 작업내역처럼 다시 만들 수 있게).
 $('card-history')?.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-reset]');
@@ -670,7 +728,7 @@ function attachProgress(id, freshLog) {
         cardPct = 100; setCardEnergy(100, '완성! 🎉'); const f = $('card-energy'); if (f) f.classList.remove('anim');
         cardCelebrate();
       }
-      if (m.kind === 'highlight') { showHighlightResults(m.clips || []); }
+      if (m.kind === 'highlight') { showHighlightResults(m.clips || []); loadHlHistory(); }
       else if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
       else if (m.file) showResult(m.file, m.title, m.projectId);
       if (!m.error) {
