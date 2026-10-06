@@ -239,7 +239,7 @@
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
         region, order, cat, count, sec, orient, query, pageToken, loadedCount, picked,
-        resultsHtml: $('hl-results')?.innerHTML || '',
+        resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
         catActive: document.querySelector('.hl-cat.active')?.dataset.ko || '',
@@ -262,6 +262,9 @@
     // 검색 결과 복원(카드 다시 클릭되게 바인딩)
     if (s.resultsHtml) {
       $('hl-results').innerHTML = s.resultsHtml;
+      // 🔴저장된 HTML엔 이미 data-w="1"가 박혀 있어 wireCards의 :not([data-w])가 전부 걸러버린다 → 클릭 안됨.
+      //   복원 후엔 data-w를 싹 지우고 다시 바인딩해야 카드가 눌린다.
+      $('hl-results').querySelectorAll('.hl-card[data-w]').forEach((c) => c.removeAttribute('data-w'));
       wireCards($('hl-results'));
       $('hl-sort-row').classList.remove('hidden');
       if ($('hl-search-state')) $('hl-search-state').textContent = s.searchState;
