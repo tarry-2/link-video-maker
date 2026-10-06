@@ -612,6 +612,8 @@ function attachProgress(id, freshLog) {
       if (recv > logCount) { // 새 줄만 추가(로그 유실·중복 둘 다 방지)
         addLog(m.log, m.log.includes('[완료]') ? 'done' : m.log.includes('[실패]') ? 'fail' : '');
         cardEnergyFromLog(m.log);
+        // 움직이는영상 GPU가 켜지거나(생성 시작) 꺼질 때(팟 종료) 상단 배지를 바로 갱신해 과금상태를 눈에 보이게.
+        if (/움직이는 영상|GPU|팟/.test(m.log)) refreshRunpod();
         logCount = recv;
       }
     }
@@ -619,6 +621,7 @@ function attachProgress(id, freshLog) {
       es.close(); curES = null; curJobId = null;
       shownDoneId = id; // 이 결과는 이 기기에서 이미 표시함 → syncCurrentJob 중복표시 방지
       clearTimeout(cardTimer);
+      refreshRunpod(); // 작업 끝났으니 GPU가 꺼졌는지(자동종료) 배지로 바로 확인시켜준다.
       try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
       if (m.error) { setCardEnergy(cardPct, '실패'); showCardResume(); }
@@ -842,21 +845,44 @@ $('settings-btn').onclick = async () => {
 $('settings-close').onclick = () => $('settings-modal').classList.add('hidden');
 
 // ── RunPod(움직이는 영상 GPU) 현황: 잔액 + 실행 중 팟 + 지금 끄기 ──
+// 상단 배지(gpu-badge)는 항상, 설정 모달 안 정보(runpod-info/status)는 열렸을 때 함께 갱신한다.
+function setGpuBadge(state, label) {
+  const b = $('gpu-badge'); if (!b) return;
+  b.className = 'gpu-badge ' + state; // off=초록(과금없음) / on=빨강(과금중) / unknown=회색
+  b.textContent = '● ' + label;
+}
 async function refreshRunpod() {
   const info = $('runpod-info'), st = $('runpod-status');
-  if (!info) return;
-  info.textContent = '상태 확인 중…'; if (st) st.textContent = '';
+  if (info) { info.textContent = '상태 확인 중…'; if (st) st.textContent = ''; }
   try {
     const d = await (await fetch('/api/runpod/status')).json();
-    if (!d.configured) { info.textContent = 'RunPod 키 미설정 — 위에서 키를 저장하면 잔액·상태가 표시됩니다.'; return; }
+    if (!d.configured) {
+      setGpuBadge('unknown', 'GPU 미설정');
+      if (info) info.textContent = 'RunPod 키 미설정 — 위에서 키를 저장하면 잔액·상태가 표시됩니다.';
+      return;
+    }
     const bal = (typeof d.balance === 'number') ? ('잔액 $' + d.balance.toFixed(2)) : '잔액 조회 불가';
     const running = (d.pods || []).filter(p => p.status === 'RUNNING');
+    // ★상단 배지: 꺼짐이면 초록 "GPU 꺼짐", 켜졌으면 빨강 깜빡 "GPU 켜짐(과금중)"
+    if (running.length) setGpuBadge('on', `GPU 켜짐 ${running.length}대 · 과금중`);
+    else setGpuBadge('off', 'GPU 꺼짐 · 과금없음');
     if (st) st.innerHTML = running.length
       ? `<span style="color:#e0a030">● GPU ${running.length}대 켜짐(과금 중)</span>`
       : '<span style="color:var(--teal)">● 꺼짐</span>';
-    info.textContent = `${bal} · ${running.length ? ('켜진 GPU ' + running.length + '대 — 아래 「지금 GPU 끄기」로 중단') : 'GPU 꺼짐(과금 없음)'}`;
-  } catch { info.textContent = '상태를 불러오지 못했습니다.'; }
+    if (info) info.textContent = `${bal} · ${running.length ? ('켜진 GPU ' + running.length + '대 — 아래 「지금 GPU 끄기」로 중단') : 'GPU 꺼짐(과금 없음)'}`;
+  } catch {
+    setGpuBadge('unknown', 'GPU 확인실패');
+    if (info) info.textContent = '상태를 불러오지 못했습니다.';
+  }
 }
+// 상단 배지 클릭 = 설정 열어 GPU 섹션 보이기(끄기 버튼까지). 설정 버튼을 그대로 눌러 모달 열고 스크롤.
+$('gpu-badge')?.addEventListener('click', () => {
+  $('settings-btn')?.click();
+  setTimeout(() => $('runpod-section')?.scrollIntoView({behavior:'smooth', block:'center'}), 150);
+});
+// 페이지 로드시 1회 + 1분마다 자동 갱신(제작 중이면 pollGpuFast가 더 자주 갱신).
+refreshRunpod();
+setInterval(refreshRunpod, 60000);
 $('runpod-refresh')?.addEventListener('click', refreshRunpod);
 $('runpod-stop')?.addEventListener('click', async () => {
   const msg = $('runpod-msg');
