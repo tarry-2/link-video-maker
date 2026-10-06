@@ -107,15 +107,20 @@ function iso8601ToSec(d: string): number {
   if (!m) return 0;
   return (Number(m[1] || 0) * 3600) + (Number(m[2] || 0) * 60) + Number(m[3] || 0);
 }
-export async function searchCreativeCommons(query: string, opts: {max?: number; minSec?: number; maxSec?: number} = {}): Promise<CcVideo[]> {
+export async function searchCreativeCommons(query: string, opts: {max?: number; minSec?: number; maxSec?: number; region?: string; language?: string; order?: string} = {}): Promise<CcVideo[]> {
   if (!query.trim()) throw new Error('검색어를 입력하세요.');
   const token = await accessToken();
   const max = Math.min(25, Math.max(5, opts.max || 15));
+  // 정렬: viewCount(조회수순=잘나가는 것 위로)·date(최신)·relevance(관련도). 기본 조회수순.
+  const order = ['viewCount', 'date', 'relevance', 'rating'].includes(String(opts.order)) ? String(opts.order) : 'viewCount';
   // 1) search.list — CC 라이선스 + 영상만. (type=video 필수 when videoLicense set)
+  //    region/language로 그 나라 영상 위주로(한국=KR/ko, 해외=US/en).
   const sp = new URLSearchParams({
     part: 'snippet', type: 'video', videoLicense: 'creativeCommon',
-    q: query, maxResults: String(max), order: 'relevance', safeSearch: 'moderate',
+    q: query, maxResults: String(max), order, safeSearch: 'moderate',
   });
+  if (opts.region) sp.set('regionCode', opts.region);
+  if (opts.language) sp.set('relevanceLanguage', opts.language);
   const sr = await fetch('https://www.googleapis.com/youtube/v3/search?' + sp.toString(), {
     headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
   });
@@ -143,6 +148,9 @@ export async function searchCreativeCommons(query: string, opts: {max?: number; 
       publishedAt: sn.publishedAt || '', durationSec: dur, views: Number(it.statistics?.viewCount || 0),
     });
   }
+  // 정렬 재적용(videos.list는 id 순서라 search order가 흐트러짐). 조회수순/최신순 확실히.
+  if (order === 'date') out.sort((a, b) => (b.publishedAt > a.publishedAt ? 1 : -1));
+  else if (order !== 'relevance') out.sort((a, b) => b.views - a.views); // viewCount/rating → 조회수 많은 순
   return out;
 }
 

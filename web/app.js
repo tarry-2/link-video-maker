@@ -831,45 +831,116 @@ $('duration')?.addEventListener('change', syncFormat);
 $('duration')?.addEventListener('input', syncFormat);
 syncFormat();
 
-// ── 유튜브 하이라이트: 재사용(CC) 영상 검색 → 선택 → 하이라이트 숏폼 생성 ──
-let hlPicked = null; // 선택한 영상 {videoId, title, channel}
-let hlCount = 2, hlSec = 30;
+// ── 유튜브 하이라이트: 나라·주제 선택 → CC 영상 쫙 → 선택 → 편수·길이 → 하이라이트 숏폼 ──
+let hlPicked = null;       // 선택한 영상 {videoId, title, channel, durationSec}
+let hlRegion = 'kr';       // kr | global
+let hlOrder = 'viewCount'; // viewCount | date | relevance
+let hlCat = '';            // 현재 선택된 카테고리 라벨(검색어 표시용)
+let hlCount = 3, hlSec = 30;
 function fmtDur(s) { const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; }
-async function hlSearch() {
-  const q = $('hl-query').value.trim();
+
+// 나라별 카테고리 — {라벨, 한국검색어, 해외검색어}. 아주 다양하게(좁으면 툴이 쪼그라듦).
+const HL_CATS = [
+  {ko: '연예·스타', kq: '연예인 인터뷰', gq: 'celebrity interview'},
+  {ko: '예능·토크쇼', kq: '예능 토크쇼', gq: 'talk show funny'},
+  {ko: '드라마·영화', kq: '드라마 명장면', gq: 'movie scene'},
+  {ko: 'K-pop·음악', kq: '케이팝 무대', gq: 'music performance live'},
+  {ko: '스포츠', kq: '스포츠 하이라이트', gq: 'sports highlights'},
+  {ko: '경제·재테크', kq: '경제 뉴스 재테크', gq: 'economy finance explained'},
+  {ko: '시사·뉴스', kq: '뉴스 이슈', gq: 'news report'},
+  {ko: 'IT·테크', kq: 'IT 리뷰 테크', gq: 'tech review'},
+  {ko: '게임', kq: '게임 플레이', gq: 'gaming highlights'},
+  {ko: '먹방·음식', kq: '먹방 맛집', gq: 'food mukbang'},
+  {ko: '여행', kq: '여행 브이로그', gq: 'travel vlog'},
+  {ko: '교육·지식', kq: '지식 교양', gq: 'educational documentary'},
+  {ko: '역사', kq: '역사 이야기', gq: 'history documentary'},
+  {ko: '과학', kq: '과학 다큐', gq: 'science documentary'},
+  {ko: '동물·펫', kq: '동물 반려동물', gq: 'animals pets funny'},
+  {ko: '자동차', kq: '자동차 리뷰', gq: 'car review'},
+];
+function renderHlCats() {
+  const box = $('hl-cats'); if (!box) return;
+  box.innerHTML = HL_CATS.map((c) => `<button type="button" class="hl-cat" data-kq="${c.kq}" data-gq="${c.gq}" data-ko="${c.ko}">${c.ko}</button>`).join('');
+  box.querySelectorAll('.hl-cat').forEach((b) => b.addEventListener('click', () => {
+    box.querySelectorAll('.hl-cat').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    hlCat = b.dataset.ko;
+    const q = hlRegion === 'global' ? b.dataset.gq : b.dataset.kq;
+    $('hl-query').value = ''; // 칩 선택 시 직접검색칸 비움
+    hlSearch(q);
+  }));
+}
+// 영상 길이로 뽑을 수 있는 최대 편수 제안(한 편 길이 기준). 재미없는 구간까지 긁지 않게 보수적으로.
+function hlMaxClips(durationSec, clipSec) {
+  // 전체의 ~40%만 하이라이트감이라 보고, 한 편 간격은 clipSec*2로 띄움. 1~10편.
+  const usable = durationSec * 0.4;
+  return Math.max(1, Math.min(10, Math.floor(usable / Math.max(clipSec, 20))));
+}
+function renderHlCountSeg() {
+  const seg = $('hl-count-seg'); if (!seg || !hlPicked) return;
+  const max = hlMaxClips(hlPicked.durationSec, hlSec);
+  if (hlCount > max) hlCount = max;
+  const opts = [];
+  for (const n of [1, 2, 3, 5, 8, 10]) if (n <= max) opts.push(n);
+  if (!opts.includes(max)) opts.push(max);
+  seg.innerHTML = opts.map((n) => `<button type="button" class="seg-btn hl-count ${n === hlCount ? 'active' : ''}" data-n="${n}">${n}편</button>`).join('');
+  seg.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => {
+    seg.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); hlCount = Number(b.dataset.n);
+  }));
+  const note = $('hl-maxnote');
+  if (note) note.textContent = `— 이 영상(${fmtDur(hlPicked.durationSec)})에서 최대 ${max}편까지 추천`;
+}
+async function hlSearch(forcedQuery) {
+  const q = (forcedQuery != null ? forcedQuery : $('hl-query').value).trim();
   const st = $('hl-search-state'), box = $('hl-results');
-  if (!q) { alert('검색어를 입력하세요.'); return; }
-  st.textContent = '재사용 가능한 영상을 찾는 중…'; box.innerHTML = '';
+  if (!q) { alert('주제를 고르거나 검색어를 입력하세요.'); return; }
+  st.textContent = `${hlRegion === 'global' ? '해외' : '한국'} 재사용 영상을 찾는 중…`; box.innerHTML = '';
   $('hl-options').classList.add('hidden'); hlPicked = null;
   try {
-    const d = await (await fetch('/api/yt-search?q=' + encodeURIComponent(q))).json();
+    const d = await (await fetch(`/api/yt-search?q=${encodeURIComponent(q)}&region=${hlRegion}&order=${hlOrder}`)).json();
     if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
     const vids = d.videos || [];
-    if (!vids.length) { st.textContent = '결과가 없어요. 다른 검색어로 시도해보세요.'; return; }
+    $('hl-sort-row').classList.remove('hidden');
+    if (!vids.length) { st.textContent = '결과가 없어요. 다른 주제나 검색어로 시도해보세요.'; return; }
     st.textContent = `${vids.length}개 찾음 — 하나 고르세요`;
     box.innerHTML = vids.map((v) => `
-      <button type="button" class="hl-card" data-id="${v.videoId}" data-title="${(v.title || '').replace(/"/g, '&quot;')}" data-channel="${(v.channel || '').replace(/"/g, '&quot;')}">
+      <button type="button" class="hl-card" data-id="${v.videoId}" data-title="${(v.title || '').replace(/"/g, '&quot;')}" data-channel="${(v.channel || '').replace(/"/g, '&quot;')}" data-dur="${v.durationSec}">
         <img src="${v.thumb}" alt="" loading="lazy" />
         <div class="hl-meta"><b>${v.title || ''}</b><span>${v.channel || ''} · ${fmtDur(v.durationSec)} · 조회 ${Number(v.views).toLocaleString('ko-KR')}</span></div>
       </button>`).join('');
     box.querySelectorAll('.hl-card').forEach((b) => b.addEventListener('click', () => {
       box.querySelectorAll('.hl-card').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
-      hlPicked = {videoId: b.dataset.id, title: b.dataset.title, channel: b.dataset.channel};
+      hlPicked = {videoId: b.dataset.id, title: b.dataset.title, channel: b.dataset.channel, durationSec: Number(b.dataset.dur) || 300};
       $('hl-options').classList.remove('hidden');
       $('hl-picked').textContent = `선택: ${hlPicked.title}`;
+      renderHlCountSeg();
       $('hl-options').scrollIntoView({behavior: 'smooth', block: 'nearest'});
     }));
   } catch { st.textContent = '검색에 실패했어요. 유튜브 연결(설정)이 되어 있는지 확인하세요.'; }
 }
-$('hl-search')?.addEventListener('click', hlSearch);
-$('hl-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') hlSearch(); });
-document.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => {
-  document.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); hlCount = Number(b.dataset.n);
+document.querySelectorAll('.hl-region').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.hl-region').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+  hlRegion = b.dataset.region;
+  // 나라 바꾸면 선택된 카테고리로 다시 검색(있으면).
+  const activeCat = document.querySelector('.hl-cat.active');
+  if (activeCat) hlSearch(hlRegion === 'global' ? activeCat.dataset.gq : activeCat.dataset.kq);
 }));
+document.querySelectorAll('.hl-order').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.hl-order').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+  hlOrder = b.dataset.order;
+  // 정렬 바꾸면 현재 검색어로 재검색.
+  const activeCat = document.querySelector('.hl-cat.active');
+  const q = activeCat ? (hlRegion === 'global' ? activeCat.dataset.gq : activeCat.dataset.kq) : $('hl-query').value.trim();
+  if (q) hlSearch(q);
+}));
+$('hl-search')?.addEventListener('click', () => { document.querySelector('.hl-cat.active')?.classList.remove('active'); hlSearch(); });
+$('hl-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.querySelector('.hl-cat.active')?.classList.remove('active'); hlSearch(); } });
 document.querySelectorAll('.hl-sec').forEach((b) => b.addEventListener('click', () => {
   document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); hlSec = Number(b.dataset.s);
+  renderHlCountSeg(); // 길이 바뀌면 최대 편수 재계산
 }));
+renderHlCats();
 $('hl-generate')?.addEventListener('click', async () => {
   if (!hlPicked) { alert('먼저 영상을 고르세요.'); return; }
   const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';

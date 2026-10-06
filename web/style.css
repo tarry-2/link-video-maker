@@ -59,15 +59,30 @@ body {
 .gpu-badge.unknown { color: var(--muted); background: var(--card2); border-color: var(--line); }
 @keyframes gpuPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(226,61,61,0.6); } 50% { box-shadow: 0 0 0 6px rgba(226,61,61,0); } }
 /* 유튜브 하이라이트: 검색 결과 카드 + 완성본 그리드 */
-.hl-results { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 8px; max-height: 420px; overflow-y: auto; }
+/* 카테고리 칩 */
+.hl-cats { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.hl-cat { border: 1px solid var(--line); background: var(--card2); color: var(--text); border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.hl-cat.active { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 4px 12px rgba(18,169,152,0.3); }
+/* 검색 결과: 모바일=1열, 태블릿/PC=2열 */
+.hl-results { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; max-height: 480px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .hl-card { display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2); cursor: pointer; }
 .hl-card.active { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(18,169,152,0.3); }
-.hl-card img { width: 120px; height: 68px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: #000; }
+.hl-card img { width: 128px; height: 72px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: #000; }
 .hl-card .hl-meta { min-width: 0; }
 .hl-card .hl-meta b { display: block; font-size: 13.5px; line-height: 1.3; margin-bottom: 3px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .hl-card .hl-meta span { font-size: 11.5px; color: var(--muted); }
-.hl-result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+/* 완성본 그리드 */
+.hl-result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
 .hl-result-item { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--card2); }
+.hl-result-item video { width: 100%; border-radius: 10px; background: #000; aspect-ratio: 9/16; max-height: 380px; object-fit: cover; }
+/* 태블릿·PC: 검색 결과 2열로 더 많이 보이게 */
+@media (min-width: 680px) { .hl-results { grid-template-columns: 1fr 1fr; max-height: 560px; } }
+/* 모바일: 썸네일 조금 작게, 칩 가로 스크롤 방지(줄바꿈 유지) */
+@media (max-width: 480px) {
+  .hl-card img { width: 104px; height: 60px; }
+  .hl-cat { padding: 6px 11px; font-size: 12.5px; }
+  .hl-result-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+}
 @keyframes livePulse {
   0% { box-shadow: 0 0 0 0 rgba(255,77,141,0.6); opacity: 1; }
   70% { box-shadow: 0 0 0 7px rgba(255,77,141,0); opacity: 0.7; }

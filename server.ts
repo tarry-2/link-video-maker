@@ -828,9 +828,13 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/yt-search' && req.method === 'GET') {
     const q = u.searchParams.get('q') || '';
     if (!q.trim()) return json(res, 400, {error: '검색어를 입력하세요.'});
+    // 지역: 한국(KR/ko) / 해외(US/en). 기본 한국.
+    const region = u.searchParams.get('region') === 'global' ? 'US' : 'KR';
+    const language = region === 'US' ? 'en' : 'ko';
+    const order = u.searchParams.get('order') || 'viewCount'; // 조회수순 기본(잘나가는 것 위로)
     try {
       // 하이라이트 소재로 적합한 길이만(2분~60분). 쇼츠·장편 제외.
-      const vids = await searchCreativeCommons(q, {max: 18, minSec: 120, maxSec: 3600});
+      const vids = await searchCreativeCommons(q, {max: 18, minSec: 120, maxSec: 3600, region, language, order});
       return json(res, 200, {videos: vids});
     } catch (e: any) {
       return json(res, 502, {error: e?.message || '검색 실패'});
