@@ -546,7 +546,7 @@ window.showPostResult = function (title, images, zip, projectId) {
 
 // ── 진행 로그 SSE(재연결 가능) — 화면 내림/백그라운드로 끊겨도 복귀 시 자동 이어짐 ──
 //   제작은 서버에서 계속 돌고, /api/progress는 재접속 시 그동안의 로그를 처음부터 다시 준다.
-let curJobId = null, curES = null, reconnTries = 0;
+let curJobId = null, curES = null, reconnTries = 0, logJobId = null, logCount = 0;
 // ── 카드 진행 UX(영상과 동일): 경과시간 ⏱ · 에너지바 · 완성 폭죽 ──
 let cardStartTs = 0, cardTimer = null, cardPct = 0, cardJobStart = null;
 function cardElapsedText() { if (!cardStartTs) return ''; const s = Math.floor((Date.now() - cardStartTs) / 1000); const m = Math.floor(s / 60); return '⏱ ' + (m ? m + '분 ' : '') + (s % 60) + '초'; }
@@ -580,18 +580,29 @@ function attachProgress(id, freshLog) {
   curJobId = id;
   try { localStorage.setItem('onvideo-genjob', id); } catch {}
   if (curES) { try { curES.close(); } catch {} curES = null; }
-  if (freshLog && $('log')) $('log').textContent = ''; // 재연결 시 서버가 전체 재전송하므로 중복 방지
+  // ★로그는 '다른 작업'으로 바뀔 때만 비운다. 같은 작업 재연결에선 절대 지우지 않고(서버가 처음부터
+  //   전체를 재전송하므로) 아래 recv 카운터로 중복만 걸러 이어붙인다 → 끊김/재연결에도 로그가 안 사라진다.
+  //   (freshLog 인자는 더 이상 로그 삭제에 쓰지 않는다. 테리 지시: 로그는 수동 초기화 전엔 절대 사라지면 안 됨.)
+  if (id !== logJobId) { logJobId = id; logCount = 0; if ($('log')) $('log').textContent = ''; }
   // 새 작업이면 경과시간·진행률 리셋(재연결이면 유지).
   if (cardJobStart !== id) { cardJobStart = id; cardStartTs = Date.now(); cardPct = 0; setCardEnergy(6, '시작하는 중…'); }
   $('progress-block').classList.remove('hidden');
   $('generate').disabled = true;
   cardTick();
+  let recv = 0; // 이번 연결에서 받은 로그 줄 수 — logCount 이하(이미 표시됨)는 건너뛴다.
   const es = new EventSource('/api/progress?id=' + id);
   curES = es;
   es.onmessage = (ev) => {
     reconnTries = 0;
     const m = JSON.parse(ev.data);
-    if (m.log) { addLog(m.log, m.log.includes('[완료]') ? 'done' : m.log.includes('[실패]') ? 'fail' : ''); cardEnergyFromLog(m.log); }
+    if (m.log) {
+      recv++;
+      if (recv > logCount) { // 새 줄만 추가(로그 유실·중복 둘 다 방지)
+        addLog(m.log, m.log.includes('[완료]') ? 'done' : m.log.includes('[실패]') ? 'fail' : '');
+        cardEnergyFromLog(m.log);
+        logCount = recv;
+      }
+    }
     if (m.done) {
       es.close(); curES = null; curJobId = null;
       clearTimeout(cardTimer);
@@ -613,14 +624,18 @@ function attachProgress(id, freshLog) {
   };
   es.onerror = () => {
     es.close(); if (curES === es) curES = null;
-    if (curJobId === id && reconnTries < 6) {
+    if (curJobId === id && reconnTries < 12) {
       reconnTries++;
       setTimeout(() => { if (curJobId === id && !curES) attachProgress(id, true); }, 2500);
     } else if (curJobId === id) {
-      // 서버에 작업이 없음(재시작/중단 등) — 종료 + 카드면 '이어서 다시 만들기' 노출
+      // 재연결을 여러 번 실패 — 서버에 작업이 없음(배포로 인한 재시작 등)일 수 있다.
+      // ★조용히 멈추지 않는다: 로그는 그대로 두고(절대 안 지움) 상황을 명확히 알린다.
+      const wasCard = (typeof mode !== 'undefined' && mode === 'card');
       curJobId = null; try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
-      if (typeof mode !== 'undefined' && mode === 'card') { clearTimeout(cardTimer); showCardResume(); }
+      clearTimeout(cardTimer);
+      addLog('[연결 끊김] 진행 연결이 끊겼습니다(서버 업데이트·네트워크 등). 제작이 서버에서 완료됐을 수도 있으니 작업 내역을 확인하거나 다시 시작해 주세요. (로그는 유지됩니다)', 'fail');
+      if (wasCard) showCardResume();
     }
   };
 }

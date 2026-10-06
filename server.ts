@@ -1200,11 +1200,18 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       Connection: 'keep-alive',
     });
     let sent = 0;
+    let lastWrite = Date.now();
     const timer = setInterval(() => {
+      let wrote = false;
       while (sent < job.logs.length) {
         res.write(`data: ${JSON.stringify({log: job.logs[sent]})}\n\n`);
         sent++;
+        wrote = true;
       }
+      // ★heartbeat — 움직이는 AI 영상(RunPod 팟 부팅) 등으로 새 로그 없이 몇 분씩 조용할 때
+      //   연결이 idle로 끊기지 않게 15초마다 주석 핑을 보낸다(EventSource는 ':' 줄 무시).
+      if (wrote) lastWrite = Date.now();
+      else if (Date.now() - lastWrite > 15000) { res.write(': ping\n\n'); lastWrite = Date.now(); }
       if (job.done) {
         res.write(
           `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip, projectId: job.projectId})}\n\n`,
