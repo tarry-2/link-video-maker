@@ -179,13 +179,27 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
     log('[하이라이트] 자막 분석 실패 → 순서대로 나눕니다: ' + (e?.message || '').slice(0, 80));
   }
 
-  // 부족하면(또는 0개면) 순차 분할로 N개까지 채운다(겹치지 않는 구간만 추가).
+  // ★겹침 제거(핵심) — Gemini가 "겹치지 마라"를 어기고 겹친 구간을 줄 수 있다(0~60 + 30~90 등).
+  //   OpusClip처럼 '절대 안 겹치게' 하려면 실제 시간대가 겹치는 구간을 버려야 한다.
+  //   시작 순으로 정렬 후, 직전에 '채택한' 구간의 end 이후(겹침 여유 1초)에 시작하는 것만 남긴다.
+  const dropOverlaps = (list: Highlight[]): Highlight[] => {
+    const sorted = [...list].sort((a, b) => a.start - b.start);
+    const kept: Highlight[] = [];
+    for (const h of sorted) {
+      const last = kept[kept.length - 1];
+      if (!last || h.start >= last.end - 1) kept.push(h); // 직전 구간이 끝난 뒤 시작해야 채택
+    }
+    return kept;
+  };
+  hs = dropOverlaps(hs).slice(0, n);
+
+  // 부족하면(또는 0개면) 순차 분할로 N개까지 채운다 — 기존 채택 구간과 '시간대가 겹치지 않는' 것만.
   if (hs.length < n) {
     const need = n - hs.length;
-    if (hs.length) log(`[하이라이트] AI가 ${hs.length}개 골랐고, ${need}개는 순서대로 채웁니다.`);
-    const extra = splitEvenly(durationSec, n, clipSec).filter((e) =>
-      !hs.some((h) => Math.abs(h.start - e.start) < clipSec)); // 기존 구간과 안 겹치는 것만
-    hs = hs.concat(extra).slice(0, n);
+    if (hs.length) log(`[하이라이트] AI가 ${hs.length}개 골랐고, 최대 ${need}개를 겹치지 않게 더 채웁니다.`);
+    const extra = splitEvenly(durationSec, n * 2, clipSec).filter((e) =>
+      !hs.some((h) => e.start < h.end && e.end > h.start)); // 시간대가 실제로 겹치면 제외
+    hs = dropOverlaps(hs.concat(extra)).slice(0, n); // 합친 뒤에도 다시 겹침 제거(추가분끼리도)
   }
   hs.sort((a, b) => a.start - b.start);
   log(`[하이라이트] 구간 ${hs.length}개 확정`);
