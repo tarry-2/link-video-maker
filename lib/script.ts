@@ -145,36 +145,31 @@ ${catLine}
 ${source.slice(0, 12000)}`;
 
   // ★우선순위 Gemini(키 폴백+모델 폴백), 없거나 전부 실패하면 OpenAI 폴백.
-  let raw = '';
+  //   ★LLM이 고온도에서 가끔 깨진 JSON을 뱉으면 영상 제작 '전체'가 실패하던 문제 → 파싱 실패 시 조용히
+  //   재생성(최대 3회, 재시도는 저온도로 JSON 안정화). 코드펜스(```json)도 벗겨낸다.
   const gk = geminiKeys.filter(Boolean);
-  if (gk.length) {
-    try {
-      raw = await geminiGenerate(gk, prompt, {
-        json: true,
-        maxTokens: 4096,
-        temperature: 0.9,
-        log: opts.log,
-      });
-    } catch (e: any) {
-      opts.log?.(`[대본] Gemini 실패 → OpenAI 폴백: ${e.message}`);
+  if (!gk.length && !opts.openaiKey) throw new Error('Gemini/OpenAI 키가 모두 없습니다.');
+  let sb: Storyboard | null = null;
+  let lastErr = '대본 생성 실패';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let raw = '';
+    if (gk.length) {
+      try { raw = await geminiGenerate(gk, prompt, {json: true, maxTokens: 4096, temperature: attempt === 0 ? 0.9 : 0.6, log: opts.log}); }
+      catch (e: any) { lastErr = e?.message || '생성 실패'; opts.log?.(`[대본] Gemini 실패${opts.openaiKey ? ' → OpenAI 폴백' : ''}: ${lastErr}`); }
     }
+    if (!raw && opts.openaiKey) {
+      try { opts.log?.('[대본] OpenAI로 생성'); raw = await openaiJson(opts.openaiKey, prompt, 4096); }
+      catch (e: any) { lastErr = e?.message || '생성 실패'; }
+    }
+    if (!raw) continue;
+    try {
+      const s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+      const parsed = JSON.parse(s.startsWith('{') ? s : (s.match(/\{[\s\S]*\}/)?.[0] || s));
+      if (parsed?.scenes?.length) { sb = parsed; break; }
+      lastErr = '대본에 장면이 없음';
+    } catch (e: any) { lastErr = e?.message || '대본 JSON 파싱 실패'; opts.log?.(`[대본] JSON 파싱 실패 → 재생성(${attempt + 1}/3)`); }
   }
-  if (!raw) {
-    if (!opts.openaiKey) throw new Error('Gemini/OpenAI 키가 모두 없습니다.');
-    opts.log?.('[대본] OpenAI로 생성');
-    raw = await openaiJson(opts.openaiKey, prompt, 4096);
-  }
-
-  let sb: Storyboard;
-  try {
-    sb = JSON.parse(raw);
-  } catch {
-    // JSON 앞뒤에 잡텍스트가 붙은 경우 대비: 첫 { ~ 마지막 } 만 추출
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error('대본 JSON 파싱 실패');
-    sb = JSON.parse(m[0]);
-  }
-  if (!sb.scenes?.length) throw new Error('대본에 장면이 없습니다.');
+  if (!sb) throw new Error('대본 생성 실패(재시도 후): ' + lastErr);
   // 자막·후킹·나레이션 이모지 제거(폰트에 없어 깨짐). title은 유튜브용이라 유지.
   for (const s of sb.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = stripEmoji(s.narration || ''); }
   // ★모든 장면 나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)

@@ -869,23 +869,35 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 이 카테고리에 딱인�
 - 정치·종교·자극·혐오 제외.
 
 JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}]}`;
-    try {
-      let raw = '';
-      if (k.gemini.length) {
-        try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 1024, temperature: 1.1}); } catch {}
-      }
-      if (!raw && k.openai) raw = await openaiJson(k.openai, prompt, 1024);
-      const m = raw.match(/\{[\s\S]*\}/);
-      const data = m ? JSON.parse(m[0]) : {topics: []};
-      // ★마크다운 별표(**강조**·*·리스트마커) 제거 — LLM이 넣은 별표가 화면에 그대로 노출되던 문제.
-      const clean = (s: any) => String(s || '').replace(/\*+/g, '').replace(/^\s*[-#>]+\s*/, '').replace(/`/g, '').trim();
-      const topics = (Array.isArray(data.topics) ? data.topics : []).slice(0, 8)
+    // ★마크다운 별표(**강조**·*·리스트마커) 제거 — LLM이 넣은 별표가 화면에 그대로 노출되던 문제.
+    const clean = (s: any) => String(s || '').replace(/\*+/g, '').replace(/^\s*[-#>]+\s*/, '').replace(/`/g, '').trim();
+    // ★LLM(Gemini)이 고온도에서 가끔 깨진 JSON(문자열 내 따옴표 미escape 등)을 뱉어 "Expected ',' or '}'"로
+    //   터지던 간헐 오류 → 파싱 실패해도 조용히 재생성(최대 3회, 재시도는 저온도로 JSON 안정화). 코드펜스도 제거.
+    const extractTopics = (raw: string): {title: string; why: string}[] | null => {
+      let s = String(raw || '').trim();
+      s = s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+      const m = s.match(/\{[\s\S]*\}/);
+      if (!m) return null;
+      const data = JSON.parse(m[0]); // 실패하면 바깥 catch가 잡아 다음 시도로
+      return (Array.isArray(data.topics) ? data.topics : []).slice(0, 8)
         .map((t: any) => ({title: clean(t.title), why: clean(t.why)}))
         .filter((t: any) => t.title);
-      return json(res, 200, {topics});
-    } catch (e: any) {
-      return json(res, 502, {error: '주제 추천 실패: ' + e.message});
+    };
+    let lastErr = '빈 응답';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        let raw = '';
+        if (k.gemini.length) {
+          try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 1024, temperature: attempt === 0 ? 1.1 : 0.7}); }
+          catch (e: any) { lastErr = e?.message || '생성 실패'; }
+        }
+        if (!raw && k.openai) raw = await openaiJson(k.openai, prompt, 1024);
+        const topics = extractTopics(raw);
+        if (topics && topics.length) return json(res, 200, {topics});
+        lastErr = raw ? 'JSON 파싱 실패' : lastErr;
+      } catch (e: any) { lastErr = e?.message || 'JSON 파싱 실패'; }
     }
+    return json(res, 502, {error: '주제 추천 실패(재시도 후): ' + lastErr});
   }
 
   // ── 카테고리 목록 ──

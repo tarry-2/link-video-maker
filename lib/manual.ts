@@ -117,34 +117,26 @@ JSON만 출력:
 {"title":"...","musicPrompt":"...","scenes":[{"imageIndex":0,"narration":"...","hookTop":"...","hookAccent":"...","accentColor":"#FFE24B"}]}`;
 
   log('[수동] Gemini 비전으로 이미지 분석 + 대본 생성…');
-  let raw = '';
-  if (keys.gemini.length) {
-    try {
-      raw = await geminiGenerate(keys.gemini, prompt, {
-        json: true,
-        maxTokens: 4096,
-        images: geminiImages,
-        log,
-      });
-    } catch (e: any) {
-      log(`[수동] Gemini 실패(${e.message}) → OpenAI 폴백(비전)`);
+  if (!keys.gemini.length && !keys.openai) throw new Error('Gemini/OpenAI 키가 없습니다.');
+  // ★LLM이 가끔 깨진 JSON을 뱉으면 수동 제작 전체가 실패하던 문제 → 파싱 실패 시 조용히 재생성(최대 3회).
+  let plan: {title: string; musicPrompt: string; scenes: ManualScene[]} | null = null;
+  let lastErr = '대본 생성 실패';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let raw = '';
+    if (keys.gemini.length) {
+      try { raw = await geminiGenerate(keys.gemini, prompt, {json: true, maxTokens: 4096, images: geminiImages, log}); }
+      catch (e: any) { lastErr = e?.message || '생성 실패'; log(`[수동] Gemini 실패(${lastErr})${keys.openai ? ' → OpenAI 폴백(비전없음)' : ''}`); }
     }
+    if (!raw && keys.openai) { try { raw = await openaiJson(keys.openai, prompt, 4096); } catch (e: any) { lastErr = e?.message || '생성 실패'; } }
+    if (!raw) continue;
+    try {
+      const s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+      const parsed = JSON.parse(s.startsWith('{') ? s : (s.match(/\{[\s\S]*\}/)?.[0] || s));
+      if (parsed?.scenes?.length) { plan = parsed; break; }
+      lastErr = '대본 장면이 없음';
+    } catch (e: any) { lastErr = e?.message || '대본 JSON 파싱 실패'; log(`[수동] JSON 파싱 실패 → 재생성(${attempt + 1}/3)`); }
   }
-  if (!raw) {
-    // OpenAI 폴백은 비전 없이 키워드/팩트만으로(이미지 순서대로 사용)
-    if (!keys.openai) throw new Error('Gemini/OpenAI 키가 없습니다.');
-    raw = await openaiJson(keys.openai, prompt, 4096);
-  }
-
-  let plan: {title: string; musicPrompt: string; scenes: ManualScene[]};
-  try {
-    plan = JSON.parse(raw);
-  } catch {
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) throw new Error('대본 JSON 파싱 실패');
-    plan = JSON.parse(m[0]);
-  }
-  if (!plan.scenes?.length) throw new Error('대본 장면이 없습니다.');
+  if (!plan) throw new Error('수동 대본 생성 실패(재시도 후): ' + lastErr);
   // ★나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
   for (const s of plan.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = normalizeEnding(stripEmoji(s.narration)); }
   const totalChars = plan.scenes.reduce((a, s) => a + (s.narration || '').length, 0);

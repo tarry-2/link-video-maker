@@ -114,15 +114,26 @@ export async function generateCardStoryboard(
   const n = Math.max(3, Math.min(12, count));
   const palette = preset?.accentColors?.length ? preset.accentColors : ['#FFD84D', '#4FE0D0', '#FF8ABf'];
   const prompt = buildPrompt(topic, n, preset, imageStyle);
-  let raw = '';
-  if (keys.gemini?.length) {
-    try { raw = await geminiGenerate(keys.gemini, prompt, {json: true, maxTokens: 2048, temperature: 0.95}); } catch { /* openai 폴백 */ }
+  // ★LLM(Gemini)이 고온도에서 가끔 깨진 JSON(문자열 내 따옴표 미escape 등)을 뱉으면 파싱이 터져
+  //   카드 제작 '전체'가 실패하던 문제 → 파싱 실패 시 조용히 재생성(최대 3회, 재시도는 저온도로 JSON 안정화).
+  //   코드펜스(```json)도 벗겨낸다.
+  let lastErr = 'AI 키를 확인하세요.';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let raw = '';
+    if (keys.gemini?.length) {
+      try { raw = await geminiGenerate(keys.gemini, prompt, {json: true, maxTokens: 2048, temperature: attempt === 0 ? 0.95 : 0.6}); }
+      catch (e: any) { lastErr = e?.message || '생성 실패'; }
+    }
+    if (!raw && keys.openai) { try { raw = await openaiJson(keys.openai, prompt, 2048); } catch (e: any) { lastErr = e?.message || '생성 실패'; } }
+    if (!raw) continue;
+    try {
+      const s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+      const m = s.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('JSON 형태 아님');
+      const sb = normalize(JSON.parse(m[0]), n, palette);
+      if (sb.cards.length) return sb;
+      lastErr = '카드가 비어있음';
+    } catch (e: any) { lastErr = e?.message || 'JSON 파싱 실패'; }
   }
-  if (!raw && keys.openai) raw = await openaiJson(keys.openai, prompt, 2048);
-  if (!raw) throw new Error('카드 대본 생성 실패: AI 키를 확인하세요.');
-  const m = raw.match(/\{[\s\S]*\}/);
-  const j = m ? JSON.parse(m[0]) : {};
-  const sb = normalize(j, n, palette);
-  if (!sb.cards.length) throw new Error('카드 대본이 비었습니다. 다시 시도하세요.');
-  return sb;
+  throw new Error('카드 대본 생성 실패(재시도 후): ' + lastErr);
 }
