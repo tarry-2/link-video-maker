@@ -52,7 +52,13 @@ function cardSpeech(c: CardPlan): string {
   if (c.wrong) parts.push('흔한 실수, ' + c.wrong);
   if (c.right) parts.push('올바른 방법, ' + c.right);
   if (c.body) parts.push(c.body);
-  return parts.join('. ').replace(/\n/g, ' ').slice(0, 300) || '다음';
+  // ★해시태그(#태그)는 나레이션에서 읽지 않는다 — 제거하고 공백 정리(테리 지시).
+  return parts.join('. ')
+    .replace(/#[^\s#]+/g, ' ')
+    .replace(/\n/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 300) || '다음';
 }
 
 // 카드 → 읽을 글자 수(나레이션 OFF일 때 표시 시간 산정용).
