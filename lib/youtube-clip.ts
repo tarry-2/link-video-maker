@@ -36,7 +36,8 @@ export async function ytdlpAvailable(): Promise<boolean> {
 async function download(videoId: string, dir: string, log: (m: string) => void): Promise<{videoPath: string; subText: string}> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const base = path.join(dir, 'src');
-  const common = ['--no-playlist', '--no-warnings', '--retries', '5', '--socket-timeout', '30', '--sleep-requests', '1'];
+  // -4=IPv4 강제(데이터센터 IPv6가 더 자주 차단됨), --sleep-requests=레이트리밋 완화.
+  const common = ['--no-playlist', '--no-warnings', '--retries', '5', '--socket-timeout', '30', '--sleep-requests', '1', '-4'];
   if (process.env.YT_COOKIES_FILE && fs.existsSync(process.env.YT_COOKIES_FILE)) common.push('--cookies', process.env.YT_COOKIES_FILE);
   if (process.env.YT_PROXY) common.push('--proxy', process.env.YT_PROXY);
   // ★403/봇차단 뚫기: 유튜브는 web 클라이언트에 PO토큰 핸드셰이크를 요구하지만 android/ios/tv 클라이언트는
@@ -56,7 +57,11 @@ async function download(videoId: string, dir: string, log: (m: string) => void):
       log(`[하이라이트] ${client} 실패 → 다음 방식 시도`);
     }
   }
-  if (!ok) throw new Error('모든 방식으로 영상 다운로드 실패(유튜브 차단). ' + lastErr);
+  if (!ok) {
+    const botBlocked = /not a bot|Sign in to confirm/i.test(lastErr);
+    if (botBlocked) throw new Error('유튜브가 이 서버를 "봇"으로 보고 다운로드를 막았어요(클라우드 IP 특성). 해결하려면 유튜브 로그인 쿠키가 필요합니다 — 설정에 쿠키를 등록하면 뚫립니다. (쿠키 없이도 되는 영상/시간대가 있어 다른 영상으로 재시도해볼 수도 있어요.)');
+    throw new Error('영상 다운로드 실패. ' + lastErr);
+  }
   // 2) 자막(자동 생성 포함) — vtt. 영어 우선. 실패해도 영상은 받았으니 균등분할로 진행(여러 클라이언트 시도).
   log('[하이라이트] 자막 다운로드…');
   for (const client of CLIENTS) {

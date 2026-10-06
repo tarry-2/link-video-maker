@@ -62,7 +62,7 @@
 
   // ── 에너지바 + 경과시간 ──
   let energyPct = 0, startTs = 0, tickTimer = null;
-  function setEnergy(pct, label) { energyPct = Math.max(0, Math.min(100, pct)); const f = $('hl-energy'); if (f) f.style.width = energyPct + '%'; if ($('hl-energy-label')) $('hl-energy-label').textContent = label || ''; }
+  function setEnergy(pct, label) { energyPct = Math.max(0, Math.min(100, pct)); const f = $('hl-energy'); if (f) f.style.width = energyPct + '%'; if ($('hl-energy-label')) $('hl-energy-label').textContent = `${Math.round(energyPct)}% · ${label || ''}`; }
   function elapsedText() { if (!startTs) return ''; const s = Math.floor((Date.now() - startTs) / 1000); return `⏱ ${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
   function tick() { clearTimeout(tickTimer); const n = $('hl-elapsed'); if (!n) return; n.textContent = elapsedText(); tickTimer = setTimeout(tick, 1000); }
   function energyFromLog(line) {
@@ -398,6 +398,7 @@
   }
   $('hl-generate')?.addEventListener('click', () => {
     if (!picked) { alert('먼저 영상을 고르세요.'); return; }
+    if (curJobId) { alert('이미 제작이 진행 중이에요. 끝나거나 중단한 뒤에 다시 시작하세요.'); return; } // 중복 생성 방지
     addLog('──────── 하이라이트 제작 시작 ────────', 'done');
     addLog(`• 나라: ${region === 'global' ? '해외' : '한국'}`);
     addLog(`• 주제: ${cat || '직접 검색'}`);
