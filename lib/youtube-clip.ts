@@ -40,9 +40,9 @@ async function download(videoId: string, dir: string, log: (m: string) => void):
   const common = ['--no-playlist', '--no-warnings', '--retries', '5', '--socket-timeout', '30', '--sleep-requests', '1', '-4'];
   if (process.env.YT_COOKIES_FILE && fs.existsSync(process.env.YT_COOKIES_FILE)) common.push('--cookies', process.env.YT_COOKIES_FILE);
   if (process.env.YT_PROXY) common.push('--proxy', process.env.YT_PROXY);
-  // ★403/봇차단 뚫기: 유튜브는 web 클라이언트에 PO토큰 핸드셰이크를 요구하지만 android/ios/tv 클라이언트는
-  //   그게 없어 데이터센터 IP에서도 잘 뚫린다(2026 공식 권장). 여러 클라이언트를 순서대로 때려 하나라도 되면 성공.
-  const CLIENTS = ['android', 'ios', 'tv', 'web_safari', 'default'];
+  // ★다운로드 뚫기(2026-10 기준): 쿠키 인증 환경에선 tv_downgraded가 "page needs to be reloaded"를 내므로 제외.
+  //   web_embedded/default가 쿠키와 가장 잘 맞고, android/ios는 쿠키 없을 때 봇차단 우회용. 순서대로 시도.
+  const CLIENTS = ['web_embedded', 'default', 'android', 'ios', 'web_safari'];
   // 1) 영상 먼저 — 720p 이하. https(dash) 우선, 코덱 안 가리고 관대하게. 최종 ffmpeg mp4 머지.
   log('[하이라이트] 영상 다운로드…(용량에 따라 수 분)');
   let ok = false, lastErr = '';

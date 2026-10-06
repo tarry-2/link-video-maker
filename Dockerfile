@@ -6,10 +6,14 @@ RUN apt-get update && apt-get install -y \
   libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev libasound2 libxrandr2 \
   libxkbcommon-dev libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 \
   libpango-1.0-0 libcairo2 libcups2 ffmpeg fonts-noto-cjk \
-  python3 curl \
+  python3 curl unzip \
   && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
   && chmod a+rx /usr/local/bin/yt-dlp \
   && rm -rf /var/lib/apt/lists/*
+
+# ★유튜브 n-challenge(2026-09~) 해결용 JS 런타임 Deno — 없으면 모든 다운로드 실패.
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh \
+  && /usr/local/bin/deno --version
 
 WORKDIR /app
 
