@@ -54,6 +54,7 @@ function applyMode(m) {
   const hl = m === 'highlight';
   document.querySelector('.tabs')?.classList.toggle('hidden', hl);
   document.querySelector('.app-right')?.classList.toggle('hidden', hl);
+  document.querySelector('.app-grid')?.classList.toggle('highlight-mode', hl); // 왼쪽이 전체폭(카드 안 짜부라지게)
   $('video-history-section')?.classList.toggle('hidden', hl || m === 'card'); // 하이라이트 뷰에선 영상 내역도 숨김
   $('nav-make')?.classList.toggle('active', !hl);
   $('nav-highlight')?.classList.toggle('active', hl);
