@@ -10,7 +10,7 @@ import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {pipelineKeys} from './keys';
 import {extractHighlights} from './youtube-clip';
-import {renderVideo, buildRenderPublic} from './render';
+import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {addPortfolio, listPortfolio} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
 import {geminiGenerate} from './gemini';
@@ -138,16 +138,44 @@ export async function makeHighlights(
       durationInFrames: Math.max(clipFrames, narrFrames),
     };
 
+    // ★디자인 썸네일용 배경 = 후킹 글자 없는 '깨끗한' 원본 클립 프레임(c.file). 완성 mp4엔 후킹이 박혀
+    //   있어 그걸 배경으로 쓰면 글자가 겹친다 → 반드시 원본 클립에서 뽑는다.
+    const thumbName = 'thumb.png';
+    const thumbAbs = path.join(studioDir, thumbName);
+    const bgName = 'bg.png';
+    const bgAbs = path.join(pubClipDir, bgName);
+    let bgOk = false;
+    try { bgOk = await extractThumb(c.file, bgAbs, Math.min(1.5, Math.max(0.3, durSec / 2))); } catch {}
+
     const output = `highlight-${i + 1}-${randomUUID().slice(0, 8)}.mp4`;
     // ★R2 활성이면 렌더 출력을 볼륨이 아니라 /tmp에 쓴다(studio와 동일). 볼륨(/app/data)이 꽉 차면
     //   Remotion 마지막 faststart 리먹스가 ENOSPC(exit 228)로 죽기 때문. /tmp는 컨테이너 로컬(수GB).
     const outAbs = r2Enabled()
       ? path.join(os.tmpdir(), `onvideo-hl-out-${projectId}-${output}`)
       : path.join(studioDir, output);
-    const publicDir = await buildRenderPublic(jobRel);
+    let thumbOk = false;
+    const publicDir = await buildRenderPublic(jobRel); // bg.png 포함(위에서 pubClipDir에 뽑음)
     try {
       log(`[하이라이트] ${i + 1}/${clips.length} 편 렌더…`);
       await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
+      // 디자인 썸네일(일반영상과 동일 Thumbnail 컴포지션) — 깨끗한 프레임 배경 + 후킹 큰글자 + 강조 뱃지.
+      if (bgOk) {
+        try {
+          await renderThumbnail(
+            {image: `${jobRel}/${bgName}`,
+              big: (c.hookTop || meta.title).slice(0, 18),
+              small: '',
+              badge: (c.hookAccent || '').slice(0, 8),
+              accentColor: '#FFE24B'},
+            thumbAbs, log, publicDir, orientation,
+          );
+          thumbOk = fs.existsSync(thumbAbs);
+        } catch (e: any) { log('[썸네일] 디자인 커버 실패, 프레임으로 대체: ' + (e?.message || '')); }
+      }
+      // 디자인 실패 시 폴백 = 완성 mp4 프레임 추출(후킹 박힌 화면이라도 커버는 생김).
+      if (!thumbOk) {
+        try { thumbOk = await extractThumb(outAbs, thumbAbs, Math.min(1.2, Math.max(0.3, durSec / 2))); } catch {}
+      }
     } finally {
       await fsp.rm(publicDir, {recursive: true, force: true});
       await fsp.rm(pubClipDir, {recursive: true, force: true}); // 렌더 끝났으니 public 클립 정리
@@ -174,20 +202,14 @@ export async function makeHighlights(
       kind: 'highlight',
       attribution, // CC BY 출처 — 상세설명/캡션에 자동 포함
     };
-    // ★썸네일(커버) — 완성 mp4(후킹 자막 입힘)에서 프레임 1장 추출. 없으면 인스타/유튜브가 첫 프레임
-    //   (어두운 화면)을 커버로 집어가 미리보기가 빈다. 후킹이 자리잡는 ~1.2초 지점에서 뽑는다.
-    const thumbName = 'thumb.png';
-    const thumbAbs = path.join(studioDir, thumbName);
-    try {
-      const at = Math.min(1.2, Math.max(0.3, durSec / 2));
-      if (await extractThumb(outAbs, thumbAbs, at)) {
-        proj.thumb = thumbName;
-        if (r2Enabled()) {
-          try { const tk = videoKey(projectId, thumbName);
-            if (await uploadFile(tk, thumbAbs, 'image/png')) proj.thumbR2 = tk; } catch {}
-        }
-      } else { log('[썸네일] 추출 실패(커버 없이 진행)'); }
-    } catch (e: any) { log('[썸네일] 건너뜀: ' + (e?.message || '')); }
+    // ★썸네일(커버) — 위에서 만든 디자인 커버(thumbAbs)를 project.json에 연결 + R2 업로드.
+    if (thumbOk && fs.existsSync(thumbAbs)) {
+      proj.thumb = thumbName;
+      if (r2Enabled()) {
+        try { const tk = videoKey(projectId, thumbName);
+          if (await uploadFile(tk, thumbAbs, 'image/png')) proj.thumbR2 = tk; } catch {}
+      }
+    } else { log('[썸네일] 커버 생성 실패(커버 없이 진행)'); }
     // R2 활성이면 완성본(/tmp)을 R2로 올리고 삭제(볼륨 안 씀=228 회피). 실패하면 볼륨으로 폴백 복사해 로컬 서빙.
     if (r2Enabled()) {
       const volFile = path.join(studioDir, output);
