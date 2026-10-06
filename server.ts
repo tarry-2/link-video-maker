@@ -1420,5 +1420,5 @@ server.listen(PORT, () => {
   igRefresh();
   setInterval(igRefresh, 24 * 60 * 60 * 1000);
   // 구버전 하이라이트(project.json 없음) 복구 → 기존 것도 유튜브·인스타 업로드 가능.
-  try { backfillHighlightProjects((m) => console.log(m)); } catch {}
+  backfillHighlightProjects((m) => console.log(m)).catch(() => {});
 });

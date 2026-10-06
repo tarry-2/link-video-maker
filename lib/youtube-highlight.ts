@@ -6,18 +6,33 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {pipelineKeys} from './keys';
 import {extractHighlights} from './youtube-clip';
 import {renderVideo, buildRenderPublic} from './render';
 import {addPortfolio, listPortfolio} from './portfolio';
-import {r2Enabled, videoKey, uploadFile} from './storage';
+import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
 import {geminiGenerate} from './gemini';
 import {ttsElevenJoined, alignToWords, pickVoice, VOICES, type Word} from './tts';
 import type {SceneData} from '../src/Scene';
 
 const DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data');
 const FPS = 30;
+const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
+
+// 완성 영상(후킹 자막이 이미 입혀진 mp4)에서 프레임 1장을 뽑아 썸네일 PNG로 저장.
+//   커버가 없으면 인스타/유튜브가 영상 첫 프레임(어두운 화면)을 집어가 미리보기가 빈다.
+//   후킹이 자리잡은 지점(atSec)에서 뽑아 글자가 보이는 썸네일을 만든다.
+function extractThumb(videoPath: string, outPng: string, atSec: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const ps = spawn(FFMPEG, ['-y', '-ss', String(atSec), '-i', videoPath, '-frames:v', '1', '-q:v', '2', outPng],
+      {stdio: ['ignore', 'ignore', 'ignore']});
+    const t = setTimeout(() => { ps.kill('SIGKILL'); resolve(false); }, 60000);
+    ps.on('error', () => { clearTimeout(t); resolve(false); });
+    ps.on('close', (code) => { clearTimeout(t); resolve(code === 0 && fs.existsSync(outPng)); });
+  });
+}
 
 // 재사용 영상에 '내 관점의 해설'을 입혀 수익화(변형 가치) 기준을 충족시키기 위한 나레이션 대본 생성.
 //   원본 대사(transcript)를 근거로 맥락·논평을 더한다(단순 중계/낭독 금지).
@@ -159,6 +174,20 @@ export async function makeHighlights(
       kind: 'highlight',
       attribution, // CC BY 출처 — 상세설명/캡션에 자동 포함
     };
+    // ★썸네일(커버) — 완성 mp4(후킹 자막 입힘)에서 프레임 1장 추출. 없으면 인스타/유튜브가 첫 프레임
+    //   (어두운 화면)을 커버로 집어가 미리보기가 빈다. 후킹이 자리잡는 ~1.2초 지점에서 뽑는다.
+    const thumbName = 'thumb.png';
+    const thumbAbs = path.join(studioDir, thumbName);
+    try {
+      const at = Math.min(1.2, Math.max(0.3, durSec / 2));
+      if (await extractThumb(outAbs, thumbAbs, at)) {
+        proj.thumb = thumbName;
+        if (r2Enabled()) {
+          try { const tk = videoKey(projectId, thumbName);
+            if (await uploadFile(tk, thumbAbs, 'image/png')) proj.thumbR2 = tk; } catch {}
+        }
+      } else { log('[썸네일] 추출 실패(커버 없이 진행)'); }
+    } catch (e: any) { log('[썸네일] 건너뜀: ' + (e?.message || '')); }
     // R2 활성이면 완성본(/tmp)을 R2로 올리고 삭제(볼륨 안 씀=228 회피). 실패하면 볼륨으로 폴백 복사해 로컬 서빙.
     if (r2Enabled()) {
       const volFile = path.join(studioDir, output);
@@ -199,36 +228,73 @@ export async function makeHighlights(
   return results;
 }
 
-// ★기존(구버전) 하이라이트 복구 — v1.80.0 전에 만든 하이라이트는 project.json을 안 써서
-//   유튜브·인스타 업로드·상세설명이 "영상을 찾을 수 없습니다"로 실패한다. mp4는 볼륨에 그대로 남아있으니
-//   portfolio.json 정보로 project.json을 만들어주면 되살아난다(새로 만들 필요 없음). 부팅 시 1회 실행.
-export function backfillHighlightProjects(log: (m: string) => void = () => {}): number {
-  let fixed = 0;
+// ★기존(구버전) 하이라이트 복구 — v1.80.0 전에 만든 하이라이트는 project.json/썸네일이 없어서
+//   업로드·상세설명이 실패하고 커버(썸네일)도 빈다. mp4는 볼륨/ R2에 남아있으니 거기서 project.json과
+//   썸네일을 만들어주면 되살아난다(새로 만들 필요 없음). 부팅 시 1회 실행.
+export async function backfillHighlightProjects(log: (m: string) => void = () => {}): Promise<number> {
+  let fixed = 0, thumbed = 0;
   for (const it of listPortfolio()) {
     if (it.kind !== 'highlight' || !it.projectId || !it.output) continue;
     const dir = path.join(DATA_DIR, 'studio', it.projectId);
     const pjPath = path.join(dir, 'project.json');
-    if (fs.existsSync(pjPath)) continue; // 이미 있으면 건너뜀(신규 or 복구완료)
-    const mp4 = path.join(dir, it.output);
-    if (!fs.existsSync(mp4)) continue; // mp4가 사라졌으면 복구 불가(새로 만들어야 함)
-    const proj: any = {
-      id: it.projectId,
-      title: it.title,
-      status: 'completed',
-      output: it.output,
-      orientation: it.orientation || 'portrait',
-      // 상세설명 생성용 재료(없으니 제목으로 대체) + 길이는 기본값(메타 힌트용이라 정확할 필요 없음).
-      scenes: [{narration: it.title || '', voice: {frames: 0}}],
-      input: {duration: 30},
-      kind: 'highlight',
-    };
+    const volMp4 = path.join(dir, it.output);
+
+    // 1) project.json이 없으면 생성(볼륨에 mp4가 있어야 복구 가능).
+    let proj: any = null;
+    if (fs.existsSync(pjPath)) {
+      try { proj = JSON.parse(fs.readFileSync(pjPath, 'utf8')); } catch { proj = null; }
+    }
+    if (!proj) {
+      if (!fs.existsSync(volMp4)) continue; // mp4가 사라졌으면 복구 불가(새로 만들어야 함)
+      proj = {
+        id: it.projectId, title: it.title, status: 'completed', output: it.output,
+        orientation: it.orientation || 'portrait',
+        scenes: [{narration: it.title || '', voice: {frames: 0}}],
+        input: {duration: 30}, kind: 'highlight',
+      };
+      try {
+        fs.mkdirSync(dir, {recursive: true});
+        fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
+        fs.renameSync(pjPath + '.tmp', pjPath);
+        fixed++;
+      } catch (e: any) { log('[복구] ' + it.projectId + ' project.json 실패: ' + (e?.message || '')); continue; }
+    }
+
+    // 2) 썸네일(커버)이 없으면 영상에서 추출. 영상은 볼륨(volMp4) 또는 R2(proj.outputR2)에 있다.
+    if (proj.thumb || proj.thumbR2) continue; // 이미 있으면 통과
+    let srcMp4 = fs.existsSync(volMp4) ? volMp4 : '';
+    let tmpDl = '';
+    if (!srcMp4 && proj.outputR2) {
+      try {
+        const got = await getStream(proj.outputR2);
+        if (got) {
+          tmpDl = path.join(os.tmpdir(), `hl-bf-${it.projectId}.mp4`);
+          await new Promise<void>((resolve, reject) => {
+            const w = fs.createWriteStream(tmpDl);
+            got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject);
+          });
+          srcMp4 = tmpDl;
+        }
+      } catch (e: any) { log('[복구] ' + it.projectId + ' R2 다운로드 실패: ' + (e?.message || '')); }
+    }
+    if (!srcMp4) continue; // 영상 소스 없음 → 썸네일 생략
+    const thumbAbs = path.join(dir, 'thumb.png');
     try {
-      fs.mkdirSync(dir, {recursive: true});
-      fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
-      fs.renameSync(pjPath + '.tmp', pjPath);
-      fixed++;
-    } catch (e: any) { log('[복구] ' + it.projectId + ' 실패: ' + (e?.message || '')); }
+      const dur = Number(proj.input?.duration) || 30;
+      const at = Math.min(1.2, Math.max(0.3, dur / 2));
+      if (await extractThumb(srcMp4, thumbAbs, at)) {
+        proj.thumb = 'thumb.png';
+        if (r2Enabled()) {
+          try { const tk = videoKey(it.projectId, 'thumb.png');
+            if (await uploadFile(tk, thumbAbs, 'image/png')) proj.thumbR2 = tk; } catch {}
+        }
+        fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
+        fs.renameSync(pjPath + '.tmp', pjPath);
+        thumbed++;
+      }
+    } catch (e: any) { log('[복구] ' + it.projectId + ' 썸네일 실패: ' + (e?.message || '')); }
+    finally { if (tmpDl) { try { fs.rmSync(tmpDl, {force: true}); } catch {} } }
   }
-  if (fixed) log(`[복구] 기존 하이라이트 ${fixed}편에 project.json을 복구했습니다(이제 업로드 가능).`);
-  return fixed;
+  if (fixed || thumbed) log(`[복구] 기존 하이라이트: project.json ${fixed}편 + 썸네일 ${thumbed}편 복구 완료.`);
+  return fixed + thumbed;
 }
