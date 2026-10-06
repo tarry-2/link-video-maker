@@ -200,7 +200,8 @@
   }
   function updateEstimate() {
     const n = Number(el('duration').value);
-    const count = n <= 30 ? 4 : n <= 60 ? 6 : Math.min(10, Math.ceil(n / 12));
+    const sc = Number(el('scene-count')?.value) || 0;
+    const count = (sc >= 2) ? Math.min(12, sc) : (n <= 30 ? 4 : n <= 60 ? 6 : Math.min(10, Math.ceil(n / 12)));
     const r = rates();
     const chars = Math.round(n * 5.6); // 대본 예상 글자수
     const quantities = {draft:1, image:mode === 'manual' ? 0 : count, voice:chars / 1000, music:el('v-bgm')?.checked ? n / 60 : 0};
@@ -401,6 +402,7 @@
         duration:Number(el('duration').value), voice:el('voice').value, presetId:selectedPreset || '', quality:el('quality').value,
         imageStyle:el('image-style') ? el('image-style').value : 'real',
         characterId:el('character-select') ? el('character-select').value : '',
+        sceneCount:Number(el('scene-count')?.value) || 0,
         aiClips:Number(el('aiClips')?.value) || 0, autoShutdown:el('auto-shutdown') ? el('auto-shutdown').checked : true,
         music:el('v-bgm') ? el('v-bgm').checked : true, product, rates:rates()});
       try { localStorage.setItem('onvideo-open', p.id); } catch {}

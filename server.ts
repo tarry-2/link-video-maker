@@ -1042,6 +1042,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           quality: b.quality === 'fast' ? 'fast' : 'high',
           // ★전체 스타일 허용(실사·애니·고전 등 15종). 예전엔 real/anime로 뭉개 다른 스타일이 안 먹었음.
           imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
+          sceneCount: Number(b.sceneCount) || 0, // 0=길이로 자동, 2~12=직접 지정
           aiClips: Number(b.aiClips) || 0,
           autoShutdown: b.autoShutdown !== false, // 기본 자동 종료(과금 방지)
           narration: b.narration !== false, // 나레이션 토글(기본 ON)

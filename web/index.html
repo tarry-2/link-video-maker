@@ -40,7 +40,8 @@
     </header>
 
     <nav class="topnav">
-      <a href="/" class="navtab active">✏️ 영상 만들기</a>
+      <a href="/" class="navtab active" id="nav-make">✏️ 영상 만들기</a>
+      <a href="/?view=highlight" class="navtab" id="nav-highlight">🎬 유튜브 하이라이트</a>
       <a href="/voices?tab=voice" class="navtab">🎙 목소리 듣기</a>
       <a href="/voices?tab=pf" class="navtab">🎬 포트폴리오</a>
     </nav>
@@ -59,7 +60,6 @@
         <button id="tab-topic" class="tab" type="button">💡 주제로</button>
         <button id="tab-card" class="tab" type="button">🎴 카드뉴스</button>
         <button id="tab-manual" class="tab" type="button">🖼 내 사진</button>
-        <button id="tab-highlight" class="tab" type="button">🎬 유튜브 하이라이트</button>
         <button id="tab-batch" class="tab" type="button">📚 여러 편</button>
       </div>
 
@@ -227,6 +227,16 @@
               </optgroup>
             </select>
             <p id="format-note" class="mini-state">쇼츠 = 세로 9:16 · 롱폼 = 가로 16:9 (유튜브 기준 자동)</p>
+            <label class="field-label" style="margin-top:10px">장면(이미지) 수 <span class="hint">— 몇 개의 그림으로 나눌지</span></label>
+            <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+              <button type="button" class="seg-btn sc-n active" data-n="0">자동</button>
+              <button type="button" class="seg-btn sc-n" data-n="4">4장</button>
+              <button type="button" class="seg-btn sc-n" data-n="6">6장</button>
+              <button type="button" class="seg-btn sc-n" data-n="8">8장</button>
+              <button type="button" class="seg-btn sc-n" data-n="10">10장</button>
+            </div>
+            <input type="hidden" id="scene-count" value="0" />
+            <p class="mini-state">자동 = 길이에 맞춰 알아서. 많을수록 장면이 자주 바뀌고 이미지 비용이 조금 늘어요.</p>
           </div>
           <div class="col">
             <label class="field-label">목소리 <span class="hint">(비우면 카테고리 추천)</span> <a href="/voices?tab=voice" target="_blank" style="color:var(--teal);font-size:12px;text-decoration:none;float:right">🎙 들어보기 →</a></label>
@@ -290,11 +300,11 @@
           <input type="hidden" id="aiClips" value="0" />
           <!-- 움직이는 영상 고르면 몇 장면 만들지 -->
           <div id="motion-count-row" class="hidden" style="margin-top:10px">
-            <label class="field-label">움직이는 장면 수 <span class="hint">(많을수록 생생하지만 비용·시간 ↑)</span></label>
+            <label class="field-label">움직이는 장면 수 <span class="hint">(많을수록 생생해요. 비용 대부분은 GPU 준비 고정비라 장면 늘려도 조금만 올라요)</span></label>
             <div class="seg" style="margin-top:6px">
-              <button type="button" class="seg-btn active vclip-n" data-clips="1">첫 장면만<br><span class="hint">약 1,000원</span></button>
-              <button type="button" class="seg-btn vclip-n" data-clips="2">2장면<br><span class="hint">약 1,500원</span></button>
-              <button type="button" class="seg-btn vclip-n" data-clips="3">3장면<br><span class="hint">약 2,000원</span></button>
+              <button type="button" class="seg-btn active vclip-n" data-clips="1">첫 장면만<br><span class="hint">약 250원</span></button>
+              <button type="button" class="seg-btn vclip-n" data-clips="2">2장면<br><span class="hint">약 300원</span></button>
+              <button type="button" class="seg-btn vclip-n" data-clips="3">3장면<br><span class="hint">약 350원</span></button>
             </div>
             <label id="auto-shutdown-row" class="field-label" style="margin-top:10px;display:block"><input type="checkbox" id="auto-shutdown" checked /> 만들고 나면 자동으로 비용 끄기 <span class="hint">(권장 — 켜두면 추가 요금이 계속 나가요)</span></label>
           </div>

@@ -54,6 +54,7 @@ export type PipelineOpts = {
   presetId?: string; // ★카테고리 프리셋 id (있으면 톤·이미지·목소리·BGM 자동)
   quality?: 'fast' | 'high'; // 이미지 화질(fast=schnell 싸게 / high=dev 실사)
   imageStyle?: string; // 이미지 스타일 id(레지스트리 lib/styles.ts. real·anime·chalkboard 등)
+  sceneCount?: number; // ★장면(이미지) 수 직접 지정(0/미지정=길이로 자동). 2~12.
   aiClips?: number; // 움직이는 AI 영상(Wan2.2) 클립 개수(0=안씀, 기본 0). 앞에서부터 N개 장면에 적용.
   autoShutdown?: boolean; // 움직이는 영상 작업이 끝나면 RunPod 팟을 자동 종료(과금 중단). 기본 true.
   narration?: boolean; // 나레이션(AI 음성) 넣기. 기본 true. false면 음성·단어자막 없이 영상만.
@@ -88,6 +89,7 @@ export async function makeVideo(
     purpose: opts.purpose,
     preset,
     imageStyle: opts.imageStyle,
+    sceneCount: opts.sceneCount,
     openaiKey: keys.openai,
     log,
   });

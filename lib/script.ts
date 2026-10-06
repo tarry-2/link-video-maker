@@ -55,6 +55,7 @@ export async function generateStoryboard(
     purpose?: string;
     preset?: Preset; // ★카테고리 프리셋(있으면 톤·후킹·마무리를 이걸로)
     imageStyle?: string; // ★사용자가 고른 아트스타일 id(visualPrompt를 이 스타일에 맞게 생성)
+    sceneCount?: number; // ★사용자가 장면(이미지) 수를 직접 지정(0/미지정=길이로 자동). 2~12.
     openaiKey?: string;
     log?: (m: string) => void;
   },
@@ -64,8 +65,10 @@ export async function generateStoryboard(
   const landscape = duration >= 90;
   const format = landscape ? '롱폼' : '쇼츠';
   const orient = landscape ? '가로(16:9, wide)' : '세로(9:16)';
-  const n =
-    duration <= 30 ? 4 : duration <= 60 ? 6 : Math.min(10, Math.ceil(duration / 12));
+  // 장면 수: 사용자가 직접 지정했으면(2~12) 그걸 쓰고, 아니면 길이로 자동 결정.
+  const n = (opts.sceneCount && opts.sceneCount >= 2)
+    ? Math.min(12, Math.max(2, Math.floor(opts.sceneCount)))
+    : (duration <= 30 ? 4 : duration <= 60 ? 6 : Math.min(10, Math.ceil(duration / 12)));
   const perScene = Math.round((duration * 5.6) / n); // ★실측보정 5.6: dry-run으로 목표길이에 중심 맞춤(v4 통짜 rate 6.0자/초). "약 N자"만 지시(문장수 지시 금지=폭주). Gemini가 ±25% 널뛰어도 평균은 목표에 근접.
 
   const preset = opts.preset;

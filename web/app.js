@@ -21,13 +21,14 @@ $('tab-topic').onclick = () => setMode('topic');
 $('tab-manual').onclick = () => setMode('manual');
 $('tab-batch').onclick = () => setMode('batch');
 $('tab-card').onclick = () => setMode('card');
-$('tab-highlight').onclick = () => setMode('highlight');
 function applyMode(m) {
   mode = m;
-  for (const t of ['auto', 'topic', 'manual', 'batch', 'card', 'highlight']) {
-    $('tab-' + t).classList.toggle('active', m === t);
-    $('pane-' + t).classList.toggle('hidden', m !== t);
+  for (const t of ['auto', 'topic', 'manual', 'batch', 'card']) {
+    $('tab-' + t)?.classList.toggle('active', m === t);
+    $('pane-' + t)?.classList.toggle('hidden', m !== t);
   }
+  // 하이라이트 pane은 상단 네비(뷰)로만 켜짐 — 생성 소탭엔 없음.
+  $('pane-highlight')?.classList.toggle('hidden', m !== 'highlight');
   // 배치·하이라이트 모드에선 공용 제작 버튼 숨김(자체 생성 버튼 사용).
   const gen = $('generate'); if (gen) gen.classList.toggle('hidden', m === 'batch' || m === 'highlight');
   // 카드 모드일 땐 오른쪽 studio 편집기를 숨긴다(카드는 studio 시스템을 안 쓰므로 혼란 방지).
@@ -49,6 +50,17 @@ function applyMode(m) {
   $('advanced-row')?.classList.toggle('hidden', selfSettings);
   $('audio-row')?.classList.toggle('hidden', selfSettings);
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
+  // ★하이라이트는 상단 네비의 독립 '뷰' — 생성 소탭(.tabs)·오른쪽 패널·히어로를 숨겨 전용 화면처럼 보인다.
+  const hl = m === 'highlight';
+  document.querySelector('.tabs')?.classList.toggle('hidden', hl);
+  document.querySelector('.app-right')?.classList.toggle('hidden', hl);
+  $('video-history-section')?.classList.toggle('hidden', hl || m === 'card'); // 하이라이트 뷰에선 영상 내역도 숨김
+  $('nav-make')?.classList.toggle('active', !hl);
+  $('nav-highlight')?.classList.toggle('active', hl);
+  const hero = document.querySelector('.page-head .hero');
+  if (hero) hero.textContent = hl ? '유튜브 하이라이트' : '주제나 링크만 넣으면 영상이 완성돼요';
+  const sub = document.querySelector('.page-head .sub');
+  if (sub) sub.textContent = hl ? '저작권 걱정 없는 재사용 영상에서 터질 순간만 뽑아 숏폼으로. 상단 후킹·자동 업로드까지.' : '대본·이미지·음성·자막·배경음악까지 자동으로. 세부 설정은 안 건드려도 됩니다.';
 }
 function setMode(m) { applyMode(m); saveFormState(); }
 
@@ -204,6 +216,8 @@ async function loadCategories() {
   renderStyleGallery();
 
   restoreFormState(); // 카테고리·목소리가 채워진 뒤 저장된 입력 복원
+  // 상단 네비 '유튜브 하이라이트'로 들어오면(?view=highlight) 저장된 모드보다 우선해 하이라이트 뷰로.
+  try { if (new URLSearchParams(location.search).get('view') === 'highlight') setModeSilent('highlight'); } catch {}
   loadCharacters();
 }
 
@@ -880,6 +894,14 @@ function setAiClips(n) {
   $('motion-count-row')?.classList.toggle('hidden', n === 0);
   document.querySelectorAll('.vclip-n').forEach((b) => b.classList.toggle('active', Number(b.dataset.clips) === n));
 }
+// 장면(이미지) 수 직접 지정 — 세그먼트 버튼. 0=자동(길이로).
+function setSceneCount(n) {
+  n = Number(n) || 0;
+  const hid = $('scene-count'); if (hid) hid.value = String(n);
+  document.querySelectorAll('.sc-n').forEach((b) => b.classList.toggle('active', Number(b.dataset.n) === n));
+}
+document.querySelectorAll('.sc-n').forEach((b) => b.addEventListener('click', () => { setSceneCount(Number(b.dataset.n)); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); }));
+
 $('vtype-photo')?.addEventListener('click', () => { setAiClips(0); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); });
 $('vtype-motion')?.addEventListener('click', () => { setAiClips(lastMotionClips); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); });
 document.querySelectorAll('.vclip-n').forEach((b) => b.addEventListener('click', () => { setAiClips(Number(b.dataset.clips)); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); }));
@@ -1155,7 +1177,7 @@ function saveFormState() {
   try {
     const activeTopic = document.querySelector('.topic-item.active');
     const s = {
-      mode, selectedPreset,
+      mode: mode === 'highlight' ? 'auto' : mode, selectedPreset, // 하이라이트는 URL 뷰라 저장 모드엔 안 남김
       url: $('url')?.value || '',
       topicInput: $('topic-input')?.value || '',
       topics: window.__topics || [],
@@ -1165,6 +1187,7 @@ function saveFormState() {
       imageStyle: $('image-style')?.value,
       characterId: $('character-select')?.value || '',
       quality: $('quality')?.value,
+      sceneCount: $('scene-count')?.value || '0',
       aiClips: $('aiClips')?.value || '0',
       keywords: $('keywords')?.value || '',
       facts: $('facts')?.value || '',
@@ -1199,6 +1222,7 @@ function restoreFormState() {
   syncCharacterRow();
   if (s.characterId != null && $('character-select')) { $('character-select').value = s.characterId; updateCharacterThumb(); }
   if (s.quality && $('quality')) $('quality').value = s.quality;
+  if (s.sceneCount != null) setSceneCount(Number(s.sceneCount));
   if (s.aiClips != null) setAiClips(Number(s.aiClips));
   if (s.keywords != null) $('keywords').value = s.keywords;
   if (s.facts != null) $('facts').value = s.facts;
@@ -1234,6 +1258,7 @@ function resetForm() {
   if ($('duration')) $('duration').value = '30';
   if ($('image-style')) { $('image-style').value = 'real'; renderStyleGallery(); }
   if ($('quality')) $('quality').value = 'high';
+  setSceneCount(0);
   setAiClips(0);
 
   if ($('product-lock')) { $('product-lock').checked = false; $('product-fields').classList.add('hidden'); }
