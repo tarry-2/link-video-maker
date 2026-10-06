@@ -313,7 +313,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string}[]};
+type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string}[]; cancelled?: boolean};
 // ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
 function jlog(job: Job, s: string) {
   const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
@@ -1252,7 +1252,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     if (!/^[\w-]{11}$/.test(videoId)) return json(res, 400, {error: '영상을 선택하세요.'});
     const title = String(b.title || '').slice(0, 200);
     const channel = String(b.channel || '').slice(0, 120);
-    const count = Math.max(1, Math.min(5, Number(b.count) || 3));
+    const count = Math.max(1, Math.min(10, Number(b.count) || 3));
     const clipSec = Math.max(15, Math.min(60, Number(b.clipSec) || 30));
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
@@ -1260,10 +1260,9 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     currentGenJob = id;
     (async () => {
       try {
-        const clips = await makeHighlights(videoId, {title, channel}, {count, clipSec, log: (m) => jlog(job, m)});
+        const clips = await makeHighlights(videoId, {title, channel}, {count, clipSec, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
         job.kind = 'highlight';
         job.clips = clips.map((c) => ({projectId: c.projectId, file: c.file, title: c.title}));
-        // 대표(첫 편)를 기본 미리보기로.
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }
         job.done = true; job.doneAt = Date.now();
       } catch (e: any) {
@@ -1272,6 +1271,16 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       }
     })();
     return json(res, 202, {id});
+  }
+
+  // 하이라이트 작업 중단(잘못 골랐을 때) — cancelled 플래그만 세우면 makeHighlights가 다음 단계에서 멈춘다.
+  if (p === '/api/generate-highlights/cancel' && req.method === 'POST') {
+    const b = await readBody(req);
+    const job = jobs.get(String(b.id || ''));
+    if (!job) return json(res, 404, {error: '작업을 찾을 수 없습니다(이미 끝났을 수 있어요).'});
+    job.cancelled = true;
+    jlog(job, '[중단] 사용자가 중단을 눌렀습니다. 진행 중인 단계가 끝나는 대로 멈춥니다…');
+    return json(res, 200, {ok: true});
   }
 
   // ── 현재 진행 중 작업(모바일↔PC 공유) — 어느 기기든 이걸 받아 같은 SSE에 붙어 실시간으로 같이 본다 ──

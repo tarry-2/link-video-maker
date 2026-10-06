@@ -89,6 +89,8 @@
     if (id !== logJobId) { logJobId = id; logCount = 0; } // 로그는 안 비움(초기화 전까지 유지)
     if (!startTs) startTs = Date.now();
     $('progress-block').classList.remove('hidden');
+    $('hl-stop')?.classList.remove('hidden'); // 진행 중엔 중단 버튼 노출
+    $('hl-resume')?.classList.add('hidden');
     tick();
     let recv = 0;
     const es = new EventSource('/api/progress?id=' + id); curES = es;
@@ -101,9 +103,10 @@
         clearTimeout(tickTimer);
         try { localStorage.removeItem('onvideo-hljob'); } catch {}
         refreshGpu();
-        if (m.error) { setEnergy(energyPct, '실패'); showResume(); }
+        $('hl-stop')?.classList.add('hidden'); // 끝났으니 중단 버튼 숨김
+        if (m.error) { setEnergy(energyPct, m.error.includes('중단') ? '중단됨' : '실패'); showResume(); }
         else { setEnergy(100, '완성! 🎉'); const f = $('hl-energy'); if (f) f.classList.remove('anim'); celebrate(); }
-        if (m.kind === 'highlight') { showResults(m.clips || []); loadHistory(); }
+        if (m.kind === 'highlight' && !m.error) { showResults(m.clips || []); loadHistory(); }
       }
     };
     es.onerror = () => {
@@ -407,6 +410,20 @@
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });
+  // ⏹ 중단 버튼 — 잘못 골랐을 때. 누르면 "계속 진행 / 중단" 선택.
+  $('hl-stop')?.addEventListener('click', async () => {
+    if (!curJobId) return;
+    // confirm: 확인=중단, 취소=계속 진행
+    if (!confirm('지금 만들던 하이라이트를 중단할까요?\n\n[확인] = 중단(취소)\n[취소] = 계속 진행')) {
+      addLog('▶ 계속 진행합니다.'); return;
+    }
+    try {
+      await fetch('/api/generate-highlights/cancel', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: curJobId})});
+      addLog('⏹ 중단 요청됨 — 진행 중인 단계가 끝나는 대로 멈춥니다.');
+      $('hl-stop').disabled = true; $('hl-stop').textContent = '중단 중…';
+      setTimeout(() => { if ($('hl-stop')) { $('hl-stop').disabled = false; $('hl-stop').textContent = '⏹ 중단'; } }, 3000);
+    } catch (e) { alert('중단 요청 실패: ' + e.message); }
+  });
 
   // 진행 중이던 하이라이트 작업만 자동 복구(이미 끝났거나 영상 만들기 작업이면 복구 안 함 → 화면 안 막힘).
   (async () => {

@@ -22,20 +22,24 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
+  const cancelled = opts.isCancelled || (() => false);
+  const stopIfCancelled = () => { if (cancelled()) throw new Error('사용자가 중단했습니다.'); };
   const k = pipelineKeys();
   // 1) 다운로드 + 하이라이트 구간 추출 + 9:16 크롭 (임시 폴더)
   const workDir = path.join(os.tmpdir(), `onvideo-hl-${videoId}-${Date.now()}`);
   log('[하이라이트] 재사용 영상에서 숏폼 소재를 뽑습니다…');
-  const clips = await extractHighlights(videoId, workDir, k.gemini, {count: opts.count, clipSec: opts.clipSec, log});
+  const clips = await extractHighlights(videoId, workDir, k.gemini, {count: opts.count, clipSec: opts.clipSec, log, isCancelled: cancelled});
+  stopIfCancelled();
   log(`[하이라이트] ${clips.length}개 구간 확보 — 후킹 자막 얹어 완성합니다.`);
 
   const attribution = `출처: ${meta.channel} — https://youtu.be/${videoId} (Creative Commons BY)`;
   const results: HighlightJobResult = [];
 
   for (let i = 0; i < clips.length; i++) {
+    stopIfCancelled();
     const c = clips[i];
     const projectId = randomUUID();
     const studioDir = path.join(DATA_DIR, 'studio', projectId);

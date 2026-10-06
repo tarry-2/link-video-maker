@@ -104,43 +104,49 @@ async function durationOf(file: string): Promise<number> {
 
 // Gemini로 바이럴 하이라이트 N개 선정. 자막 있으면 그 내용 기반, 없으면 길이 기준 균등 분할 폴백.
 async function pickHighlights(geminiKeys: string[], subText: string, durationSec: number, count: number, clipSec: number, log: (m: string) => void): Promise<Highlight[]> {
-  const n = Math.max(1, Math.min(5, count));
-  if (subText && geminiKeys.length) {
-    const prompt = `너는 유튜브 긴 영상에서 "쇼츠로 터질 순간"만 골라내는 전문가다. 아래는 한 영상의 자막(초 단위)이다.
-시청자가 끝까지 보고 공유할 만한 가장 강력한 순간 ${n}개를 골라, 각 구간을 약 ${clipSec}초 길이로 잡아라.
+  const n = Math.max(1, Math.min(10, count));
+  // 🔴 진짜 하이라이트만 — 자막(내용)이 반드시 있어야 "터질 구간"을 고를 수 있다.
+  //   자막이 없으면 시간 균등분할(=그냥 이어붙이기)은 하지 않는다. 테리 지시: 시간 이어맞추기 하이라이트 금지.
+  if (!subText || !geminiKeys.length) {
+    throw new Error('이 영상은 자막(대사) 정보가 없어 어디가 터지는 구간인지 알 수 없습니다. 자막이 있는 다른 영상을 골라주세요(시간 순서로 그냥 자르는 건 하지 않습니다).');
+  }
+  const prompt = `너는 유튜브 긴 영상에서 "쇼츠로 터질 순간"만 골라내는 최고의 편집자다. 아래는 한 영상의 자막(초 단위)이다.
 
-[규칙]
+[가장 중요한 원칙]
+- 영상을 처음부터 순서대로 자르지 마라. 시간을 균등하게 나누지 마라. 그건 하이라이트가 아니다.
+- 자막 내용을 읽고, "이 부분은 혼자 떼어내도 사람들이 끝까지 보고 공유하겠다" 싶은 **독립적으로 완결되고 임팩트 있는 순간만** 골라라.
+- 반전/폭로/명대사/웃긴 순간/감동/충격 사실/핵심 정보처럼 **후킹 자막을 붙일 만한 구간만** 선택한다.
+- 밋밋한 설명·인사·늘어지는 부분·맥락 없는 중간은 절대 고르지 마라.
+- ★억지로 ${n}개를 채우지 마라. 진짜 터질 만한 게 ${n}개보다 적으면 적게 줘도 된다(품질 우선). 2~3개뿐이어도 그게 맞으면 그렇게.
+- 터질 구간이 하나도 없으면 빈 배열을 줘라.
+
+[형식 규칙]
 - start/end는 초(정수), end-start ≈ ${clipSec}초(±10초). 서로 겹치지 마라. 영상 길이 ${durationSec}초를 넘지 마라.
-- hookTop: 그 클립 상단에 넣을 궁금증 폭발 후킹(한국어 12자 내외, 과장·낚시톤 OK).
+- 구간은 "말이 시작되는 지점"부터 "완결되는 지점"까지 자연스럽게. 문장 중간에서 끊지 마라.
+- hookTop: 그 구간 상단에 넣을 궁금증 폭발 후킹(한국어 12자 내외, 과장·낚시톤 OK). 그 구간 내용과 반드시 맞아야 한다.
 - hookAccent: 후킹에서 강조할 핵심 단어(한국어 6자 내).
-- reason: 왜 터질지 10자 내.
+- reason: 왜 터질지 15자 내(구체적으로).
 
 자막:
 ${subText}
 
 JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hookAccent":"...","reason":"..."}]}`;
-    try {
-      const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 2048, temperature: 0.8, log});
-      const j = JSON.parse(raw.replace(/```json|```/g, '').trim());
-      const hs: Highlight[] = (j.highlights || []).slice(0, n).map((h: any) => ({
-        start: Math.max(0, Math.floor(h.start || 0)),
-        end: Math.min(durationSec, Math.floor(h.end || (h.start + clipSec))),
-        hookTop: String(h.hookTop || '').slice(0, 24),
-        hookAccent: String(h.hookAccent || '').slice(0, 12),
-        reason: String(h.reason || '').slice(0, 20),
-      })).filter((h: Highlight) => h.end > h.start + 2);
-      if (hs.length) { log(`[하이라이트] AI가 ${hs.length}개 구간 선정`); return hs; }
-    } catch (e: any) { log('[하이라이트] 자막 분석 실패 → 균등 분할로 진행: ' + (e?.message || '').slice(0, 100)); }
+  const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 2048, temperature: 0.7, log});
+  let j: any;
+  try { j = JSON.parse(raw.replace(/```json|```/g, '').trim()); }
+  catch { throw new Error('하이라이트 구간 분석에 실패했습니다. 다시 시도해 주세요.'); }
+  const hs: Highlight[] = (j.highlights || []).slice(0, n).map((h: any) => ({
+    start: Math.max(0, Math.floor(h.start || 0)),
+    end: Math.min(durationSec, Math.floor(h.end || (h.start + clipSec))),
+    hookTop: String(h.hookTop || '').slice(0, 24),
+    hookAccent: String(h.hookAccent || '').slice(0, 12),
+    reason: String(h.reason || '').slice(0, 24),
+  })).filter((h: Highlight) => h.end > h.start + 2);
+  if (!hs.length) {
+    throw new Error('이 영상에선 쇼츠로 터질 만한 하이라이트 구간을 찾지 못했어요. 다른 영상을 골라주세요(밋밋한 구간을 억지로 자르지 않습니다).');
   }
-  // 폴백: 자막 없거나 실패 → 영상을 균등 분할해서 N개(후킹문구 비움).
-  log('[하이라이트] 자막 없음 → 영상 균등 분할로 구간 생성');
-  const hs: Highlight[] = [];
-  const step = Math.max(clipSec, Math.floor(durationSec / (n + 1)));
-  for (let i = 0; i < n; i++) {
-    const start = Math.min(durationSec - clipSec, step * (i + 1));
-    if (start < 0) break;
-    hs.push({start, end: Math.min(durationSec, start + clipSec), hookTop: '', hookAccent: '', reason: ''});
-  }
+  log(`[하이라이트] AI가 진짜 터질 구간 ${hs.length}개 선정${hs.length < n ? ` (요청 ${n}개보다 적음 — 품질 우선)` : ''}`);
+  hs.forEach((h, i) => log(`[하이라이트]   ${i + 1}. ${h.start}~${h.end}초 · ${h.reason || h.hookTop}`));
   return hs;
 }
 
@@ -156,20 +162,25 @@ async function cutVertical(videoPath: string, h: Highlight, outPath: string, log
 // 전체: videoId → N개 세로 하이라이트 클립 생성. dir는 작업 폴더.
 export async function extractHighlights(
   videoId: string, dir: string, geminiKeys: string[],
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean} = {},
 ): Promise<ClipResult[]> {
   const log = opts.log || (() => {});
-  const count = Math.max(1, Math.min(5, opts.count || 3));
+  const cancelled = opts.isCancelled || (() => false);
+  const stop = () => { if (cancelled()) throw new Error('사용자가 중단했습니다.'); };
+  const count = Math.max(1, Math.min(10, opts.count || 3));
   const clipSec = Math.max(15, Math.min(60, opts.clipSec || 30));
   await fsp.mkdir(dir, {recursive: true});
   if (!(await ytdlpAvailable())) throw new Error('서버에 yt-dlp가 없습니다(배포 환경 확인 필요).');
+  stop();
   const {videoPath, subText} = await download(videoId, dir, log);
+  stop();
   const dur = await durationOf(videoPath);
   if (!dur) throw new Error('영상 길이를 읽지 못했습니다.');
   const highlights = await pickHighlights(geminiKeys, subText, dur, count, clipSec, log);
   if (!highlights.length) throw new Error('하이라이트 구간을 찾지 못했습니다.');
   const results: ClipResult[] = [];
   for (let i = 0; i < highlights.length; i++) {
+    stop();
     const h = highlights[i];
     const file = path.join(dir, `clip-${i}.mp4`);
     log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${h.start}s~${h.end}s)…`);
