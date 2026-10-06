@@ -8,7 +8,7 @@ import {randomUUID, createHmac, timingSafeEqual} from 'node:crypto';
 import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
-import {makeHighlights} from './lib/youtube-highlight';
+import {makeHighlights, backfillHighlightProjects} from './lib/youtube-highlight';
 import {generateCardStoryboard} from './lib/cards';
 import {PRESETS, RECOMMEND_STYLE, getPreset} from './lib/presets';
 import {STYLES, STYLE_IDS} from './lib/styles';
@@ -1419,4 +1419,6 @@ server.listen(PORT, () => {
   const igRefresh = () => maybeRefreshInstagram((m) => console.log(m)).catch(() => {});
   igRefresh();
   setInterval(igRefresh, 24 * 60 * 60 * 1000);
+  // 구버전 하이라이트(project.json 없음) 복구 → 기존 것도 유튜브·인스타 업로드 가능.
+  try { backfillHighlightProjects((m) => console.log(m)); } catch {}
 });

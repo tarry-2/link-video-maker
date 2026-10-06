@@ -398,6 +398,17 @@
   $('hl-sec-custom')?.addEventListener('input', () => {
     const v = Math.max(15, Math.min(600, Number($('hl-sec-custom').value) || 0));
     if (v >= 15) { sec = v; document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); renderCountSeg(); saveState(); }
+    if ($('hl-sec-saved')) $('hl-sec-saved').textContent = ''; // 값 바꾸면 안내 지움
+  });
+  // 저장 버튼 — 직접 입력한 길이를 적용·저장하고 "저장되었습니다" 안내.
+  $('hl-sec-save')?.addEventListener('click', () => {
+    const raw = Number($('hl-sec-custom').value) || 0;
+    if (raw < 15 || raw > 600) { alert('15~600초(최대 10분) 사이로 입력하세요.'); return; }
+    sec = Math.round(raw);
+    document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active'));
+    renderCountSeg(); saveState();
+    const m = $('hl-sec-saved'); if (m) { const mm = Math.floor(sec/60), ss = sec%60;
+      m.textContent = `✅ 저장되었습니다 — 한 편 ${sec}초${mm?` (${mm}분 ${ss}초)`:''}`; }
   });
   // 해설 넣기 토글
   document.querySelectorAll('.hl-cm').forEach((b) => b.addEventListener('click', () => {

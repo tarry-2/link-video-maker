@@ -10,7 +10,7 @@ import {randomUUID} from 'node:crypto';
 import {pipelineKeys} from './keys';
 import {extractHighlights} from './youtube-clip';
 import {renderVideo, buildRenderPublic} from './render';
-import {addPortfolio} from './portfolio';
+import {addPortfolio, listPortfolio} from './portfolio';
 import {r2Enabled, videoKey, uploadFile} from './storage';
 import {geminiGenerate} from './gemini';
 import {ttsElevenJoined, alignToWords, pickVoice, VOICES, type Word} from './tts';
@@ -197,4 +197,38 @@ export async function makeHighlights(
   try { await fsp.rm(workDir, {recursive: true, force: true}); } catch {}
   log(`[하이라이트] 총 ${results.length}편 완성! 포트폴리오에서 유튜브·인스타로 올릴 수 있어요.`);
   return results;
+}
+
+// ★기존(구버전) 하이라이트 복구 — v1.80.0 전에 만든 하이라이트는 project.json을 안 써서
+//   유튜브·인스타 업로드·상세설명이 "영상을 찾을 수 없습니다"로 실패한다. mp4는 볼륨에 그대로 남아있으니
+//   portfolio.json 정보로 project.json을 만들어주면 되살아난다(새로 만들 필요 없음). 부팅 시 1회 실행.
+export function backfillHighlightProjects(log: (m: string) => void = () => {}): number {
+  let fixed = 0;
+  for (const it of listPortfolio()) {
+    if (it.kind !== 'highlight' || !it.projectId || !it.output) continue;
+    const dir = path.join(DATA_DIR, 'studio', it.projectId);
+    const pjPath = path.join(dir, 'project.json');
+    if (fs.existsSync(pjPath)) continue; // 이미 있으면 건너뜀(신규 or 복구완료)
+    const mp4 = path.join(dir, it.output);
+    if (!fs.existsSync(mp4)) continue; // mp4가 사라졌으면 복구 불가(새로 만들어야 함)
+    const proj: any = {
+      id: it.projectId,
+      title: it.title,
+      status: 'completed',
+      output: it.output,
+      orientation: it.orientation || 'portrait',
+      // 상세설명 생성용 재료(없으니 제목으로 대체) + 길이는 기본값(메타 힌트용이라 정확할 필요 없음).
+      scenes: [{narration: it.title || '', voice: {frames: 0}}],
+      input: {duration: 30},
+      kind: 'highlight',
+    };
+    try {
+      fs.mkdirSync(dir, {recursive: true});
+      fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
+      fs.renameSync(pjPath + '.tmp', pjPath);
+      fixed++;
+    } catch (e: any) { log('[복구] ' + it.projectId + ' 실패: ' + (e?.message || '')); }
+  }
+  if (fixed) log(`[복구] 기존 하이라이트 ${fixed}편에 project.json을 복구했습니다(이제 업로드 가능).`);
+  return fixed;
 }
