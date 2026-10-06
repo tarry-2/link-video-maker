@@ -203,7 +203,7 @@
     const count = n <= 30 ? 4 : n <= 60 ? 6 : Math.min(10, Math.ceil(n / 12));
     const r = rates();
     const chars = Math.round(n * 5.6); // 대본 예상 글자수
-    const quantities = {draft:1, image:mode === 'manual' ? 0 : count, voice:chars / 1000, music:el('studio-music').checked ? n / 60 : 0};
+    const quantities = {draft:1, image:mode === 'manual' ? 0 : count, voice:chars / 1000, music:el('v-bgm')?.checked ? n / 60 : 0};
     const qtyLabel = {draft:'1회', image:`${count}장`, voice:`${chars.toLocaleString('ko-KR')}자`, music:`${(n/60).toFixed(1)}분`};
     let subtotal = 0; const lines = []; const missing = [];
     for (const [k, qty] of Object.entries(quantities)) {
@@ -216,7 +216,7 @@
     let html = `<b>예상 비용 약 ${Math.ceil(subtotal).toLocaleString('ko-KR')}원</b>`;
     if (lines.length) html += `<br><small>${lines.join('<br>')}</small>`;
     if (missing.length) html += `<br><small>· ${missing.join('·')} 단가 미입력(미산정)</small>`;
-    if (!el('studio-music').checked) html += `<br><small>· 배경음악 미포함(옵션 꺼짐)</small>`;
+    if (!el('v-bgm')?.checked) html += `<br><small>· 배경음악 미포함(옵션 꺼짐)</small>`;
     html += `<br><small>약 ${count}장면 기준 · 서버 비용·재시도 별도</small>`;
     el('create-estimate').innerHTML = html;
     try { localStorage.setItem('onvideo-unit-rates', JSON.stringify(r)); } catch {}
@@ -228,9 +228,7 @@
   document.querySelectorAll('.studio-options input, #rate-section input, #duration, #quality').forEach(i => i.addEventListener('input', updateEstimate));
   ['tab-auto', 'tab-topic', 'tab-manual'].forEach(id => el(id) && el(id).addEventListener('click', updateEstimate));
   el('product-lock').onchange = () => el('product-fields').classList.toggle('hidden', !el('product-lock').checked);
-  // The existing pipeline does not implement AI clips. Do not estimate or charge for that option.
-  el('aiClips').value = '0'; el('aiClips').disabled = true;
-  el('aiClips').title = '장면 편집에서는 원본 사진 또는 AI 이미지를 사용합니다.';
+  // 영상 종류(aiClips)는 app.js의 버튼이 관리한다. 여기서 건드리지 않음.
   updateEstimate();
   async function loadHistory() {
     const rows = await api('/api/studio');
@@ -403,7 +401,8 @@
         duration:Number(el('duration').value), voice:el('voice').value, presetId:selectedPreset || '', quality:el('quality').value,
         imageStyle:el('image-style') ? el('image-style').value : 'real',
         characterId:el('character-select') ? el('character-select').value : '',
-        music:el('studio-music').checked, product, rates:rates()});
+        aiClips:Number(el('aiClips')?.value) || 0, autoShutdown:el('auto-shutdown') ? el('auto-shutdown').checked : true,
+        music:el('v-bgm') ? el('v-bgm').checked : true, product, rates:rates()});
       try { localStorage.setItem('onvideo-open', p.id); } catch {}
       render(p); schedule(); await loadHistory();
       el('studio-editor').scrollIntoView({behavior:'smooth'}); message('대본 작성이 시작됐습니다. 작업 내역에서 다시 열 수 있습니다.');
@@ -426,7 +425,7 @@
         voice: el('voice').value, quality: el('quality').value,
         imageStyle: el('image-style') ? el('image-style').value : 'real',
         characterId: el('character-select') ? el('character-select').value : '',
-        music: el('studio-music').checked,
+        music: el('v-bgm') ? el('v-bgm').checked : true,
       });
       el('batch-topics').value = '';
       renderBatch();

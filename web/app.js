@@ -784,13 +784,22 @@ $('duration')?.addEventListener('change', syncFormat);
 $('duration')?.addEventListener('input', syncFormat);
 syncFormat();
 
-// '살아 움직이는 영상'을 골랐을 때만 자동-비용끄기 옵션을 보여준다(평소엔 숨겨 깔끔하게).
-function syncAiClips() {
-  const row = $('auto-shutdown-row');
-  if (row) row.classList.toggle('hidden', Number($('aiClips')?.value || 0) === 0);
+// 영상 종류 = 버튼(세그먼트)으로 고른다. 네이티브 select가 일부 브라우저에서 안 열려서 버튼으로 교체.
+// aiClips 는 숨은 input(값: 0=사진영상, 1~3=움직이는 장면 수). '움직이는 영상'을 골랐을 때만 장면수·자동끄기 노출.
+let lastMotionClips = 1; // 사진영상↔움직이는영상 오갈 때 마지막으로 고른 장면 수 기억
+function setAiClips(n) {
+  n = Number(n) || 0;
+  if (n > 0) lastMotionClips = n;
+  const hid = $('aiClips'); if (hid) hid.value = String(n);
+  $('vtype-photo')?.classList.toggle('active', n === 0);
+  $('vtype-motion')?.classList.toggle('active', n > 0);
+  $('motion-count-row')?.classList.toggle('hidden', n === 0);
+  document.querySelectorAll('.vclip-n').forEach((b) => b.classList.toggle('active', Number(b.dataset.clips) === n));
 }
-$('aiClips')?.addEventListener('change', syncAiClips);
-syncAiClips();
+$('vtype-photo')?.addEventListener('click', () => { setAiClips(0); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); });
+$('vtype-motion')?.addEventListener('click', () => { setAiClips(lastMotionClips); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); });
+document.querySelectorAll('.vclip-n').forEach((b) => b.addEventListener('click', () => { setAiClips(Number(b.dataset.clips)); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); }));
+setAiClips(0);
 
 // ── 키 설정 모달 ──
 const KEY_META = [
@@ -1049,6 +1058,7 @@ function saveFormState() {
       imageStyle: $('image-style')?.value,
       characterId: $('character-select')?.value || '',
       quality: $('quality')?.value,
+      aiClips: $('aiClips')?.value || '0',
       keywords: $('keywords')?.value || '',
       facts: $('facts')?.value || '',
 
@@ -1082,6 +1092,7 @@ function restoreFormState() {
   syncCharacterRow();
   if (s.characterId != null && $('character-select')) { $('character-select').value = s.characterId; updateCharacterThumb(); }
   if (s.quality && $('quality')) $('quality').value = s.quality;
+  if (s.aiClips != null) setAiClips(Number(s.aiClips));
   if (s.keywords != null) $('keywords').value = s.keywords;
   if (s.facts != null) $('facts').value = s.facts;
 
@@ -1116,6 +1127,7 @@ function resetForm() {
   if ($('duration')) $('duration').value = '30';
   if ($('image-style')) { $('image-style').value = 'real'; renderStyleGallery(); }
   if ($('quality')) $('quality').value = 'high';
+  setAiClips(0);
 
   if ($('product-lock')) { $('product-lock').checked = false; $('product-fields').classList.add('hidden'); }
   ['name', 'price', 'benefit', 'url'].forEach((k) => { if ($('product-' + k)) $('product-' + k).value = ''; });

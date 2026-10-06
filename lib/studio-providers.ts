@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import {existsSync} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {pipelineKeys} from './keys';
@@ -9,8 +10,10 @@ import {generateImageFlux, generateImageNano} from './image';
 import {ttsEleven, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
+import {getStyle} from './styles';
+import {ensureWanPod, wanT2V, terminatePod} from './runpod-wan';
 import {renderVideo, renderThumbnail} from './render';
-import {resolveProduct} from './studio-model';
+import {resolveProduct, fingerprint} from './studio-model';
 import type {StudioDependencies} from './studio';
 
 export const studioProviders: StudioDependencies = {
@@ -67,6 +70,49 @@ export const studioProviders: StudioDependencies = {
     const ms = p.scenes.reduce((n, s) => n + (s.voice?.frames || 0), 0) / 30 * 1000;
     await generateBgm(k.elevenlabs, p.musicPrompt, ms, file, log);
   },
+  // ★움직이는 AI 영상(Wan2.2) — 앞에서부터 aiClips개 장면을 RunPod에서 영상 클립으로 만들어 scene.video에 세팅.
+  //   이미지는 이미 만들어져 있으니(폴백·썸네일용) 클립 실패 시 그대로 사진영상으로 진행한다.
+  async clips(p, dir, log) {
+    const n = Math.max(0, Math.min(p.scenes.length, Math.floor(p.input.aiClips || 0)));
+    // aiClips를 줄였으면, 더는 안 쓰는 장면의 클립을 떼어내 이미지로 되돌린다(장면.video 존재 = 현재 설정 반영).
+    for (let i = n; i < p.scenes.length; i++) p.scenes[i].video = undefined;
+    if (n === 0) return;
+    const k = pipelineKeys();
+    if (!k.runpod) { log('[영상] RunPod 키가 없어 움직이는 영상을 건너뜁니다(사진영상으로 진행). 키 설정에서 RunPod 키를 저장하세요.'); for (const s of p.scenes) s.video = undefined; return; }
+    const landscape = p.input.duration >= 90;
+    const style = getStyle(p.input.imageStyle);
+    const motionCue = style.id === 'classic'
+      ? 'gentle period-film motion, soft vintage camera pan, subtle flicker and film grain, smooth and fluid'
+      : style.illustration
+      ? 'smooth animated motion, gentle character movement, soft parallax camera, fluid 2D animation'
+      : 'natural lifelike motion, subtle cinematic camera movement, smooth and fluid';
+    let pod: string | undefined;
+    try { pod = await ensureWanPod(k.runpod, log); }
+    catch (e: any) { log(`[영상] 움직이는 영상 준비 실패(${e.message}) → 사진영상으로 진행`); for (const s of p.scenes) s.video = undefined; return; }
+    try {
+      for (let i = 0; i < n; i++) {
+        const s = p.scenes[i];
+        const vp = p.subject ? `${p.subject}. ${s.visualPrompt}. (main subject must be ${p.subject})` : s.visualPrompt;
+        const sig = fingerprint([vp, p.input.imageStyle, landscape, 'wan']);
+        const file = `clip-${i}-${sig}.mp4`;
+        if (s.video?.signature === sig && existsSync(path.join(dir, file))) { log(`[장면 ${i + 1}] 🎬 기존 움직이는 영상 재사용`); continue; }
+        const wanPrompt = `${vp}. ${style.promptAdd}. ${motionCue}`;
+        try {
+          log(`[장면 ${i + 1}/${n}] 🎬 움직이는 영상 생성…(수 분 걸릴 수 있어요)`);
+          await wanT2V(pod, wanPrompt, path.join(dir, file), {
+            width: landscape ? 832 : 480, height: landscape ? 480 : 832, length: 81, interpolate: true, log,
+          });
+          s.video = {signature: sig, file};
+        } catch (e: any) { log(`[장면 ${i + 1}] ⚠️ 움직이는 영상 실패(${e.message}) → 사진 사용`); s.video = undefined; }
+      }
+    } finally {
+      // 클립을 다 뽑았으면 팟 종료(렌더는 Railway에서 하므로 팟 불필요). autoShutdown=false면 켜둔다(과금 계속).
+      if (p.input.autoShutdown !== false) {
+        try { await terminatePod(k.runpod, pod); log('[영상] RunPod 팟 종료(과금 중단).'); }
+        catch (e: any) { log(`[영상] ⚠️ 팟 자동 종료 실패(${e.message}) — 설정에서 수동으로 꺼주세요.`); }
+      } else log('[영상] RunPod 팟을 켜둡니다(자동 종료 OFF). 끝나면 설정에서 꺼주세요(과금 계속).');
+    }
+  },
   async render(p, dir, output, log, thumbOut) {
     // Fresh public folder per render: cached bundles must never serve an older scene.
     const publicDir = await fs.mkdtemp(path.join(os.tmpdir(), 'onvideo-render-'));
@@ -75,11 +121,12 @@ export const studioProviders: StudioDependencies = {
       const prefix = `studio/${p.id}`;
       const mediaDir = path.join(publicDir, prefix);
       await fs.mkdir(mediaDir, {recursive: true});
-      const names = new Set(p.scenes.flatMap(s => [s.image!.file, s.voice!.file]));
+      const names = new Set(p.scenes.flatMap(s => [s.image!.file, s.voice!.file, ...(s.video ? [s.video.file] : [])]));
       if (p.bgm) names.add(p.bgm.file);
       for (const name of names) await fs.copyFile(path.join(dir, name), path.join(mediaDir, name));
       const scenes = p.scenes.map((s, i) => ({
         image: `${prefix}/${s.image!.file}`, voiceSrc: `${prefix}/${s.voice!.file}`,
+        video: s.video ? `${prefix}/${s.video.file}` : undefined, // 움직이는 영상 클립(있으면 Scene.tsx가 이미지 대신 렌더)
         hookTop: resolveProduct(s.hookTop, p.input.product), hookAccent: resolveProduct(s.hookAccent, p.input.product),
         accentColor: s.accentColor, words: s.voice!.words || [], durationInFrames: s.voice!.frames!,
         motion: i, punch: i === 0, product: p.input.product || undefined,

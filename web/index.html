@@ -241,18 +241,23 @@
 
         </details><!-- /#detail-settings -->
 
-        <!-- ★중요 선택이라 세부 설정 밖, 버튼 바로 위에 크게 노출 -->
-        <div class="row" id="advanced-row" style="margin-top:14px">
-          <div class="col">
-            <label class="field-label">🎥 영상 종류</label>
-            <select id="aiClips" class="input">
-              <option value="0" selected>📷 사진 영상 (그림 + 움직임 효과) · 무료·빠름</option>
-              <option value="1">🎬 움직이는 영상 · 첫 장면만 (약 1,000원)</option>
-              <option value="2">🎬 움직이는 영상 · 2장면 (약 1,500원)</option>
-              <option value="3">🎬 움직이는 영상 · 3장면 (약 2,000원)</option>
-            </select>
-            <p class="hint" style="margin:4px 0 0">📷 사진 영상 = AI 그림에 움직임 효과(빠르고 무료). 🎬 움직이는 영상 = 그림이 실제로 살아 움직임(더 생생, 유료·시간 걸림).</p>
-            <label id="auto-shutdown-row" class="field-label hidden" style="margin-top:8px"><input type="checkbox" id="auto-shutdown" checked /> 만들고 나면 자동으로 비용 끄기 <span class="hint">(권장 — 켜두면 추가 요금이 계속 나가요)</span></label>
+        <!-- ★중요 선택이라 세부 설정 밖, 버튼 바로 위에 크게 노출. 네이티브 select 대신 버튼(확실히 클릭됨) -->
+        <div id="advanced-row" style="margin-top:14px">
+          <label class="field-label">🎥 영상 종류 — 눌러서 고르세요</label>
+          <div class="seg vtype-seg" style="margin-top:6px">
+            <button type="button" id="vtype-photo" class="seg-btn active" data-clips="0">📷 사진 영상<br><span class="hint">그림 + 움직임 효과 · 무료·빠름</span></button>
+            <button type="button" id="vtype-motion" class="seg-btn" data-clips="1">🎬 움직이는 영상<br><span class="hint">그림이 실제로 살아 움직임 · 유료</span></button>
+          </div>
+          <input type="hidden" id="aiClips" value="0" />
+          <!-- 움직이는 영상 고르면 몇 장면 만들지 -->
+          <div id="motion-count-row" class="hidden" style="margin-top:10px">
+            <label class="field-label">움직이는 장면 수 <span class="hint">(많을수록 생생하지만 비용·시간 ↑)</span></label>
+            <div class="seg" style="margin-top:6px">
+              <button type="button" class="seg-btn active vclip-n" data-clips="1">첫 장면만<br><span class="hint">약 1,000원</span></button>
+              <button type="button" class="seg-btn vclip-n" data-clips="2">2장면<br><span class="hint">약 1,500원</span></button>
+              <button type="button" class="seg-btn vclip-n" data-clips="3">3장면<br><span class="hint">약 2,000원</span></button>
+            </div>
+            <label id="auto-shutdown-row" class="field-label" style="margin-top:10px;display:block"><input type="checkbox" id="auto-shutdown" checked /> 만들고 나면 자동으로 비용 끄기 <span class="hint">(권장 — 켜두면 추가 요금이 계속 나가요)</span></label>
           </div>
         </div>
 

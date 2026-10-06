@@ -18,6 +18,8 @@ export const createSchema = z.object({
   characterId: text(40).default(''), // 애니: 지정 캐릭터(비우면 랜덤 생성)
   quality: z.enum(['fast', 'high']).default('high'),
   imageStyle: z.enum(STYLE_IDS as [string, ...string[]]).default('real'),
+  aiClips: z.number().int().min(0).max(3).default(0), // 움직이는 AI 영상(Wan) 클립 수(0=사진영상, 1~3=앞 N장면)
+  autoShutdown: z.boolean().default(true), // 클립 생성 끝나면 RunPod 팟 자동 종료(과금 중단)
   music: z.boolean().default(false),
   product: productSchema.nullable().default(null),
   rates: ratesSchema.default({draft: null, image: null, voice: null, music: null}),
@@ -45,7 +47,7 @@ export type Product = z.infer<typeof productSchema>;
 export type Rates = z.infer<typeof ratesSchema>;
 export type Input = Omit<z.infer<typeof createSchema>, 'images'>;
 export type Media = {signature: string; file: string; words?: {t: string; s: number; e: number}[]; frames?: number};
-export type Scene = EditScene & {image?: Media; voice?: Media; imageVersion?: number; voiceVersion?: number};
+export type Scene = EditScene & {image?: Media; voice?: Media; video?: Media; imageVersion?: number; voiceVersion?: number};
 export type Project = {
   id: string; revision: number; createdAt: string; updatedAt: string;
   status: 'planning' | 'draft' | 'running' | 'completed' | 'failed';

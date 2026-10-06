@@ -38,6 +38,9 @@ export type StudioDependencies = {
   image: (p: Project, s: Scene, file: string, log: (s: string) => void) => Promise<void>;
   voice: (p: Project, s: Scene, file: string) => Promise<Pick<Media, 'words' | 'frames'>>;
   music: (p: Project, file: string, log: (s: string) => void) => Promise<void>;
+  // 움직이는 AI 영상(Wan2.2) 클립 생성(선택). p.input.aiClips 수만큼 앞 장면을 영상 클립으로 만들어
+  // scene.video에 세팅한다. RunPod 팟 라이프사이클(준비·종료)도 여기서 처리. 없으면 사진영상으로 진행.
+  clips?: (p: Project, directory: string, log: (s: string) => void) => Promise<void>;
   // thumbOut을 주면 영상과 함께 후킹 프레임 썸네일 PNG도 같은 경로에 생성(실패해도 영상엔 영향 없음).
   render: (p: Project, directory: string, output: string, log: (s: string) => void, thumbOut?: string) => Promise<void>;
 };
@@ -299,6 +302,13 @@ export class Studio {
         await this.media(p, i, 'image', log); await this.media(p, i, 'voice', log);
       }
       log('[진행] 모든 장면 소재 준비 완료.');
+      // ★움직이는 AI 영상(Wan2.2): aiClips>0이면 앞 N장면을 RunPod에서 영상 클립으로 만들어 scene.video에 세팅.
+      //   실패하거나 키가 없으면 조용히 이미지(사진영상)로 진행한다. 팟 준비·종료는 clips() 안에서.
+      if (this.deps.clips) {
+        p.phase = '움직이는 영상'; this.save(p);
+        await this.deps.clips(p, this.directory(id), log);
+        this.save(p);
+      }
       if (p.input.music && !p.bgm) {
         p.phase = '배경음악'; this.save(p);
         const file = `music-${randomUUID()}.mp3`;
