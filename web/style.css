@@ -329,6 +329,13 @@ textarea.input { resize: vertical; font-family: inherit; }
 /* 대본 검토와 장면별 편집 */
 .studio-options { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 18px; }
 summary { cursor: pointer; font-weight: 700; }
+/* 세부 설정 — 접어두고 안 건드려도 되게. 초보는 입력+버튼만 보이게. */
+.detail-settings { margin-top: 16px; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; background: var(--card2); }
+.detail-settings > summary { font-size: 15px; list-style: none; }
+.detail-settings > summary::-webkit-details-marker { display: none; }
+.detail-settings > summary::before { content: '▸ '; color: var(--teal); }
+.detail-settings[open] > summary::before { content: '▾ '; }
+.detail-settings[open] > summary { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .rate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; font-size: 13px; }
 .cost-box { padding: 14px; margin: 18px 0 8px; background: #14302c; color: #c6f5e9; border-radius: 12px; font-size: 13px; }
 .cost-box small { display: block; margin-top: 6px; }

@@ -45,19 +45,19 @@
 
     <main id="main" class="wrap wide">
       <div class="page-head">
-        <p class="eyebrow">LINK → VIDEO</p>
-        <h1 class="hero">링크 하나로<br />프로급 쇼츠를 만드세요</h1>
-        <p class="sub">뉴스·블로그·레시피 링크를 넣으면 대본·이미지·음성·자막·배경음악까지 자동으로.</p>
+        <p class="eyebrow">ONVIDEO</p>
+        <h1 class="hero">주제나 링크만 넣으면<br />영상이 완성돼요</h1>
+        <p class="sub">대본·이미지·음성·자막·배경음악까지 자동으로. 세부 설정은 안 건드려도 됩니다.</p>
       </div>
 
       <div class="app-grid">
         <div class="app-left">
       <div class="tabs">
-        <button id="tab-auto" class="tab active" type="button">🔗 링크로 자동</button>
-        <button id="tab-topic" class="tab" type="button">💡 주제 추천</button>
-        <button id="tab-manual" class="tab" type="button">🖼 내 이미지로</button>
-        <button id="tab-batch" class="tab" type="button">📚 여러 편 한 번에</button>
+        <button id="tab-auto" class="tab active" type="button">🔗 링크로</button>
+        <button id="tab-topic" class="tab" type="button">💡 주제로</button>
         <button id="tab-card" class="tab" type="button">🎴 카드뉴스</button>
+        <button id="tab-manual" class="tab" type="button">🖼 내 사진</button>
+        <button id="tab-batch" class="tab" type="button">📚 여러 편</button>
       </div>
 
       <div class="card">
@@ -165,12 +165,15 @@
           <p id="card-audio-hint" class="mini-state">나레이션을 끄면 ‘카드만 집중’ 모드 — 글자 카드가 슬라이드로 넘어가고 배경음악만 깔려요(진짜 카드뉴스).</p>
         </div>
 
-        <label class="field-label">2. 카테고리 <span class="hint">— 고르면 톤·이미지·목소리·배경음악이 자동으로 맞춰져요</span></label>
+        <details id="detail-settings" class="detail-settings">
+          <summary>⚙️ 세부 설정 <span class="hint">— 안 건드려도 알아서 잘 나와요 (카테고리·길이·목소리·스타일·나레이션·움직임)</span></summary>
+
+        <label class="field-label">카테고리 <span class="hint">— 고르면 톤·이미지·목소리·배경음악이 자동으로 맞춰져요</span></label>
         <div id="categories" class="cat-groups"></div>
 
         <div class="row">
           <div class="col">
-            <label class="field-label">3. 길이</label>
+            <label class="field-label">길이</label>
             <select id="duration" class="input">
               <optgroup label="쇼츠 (세로 9:16)">
                 <option value="15">15초 · 짧게 · 세로</option>
@@ -187,7 +190,7 @@
             <p id="format-note" class="mini-state">쇼츠 = 세로 9:16 · 롱폼 = 가로 16:9 (유튜브 기준 자동)</p>
           </div>
           <div class="col">
-            <label class="field-label">4. 목소리 <span class="hint">(비우면 카테고리 추천)</span> <a href="/voices?tab=voice" target="_blank" style="color:var(--teal);font-size:12px;text-decoration:none;float:right">🎙 들어보기 →</a></label>
+            <label class="field-label">목소리 <span class="hint">(비우면 카테고리 추천)</span> <a href="/voices?tab=voice" target="_blank" style="color:var(--teal);font-size:12px;text-decoration:none;float:right">🎙 들어보기 →</a></label>
             <div class="voice-row">
               <select id="voice" class="input"></select>
             </div>
@@ -250,6 +253,8 @@
           </div>
         </div>
 
+        </details><!-- /#detail-settings -->
+
         <details class="studio-options">
           <summary>상품 정보 고정 · 배경음악 · 예상 비용</summary>
           <label class="field-label"><input type="checkbox" id="product-lock" /> 상품 정보 고정 (내 이미지 모드)</label>
@@ -263,8 +268,8 @@
           <label class="field-label"><input id="studio-music" type="checkbox" /> AI 배경음악 생성 (추가 비용)</label>
         </details>
         <div id="create-estimate" class="cost-box dev-only" aria-live="polite"></div>
-        <button id="generate" class="primary-btn">1. 대본 먼저 만들기</button>
-        <p class="mini-state">대본을 확인한 후 이미지·음성 제작을 시작합니다. 대본 작성에도 API 비용이 발생할 수 있습니다. 입력한 내용은 탭을 옮기거나 새로고침해도 유지돼요.</p>
+        <button id="generate" class="primary-btn">🎬 영상 만들기</button>
+        <p class="mini-state">버튼을 누르면 먼저 대본을 만들어 보여드려요. 확인 후 이미지·음성 제작이 이어집니다. 입력한 내용은 새로고침해도 유지돼요.</p>
         <button id="reset-form" type="button" class="ghost-btn small">🧹 입력 초기화</button>
         <p id="studio-message" class="mini-state" role="status"></p>
       </div>

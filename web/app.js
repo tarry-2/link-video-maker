@@ -37,7 +37,9 @@ function applyMode(m) {
   if (m !== 'card') $('card-editor')?.classList.add('hidden'); // 카드모드 벗어나면 편집창 닫기
   if (m === 'card') loadCardHistory();
   // 카드 모드는 대본 검토 단계가 없어 버튼 라벨을 바로 제작으로.
-  if (gen) gen.textContent = m === 'card' ? '🎴 카드 대본 만들기' : '1. 대본 먼저 만들기';
+  if (gen) gen.textContent = m === 'card' ? '🎴 카드 대본 만들기' : '🎬 영상 만들기';
+  // 공용 세부설정은 영상계열(auto/topic/manual/batch)에서만. 카드는 자체 설정이 있어 숨김.
+  $('detail-settings')?.classList.toggle('hidden', m === 'card');
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
 }
 function setMode(m) { applyMode(m); saveFormState(); }
