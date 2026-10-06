@@ -2,14 +2,14 @@
 // '카드만' 모드 = 나레이션 OFF. 글자 중심 카드가 슬라이드로 넘어가고 BGM만.
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
-import {mkdir} from 'node:fs/promises';
+import {mkdir, rm} from 'node:fs/promises';
 import {generateCardStoryboard, type CardPlan, type CardStoryboard} from './cards';
 import {getPreset} from './presets';
 import {generateImageFlux} from './image';
 import {ttsElevenJoined} from './tts';
 import {VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
-import {renderCardVideo, renderCardStills} from './render';
+import {renderCardVideo, renderCardStills, buildRenderPublic} from './render';
 import {buildZip} from './zip';
 import {writeFile} from 'node:fs/promises';
 import type {CardData, MotionStyle} from '../src/Card';
@@ -163,7 +163,11 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   if (output === 'post') {
     const pngAbs = cards.map((_, i) => abs(`${pubRel}/card-${i + 1}.png`));
     log('[게시물] 카드 이미지 생성 중…');
-    await renderCardStills(cards, pngAbs, log);
+    // 전용 public 폴더로 렌더(캐시 번들엔 이 작업의 bg 이미지가 없다). PNG 출력은 실제 public/jobs/에 그대로 쓴다.
+    const stillPublic = await buildRenderPublic(pubRel);
+    try {
+      await renderCardStills(cards, pngAbs, log, stillPublic);
+    } finally { await rm(stillPublic, {recursive: true, force: true}); }
     const files = pngAbs.map((p, i) => ({name: `${String(i + 1).padStart(2, '0')}.png`, path: p}));
     const zipAbs = path.join(process.cwd(), 'out', `cards-${id}.zip`);
     await writeFile(zipAbs, buildZip(files));
@@ -195,7 +199,11 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `card-${id}.mp4`);
   const transitionFrames = 12;
-  await renderCardVideo(cards, transitionFrames, out, log, bgmSrc, voiceSrc, undefined, 'portrait');
+  // 전용 public 폴더로 렌더 — 이 작업의 bg/음성/BGM이 담긴 번들을 새로 만들어 staticFile이 전부 찾게 한다.
+  const renderPublic = await buildRenderPublic(pubRel);
+  try {
+    await renderCardVideo(cards, transitionFrames, out, log, bgmSrc, voiceSrc, renderPublic, 'portrait');
+  } finally { await rm(renderPublic, {recursive: true, force: true}); }
   log('[완료] 카드뉴스 영상 완성!');
   let projectId: string | undefined;
   try {

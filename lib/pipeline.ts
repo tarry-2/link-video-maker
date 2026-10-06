@@ -1,13 +1,13 @@
 // 전체 파이프라인 — 링크 → 본문 → 대본 → 장면별(이미지+음성+자막타이밍) → Remotion 렌더.
 import {randomUUID} from 'node:crypto';
-import {mkdir, writeFile} from 'node:fs/promises';
+import {mkdir, writeFile, rm} from 'node:fs/promises';
 import path from 'node:path';
 import {generateStoryboard} from './script';
 import {generateImageFlux} from './image';
 import {ttsElevenJoined, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
-import {renderVideo} from './render';
+import {renderVideo, buildRenderPublic} from './render';
 import type {SceneData} from '../src/Scene';
 
 const FPS = 30;
@@ -153,7 +153,12 @@ export async function makeVideo(
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `${id}.mp4`);
   await mkdir(path.join(process.cwd(), 'out'), {recursive: true});
-  await renderVideo(scenes, transitionFrames, out, log, bgmSrc, voiceRel, undefined, orientation);
+  // ★전용 public 폴더로 렌더 — 캐시 번들은 번들 이후 생성한 이 작업의 이미지·음성·BGM을 404로 못 서빙한다
+  //   (MediaError). 이 작업 자산만 담은 번들을 새로 만들어 넘긴다(카드·studio 경로와 동일).
+  const renderPublic = await buildRenderPublic(pubRel);
+  try {
+    await renderVideo(scenes, transitionFrames, out, log, bgmSrc, voiceRel, renderPublic, orientation);
+  } finally { await rm(renderPublic, {recursive: true, force: true}); }
   log(`[완료] ${out}`);
   return {out, title: sb.title, imageDir: abs(pubRel)};
 }

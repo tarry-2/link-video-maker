@@ -5,11 +5,29 @@ import {selectComposition, renderMedia, renderStill} from '@remotion/renderer';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
-import {rm} from 'node:fs/promises';
+import {rm, cp, mkdtemp} from 'node:fs/promises';
 import type {SceneData} from '../src/Scene';
 import type {CardData} from '../src/Card';
 
 let cachedServeUrl: string | null = null;
+
+// ★렌더 전용 public 폴더 — Remotion 렌더는 "번들에 복사된 public"만 서빙하고, getServeUrl 번들은 최초 1회만
+//   만들어 캐시된다. 그래서 번들 이후 public/jobs/{id}/에 쓴 이 작업의 이미지·음성·BGM은 캐시 번들에 없어
+//   404 → "Could not play audio … MediaError"로 렌더가 통째로 실패한다(실측 확인). 폰트/효과음 + 이 작업
+//   폴더만 담은 임시 public 폴더를 매 렌더마다 새로 만들어 publicDir로 넘기면(studio 영상 경로와 동일),
+//   그 자산이 신선한 번들에 들어가 staticFile이 전부 찾는다. 호출부는 렌더 후 rm으로 지운다.
+export async function buildRenderPublic(jobRel?: string): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'onvideo-render-'));
+  for (const folder of ['fonts', 'sfx']) {
+    const src = path.join(process.cwd(), 'public', folder);
+    if (fs.existsSync(src)) await cp(src, path.join(dir, folder), {recursive: true});
+  }
+  if (jobRel) {
+    const src = path.join(process.cwd(), 'public', jobRel);
+    if (fs.existsSync(src)) await cp(src, path.join(dir, jobRel), {recursive: true});
+  }
+  return dir;
+}
 
 // ★컨테이너(Railway/Docker) 진짜 메모리 한계를 읽는다. os.totalmem()은 호스트 물리 메모리(예: 322GB)를
 // 반환해서 착시 → 실제로는 cgroup으로 컨테이너에 훨씬 작은 한계(예: 8GB)가 걸려 있고, 이걸 넘으면

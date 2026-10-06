@@ -5,10 +5,11 @@
 //   코드 수정 없이 그대로 재활용된다. 영상 studio.ts의 완성 처리(R2 업로드·썸네일·addPortfolio)와 동일 패턴.
 import fs from 'node:fs';
 import path from 'node:path';
+import {rm} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {addPortfolio} from './portfolio';
 import {r2Enabled, videoKey, uploadFile} from './storage';
-import {renderCardStills} from './render';
+import {renderCardStills, buildRenderPublic} from './render';
 import type {CardData} from '../src/Card';
 
 const STUDIO_DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data');
@@ -65,8 +66,14 @@ export async function registerCardDeck(reg: CardRegister): Promise<string> {
     const thumbName = 'thumb.png';
     const thumbAbs = path.join(dir, thumbName);
     // ★썸네일은 글자를 상단 정렬(thumbTop) — 유튜브가 하단을 재생시간·제목으로 가리기 때문.
-    try { await renderCardStills([{...reg.cards[coverIdx], thumbTop: true}], [thumbAbs], log); }
-    catch (e: any) { log('[썸네일] 생성 건너뜀: ' + (e?.message || e)); }
+    // 캐시 번들엔 이 작업의 커버 bg 이미지가 없으므로(카드 영상/게시물과 동일 이유), 폰트 + 커버 작업
+    // 폴더만 담은 전용 public 폴더로 렌더해 bg·폰트를 staticFile이 전부 찾게 한다.
+    const coverCard = {...reg.cards[coverIdx], thumbTop: true};
+    const thumbPublic = await buildRenderPublic(coverCard.bg ? path.dirname(coverCard.bg) : undefined);
+    try {
+      await renderCardStills([coverCard], [thumbAbs], log, thumbPublic);
+    } catch (e: any) { log('[썸네일] 생성 건너뜀: ' + (e?.message || e)); }
+    finally { await rm(thumbPublic, {recursive: true, force: true}); }
 
     proj.output = output;
     proj.thumb = fs.existsSync(thumbAbs) ? thumbName : undefined;

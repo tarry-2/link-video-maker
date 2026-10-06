@@ -1,7 +1,7 @@
 // 수동 모드 — 사용자가 직접 넣은 이미지들 + 키워드/팩트로 영상 생성.
 // Gemini 비전이 이미지를 직접 보고: 좋은 것 선별 → 순서 배치 → 각 이미지에 맞는 후킹·자막·나레이션 생성.
 // 이 모드는 Flux 생성 안 함(사용자 이미지 그대로 사용).
-import {readFile, mkdir, copyFile} from 'node:fs/promises';
+import {readFile, mkdir, copyFile, rm} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -11,7 +11,7 @@ import {ttsElevenJoined, alignToWords, VOICES, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {normalizeEnding, stripEmoji} from './script';
-import {renderVideo} from './render';
+import {renderVideo, buildRenderPublic} from './render';
 import type {PipelineKeys} from './pipeline';
 import type {SceneData} from '../src/Scene';
 
@@ -230,7 +230,12 @@ export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Pro
   await mkdir(path.join(process.cwd(), 'out'), {recursive: true});
   // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16(자동 모드와 동일 기준).
   const orientation: 'portrait' | 'landscape' = opts.duration >= 90 ? 'landscape' : 'portrait';
-  await renderVideo(scenes, transitionFrames, out, log, bgmSrc, voiceRel, undefined, orientation);
+  // ★전용 public 폴더로 렌더 — 캐시 번들은 번들 이후 생성한 이 작업의 이미지·클립·음성·BGM을 404로 못 서빙한다
+  //   (MediaError). 이 작업 자산만 담은 번들을 새로 만들어 넘긴다(카드·studio 경로와 동일).
+  const renderPublic = await buildRenderPublic(pubRel);
+  try {
+    await renderVideo(scenes, transitionFrames, out, log, bgmSrc, voiceRel, renderPublic, orientation);
+  } finally { await rm(renderPublic, {recursive: true, force: true}); }
   log(`[완료] ${out}`);
   return {out, title: plan.title, imageDir: abs(pubRel)};
 }
