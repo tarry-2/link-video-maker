@@ -1007,7 +1007,8 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           presetId: b.presetId || undefined,
           voice: b.voice || undefined,
           quality: b.quality === 'fast' ? 'fast' : 'high',
-          imageStyle: b.imageStyle === 'anime' ? 'anime' : 'real',
+          // ★전체 스타일 허용(실사·애니·고전 등 15종). 예전엔 real/anime로 뭉개 다른 스타일이 안 먹었음.
+          imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
           aiClips: Number(b.aiClips) || 0,
           log: (m) => jlog(job, m),
         });

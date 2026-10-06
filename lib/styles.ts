@@ -177,6 +177,17 @@ export const STYLES: ArtStyle[] = [
     peopleAdd: ', soft painterly figures are welcome, gentle',
     guidance: 3.5, illustration: true,
   },
+  // ── 고전·클래식 ──
+  {
+    id: 'classic', name: '고전·클래식', emoji: '🏛️',
+    desc: '세피아·올드필름·역사 다큐 질감. 품격 있고 아련 — 역사·미스터리·명작·회고에.',
+    group: '실사·시네마틱',
+    // ★Wan이 약한 스타일은 묻혀서 실사처럼 나온다 → 세피아/올드필름을 앞세워 강하게 지시(실측 보강).
+    promptAdd:
+      ', heavily aged vintage antique photograph from the early 1900s, strong warm sepia monochrome tone, faded and desaturated, heavy analog film grain and scratches, dust and visible wear, strong dark vignette corners, old daguerreotype and historical archival photo look, nostalgic timeless mood, NOT modern, NOT colorful, NOT a sharp digital photo',
+    peopleAdd: ', if a person appears render them in a dignified vintage period style, often soft-focus, silhouette or classic portrait framing',
+    guidance: 4, illustration: false,
+  },
 ];
 
 export type ImageStyle = string; // 스타일 id(레지스트리 키). 과거 'real'|'anime' 호환.

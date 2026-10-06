@@ -138,8 +138,14 @@ export async function makeVideo(
     let videoRel: string | undefined;
     if (wanPod && i < aiClips) {
       videoRel = `${pubRel}/clip-${i}.mp4`;
-      // visualPrompt(영어·매체중립) + 선택 스타일 + 자연스러운 모션/카메라 묘사로 영상 프롬프트 구성.
-      const wanPrompt = `${vp}. ${style.promptAdd}. natural lifelike motion, subtle cinematic camera movement, smooth and fluid`;
+      // visualPrompt(영어·매체중립) + 선택 스타일 + 모션 큐. 모션은 스타일 결에 맞게(실사=사실적,
+      //   일러스트=부드러운 애니메이션, 고전=아날로그 필름) 다르게 줘야 애니·고전도 자연스럽게 움직인다.
+      const motionCue = style.id === 'classic'
+        ? 'gentle period-film motion, soft vintage camera pan, subtle flicker and film grain, smooth and fluid'
+        : style.illustration
+        ? 'smooth animated motion, gentle character movement, soft parallax camera, fluid 2D animation'
+        : 'natural lifelike motion, subtle cinematic camera movement, smooth and fluid';
+      const wanPrompt = `${vp}. ${style.promptAdd}. ${motionCue}`;
       try {
         log(`[장면 ${i + 1}] 🎬 움직이는 영상 생성…`);
         await wanT2V(wanPod, wanPrompt, abs(videoRel), {
