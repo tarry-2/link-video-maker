@@ -386,6 +386,8 @@ $('generate').onclick = async () => {
       imageStyle: $('image-style') ? $('image-style').value : 'real',
       aiClips: Number($('aiClips').value),
       autoShutdown: $('auto-shutdown') ? $('auto-shutdown').checked : true,
+      narration: $('v-narration') ? $('v-narration').checked : true,
+      bgm: $('v-bgm') ? $('v-bgm').checked : true,
     };
   } else {
     if (!uploadedImages.length) { alert('이미지를 넣어주세요.'); return; }
@@ -773,6 +775,14 @@ function syncFormat() {
 $('duration')?.addEventListener('change', syncFormat);
 $('duration')?.addEventListener('input', syncFormat);
 syncFormat();
+
+// '살아 움직이는 영상'을 골랐을 때만 자동-비용끄기 옵션을 보여준다(평소엔 숨겨 깔끔하게).
+function syncAiClips() {
+  const row = $('auto-shutdown-row');
+  if (row) row.classList.toggle('hidden', Number($('aiClips')?.value || 0) === 0);
+}
+$('aiClips')?.addEventListener('change', syncAiClips);
+syncAiClips();
 
 // ── 키 설정 모달 ──
 const KEY_META = [

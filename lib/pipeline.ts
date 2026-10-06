@@ -56,6 +56,8 @@ export type PipelineOpts = {
   imageStyle?: string; // 이미지 스타일 id(레지스트리 lib/styles.ts. real·anime·chalkboard 등)
   aiClips?: number; // 움직이는 AI 영상(Wan2.2) 클립 개수(0=안씀, 기본 0). 앞에서부터 N개 장면에 적용.
   autoShutdown?: boolean; // 움직이는 영상 작업이 끝나면 RunPod 팟을 자동 종료(과금 중단). 기본 true.
+  narration?: boolean; // 나레이션(AI 음성) 넣기. 기본 true. false면 음성·단어자막 없이 영상만.
+  bgm?: boolean; // 배경음악 넣기. 기본 true. false면 음악 없음.
   transitionFrames?: number;
   log?: (m: string) => void;
 };
@@ -96,15 +98,21 @@ export async function makeVideo(
   const voiceId = VOICES[voiceKey]?.id || VOICES[DEFAULT_VOICE].id;
   const scenes: SceneData[] = [];
 
-  // ★음성은 통짜로 한 번에 생성(억양이 자연스럽게 이어짐). 장면별 구간(sceneRanges)만 나눠 쓴다.
-  log('[음성] 전체 나레이션 한 번에 생성(자연스러운 억양)…');
-  const voiceRel = `${pubRel}/voice.mp3`;
-  const {align, sceneRanges} = await ttsElevenJoined(
-    keys.elevenlabs,
-    sb.scenes.map((s) => s.narration),
-    abs(voiceRel),
-    voiceId,
-  );
+  // ★나레이션 토글 — ON이면 통짜 음성 생성(억양 자연스럽게 이어짐, 장면별 구간 sceneRanges로 나눠 씀).
+  //   OFF면 음성·단어자막 없이 영상만 만든다(장면 길이는 글자 수로 산정).
+  const wantNarration = opts.narration !== false;
+  let voiceRel: string | undefined;
+  let align: Awaited<ReturnType<typeof ttsElevenJoined>>['align'] = null;
+  let sceneRanges: [number, number][] = [];
+  if (wantNarration) {
+    log('[음성] 전체 나레이션 한 번에 생성(자연스러운 억양)…');
+    voiceRel = `${pubRel}/voice.mp3`;
+    const r = await ttsElevenJoined(keys.elevenlabs, sb.scenes.map((s) => s.narration), abs(voiceRel), voiceId);
+    align = r.align;
+    sceneRanges = r.sceneRanges;
+  } else {
+    log('[음성] 나레이션 끔 — 음성 없이 영상만 만듭니다.');
+  }
 
   // ★움직이는 AI 영상(Wan2.2) — 앞에서부터 aiClips개 장면을 RunPod에서 영상 클립으로 만든다.
   //   이미지는 항상 먼저 만들어 폴백/썸네일로 두고, 클립 성공 시 scene.video로 교체(Scene.tsx가 video 우선 렌더).
@@ -159,8 +167,9 @@ export async function makeVideo(
     }
 
     const [startSec, endSec] = sceneRanges[i] || [0, 0];
-    const words = alignToWords(align, FPS, startSec, [startSec, endSec]);
-    const durSec = endSec > startSec ? endSec - startSec : s.narration.length / 3.9;
+    // 나레이션 ON이면 음성 타이밍으로 단어자막·구간, OFF면 자막 없이 글자 수로 읽을 시간 산정.
+    const words = wantNarration ? alignToWords(align, FPS, startSec, [startSec, endSec]) : [];
+    const durSec = endSec > startSec ? endSec - startSec : Math.min(6, Math.max(2.2, s.narration.length / 7));
     // 마지막 장면만 꼬리 여유, 중간은 딱 붙여 통짜 오디오와 싱크
     const tail = i === sb.scenes.length - 1 ? 0.5 : 0.15;
     const durationInFrames = Math.max(FPS, Math.round((durSec + tail) * FPS));
@@ -193,12 +202,18 @@ export async function makeVideo(
   const transitionFrames = 0;
   const totalFrames = scenes.reduce((a, s) => a + s.durationInFrames, 0);
   const totalMs = (totalFrames / FPS) * 1000;
-  const bgmRel = `${pubRel}/bgm.mp3`;
-  log('[BGM] 배경음악 생성 중…');
-  const musicMood = sb.musicPrompt || preset?.musicMood || '';
-  // BGM 실패 시 throw(사유 포함) → 제작 중단. 웹/CLI 동일 정책.
-  await generateBgm(keys.elevenlabs, musicMood, totalMs, abs(bgmRel), log);
-  const bgmSrc: string = bgmRel;
+  // ★배경음악 토글 — ON이면 분위기 음악 생성, OFF면 음악 없이.
+  let bgmSrc: string | undefined;
+  if (opts.bgm !== false) {
+    const bgmRel = `${pubRel}/bgm.mp3`;
+    log('[BGM] 배경음악 생성 중…');
+    const musicMood = sb.musicPrompt || preset?.musicMood || '';
+    // BGM 실패 시 throw(사유 포함) → 제작 중단. 웹/CLI 동일 정책.
+    await generateBgm(keys.elevenlabs, musicMood, totalMs, abs(bgmRel), log);
+    bgmSrc = bgmRel;
+  } else {
+    log('[BGM] 배경음악 끔.');
+  }
 
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `${id}.mp4`);

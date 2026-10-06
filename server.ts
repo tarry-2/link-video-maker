@@ -1007,8 +1007,12 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const url = String(b.url || '').trim();
     if (!url) return json(res, 400, {error: '링크를 입력하세요.'});
     const k = pipelineKeys();
-    if (!k.elevenlabs || (!k.gemini.length && !k.openai))
-      return json(res, 400, {error: '설정에서 키를 먼저 저장하세요(Gemini/OpenAI, ElevenLabs).'});
+    if (!k.gemini.length && !k.openai)
+      return json(res, 400, {error: '설정에서 대본 키(Gemini 또는 OpenAI)를 저장하세요.'});
+    // ElevenLabs는 나레이션·배경음악 중 하나라도 켰을 때만 필요(둘 다 끄면 음성·음악 없이 영상만).
+    const needsEleven = b.narration !== false || b.bgm !== false;
+    if (needsEleven && !k.elevenlabs)
+      return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다(둘 다 끄면 키 없이 가능).'});
 
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
@@ -1027,6 +1031,8 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
           aiClips: Number(b.aiClips) || 0,
           autoShutdown: b.autoShutdown !== false, // 기본 자동 종료(과금 방지)
+          narration: b.narration !== false, // 나레이션 토글(기본 ON)
+          bgm: b.bgm !== false,              // 배경음악 토글(기본 ON)
           log: (m) => jlog(job, m),
         });
         // 바탕화면 폴더에도 저장

@@ -231,16 +231,22 @@
           </div>
         </div>
 
+        <div class="row" id="audio-row" style="margin-top:4px">
+          <label class="toggle col"><input type="checkbox" id="v-narration" checked /> 🎙 나레이션 <span class="hint">(AI가 대본을 읽어줌)</span></label>
+          <label class="toggle col"><input type="checkbox" id="v-bgm" checked /> 🎵 배경음악 <span class="hint">(분위기 음악 깔림)</span></label>
+        </div>
+
         <div class="row" id="advanced-row">
           <div class="col">
-            <label class="field-label">움직이는 AI 영상 <span class="hint">— 실사·애니, 클라우드 GPU(유료)</span></label>
+            <label class="field-label">화면이 움직일까요?</label>
+            <p class="hint" style="margin:2px 0 8px">그림이 살아 움직이는 영상으로 만들지 고르세요. 움직이면 더 생생하지만 시간·비용이 들어요.</p>
             <select id="aiClips" class="input">
-              <option value="0" selected>안 씀 (이미지+줌, 무료)</option>
-              <option value="1">첫 장면만 (약 1,000원)</option>
-              <option value="2">2개 장면 (약 1,500원)</option>
-              <option value="3">3개 장면 (약 2,000원)</option>
+              <option value="0" selected>📷 사진처럼 (그림 + 움직임 효과) · 무료·빠름</option>
+              <option value="1">🎬 살아 움직이는 영상 · 첫 장면만 (약 1,000원)</option>
+              <option value="2">🎬 살아 움직이는 영상 · 2장면 (약 1,500원)</option>
+              <option value="3">🎬 살아 움직이는 영상 · 3장면 (약 2,000원)</option>
             </select>
-            <label class="field-label" style="margin-top:8px"><input type="checkbox" id="auto-shutdown" checked /> 끝나면 GPU 자동 끄기 <span class="hint">— 끄면 과금 중단(권장). 체크 해제 시 계속 켜둠(다음 작업 빠름·과금 계속)</span></label>
+            <label id="auto-shutdown-row" class="field-label hidden" style="margin-top:8px"><input type="checkbox" id="auto-shutdown" checked /> 만들고 나면 자동으로 비용 끄기 <span class="hint">(권장 — 켜두면 추가 요금이 계속 나가요)</span></label>
           </div>
         </div>
 
