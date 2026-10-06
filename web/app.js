@@ -65,6 +65,12 @@ function applyMode(m) {
   const hl = m === 'highlight';
   document.querySelector('.tabs')?.classList.toggle('hidden', hl);
   document.querySelector('.app-grid')?.classList.toggle('highlight-mode', hl); // 왼쪽이 전체폭(카드 안 짜부라지게)
+  // 🔴 영상 만들기의 대본 편집기·상품고정·예상비용은 하이라이트와 무관 → 하이라이트 뷰에선 숨긴다.
+  //   (안 숨기면 "상품 정보 고정/대본 만들기" 폼이 하이라이트 화면에 겹쳐 보이고 studio 흐름이 간섭함)
+  document.querySelector('.studio-options')?.classList.toggle('hidden', hl);
+  $('studio-message')?.classList.toggle('hidden', hl);
+  $('create-estimate')?.classList.toggle('hidden', hl);
+  if (hl) $('studio-editor')?.classList.add('hidden'); // 하이라이트에선 대본 편집기 무조건 숨김
   if (hl) {
     $('preview-hint')?.classList.add('hidden'); // 하이라이트는 영상 미리보기 안내 불필요
     // 진행 중 작업이 없으면, 이전 영상/카드 작업의 결과(변비약 영상 등)가 하이라이트에 섞여 보이지 않게 숨긴다.
