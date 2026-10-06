@@ -26,6 +26,7 @@ export const sceneSchema = z.object({
   product: z.object({name: z.string(), price: z.string(), benefit: z.string(), url: z.string()}).optional(),
   video: z.string().optional(), // 배경 영상 클립(있으면 이미지 대신 사용)
   fullBleed: z.boolean().optional(), // ★유튜브 하이라이트: 이미 9:16인 클립을 레터박스 없이 꽉 채우고 원본 소리 재생
+  duckAudio: z.boolean().optional(), // 해설 나레이션을 깔 때 원본(클립) 소리를 줄인다
   hookTop: z.string(),
   hookAccent: z.string(),
   accentColor: z.string(),
@@ -50,6 +51,7 @@ export const Scene: React.FC<SceneData> = ({
   product,
   video,
   fullBleed,
+  duckAudio,
   hookTop,
   hookAccent,
   accentColor,
@@ -112,7 +114,8 @@ export const Scene: React.FC<SceneData> = ({
   if (fullBleed && video) {
     return (
       <AbsoluteFill style={{backgroundColor: '#000'}}>
-        <OffthreadVideo src={staticFile(video)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        {/* 해설 나레이션을 깔면 원본 클립 소리를 줄여(더킹) 내 목소리가 들리게 한다. */}
+        <OffthreadVideo src={staticFile(video)} volume={duckAudio ? 0.2 : 1} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
         {(hookTop || hookAccent) && (
           <div style={{
             position: 'absolute', top: L.hookTop, left: 0, right: 0, padding: L.hookPad,
@@ -124,6 +127,33 @@ export const Scene: React.FC<SceneData> = ({
               lineHeight: 1.12, marginTop: 6, textShadow: outline(5), WebkitTextStroke: '2px #000'}}>{hookAccent}</div>}
           </div>
         )}
+        {/* 해설 카라오케 자막(하단) — 해설은 길어서 전부 깔면 넘침 → 지금 말하는 구간만 보이는 윈도우(≈6단어). */}
+        {words.length > 0 && (() => {
+          const WIN = 6;
+          // 현재 프레임에 해당하는 단어 index(없으면 직전까지 말한 단어). 그걸 중심으로 윈도우.
+          let cur = words.findIndex((w) => frame >= w.s && frame < w.e);
+          if (cur < 0) { for (let i = 0; i < words.length; i++) { if (words[i].s <= frame) cur = i; } }
+          if (cur < 0) cur = 0;
+          const start = Math.max(0, Math.min(cur - 1, words.length - WIN));
+          const win = words.slice(start, start + WIN);
+          return (
+            <div style={{
+              position: 'absolute', bottom: L.subBottom, width: '100%', display: 'flex', flexWrap: 'wrap',
+              justifyContent: 'center', alignItems: 'center', gap: L.subGap, padding: L.subPad, boxSizing: 'border-box',
+            }}>
+              {win.map((w, i) => {
+                const active = frame >= w.s && frame < w.e;
+                return (
+                  <span key={start + i} style={{
+                    fontFamily: notoFont, fontWeight: 800, fontSize: L.fsSub,
+                    color: active ? accentColor : '#fff', textShadow: outline(active ? 5 : 4),
+                    transform: active ? 'scale(1.14)' : 'scale(1)', display: 'inline-block',
+                  }}>{w.t}</span>
+                );
+              })}
+            </div>
+          );
+        })()}
       </AbsoluteFill>
     );
   }

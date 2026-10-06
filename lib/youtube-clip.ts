@@ -12,7 +12,7 @@ const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 
 export type Highlight = {start: number; end: number; hookTop: string; hookAccent: string; reason: string};
-export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string};
+export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string; transcript?: string};
 
 function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 300000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -96,6 +96,19 @@ function vttToTimedText(vtt: string): string {
     }
   }
   return out.join('\n').slice(0, 12000); // 토큰 절약(앞부분 위주)
+}
+
+// subText("[N초] 텍스트" 줄들)에서 [start,end]초 구간의 대사만 뽑아 한 덩어리로(해설 대본 근거용).
+function sliceTranscript(subText: string, start: number, end: number): string {
+  if (!subText) return '';
+  const out: string[] = [];
+  for (const ln of subText.split('\n')) {
+    const m = /^\[(\d+)s\]\s*(.*)$/.exec(ln);
+    if (!m) continue;
+    const sec = Number(m[1]);
+    if (sec >= start - 1 && sec <= end + 1 && m[2].trim()) out.push(m[2].trim());
+  }
+  return out.join(' ').slice(0, 1200);
 }
 
 // 영상 길이(초) — ffprobe.
@@ -216,7 +229,7 @@ export async function extractHighlights(
   const stop = () => { if (cancelled()) throw new Error('사용자가 중단했습니다.'); };
   const orientation = opts.orientation === 'landscape' ? 'landscape' : 'portrait';
   const count = Math.max(1, Math.min(10, opts.count || 3));
-  const clipSec = Math.max(15, Math.min(60, opts.clipSec || 30));
+  const clipSec = Math.max(15, Math.min(600, opts.clipSec || 30)); // 최대 10분(길게 커스텀 가능)
   await fsp.mkdir(dir, {recursive: true});
   if (!(await ytdlpAvailable())) throw new Error('서버에 yt-dlp가 없습니다(배포 환경 확인 필요).');
   stop();
@@ -237,7 +250,7 @@ export async function extractHighlights(
     log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${h.start}s~${h.end}s · ${orientation === 'landscape' ? '가로' : '세로'})…`);
     try {
       await cutClip(videoPath, h, file, orientation, log);
-      results.push({file, start: h.start, end: h.end, hookTop: h.hookTop, hookAccent: h.hookAccent});
+      results.push({file, start: h.start, end: h.end, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end)});
     } catch (e: any) { log(`[하이라이트] ${i + 1}번 컷 실패(건너뜀): ` + (e?.message || '').slice(0, 120)); }
   }
   if (!results.length) throw new Error('클립을 하나도 만들지 못했습니다.');

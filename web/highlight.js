@@ -232,13 +232,14 @@
   // ── 검색/선택/설정 ──
   let picked = null, region = 'kr', order = 'viewCount', cat = '';
   let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait';
+  let commentary = 0, voice = ''; // 해설 넣기(0/1) · 해설 목소리
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
   const STATE_KEY = 'onvideo-hl-state';
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, query, pageToken, loadedCount, picked,
+        region, order, cat, count, sec, orient, commentary, voice, query, pageToken, loadedCount, picked,
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -252,11 +253,16 @@
     region = s.region || 'kr'; order = s.order || 'viewCount'; cat = s.cat || ''; orient = s.orient || 'portrait';
     document.querySelectorAll('.hl-orient').forEach((b) => b.classList.toggle('active', b.dataset.o === orient));
     count = s.count || 3; sec = s.sec || 30; query = s.query || ''; pageToken = s.pageToken || ''; loadedCount = s.loadedCount || 0;
+    commentary = s.commentary || 0; voice = s.voice || '';
     picked = s.picked || null;
+    document.querySelectorAll('.hl-cm').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === commentary));
+    $('hl-voice-row')?.classList.toggle('hidden', !commentary);
     // 버튼 활성 복원
     document.querySelectorAll('.hl-region').forEach((b) => b.classList.toggle('active', b.dataset.region === region));
     document.querySelectorAll('.hl-order').forEach((b) => b.classList.toggle('active', b.dataset.order === order));
     document.querySelectorAll('.hl-sec').forEach((b) => b.classList.toggle('active', Number(b.dataset.s) === sec));
+    // 프리셋에 없는 커스텀 길이면 입력칸에 표시(버튼 활성 없음).
+    if (![15,30,45,60,90,120,180,300].includes(sec) && $('hl-sec-custom')) $('hl-sec-custom').value = sec;
     if (s.catActive) document.querySelectorAll('.hl-cat').forEach((b) => b.classList.toggle('active', b.dataset.ko === s.catActive));
     if (s.query) $('hl-query').value = s.query;
     // 검색 결과 복원(카드 다시 클릭되게 바인딩)
@@ -385,8 +391,29 @@
   $('hl-search')?.addEventListener('click', () => { document.querySelector('.hl-cat.active')?.classList.remove('active'); search(); });
   $('hl-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.querySelector('.hl-cat.active')?.classList.remove('active'); search(); } });
   document.querySelectorAll('.hl-sec').forEach((b) => b.addEventListener('click', () => {
-    document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); sec = Number(b.dataset.s); renderCountSeg(); saveState();
+    document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); sec = Number(b.dataset.s);
+    if ($('hl-sec-custom')) $('hl-sec-custom').value = ''; renderCountSeg(); saveState();
   }));
+  // 길이 직접 입력(15~600초) — 버튼 선택 해제하고 그 값을 쓴다.
+  $('hl-sec-custom')?.addEventListener('input', () => {
+    const v = Math.max(15, Math.min(600, Number($('hl-sec-custom').value) || 0));
+    if (v >= 15) { sec = v; document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); renderCountSeg(); saveState(); }
+  });
+  // 해설 넣기 토글
+  document.querySelectorAll('.hl-cm').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-cm').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+    commentary = Number(b.dataset.c); $('hl-voice-row')?.classList.toggle('hidden', !commentary); saveState();
+  }));
+  $('hl-voice')?.addEventListener('change', () => { voice = $('hl-voice').value; saveState(); });
+  // 해설 목소리 목록 채우기(영상 만들기와 같은 ElevenLabs 목소리 재사용).
+  (async () => {
+    try {
+      const d = await (await fetch('/api/categories')).json();
+      const sel = $('hl-voice'); if (!sel || !d.voices) return;
+      sel.innerHTML = d.voices.map((v) => `<option value="${v.id}">${esc(v.label)}${v.note ? ' · ' + esc(v.note) : ''}</option>`).join('');
+      if (voice) sel.value = voice; else voice = sel.value;
+    } catch {}
+  })();
   document.querySelectorAll('.hl-orient').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-orient').forEach((x) => x.classList.remove('active')); b.classList.add('active'); orient = b.dataset.o; saveState();
   }));
@@ -438,9 +465,10 @@
     addLog(`• 원본 길이: ${fmtDur(picked.durationSec)} → 클립 ${sec}초짜리`);
     addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}`);
     addLog(`• 만들 편수: ${count}편`);
+    addLog(`• 해설: ${commentary ? 'AI 해설 입힘 (' + ($('hl-voice')?.selectedOptions[0]?.textContent || voice) + ')' : '원본 그대로'}`);
     addLog('────────────────────────────');
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
-    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient};
+    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, commentary: !!commentary, voice};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });

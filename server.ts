@@ -217,6 +217,21 @@ async function ensureInstaVideoR2(id: string): Promise<string> {
   setSampleR2(base, key);
   return key;
 }
+// 재사용(CC BY) 하이라이트의 출처 문구 — 상세설명·캡션에 반드시 포함(저작권 표기 의무).
+//   project.json.attribution 우선, 없으면 attribution.txt 폴백. 하이라이트가 아니면 빈 문자열.
+function readAttribution(id: string): string {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return '';
+  const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
+  try {
+    const a = JSON.parse(fs.readFileSync(path.join(dir, 'project.json'), 'utf8')).attribution;
+    if (a) return String(a).trim();
+  } catch {}
+  try {
+    const f = path.join(dir, 'attribution.txt');
+    if (fs.existsSync(f)) return fs.readFileSync(f, 'utf8').trim();
+  } catch {}
+  return '';
+}
 // 카드 게시물(캐러셀) 메타 — project.json에서 제목·나레이션(캡션 생성용) 읽기.
 function cardPostMeta(id: string): {title: string; narrations: string[]} | null {
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
@@ -664,6 +679,9 @@ const server = http.createServer(async (req, res) => {
     const orientation = pf?.orientation === 'landscape' ? 'landscape' : 'portrait';
     try {
       const meta = await generateMeta({gemini: k.gemini, openai: k.openai}, src.title, src.narrations, src.durSec, orientation);
+      // CC BY 하이라이트는 출처를 설명 끝에 반드시 붙인다(저작권 표기 의무).
+      const attr = readAttribution(id);
+      if (attr && !meta.description.includes(attr)) meta.description = (meta.description + '\n\n' + attr).slice(0, 4900);
       return json(res, 200, meta);
     } catch (e: any) { return json(res, 502, {error: '메타 생성 실패: ' + e.message}); }
   }
@@ -762,7 +780,10 @@ const server = http.createServer(async (req, res) => {
     const k = pipelineKeys();
     try {
       const caption = await generateCaption({gemini: k.gemini, openai: k.openai}, meta.title, meta.narrations);
-      return json(res, 200, {caption});
+      // CC BY 하이라이트는 캡션에도 출처를 붙인다(저작권 표기 의무).
+      const attr = readAttribution(id);
+      const finalCaption = attr && !caption.includes(attr) ? (caption + '\n\n' + attr) : caption;
+      return json(res, 200, {caption: finalCaption});
     } catch (e: any) { return json(res, 502, {error: '캡션 생성 실패: ' + e.message}); }
   }
   // 인스타 업로드(릴스/피드) — 완성 영상이 R2에 있어야 함(공개 presigned URL 필요)
@@ -1258,15 +1279,17 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const title = String(b.title || '').slice(0, 200);
     const channel = String(b.channel || '').slice(0, 120);
     const count = Math.max(1, Math.min(10, Number(b.count) || 3));
-    const clipSec = Math.max(15, Math.min(60, Number(b.clipSec) || 30));
+    const clipSec = Math.max(15, Math.min(600, Number(b.clipSec) || 30)); // 최대 10분(커스텀)
     const orientation = b.orientation === 'landscape' ? 'landscape' : 'portrait';
+    const commentary = !!b.commentary; // 해설 나레이션 입히기(수익화 변형 가치)
+    const voice = typeof b.voice === 'string' ? b.voice : undefined;
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
     currentGenJob = id;
     (async () => {
       try {
-        const clips = await makeHighlights(videoId, {title, channel}, {count, clipSec, orientation, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
+        const clips = await makeHighlights(videoId, {title, channel}, {count, clipSec, orientation, commentary, voice, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
         job.kind = 'highlight';
         job.clips = clips.map((c) => ({projectId: c.projectId, file: c.file, title: c.title}));
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }

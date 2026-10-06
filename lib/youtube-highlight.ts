@@ -11,10 +11,41 @@ import {pipelineKeys} from './keys';
 import {extractHighlights} from './youtube-clip';
 import {renderVideo, buildRenderPublic} from './render';
 import {addPortfolio} from './portfolio';
+import {r2Enabled, videoKey, uploadFile} from './storage';
+import {geminiGenerate} from './gemini';
+import {ttsElevenJoined, alignToWords, pickVoice, VOICES, type Word} from './tts';
 import type {SceneData} from '../src/Scene';
 
 const DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data');
 const FPS = 30;
+
+// 재사용 영상에 '내 관점의 해설'을 입혀 수익화(변형 가치) 기준을 충족시키기 위한 나레이션 대본 생성.
+//   원본 대사(transcript)를 근거로 맥락·논평을 더한다(단순 중계/낭독 금지).
+async function writeCommentary(
+  geminiKeys: string[], title: string, transcript: string, hook: string, clipSec: number,
+): Promise<string> {
+  if (!geminiKeys.length) return '';
+  const targetChars = Math.max(40, Math.round(clipSec * 3.0));
+  const prompt = `너는 유튜브 '리뷰·해설' 채널 운영자다. 아래는 남의 영상(재사용)에서 가져온 한 장면이다.
+이 장면에 '네 관점의 해설/논평'을 한국어로 입혀 영상에 깔 나레이션을 써라. 장면을 그대로 중계·낭독하지 말고,
+배경·맥락 설명, 왜 중요한지, 포인트 짚기, 너의 해석 한마디를 넣어 '원본과 구별되는 가치'를 더해라.
+
+영상 제목: ${title}
+장면 상단 후킹: ${hook || '(없음)'}
+장면 대사/내용: ${transcript || '(대사 없음 — 제목과 후킹으로 맥락 추론)'}
+
+[규칙]
+- 분량: 약 ${targetChars}자(이 장면 ${clipSec}초에 얹을 분량). 넘지 마라.
+- 구어체로 말하듯. 첫 문장은 시청자를 붙잡는 한마디.
+- 해설·논평·맥락 중심(받아쓰기·중계 금지).
+- 해시태그·이모지·따옴표 없이 '읽을 문장'만.
+JSON만 출력: {"commentary":"..."}`;
+  try {
+    const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 512, temperature: 0.8});
+    const m = raw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
+    return m ? String(JSON.parse(m[0]).commentary || '').trim() : '';
+  } catch { return ''; }
+}
 
 export type HighlightJobResult = {projectId: string; file: string; title: string; hookTop: string}[];
 
@@ -22,7 +53,7 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -55,39 +86,107 @@ export async function makeHighlights(
 
     // 클립 길이(초)로 프레임 수 산정.
     const durSec = Math.max(1, c.end - c.start);
+    const clipFrames = Math.round(durSec * FPS);
+
+    // ── 해설 나레이션(선택) — 원본에 '내 관점의 해설'을 입혀 수익화(변형 가치) 충족 ──
+    //   Gemini로 해설 대본 → ElevenLabs TTS(단어 타이밍) → 원본 소리는 더킹, 카라오케 자막으로 표시.
+    let words: Word[] = [];
+    let voiceRel: string | undefined;
+    let narrFrames = 0;
+    if (opts.commentary) {
+      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', Math.round(durSec));
+      if (commentary && k.elevenlabs) {
+        log(`[하이라이트] ${i + 1}편 해설 나레이션 생성…`);
+        try {
+          const voiceId = VOICES[pickVoice(opts.voice, undefined)].id;
+          const narrAbs = path.join(pubClipDir, 'narration.mp3'); // buildRenderPublic 전에 써야 복사됨
+          const {align} = await ttsElevenJoined(k.elevenlabs, [commentary], narrAbs, voiceId);
+          words = alignToWords(align, FPS);
+          narrFrames = words.length ? words[words.length - 1].e + 15 : 0;
+          voiceRel = `${jobRel}/narration.mp3`;
+        } catch (e: any) { log('[하이라이트] 해설 음성 실패(원본 소리로 진행): ' + (e?.message || '')); }
+      } else if (opts.commentary) {
+        log('[하이라이트] 해설 대본/음성 키가 없어 원본 소리로 진행합니다.');
+      }
+    }
+
     const scene: SceneData = {
       image: `${jobRel}/${clipName}`, // 폴백용(사용 안 함 — fullBleed가 video 사용)
       video: `${jobRel}/${clipName}`,
-      fullBleed: true, // 이미 9:16 → 꽉 채우고 원본 소리 + 상단 후킹만
+      fullBleed: true, // 이미 비율 맞춤 → 꽉 채우고 상단 후킹 + (해설 시)카라오케 자막
       hookTop: c.hookTop || meta.title.slice(0, 20),
       hookAccent: c.hookAccent || '',
       accentColor: '#FFE24B',
-      words: [],
-      durationInFrames: Math.round(durSec * FPS),
+      words, // 해설 있으면 카라오케 자막, 없으면 []
+      duckAudio: !!voiceRel, // 해설 깔면 원본 소리를 줄인다
+      // 해설이 클립보다 길면 나레이션 끝까지 담는다(안 그러면 말이 잘림).
+      durationInFrames: Math.max(clipFrames, narrFrames),
     };
 
     const output = `highlight-${i + 1}-${randomUUID().slice(0, 8)}.mp4`;
-    // 로컬/볼륨 저장(기존 포폴 서빙 경로 resolveVideo가 data/studio/{id}/{output}에서 찾음).
-    const outAbs = path.join(studioDir, output);
+    // ★R2 활성이면 렌더 출력을 볼륨이 아니라 /tmp에 쓴다(studio와 동일). 볼륨(/app/data)이 꽉 차면
+    //   Remotion 마지막 faststart 리먹스가 ENOSPC(exit 228)로 죽기 때문. /tmp는 컨테이너 로컬(수GB).
+    const outAbs = r2Enabled()
+      ? path.join(os.tmpdir(), `onvideo-hl-out-${projectId}-${output}`)
+      : path.join(studioDir, output);
     const publicDir = await buildRenderPublic(jobRel);
     try {
       log(`[하이라이트] ${i + 1}/${clips.length} 편 렌더…`);
-      await renderVideo([scene], 0, outAbs, log, undefined, undefined, publicDir, orientation);
+      await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
     } finally {
       await fsp.rm(publicDir, {recursive: true, force: true});
       await fsp.rm(pubClipDir, {recursive: true, force: true}); // 렌더 끝났으니 public 클립 정리
     }
 
     const title = (c.hookTop || meta.title).slice(0, 80);
+    const createdAt = new Date().toISOString();
+
+    // ★서버의 업로드·상세설명·서빙 스택(resolveVideo·ensureInstaVideoR2·readProject*·/portfolio-item)은
+    //   전부 data/studio/{id}/project.json을 디스크에서 직접 읽는다. 영상·카드와 "똑같은 모양"의
+    //   project.json을 써줘야 유튜브·인스타 업로드와 제목·설명 자동생성이 작동한다.
+    //   (안 쓰면 resolveVideo가 null → "영상을 찾을 수 없습니다" / 상세설명 생성 실패.)
+    const narrationSeed = [c.hookTop, c.hookAccent].filter(Boolean).join(' ').trim() || title;
+    const proj: any = {
+      id: projectId,
+      title,
+      status: 'completed',
+      createdAt,
+      output,
+      orientation,
+      // resolveVideo가 narrations/durSec를 scenes에서 뽑는다 → 메타 생성 재료로 후킹 문구를 넣는다.
+      scenes: [{narration: narrationSeed, voice: {frames: Math.round(durSec * FPS)}}],
+      input: {duration: Math.round(durSec)},
+      kind: 'highlight',
+      attribution, // CC BY 출처 — 상세설명/캡션에 자동 포함
+    };
+    // R2 활성이면 완성본(/tmp)을 R2로 올리고 삭제(볼륨 안 씀=228 회피). 실패하면 볼륨으로 폴백 복사해 로컬 서빙.
+    if (r2Enabled()) {
+      const volFile = path.join(studioDir, output);
+      try {
+        const key = videoKey(projectId, output);
+        if (await uploadFile(key, outAbs, 'video/mp4')) { proj.outputR2 = key; fs.rmSync(outAbs, {force: true}); }
+        else { fs.copyFileSync(outAbs, volFile); fs.rmSync(outAbs, {force: true}); }
+      } catch (e: any) {
+        log('[저장] R2 업로드 실패(로컬 보관): ' + (e?.message || e));
+        try { fs.copyFileSync(outAbs, volFile); fs.rmSync(outAbs, {force: true}); } catch {}
+      }
+    }
+    // R2 비활성이면 outAbs가 이미 볼륨(studioDir/output)이라 그대로 로컬 보관(폴백).
+    try {
+      const pjPath = path.join(studioDir, 'project.json');
+      fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
+      fs.renameSync(pjPath + '.tmp', pjPath);
+    } catch (e: any) { log('[하이라이트] project.json 저장 실패: ' + (e?.message || '')); }
+
     // 포트폴리오 등록 → voices.html 카드 + 유튜브/인스타 자동 업로드 재사용.
     try {
       addPortfolio({
         projectId, title, output,
         voice: '원본 음성(CC)', category: '🎬 유튜브 하이라이트', goal: 'info',
-        createdAt: new Date().toISOString(), orientation, kind: 'highlight',
+        createdAt, orientation, kind: 'highlight',
       });
     } catch (e: any) { log('[하이라이트] 포트폴리오 등록 건너뜀: ' + (e?.message || '')); }
-    // 출처(attribution)를 프로젝트 폴더에 남겨 업로드 설명에 쓸 수 있게.
+    // 출처(attribution)를 프로젝트 폴더에도 남긴다(상세설명 폴백 — project.json 읽기 실패 대비).
     try { fs.writeFileSync(path.join(studioDir, 'attribution.txt'), attribution); } catch {}
 
     results.push({projectId, file: output, title, hookTop: c.hookTop || ''});

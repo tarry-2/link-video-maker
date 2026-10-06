@@ -83,7 +83,27 @@
             <button type="button" class="seg-btn hl-sec active" data-s="30">30초</button>
             <button type="button" class="seg-btn hl-sec" data-s="45">45초</button>
             <button type="button" class="seg-btn hl-sec" data-s="60">60초</button>
+            <button type="button" class="seg-btn hl-sec" data-s="90">1분 30초</button>
+            <button type="button" class="seg-btn hl-sec" data-s="120">2분</button>
+            <button type="button" class="seg-btn hl-sec" data-s="180">3분</button>
+            <button type="button" class="seg-btn hl-sec" data-s="300">5분</button>
           </div>
+          <label class="voice-row" style="margin-top:8px">
+            <span class="field-label" style="margin:0">직접 입력(초)</span>
+            <input id="hl-sec-custom" class="input" type="number" min="15" max="600" step="5" placeholder="예: 150" style="max-width:120px">
+            <span class="hint">15~600초(최대 10분)</span>
+          </label>
+
+          <label class="field-label" style="margin-top:14px">🎙 해설 넣기 <span class="hint">(수익화 추천)</span></label>
+          <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+            <button type="button" class="seg-btn hl-cm active" data-c="0">원본 그대로</button>
+            <button type="button" class="seg-btn hl-cm" data-c="1">AI 해설 입히기</button>
+          </div>
+          <div id="hl-voice-row" class="voice-row hidden" style="margin-top:8px">
+            <span class="field-label" style="margin:0">해설 목소리</span>
+            <select id="hl-voice" class="input" style="max-width:220px"></select>
+          </div>
+          <p class="hint" id="hl-cm-note" style="margin-top:4px">원본에 'AI 해설(내 관점)'을 깔면 유튜브가 '리뷰·논평'으로 인정해 재사용 수익화에 유리합니다. 원본 소리는 자동으로 줄어듭니다.</p>
           <p class="mini-state" id="hl-picked"></p>
           <button id="hl-generate" class="primary-btn" type="button" style="margin-top:12px">🎬 하이라이트 숏폼 만들기</button>
           <p class="mini-state">AI가 영상에서 터질 만한 순간을 골라 세로 숏폼으로 자릅니다. 상단 후킹 자막이 자동으로 얹혀요. 완성되면 유튜브·인스타로 바로 올릴 수 있어요. <b>원작자 출처는 자동 표기됩니다(CC BY).</b></p>
