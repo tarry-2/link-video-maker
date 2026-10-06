@@ -9,7 +9,7 @@ import {rm} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {addPortfolio} from './portfolio';
 import {r2Enabled, videoKey, uploadFile} from './storage';
-import {renderCardStills, buildRenderPublic} from './render';
+import {renderCardCover, buildRenderPublic} from './render';
 import type {CardData} from '../src/Card';
 
 const STUDIO_DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data');
@@ -71,7 +71,8 @@ export async function registerCardDeck(reg: CardRegister): Promise<string> {
     const coverCard = {...reg.cards[coverIdx], thumbTop: true};
     const thumbPublic = await buildRenderPublic(coverCard.bg ? path.dirname(coverCard.bg) : undefined);
     try {
-      await renderCardStills([coverCard], [thumbAbs], log, thumbPublic);
+      // ★영상 커버는 릴스/유튜브와 같은 9:16로(게시물용 4:5 CardStill을 쓰면 좌우가 잘림 — 영상 썸네일과 동일하게).
+      await renderCardCover(coverCard, thumbAbs, log, thumbPublic);
     } catch (e: any) { log('[썸네일] 생성 건너뜀: ' + (e?.message || e)); }
     finally { await rm(thumbPublic, {recursive: true, force: true}); }
 

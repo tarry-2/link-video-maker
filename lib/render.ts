@@ -188,6 +188,35 @@ export async function renderCardStills(
   }
 }
 
+// 카드 '영상'(릴스) 커버 — 세로 9:16 한 장으로 렌더한다. 게시물용 CardStill은 4:5(1080×1350)라 릴스/유튜브
+// 커버로 쓰면 좌우가 잘린다(넷플릭스→플릭스). 실제 영상 첫 장면과 같은 CardVideo(9:16) 컴포지션에서 한 프레임만 뽑아
+// 영상 썸네일처럼 9:16로 만든다. 카라오케 캡션(words)은 커버에선 뺀다(깔끔한 커버).
+export async function renderCardCover(
+  card: CardData,
+  outPath: string,
+  log?: (m: string) => void,
+  publicDir?: string,
+): Promise<void> {
+  const serveUrl = publicDir
+    ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
+    : await getServeUrl(log);
+  try {
+    const inputProps = {
+      cards: [{...card, words: undefined, durationInFrames: 90, index: 0, total: 1}],
+      transitionFrames: 0,
+      orientation: 'portrait' as const,
+    };
+    const composition = await selectComposition({serveUrl, id: 'CardVideo', inputProps});
+    await renderStill({
+      composition, serveUrl, output: outPath, inputProps,
+      frame: 45, imageFormat: 'png',
+      chromiumOptions: {gl: 'swiftshader', enableMultiProcessOnLinux: true},
+    });
+  } finally {
+    if (publicDir) await rm(serveUrl, {recursive: true, force: true});
+  }
+}
+
 export type ThumbInput = {image: string; big: string; small: string; badge: string; accentColor: string};
 
 // 전용 썸네일(커버) 1장 생성 — 영상 프레임 재활용이 아니라 독립 디자인(Thumbnail 컴포지션).
