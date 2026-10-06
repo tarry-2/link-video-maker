@@ -9,7 +9,7 @@ import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {renderVideo, buildRenderPublic} from './render';
 import {getStyle} from './styles';
-import {ensureWanPod, wanT2V} from './runpod-wan';
+import {ensureWanPod, wanT2V, terminatePod} from './runpod-wan';
 import type {SceneData} from '../src/Scene';
 
 const FPS = 30;
@@ -55,6 +55,7 @@ export type PipelineOpts = {
   quality?: 'fast' | 'high'; // 이미지 화질(fast=schnell 싸게 / high=dev 실사)
   imageStyle?: string; // 이미지 스타일 id(레지스트리 lib/styles.ts. real·anime·chalkboard 등)
   aiClips?: number; // 움직이는 AI 영상(Wan2.2) 클립 개수(0=안씀, 기본 0). 앞에서부터 N개 장면에 적용.
+  autoShutdown?: boolean; // 움직이는 영상 작업이 끝나면 RunPod 팟을 자동 종료(과금 중단). 기본 true.
   transitionFrames?: number;
   log?: (m: string) => void;
 };
@@ -177,6 +178,15 @@ export async function makeVideo(
       motion: i,
       comment: s.comment,
     });
+  }
+
+  // ★움직이는 영상 클립을 다 뽑았으면 RunPod 팟을 종료한다(렌더는 Railway에서 하므로 팟은 더 필요 없음).
+  //   autoShutdown=false면 팟을 켜둔다(다음 작업 빠르게 — 대신 시간당 과금 계속). 기본 종료(과금 방지).
+  if (wanPod && opts.autoShutdown !== false) {
+    try { await terminatePod(keys.runpod!, wanPod); log('[영상] RunPod 팟 종료(과금 중단).'); }
+    catch (e: any) { log(`[영상] ⚠️ 팟 자동 종료 실패(${e.message}) — 설정에서 수동으로 꺼주세요.`); }
+  } else if (wanPod) {
+    log('[영상] RunPod 팟을 켜둡니다(자동 종료 OFF). 끝나면 설정에서 꺼주세요(과금 계속).');
   }
 
   // ★통짜 음성이라 장면 전환은 0(전환으로 겹치면 오디오 싱크가 깨진다). 컷 편집으로 딱딱.

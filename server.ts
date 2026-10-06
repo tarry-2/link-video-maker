@@ -11,6 +11,7 @@ import {makeCardVideo} from './lib/card-pipeline';
 import {generateCardStoryboard} from './lib/cards';
 import {PRESETS, RECOMMEND_STYLE, getPreset} from './lib/presets';
 import {STYLES, STYLE_IDS} from './lib/styles';
+import {runpodStatus, stopAllWanPods} from './lib/runpod-wan';
 import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
@@ -954,6 +955,21 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     return json(res, 200, {ok: true});
   }
 
+  // ── RunPod 현황(움직이는 영상 GPU) — 잔액 + 실행 중 팟. 설정 화면에서 조회. ──
+  if (p === '/api/runpod/status' && req.method === 'GET') {
+    const e = loadEnv();
+    if (!e.RUNPOD_API_KEY) return json(res, 200, {configured: false});
+    const st = await runpodStatus(e.RUNPOD_API_KEY);
+    return json(res, 200, {configured: true, balance: st.balance, pods: st.pods});
+  }
+  // 수동 "지금 끄기" — 실행 중인 모든 움직이는-영상 팟 종료(과금 중단).
+  if (p === '/api/runpod/stop' && req.method === 'POST') {
+    const e = loadEnv();
+    if (!e.RUNPOD_API_KEY) return json(res, 400, {error: 'RunPod 키가 없습니다.'});
+    try { const ids = await stopAllWanPods(e.RUNPOD_API_KEY); return json(res, 200, {stopped: ids}); }
+    catch (err: any) { return json(res, 502, {error: err?.message || '종료 실패'}); }
+  }
+
   // ── 목소리 미리듣기 ──
   if (p === '/api/voice-preview' && req.method === 'GET') {
     const voice = u.searchParams.get('voice') || 'jaewon';
@@ -1010,6 +1026,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           // ★전체 스타일 허용(실사·애니·고전 등 15종). 예전엔 real/anime로 뭉개 다른 스타일이 안 먹었음.
           imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
           aiClips: Number(b.aiClips) || 0,
+          autoShutdown: b.autoShutdown !== false, // 기본 자동 종료(과금 방지)
           log: (m) => jlog(job, m),
         });
         // 바탕화면 폴더에도 저장

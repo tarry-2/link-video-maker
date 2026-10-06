@@ -233,12 +233,14 @@
 
         <div class="row" id="advanced-row">
           <div class="col">
-            <label class="field-label">움직이는 AI 영상 <span class="hint">— 유료, 신중히</span></label>
+            <label class="field-label">움직이는 AI 영상 <span class="hint">— 실사·애니, 클라우드 GPU(유료)</span></label>
             <select id="aiClips" class="input">
               <option value="0" selected>안 씀 (이미지+줌, 무료)</option>
-              <option value="1">첫 장면만 (약 550원)</option>
-              <option value="2">2개 장면 (약 1,100원)</option>
+              <option value="1">첫 장면만 (약 1,000원)</option>
+              <option value="2">2개 장면 (약 1,500원)</option>
+              <option value="3">3개 장면 (약 2,000원)</option>
             </select>
+            <label class="field-label" style="margin-top:8px"><input type="checkbox" id="auto-shutdown" checked /> 끝나면 GPU 자동 끄기 <span class="hint">— 끄면 과금 중단(권장). 체크 해제 시 계속 켜둠(다음 작업 빠름·과금 계속)</span></label>
           </div>
         </div>
 
@@ -359,6 +361,17 @@
         </div>
         <p class="sub small">키는 로컬 .env.local에 저장됩니다. 저장된 키는 마스킹되어 표시돼요.</p>
         <div id="key-fields"></div>
+
+        <div id="runpod-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
+          <h3 class="field-label">🎬 움직이는 영상 GPU (RunPod) <span id="runpod-status" class="hint"></span></h3>
+          <p class="hint">"움직이는 AI 영상"은 클라우드 GPU에서 만들어요(유료, 시간당 과금). 작업이 끝나면 자동으로 꺼지지만, 혹시 켜져 있으면 아래로 바로 끌 수 있어요.</p>
+          <div id="runpod-info" class="hint" style="margin:6px 0">RunPod 키를 저장하면 잔액·상태가 여기 표시됩니다.</div>
+          <div style="display:flex; gap:8px; align-items:center">
+            <button type="button" id="runpod-refresh" class="ghost-btn small">↻ 상태 새로고침</button>
+            <button type="button" id="runpod-stop" class="ghost-btn small">⏹ 지금 GPU 끄기</button>
+          </div>
+          <div id="runpod-msg" class="hint" style="margin-top:6px"></div>
+        </div>
 
         <div id="rate-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
           <h3 class="field-label">💰 예상 비용 단가 (원) <span class="hint">강의 화면엔 안 보입니다</span></h3>

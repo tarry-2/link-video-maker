@@ -383,7 +383,9 @@ $('generate').onclick = async () => {
       presetId: selectedPreset,
       voice: $('voice').value,
       quality: $('quality').value,
+      imageStyle: $('image-style') ? $('image-style').value : 'real',
       aiClips: Number($('aiClips').value),
+      autoShutdown: $('auto-shutdown') ? $('auto-shutdown').checked : true,
     };
   } else {
     if (!uploadedImages.length) { alert('이미지를 넣어주세요.'); return; }
@@ -795,6 +797,7 @@ $('settings-btn').onclick = async () => {
   $('settings-modal').classList.remove('hidden');
   refreshYtStatus();
   refreshIgStatus();
+  refreshRunpod();
   // 저장된 키 상태는 뒤에서 채운다(실패해도 입력엔 영향 없음).
   try {
     const reveal = await (await fetch('/api/settings/reveal')).json();
@@ -810,6 +813,34 @@ $('settings-btn').onclick = async () => {
   }
 };
 $('settings-close').onclick = () => $('settings-modal').classList.add('hidden');
+
+// ── RunPod(움직이는 영상 GPU) 현황: 잔액 + 실행 중 팟 + 지금 끄기 ──
+async function refreshRunpod() {
+  const info = $('runpod-info'), st = $('runpod-status');
+  if (!info) return;
+  info.textContent = '상태 확인 중…'; if (st) st.textContent = '';
+  try {
+    const d = await (await fetch('/api/runpod/status')).json();
+    if (!d.configured) { info.textContent = 'RunPod 키 미설정 — 위에서 키를 저장하면 잔액·상태가 표시됩니다.'; return; }
+    const bal = (typeof d.balance === 'number') ? ('잔액 $' + d.balance.toFixed(2)) : '잔액 조회 불가';
+    const running = (d.pods || []).filter(p => p.status === 'RUNNING');
+    if (st) st.innerHTML = running.length
+      ? `<span style="color:#e0a030">● GPU ${running.length}대 켜짐(과금 중)</span>`
+      : '<span style="color:var(--teal)">● 꺼짐</span>';
+    info.textContent = `${bal} · ${running.length ? ('켜진 GPU ' + running.length + '대 — 아래 「지금 GPU 끄기」로 중단') : 'GPU 꺼짐(과금 없음)'}`;
+  } catch { info.textContent = '상태를 불러오지 못했습니다.'; }
+}
+$('runpod-refresh')?.addEventListener('click', refreshRunpod);
+$('runpod-stop')?.addEventListener('click', async () => {
+  const msg = $('runpod-msg');
+  if (!confirm('실행 중인 움직이는-영상 GPU를 모두 끌까요? (진행 중인 영상 작업이 있으면 실패할 수 있어요)')) return;
+  if (msg) msg.textContent = '끄는 중…';
+  try {
+    const d = await (await fetch('/api/runpod/stop', {method:'POST'})).json();
+    if (msg) msg.textContent = d.stopped && d.stopped.length ? `GPU ${d.stopped.length}대 껐습니다(과금 중단).` : '켜진 GPU가 없습니다.';
+    refreshRunpod();
+  } catch { if (msg) msg.textContent = '끄기 실패 — 잠시 후 다시 시도하세요.'; }
+});
 
 // ── 유튜브 연결 ──
 async function refreshYtStatus() {

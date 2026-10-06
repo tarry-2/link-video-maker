@@ -185,3 +185,50 @@ export async function generateWanClip(key: string, prompt: string, outPath: stri
   const podId = await ensureWanPod(key, opts.log);
   await wanT2V(podId, prompt, outPath, opts);
 }
+
+// ── 팟 라이프사이클(비용 관리) ──
+
+// 팟 종료(삭제) — 과금을 멈춘다. 작업 끝나면 자동으로, 또는 사용자가 수동으로 호출.
+export async function terminatePod(key: string, podId: string): Promise<void> {
+  await rest(key, `/pods/${podId}`, 'DELETE');
+}
+
+// 실행 중인 모든 wan 팟 종료(수동 "지금 끄기" 버튼용). 종료한 팟 id 배열 반환.
+export async function stopAllWanPods(key: string): Promise<string[]> {
+  const d = await rest(key, '/pods');
+  const pods = Array.isArray(d) ? d : (d.pods || d.data || []);
+  const ids: string[] = [];
+  for (const p of pods) {
+    if (String(p.imageName || '').includes('comfyui-wan')) {
+      try { await terminatePod(key, p.id); ids.push(p.id); } catch {}
+    }
+  }
+  return ids;
+}
+
+// 잔액($) — GraphQL myself.clientBalance. 실패하면 null(표시 안 함).
+export async function getBalance(key: string): Promise<number | null> {
+  try {
+    const r = await fetch(`https://api.runpod.io/graphql?api_key=${encodeURIComponent(key)}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query: 'query { myself { clientBalance } }'}),
+      signal: AbortSignal.timeout(20000),
+    });
+    const j = await r.json().catch(() => null);
+    const b = j?.data?.myself?.clientBalance;
+    return typeof b === 'number' ? b : null;
+  } catch { return null; }
+}
+
+// RunPod 현황(설정 화면용) — 잔액 + 실행 중 wan 팟 목록.
+export async function runpodStatus(key: string): Promise<{balance: number | null; pods: {id: string; status: string; costPerHr?: number}[]}> {
+  const balance = await getBalance(key);
+  let pods: {id: string; status: string; costPerHr?: number}[] = [];
+  try {
+    const d = await rest(key, '/pods');
+    const arr = Array.isArray(d) ? d : (d.pods || d.data || []);
+    pods = arr.filter((p: any) => String(p.imageName || '').includes('comfyui-wan'))
+      .map((p: any) => ({id: p.id, status: p.desiredStatus || '?', costPerHr: p.costPerHr}));
+  } catch {}
+  return {balance, pods};
+}
