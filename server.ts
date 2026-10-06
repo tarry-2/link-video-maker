@@ -27,6 +27,8 @@ import {pngToJpeg} from './lib/img-util';
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
 const STUDIO_DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(ROOT, 'data');
+// 부팅 시 저장해둔 유튜브 쿠키가 있으면 yt-dlp가 쓰도록 경로 지정(재배포해도 볼륨에 유지).
+try { const _ck = path.join(STUDIO_DATA_DIR, 'yt-cookies.txt'); if (!process.env.YT_COOKIES_FILE && fs.existsSync(_ck)) process.env.YT_COOKIES_FILE = _ck; } catch {}
 const OUT_DIR = path.join(ROOT, 'out');
 const SAMPLE_DIR = path.join(ROOT, 'public', 'voice-samples');
 
@@ -1271,6 +1273,27 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       }
     })();
     return json(res, 202, {id});
+  }
+
+  // 유튜브 쿠키 등록(봇차단 뚫기) — 로그인한 브라우저에서 뽑은 cookies.txt 내용을 data 볼륨에 저장.
+  //   yt-dlp가 YT_COOKIES_FILE 경로를 읽는다(youtube-clip.ts). Railway 콘솔 안 건드리고 앱에서 바로.
+  if (p === '/api/youtube-cookies' && req.method === 'POST') {
+    const b = await readBody(req);
+    const txt = String(b.cookies || '').trim();
+    if (!txt || !/# Netscape HTTP Cookie File|\.youtube\.com\t/.test(txt))
+      return json(res, 400, {error: 'cookies.txt 형식이 아니에요. 크롬 확장프로그램 "Get cookies.txt"로 youtube.com 쿠키를 내보내 그 내용을 통째로 붙여넣으세요.'});
+    try {
+      const dir = path.join(STUDIO_DATA_DIR); fs.mkdirSync(dir, {recursive: true});
+      const file = path.join(dir, 'yt-cookies.txt');
+      fs.writeFileSync(file, txt, 'utf8');
+      process.env.YT_COOKIES_FILE = file; // 즉시 적용(재배포 불필요)
+      return json(res, 200, {ok: true, lines: txt.split('\n').filter(l => l.includes('.youtube.com')).length});
+    } catch (e: any) { return json(res, 500, {error: '쿠키 저장 실패: ' + e.message}); }
+  }
+  if (p === '/api/youtube-cookies' && req.method === 'GET') {
+    const file = path.join(STUDIO_DATA_DIR, 'yt-cookies.txt');
+    const exists = fs.existsSync(file);
+    return json(res, 200, {saved: exists, when: exists ? fs.statSync(file).mtime.toISOString() : null});
   }
 
   // 하이라이트 작업 중단(잘못 골랐을 때) — cancelled 플래그만 세우면 makeHighlights가 다음 단계에서 멈춘다.

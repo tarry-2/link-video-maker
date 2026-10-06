@@ -379,6 +379,27 @@
   document.querySelectorAll('.hl-sec').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); sec = Number(b.dataset.s); renderCountSeg(); saveState();
   }));
+  // ── 유튜브 쿠키 등록(봇차단 뚫기) ──
+  async function refreshCookieStatus() {
+    try { const d = await (await fetch('/api/youtube-cookies')).json();
+      if ($('ck-status')) $('ck-status').textContent = d.saved ? `✅ 등록됨 (${new Date(d.when).toLocaleDateString('ko-KR')})` : '— 미등록';
+    } catch {}
+  }
+  $('ck-save')?.addEventListener('click', async () => {
+    const txt = $('ck-input').value.trim();
+    if (!txt) { alert('쿠키 내용을 붙여넣으세요.'); return; }
+    const btn = $('ck-save'); btn.disabled = true; btn.textContent = '저장 중…';
+    try {
+      const r = await fetch('/api/youtube-cookies', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({cookies: txt})});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || '저장 실패');
+      $('ck-msg').innerHTML = `✅ 저장됨! 유튜브 쿠키 ${d.lines}줄. 이제 다운로드가 뚫립니다.`;
+      $('ck-input').value = ''; refreshCookieStatus();
+    } catch (e) { $('ck-msg').textContent = '실패: ' + e.message; }
+    finally { btn.disabled = false; btn.textContent = '🔑 쿠키 저장'; }
+  });
+  refreshCookieStatus();
+
   renderCats();
   restoreState(); // 탭 나갔다 와도 선택·검색결과 유지(초기화 전까지)
   renderCountSeg(); // 편수 버튼을 처음부터 보이게(영상 고르기 전에도)
