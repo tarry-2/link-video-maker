@@ -124,7 +124,7 @@
       <p class="mini-state" style="margin-bottom:12px">각 편을 확인하고 유튜브·인스타로 바로 올릴 수 있어요. 작업 내역에도 저장됐어요.</p>
       <div class="hl-result-grid">${clips.map((c, i) => `
         <div class="hl-result-item ${orient === 'landscape' ? 'land' : ''}">
-          <video src="/portfolio-item/${c.projectId}.mp4#t=0.5" controls playsinline preload="metadata"></video>
+          <video poster="/portfolio-thumb/${c.projectId}.png" src="/portfolio-item/${c.projectId}.mp4#t=0.5" controls playsinline preload="metadata"></video>
           <b style="display:block;margin:6px 0">${esc(c.title || ('하이라이트 ' + (i+1)))}</b>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <a class="ghost-btn small" href="/portfolio-item/${c.projectId}.mp4" download="${esc(c.title || 'highlight')}.mp4">⬇ 다운로드</a>
