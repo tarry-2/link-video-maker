@@ -72,6 +72,9 @@ export const Scene: React.FC<SceneData> = ({
         subBottom: 56, subBottomOverlay: 300, subPad: '0 110px', subGap: '12px 20px', fsSub: 62,
         prodBottom: 40, prodSide: 90, fsProdName: 32, fsProdBenefit: 26, fsProdUrl: 20,
         cmtBottom: 90, cmtSide: 90, cmtAvatar: 64, fsCmtName: 30, fsCmtText: 32, fsCmtLikes: 26,
+        // ★하이라이트 전용 — 후킹 반투명 박스 & 원본 자막 가리는 자막 띠. 가로는 원본 자막이 화면 하단(≈y950)에 있다.
+        hookBoxPad: '18px 46px',
+        hlSubTop: 858, hlSubH: 200,
       }
     : {
         // 세로 1080×1920 — 기존 값 그대로.
@@ -80,6 +83,10 @@ export const Scene: React.FC<SceneData> = ({
         subBottom: 170, subBottomOverlay: 360, subPad: '0 70px', subGap: '14px 20px', fsSub: 62,
         prodBottom: 45, prodSide: 65, fsProdName: 36, fsProdBenefit: 28, fsProdUrl: 22,
         cmtBottom: 140, cmtSide: 60, cmtAvatar: 76, fsCmtName: 34, fsCmtText: 38, fsCmtLikes: 30,
+        // ★하이라이트 전용 — 세로는 원본 영상이 중앙 밴드(y≈656~1264)라 원본 자막이 그 하단(≈y1150~1250).
+        //   우리 자막 띠를 그 위치로 올려 원본 자막을 확실히 덮는다.
+        hookBoxPad: '22px 42px',
+        hlSubTop: 1090, hlSubH: 290,
       };
 
   const hookIn = spring({frame, fps, config: {damping: 16, mass: 0.6}});
@@ -116,18 +123,30 @@ export const Scene: React.FC<SceneData> = ({
       <AbsoluteFill style={{backgroundColor: '#000'}}>
         {/* 해설 나레이션을 깔면 원본 클립 소리를 줄여(더킹) 내 목소리가 들리게 한다. */}
         <OffthreadVideo src={staticFile(video)} volume={duckAudio ? 0.2 : 1} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        {/* 상단 후킹 — 반투명 배경 박스(가독성·임팩트) + accent 테두리 + 등장 스케일 팝 */}
         {(hookTop || hookAccent) && (
           <div style={{
             position: 'absolute', top: L.hookTop, left: 0, right: 0, padding: L.hookPad,
-            textAlign: 'center', transform: `translateY(${hookY}px)`, opacity: hookIn,
+            display: 'flex', justifyContent: 'center',
+            transform: `translateY(${hookY}px) scale(${interpolate(hookIn, [0, 1], [0.9, 1])})`,
+            opacity: hookIn,
           }}>
-            {hookTop && <div style={{fontFamily: 'BlackHanSans', fontSize: L.fsHookTop, color: '#fff',
-              lineHeight: 1.1, textShadow: outline(4), WebkitTextStroke: '2px #000'}}>{hookTop}</div>}
-            {hookAccent && <div style={{fontFamily: 'BlackHanSans', fontSize: L.fsHookAccent, color: accentColor,
-              lineHeight: 1.12, marginTop: 6, textShadow: outline(5), WebkitTextStroke: '2px #000'}}>{hookAccent}</div>}
+            <div style={{
+              display: 'inline-block', textAlign: 'center', maxWidth: '94%',
+              background: 'rgba(12,12,16,0.6)', backdropFilter: 'blur(6px)',
+              border: `3px solid ${accentColor}`, borderRadius: 22, padding: L.hookBoxPad,
+              boxShadow: `0 12px 44px rgba(0,0,0,0.55), 0 0 32px ${accentColor}44`,
+            }}>
+              {hookTop && <div style={{fontFamily: blackFont, fontSize: L.fsHookTop, color: '#fff',
+                lineHeight: 1.08, textShadow: outline(3), letterSpacing: -1}}>{hookTop}</div>}
+              {hookAccent && <div style={{fontFamily: blackFont, fontSize: L.fsHookAccent, color: accentColor,
+                lineHeight: 1.12, marginTop: 4, textShadow: `0 3px 14px ${accentColor}66, ${outline(3)}`,
+                letterSpacing: -1}}>{hookAccent}</div>}
+            </div>
           </div>
         )}
-        {/* 해설 카라오케 자막(하단) — 해설은 길어서 전부 깔면 넘침 → 지금 말하는 구간만 보이는 윈도우(≈6단어). */}
+        {/* 해설 카라오케 자막 — 원본 영상에 박힌 하단 자막 '위치'로 올리고 불투명 그라데이션 띠로 원본을 덮는다.
+            (그냥 글자만 깔면 원본 자막과 겹쳐 지저분 → 띠로 확실히 가림.) 윈도우(≈6단어)만 표시. */}
         {words.length > 0 && (() => {
           const WIN = 6;
           // 현재 프레임에 해당하는 단어 index(없으면 직전까지 말한 단어). 그걸 중심으로 윈도우.
@@ -138,8 +157,11 @@ export const Scene: React.FC<SceneData> = ({
           const win = words.slice(start, start + WIN);
           return (
             <div style={{
-              position: 'absolute', bottom: L.subBottom, width: '100%', display: 'flex', flexWrap: 'wrap',
-              justifyContent: 'center', alignItems: 'center', gap: L.subGap, padding: L.subPad, boxSizing: 'border-box',
+              position: 'absolute', left: 0, right: 0, top: L.hlSubTop, height: L.hlSubH,
+              display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center',
+              gap: L.subGap, padding: L.subPad, boxSizing: 'border-box',
+              // 위아래로 페이드되는 불투명 띠 — 중앙(원본 자막 위치)은 완전 불투명으로 가리고 가장자리는 자연스럽게 섞임.
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 20%, rgba(0,0,0,0.9) 80%, rgba(0,0,0,0) 100%)',
             }}>
               {win.map((w, i) => {
                 const active = frame >= w.s && frame < w.e;
