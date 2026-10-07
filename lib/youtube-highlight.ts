@@ -67,7 +67,7 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 // videoId(CC 영상) → N편의 완성 하이라이트 숏폼. 각 편은 독립 projectId(포폴·업로드 재사용).
 export async function makeHighlights(
   videoId: string,
-  meta: {title: string; channel: string},
+  meta: {title: string; channel: string; isCc?: boolean},
   opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
@@ -82,7 +82,10 @@ export async function makeHighlights(
   stopIfCancelled();
   log(`[하이라이트] ${clips.length}개 구간 확보 — 후킹 자막 얹어 완성합니다.`);
 
-  const attribution = `출처: ${meta.channel} — https://youtu.be/${videoId} (Creative Commons BY)`;
+  // 출처 표기. CC 영상이면 (Creative Commons BY)까지 명시(합법 재사용 근거). 비-CC면 거짓표기하지 않고 출처만.
+  const attribution = meta.isCc === false
+    ? `출처: ${meta.channel} — https://youtu.be/${videoId}`
+    : `출처: ${meta.channel} — https://youtu.be/${videoId} (Creative Commons BY)`;
   const results: HighlightJobResult = [];
 
   for (let i = 0; i < clips.length; i++) {

@@ -42,30 +42,59 @@
 
       <!-- 하이라이트 만들기 -->
       <section class="card">
-        <!-- ① 한국 / 해외 -->
-        <label class="field-label">① 어느 나라 영상에서 찾을까요</label>
-        <div class="seg" style="margin-top:6px">
-          <button type="button" class="seg-btn hl-region active" data-region="kr">🇰🇷 한국</button>
-          <button type="button" class="seg-btn hl-region" data-region="global">🌍 해외</button>
+        <!-- 소재 가져오는 방법: 주제로 찾기 / 영상 URL 붙여넣기 -->
+        <div class="seg" style="margin-top:2px">
+          <button type="button" class="seg-btn hl-mode active" data-mode="search">🔎 주제로 찾기</button>
+          <button type="button" class="seg-btn hl-mode" data-mode="url">🔗 영상 URL로</button>
         </div>
 
-        <!-- ② 주제 카테고리 -->
-        <label class="field-label" style="margin-top:14px">② 주제 <span class="hint">— 고르면 그 분야 인기 영상이 쫙 떠요 (직접 검색도 가능)</span></label>
-        <div id="hl-cats" class="hl-cats"></div>
-        <div class="voice-row" style="margin-top:8px">
-          <input id="hl-query" class="input" placeholder="또는 직접 검색 (예: 손흥민, 뉴진스, 백종원…)" />
-          <button id="hl-search" class="ghost-btn" type="button">🔎 검색</button>
-        </div>
+        <!-- ▸ 주제로 찾기 패널 -->
+        <div id="hl-search-panel" style="margin-top:14px">
+          <!-- ① 한국 / 해외 -->
+          <label class="field-label">① 어느 나라 영상에서 찾을까요</label>
+          <div class="seg" style="margin-top:6px">
+            <button type="button" class="seg-btn hl-region active" data-region="kr">🇰🇷 한국</button>
+            <button type="button" class="seg-btn hl-region" data-region="global">🌍 해외</button>
+          </div>
 
-        <!-- 정렬 -->
-        <div id="hl-sort-row" class="hidden" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <span class="hint">정렬:</span>
-          <div class="seg" style="flex:1;min-width:200px">
-            <button type="button" class="seg-btn hl-order active" data-order="viewCount">🔥 조회수순</button>
-            <button type="button" class="seg-btn hl-order" data-order="date">🆕 최신순</button>
-            <button type="button" class="seg-btn hl-order" data-order="relevance">🎯 관련도</button>
+          <!-- 영상 범위(라이선스) — 기본은 안전(CC) -->
+          <label class="field-label" style="margin-top:14px">영상 범위 <span class="hint">— 기본은 안전(재사용 허가)이에요</span></label>
+          <div class="seg" style="margin-top:6px">
+            <button type="button" class="seg-btn hl-lic active" data-lic="cc">🔒 재사용 허가 (안전)</button>
+            <button type="button" class="seg-btn hl-lic" data-lic="all">🌐 전체 영상 (더 많음)</button>
+          </div>
+          <p id="hl-lic-note" class="hint" style="margin-top:4px">원작자가 "가져다 써도 좋다"고 허락한 CC 영상만 보여줘요. 출처만 밝히면 합법 수익화돼요.</p>
+
+          <!-- ② 주제 카테고리 -->
+          <label class="field-label" style="margin-top:14px">② 주제 <span class="hint">— 고르면 그 분야 인기 영상이 쫙 떠요 (직접 검색도 가능)</span></label>
+          <div id="hl-cats" class="hl-cats"></div>
+          <div class="voice-row" style="margin-top:8px">
+            <input id="hl-query" class="input" placeholder="또는 직접 검색 (예: 손흥민, 뉴진스, 백종원…)" />
+            <button id="hl-search" class="ghost-btn" type="button">🔎 검색</button>
+            <button id="hl-refresh" class="ghost-btn" type="button" title="새로 올라온 영상 끌어오기">↻ 최신 가져오기</button>
+          </div>
+
+          <!-- 정렬 -->
+          <div id="hl-sort-row" class="hidden" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="hint">정렬:</span>
+            <div class="seg" style="flex:1;min-width:200px">
+              <button type="button" class="seg-btn hl-order active" data-order="viewCount">🔥 조회수순</button>
+              <button type="button" class="seg-btn hl-order" data-order="date">🆕 최신순</button>
+              <button type="button" class="seg-btn hl-order" data-order="relevance">🎯 관련도</button>
+            </div>
           </div>
         </div>
+
+        <!-- ▸ 영상 URL 붙여넣기 패널 -->
+        <div id="hl-url-panel" class="hidden" style="margin-top:14px">
+          <label class="field-label">🔗 롱폼 영상 URL 붙여넣기 <span class="hint">— 그 영상을 하이라이트 숏폼으로 다시 가공해요</span></label>
+          <div class="voice-row" style="margin-top:6px">
+            <input id="hl-url" class="input" placeholder="https://www.youtube.com/watch?v=…  또는  https://youtu.be/…" />
+            <button id="hl-url-go" class="ghost-btn" type="button">확인</button>
+          </div>
+          <p class="hint" style="margin-top:6px">✅ <b>CC(재사용 허가) 영상 · 내 영상 · 클리핑 캠페인 영상</b>을 넣으세요. 이런 영상은 출처만 밝히면 <b>합법 수익화</b>됩니다. 출처는 자동으로 붙어요.</p>
+        </div>
+
         <p id="hl-search-state" class="mini-state"></p>
         <div id="hl-results" class="hl-results"></div>
 

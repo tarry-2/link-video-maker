@@ -18,7 +18,7 @@ import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
-import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity, searchCreativeCommons} from './lib/youtube';
+import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
@@ -865,12 +865,26 @@ const server = http.createServer(async (req, res) => {
     const language = region === 'US' ? 'en' : 'ko';
     const order = u.searchParams.get('order') || 'viewCount'; // 조회수순 기본(잘나가는 것 위로)
     const pageToken = u.searchParams.get('pageToken') || undefined; // 더보기(다음 페이지)
+    // 라이선스 범위: all=전체 영상(풀 넓음·저작권 주의) / 그 외=CC(기본·안전=원작자가 재사용 허락한 것만).
+    const license = u.searchParams.get('license') === 'all' ? 'any' : 'cc';
     try {
       // 하이라이트 소재로 적합한 길이만(2분~60분). 쇼츠·장편 제외. 한 페이지 40개씩.
-      const r = await searchCreativeCommons(q, {max: 40, minSec: 120, maxSec: 3600, region, language, order, pageToken});
+      const r = await searchCreativeCommons(q, {max: 40, minSec: 120, maxSec: 3600, region, language, order, pageToken, license});
       return json(res, 200, {videos: r.videos, nextPageToken: r.nextPageToken});
     } catch (e: any) {
       return json(res, 502, {error: e?.message || '검색 실패'});
+    }
+  }
+  // ── 영상 1개 메타 조회(URL 붙여넣기 모드) — 붙여넣은 롱폼의 제목·길이·CC여부를 확인 ──
+  if (p === '/api/yt-video' && req.method === 'GET') {
+    const raw = (u.searchParams.get('url') || u.searchParams.get('id') || '').trim();
+    const id = /^[\w-]{11}$/.test(raw) ? raw : extractVideoId(raw);
+    if (!id) return json(res, 400, {error: '유튜브 영상 URL을 확인하세요. (예: youtube.com/watch?v=… 또는 youtu.be/…)'});
+    try {
+      const m = await getVideoMeta(id);
+      return json(res, 200, m);
+    } catch (e: any) {
+      return json(res, 502, {error: e?.message || '조회 실패'});
     }
   }
   if (p === '/api/topics' && req.method === 'GET') {
@@ -1283,13 +1297,14 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const orientation = b.orientation === 'landscape' ? 'landscape' : 'portrait';
     const commentary = !!b.commentary; // 해설 나레이션 입히기(수익화 변형 가치)
     const voice = typeof b.voice === 'string' ? b.voice : undefined;
+    const isCc = b.isCc !== false; // 기본 CC(안전). URL 모드에서 비-CC 영상이면 false로 와서 출처에 CC BY를 거짓표기하지 않는다.
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
     currentGenJob = id;
     (async () => {
       try {
-        const clips = await makeHighlights(videoId, {title, channel}, {count, clipSec, orientation, commentary, voice, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
+        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
         job.kind = 'highlight';
         job.clips = clips.map((c) => ({projectId: c.projectId, file: c.file, title: c.title}));
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }

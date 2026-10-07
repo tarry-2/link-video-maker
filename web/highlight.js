@@ -233,13 +233,15 @@
   let picked = null, region = 'kr', order = 'viewCount', cat = '';
   let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait';
   let commentary = 0, voice = ''; // 해설 넣기(0/1) · 해설 목소리
+  let license = 'cc'; // 영상 범위: cc(안전·재사용 허가만) / all(전체)
+  let mode = 'search'; // 소재 가져오는 방법: search(주제로 찾기) / url(영상 URL 붙여넣기)
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
   const STATE_KEY = 'onvideo-hl-state';
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, commentary, voice, query, pageToken, loadedCount, picked,
+        region, order, cat, count, sec, orient, commentary, voice, query, pageToken, loadedCount, picked, license, mode,
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -251,6 +253,9 @@
     let s; try { s = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch {}
     if (!s) return false;
     region = s.region || 'kr'; order = s.order || 'viewCount'; cat = s.cat || ''; orient = s.orient || 'portrait';
+    license = s.license === 'all' ? 'all' : 'cc'; mode = s.mode === 'url' ? 'url' : 'search';
+    document.querySelectorAll('.hl-lic').forEach((b) => b.classList.toggle('active', b.dataset.lic === license));
+    applyLicenseNote(); applyMode();
     document.querySelectorAll('.hl-orient').forEach((b) => b.classList.toggle('active', b.dataset.o === orient));
     count = s.count || 3; sec = s.sec || 30; query = s.query || ''; pageToken = s.pageToken || ''; loadedCount = s.loadedCount || 0;
     commentary = s.commentary || 0; voice = s.voice || '';
@@ -328,23 +333,45 @@
     seg.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => { seg.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); count = Number(b.dataset.n); saveState(); }));
     if ($('hl-maxnote')) $('hl-maxnote').textContent = picked ? `— 이 영상(${fmtDur(picked.durationSec)})에서 최대 ${max}편까지 추천` : '— 영상을 고르면 그 길이에 맞게 추천해요';
   }
-  function cardHtml(v) {
-    return `<button type="button" class="hl-card" data-id="${v.videoId}" data-title="${esc(v.title)}" data-channel="${esc(v.channel)}" data-dur="${v.durationSec}">
+  function cardHtml(v, isCc) {
+    return `<button type="button" class="hl-card" data-id="${v.videoId}" data-title="${esc(v.title)}" data-channel="${esc(v.channel)}" data-dur="${v.durationSec}" data-cc="${isCc ? '1' : '0'}">
       <img src="${v.thumb}" alt="" loading="lazy" />
+      <div class="hl-play">▶ 미리보기</div>
       <div class="hl-meta"><b>${esc(v.title)}</b><span>${esc(v.channel)} · ${fmtDur(v.durationSec)} · 조회 ${Number(v.views).toLocaleString('ko-KR')}</span></div>
     </button>`;
   }
+  // 카드 클릭 = 크게보기(영상 미리보기). 내용 먼저 확인하고 모달 안에서 '이 영상으로 만들기'로 고른다.
   function wireCards(box) {
     box.querySelectorAll('.hl-card:not([data-w])').forEach((b) => {
       b.setAttribute('data-w', '1');
-      b.addEventListener('click', () => {
-        box.querySelectorAll('.hl-card').forEach((x) => x.classList.remove('active')); b.classList.add('active');
-        picked = {videoId: b.dataset.id, title: b.dataset.title, channel: b.dataset.channel, durationSec: Number(b.dataset.dur) || 300};
-        $('hl-picked').textContent = `선택: ${picked.title}`;
-        renderCountSeg(); saveState();
-        addLog(`🎥 영상 선택: ${picked.title} (${fmtDur(picked.durationSec)} · ${picked.channel})`);
-      });
+      b.addEventListener('click', () => openPreview({
+        videoId: b.dataset.id, title: b.dataset.title, channel: b.dataset.channel,
+        durationSec: Number(b.dataset.dur) || 300, isCc: b.dataset.cc === '1',
+      }));
     });
+  }
+  function selectPicked(v) {
+    picked = {videoId: v.videoId, title: v.title, channel: v.channel, durationSec: Number(v.durationSec) || 300, isCc: v.isCc !== false};
+    document.querySelectorAll('.hl-card').forEach((x) => x.classList.toggle('active', x.dataset.id === picked.videoId));
+    $('hl-picked').textContent = `선택: ${picked.title}`;
+    renderCountSeg(); saveState();
+    addLog(`🎥 영상 선택: ${picked.title} (${fmtDur(picked.durationSec)} · ${picked.channel})`);
+    $('hl-options')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+  // 크게보기 — 온비디오 안에서 유튜브 영상을 바로 재생해 내용을 미리 본다(제작 전).
+  function openPreview(v) {
+    const badge = v.isCc
+      ? '<span style="color:#2bb673;font-weight:700">✅ 재사용 허가(CC) — 출처만 밝히면 합법 수익화</span>'
+      : '<span style="color:#d08700;font-weight:700">⚠️ 표준 라이선스 — 내 영상·권한 있는 영상만 사용하세요</span>';
+    modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2 style="margin:0">미리보기</h2><button class="ghost-btn" data-x="close">✕</button></div>
+      <div style="position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden">
+        <iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.videoId)}?rel=0&autoplay=1" title="미리보기" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe>
+      </div>
+      <b style="display:block;margin:12px 0 2px">${esc(v.title)}</b>
+      <p class="hint" style="margin:0 0 6px">${esc(v.channel)} · ${fmtDur(Number(v.durationSec) || 0)}</p>
+      <p class="mini-state" style="margin:0 0 12px">${badge}</p>
+      <button class="primary-btn" data-pick="1" style="width:100%">✓ 이 영상으로 만들기</button>`,
+      (box, close) => { box.querySelector('[data-pick]').onclick = () => { selectPicked(v); close(); }; });
   }
   async function search(forcedQuery, append) {
     const box = $('hl-results'), st = $('hl-search-state');
@@ -357,14 +384,14 @@
     } else st.textContent = '더 불러오는 중…';
     $('hl-more')?.remove();
     try {
-      const url = `/api/yt-search?q=${encodeURIComponent(query)}&region=${region}&order=${order}` + (pageToken ? `&pageToken=${pageToken}` : '');
+      const url = `/api/yt-search?q=${encodeURIComponent(query)}&region=${region}&order=${order}&license=${license}` + (pageToken ? `&pageToken=${pageToken}` : '');
       const d = await (await fetch(url)).json();
       if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
       const vids = d.videos || [];
       $('hl-sort-row').classList.remove('hidden');
       pageToken = d.nextPageToken || ''; loadedCount += vids.length;
       if (!append && !vids.length) { st.textContent = '결과가 없어요. 다른 주제나 검색어로 시도해보세요.'; return; }
-      box.insertAdjacentHTML('beforeend', vids.map(cardHtml).join(''));
+      box.insertAdjacentHTML('beforeend', vids.map((v) => cardHtml(v, license === 'cc')).join(''));
       wireCards(box);
       st.textContent = `${loadedCount}개 표시 중${pageToken ? ' — 더 있어요' : ' (끝)'} · 하나 고르세요`;
       addLog(append ? `➕ ${vids.length}개 더 불러옴 (총 ${loadedCount}개)` : `🔎 "${query}" 검색 완료 — ${loadedCount}개 (${order === 'viewCount' ? '조회수순' : order === 'date' ? '최신순' : '관련도순'})`);
@@ -390,6 +417,72 @@
   }));
   $('hl-search')?.addEventListener('click', () => { document.querySelector('.hl-cat.active')?.classList.remove('active'); search(); });
   $('hl-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.querySelector('.hl-cat.active')?.classList.remove('active'); search(); } });
+
+  // ── 영상 범위(라이선스) 토글 — 기본 CC(안전) ──
+  function applyLicenseNote() {
+    const n = $('hl-lic-note'); if (!n) return;
+    n.innerHTML = license === 'all'
+      ? '전체 유튜브 영상을 보여줘요. 영상은 많지만 대부분 "표준 라이선스"라, 내 채널에 올리면 저작권 신고가 들어올 수 있어요(보통 영상 삭제가 아니라, 그 영상 광고수익이 원작자에게 가는 "클레임"이에요).'
+      : '원작자가 "가져다 써도 좋다"고 허락한 CC 영상만 보여줘요. 출처만 밝히면 합법 수익화돼요.';
+  }
+  document.querySelectorAll('.hl-lic').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-lic').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+    license = b.dataset.lic === 'all' ? 'all' : 'cc'; applyLicenseNote(); saveState();
+    addLog(`🔎 영상 범위: ${license === 'all' ? '전체 영상' : '재사용 허가(CC)'}`);
+    const ac = document.querySelector('.hl-cat.active'); const q = ac ? (region === 'global' ? ac.dataset.gq : ac.dataset.kq) : $('hl-query').value.trim(); if (q) search(q);
+  }));
+
+  // ── ↻ 최신 가져오기 — 지금 검색을 다시 돌려 새로 올라온 영상만 맨 위에 추가하고 "N개 업데이트했습니다" ──
+  async function refresh() {
+    if (!query) { alert('먼저 주제를 고르거나 검색하세요.'); return; }
+    const box = $('hl-results'), st = $('hl-search-state');
+    const existing = new Set([...box.querySelectorAll('.hl-card')].map((c) => c.dataset.id));
+    const btn = $('hl-refresh'); const o = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = '불러오는 중…'; }
+    st.textContent = '새로 올라온 영상을 확인하는 중…';
+    try {
+      const url = `/api/yt-search?q=${encodeURIComponent(query)}&region=${region}&order=${order}&license=${license}`;
+      const d = await (await fetch(url)).json();
+      if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
+      const fresh = (d.videos || []).filter((v) => !existing.has(v.videoId));
+      if (!fresh.length) { st.textContent = `업데이트할 새 영상이 없어요 (지금 ${existing.size}개).`; addLog('↻ 최신 가져오기 — 새 영상 없음'); return; }
+      box.insertAdjacentHTML('afterbegin', fresh.map((v) => cardHtml(v, license === 'cc')).join('')); // 새것은 맨 위로
+      wireCards(box); loadedCount = existing.size + fresh.length;
+      st.textContent = `✅ ${fresh.length}개 업데이트했습니다 — 맨 위에 추가됐어요 (총 ${existing.size + fresh.length}개)`;
+      addLog(`↻ 최신 가져오기 — ${fresh.length}개 업데이트`); saveState();
+    } catch { st.textContent = '최신 가져오기에 실패했어요.'; }
+    finally { if (btn) { btn.disabled = false; btn.textContent = o; } }
+  }
+  $('hl-refresh')?.addEventListener('click', refresh);
+
+  // ── 소재 가져오는 방법: 주제로 찾기 / 영상 URL 붙여넣기 ──
+  function applyMode() {
+    $('hl-search-panel')?.classList.toggle('hidden', mode !== 'search');
+    $('hl-url-panel')?.classList.toggle('hidden', mode !== 'url');
+    document.querySelectorAll('.hl-mode').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+  }
+  document.querySelectorAll('.hl-mode').forEach((b) => b.addEventListener('click', () => {
+    mode = b.dataset.mode === 'url' ? 'url' : 'search'; applyMode(); saveState();
+  }));
+  // URL 모드: 붙여넣은 롱폼 확인 → 카드 1개로 띄우고 바로 크게보기 → '이 영상으로 만들기'
+  async function loadUrl() {
+    const raw = $('hl-url').value.trim();
+    if (!raw) { alert('유튜브 영상 URL을 붙여넣으세요.'); return; }
+    const btn = $('hl-url-go'), o = btn.textContent; btn.disabled = true; btn.textContent = '확인 중…';
+    const st = $('hl-search-state'); st.textContent = '영상 정보를 확인하는 중…';
+    try {
+      const d = await (await fetch('/api/yt-video?url=' + encodeURIComponent(raw))).json();
+      if (d.error) { st.textContent = '⚠️ ' + d.error; alert(d.error); return; }
+      $('hl-results').innerHTML = cardHtml(d, d.isCc); wireCards($('hl-results'));
+      $('hl-sort-row')?.classList.add('hidden');
+      st.textContent = d.isCc ? '✅ 재사용 허가(CC) 영상이에요 — 바로 만들 수 있어요.' : '⚠️ 표준 라이선스 영상이에요 — 내 영상·권한 있는 영상만 사용하세요.';
+      addLog(`🔗 URL 확인: ${d.title} (${d.isCc ? 'CC 재사용 허가' : '표준 라이선스'})`);
+      openPreview(d); // 바로 크게보기로 내용 확인
+    } catch { st.textContent = '영상 정보를 가져오지 못했어요.'; }
+    finally { btn.disabled = false; btn.textContent = o; }
+  }
+  $('hl-url-go')?.addEventListener('click', loadUrl);
+  $('hl-url')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadUrl(); });
+  applyLicenseNote(); applyMode(); // 초기 상태 반영(restoreState가 다시 덮을 수 있음)
   document.querySelectorAll('.hl-sec').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active')); b.classList.add('active'); sec = Number(b.dataset.s);
     if ($('hl-sec-custom')) $('hl-sec-custom').value = ''; renderCountSeg(); saveState();
@@ -470,8 +563,8 @@
     if (!picked) { alert('먼저 영상을 고르세요.'); return; }
     if (curJobId) { alert('이미 제작이 진행 중이에요. 끝나거나 중단한 뒤에 다시 시작하세요.'); return; } // 중복 생성 방지
     addLog('──────── 하이라이트 제작 시작 ────────', 'done');
-    addLog(`• 나라: ${region === 'global' ? '해외' : '한국'}`);
-    addLog(`• 주제: ${cat || '직접 검색'}`);
+    addLog(`• 소재: ${mode === 'url' ? 'URL 직접 입력' : (region === 'global' ? '해외' : '한국') + ' · ' + (cat || '직접 검색')}`);
+    addLog(`• 라이선스: ${picked.isCc !== false ? '재사용 허가(CC)' : '표준 라이선스(권한 확인 필요)'}`);
     addLog(`• 원본 영상: ${picked.title}`);
     addLog(`• 원본 길이: ${fmtDur(picked.durationSec)} → 클립 ${sec}초짜리`);
     addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}`);
@@ -479,7 +572,7 @@
     addLog(`• 해설: ${commentary ? 'AI 해설 입힘 (' + ($('hl-voice')?.selectedOptions[0]?.textContent || voice) + ')' : '원본 그대로'}`);
     addLog('────────────────────────────');
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
-    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, commentary: !!commentary, voice};
+    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, commentary: !!commentary, voice, isCc: picked.isCc !== false};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });

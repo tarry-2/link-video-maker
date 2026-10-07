@@ -107,18 +107,21 @@ function iso8601ToSec(d: string): number {
   if (!m) return 0;
   return (Number(m[1] || 0) * 3600) + (Number(m[2] || 0) * 60) + Number(m[3] || 0);
 }
-export async function searchCreativeCommons(query: string, opts: {max?: number; minSec?: number; maxSec?: number; region?: string; language?: string; order?: string; pageToken?: string} = {}): Promise<{videos: CcVideo[]; nextPageToken?: string}> {
+export async function searchCreativeCommons(query: string, opts: {max?: number; minSec?: number; maxSec?: number; region?: string; language?: string; order?: string; pageToken?: string; license?: 'cc' | 'any'} = {}): Promise<{videos: CcVideo[]; nextPageToken?: string}> {
   if (!query.trim()) throw new Error('검색어를 입력하세요.');
   const token = await accessToken();
   const max = Math.min(50, Math.max(5, opts.max || 24)); // 한 페이지 최대 50(유튜브 상한)
   // 정렬: viewCount(조회수순=잘나가는 것 위로)·date(최신)·relevance(관련도). 기본 조회수순.
   const order = ['viewCount', 'date', 'relevance', 'rating'].includes(String(opts.order)) ? String(opts.order) : 'viewCount';
-  // 1) search.list — CC 라이선스 + 영상만. (type=video 필수 when videoLicense set)
+  // 라이선스 범위: 'cc'(기본·안전=원작자가 재사용 허락한 CC 영상만) / 'any'(전체 영상=풀 넓음, 저작권 주의).
+  const wantCc = opts.license !== 'any';
+  // 1) search.list — 영상만. CC 모드면 videoLicense=creativeCommon로 좁힌다. (type=video 필수 when videoLicense set)
   //    region/language로 그 나라 영상 위주로(한국=KR/ko, 해외=US/en). pageToken으로 다음 페이지(더보기).
   const sp = new URLSearchParams({
-    part: 'snippet', type: 'video', videoLicense: 'creativeCommon',
+    part: 'snippet', type: 'video',
     q: query, maxResults: String(max), order, safeSearch: 'moderate',
   });
+  if (wantCc) sp.set('videoLicense', 'creativeCommon');
   if (opts.region) sp.set('regionCode', opts.region);
   if (opts.language) sp.set('relevanceLanguage', opts.language);
   if (opts.pageToken) sp.set('pageToken', opts.pageToken);
@@ -155,6 +158,31 @@ export async function searchCreativeCommons(query: string, opts: {max?: number; 
   if (order === 'date') out.sort((a, b) => (b.publishedAt > a.publishedAt ? 1 : -1));
   else if (order !== 'relevance') out.sort((a, b) => b.views - a.views); // viewCount/rating → 조회수 많은 순
   return {videos: out, nextPageToken};
+}
+
+// ── 영상 1개 메타 조회(URL 붙여넣기 모드) ──
+// videoId로 제목·채널·길이·조회수 + 라이선스(CC여부)를 가져온다. 붙여넣은 롱폼이 '재사용 허가(CC)'인지 바로 알려주기 위함.
+export type VideoMeta = CcVideo & {license: string; isCc: boolean};
+export async function getVideoMeta(videoId: string): Promise<VideoMeta> {
+  if (!/^[\w-]{11}$/.test(videoId)) throw new Error('유튜브 영상 URL을 확인하세요.');
+  const token = await accessToken();
+  const vp = new URLSearchParams({part: 'contentDetails,statistics,snippet,status', id: videoId});
+  const vr = await fetch('https://www.googleapis.com/youtube/v3/videos?' + vp.toString(), {
+    headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
+  });
+  const vd: any = await vr.json();
+  if (!vr.ok) throw new Error('영상 정보 조회 실패: ' + (vd?.error?.message || vr.status));
+  const it = (vd.items || [])[0];
+  if (!it) throw new Error('영상을 찾을 수 없어요. URL이 맞는지(비공개·삭제·연령제한 영상은 안 돼요) 확인하세요.');
+  const sn = it.snippet || {};
+  const dur = iso8601ToSec(it.contentDetails?.duration || '');
+  const license: string = it.status?.license || 'youtube'; // 'creativeCommon' | 'youtube'
+  return {
+    videoId: it.id, title: sn.title || '', channel: sn.channelTitle || '', channelId: sn.channelId || '',
+    thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || '',
+    publishedAt: sn.publishedAt || '', durationSec: dur, views: Number(it.statistics?.viewCount || 0),
+    license, isCc: license === 'creativeCommon',
+  };
 }
 
 // 유튜브 URL에서 video id 추출(youtu.be/ID · watch?v=ID).
