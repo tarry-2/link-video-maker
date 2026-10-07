@@ -112,12 +112,14 @@ function iso8601ToSec(d: string): number {
 // ── 저작권 위험도 판정(전체 모드에서 소재 고를 때 '무난/주의' 체크) ──
 //  cc=원작자가 재사용 허락(제일 안전) / caution=강성 저작권(영화·음원·스포츠) 또는 Content ID 관리 콘텐츠 / ok=일반 롱폼(재가공+출처면 무난)
 export type RiskLevel = 'cc' | 'ok' | 'caution';
-function riskOf(license: string, categoryId: string, licensed: boolean): RiskLevel {
+// 방송사·음원 레이블·영화/드라마 스튜디오로 보이는 채널명(강성 저작권자) → 재가공해도 수동 신고·삭제 위험.
+const HARD_RIGHTS_RE = /tvN|KBS|MBC|SBS|JTBC|Mnet|EBS|YTN|ENA|채널\s?A|Channel\s?A|Official|공식\s?채널|Records|Entertainment|\bENT\b|Studios?|스튜디오|Pictures|HYBE|SMTOWN|\bSM\b|\bJYP\b|\bYG\b|방송|Network|Niziu|Netflix|Disney|Warner|Universal/i;
+function riskOf(license: string, categoryId: string, channelTitle: string): RiskLevel {
   if (license === 'creativeCommon') return 'cc';
-  // 유튜브 카테고리: 1=영화/애니, 10=음악, 17=스포츠 → 방송·영화·음원·스포츠 강성 저작권
+  // 유튜브 카테고리: 1=영화/애니, 10=음악, 17=스포츠, 30=영화, 44=예고편 → 강성 저작권
   if (['1', '10', '17', '30', '44'].includes(String(categoryId))) return 'caution';
-  if (licensed === true) return 'caution'; // Content ID로 관리되는(파트너 소유) 콘텐츠 → 클레임 가능성↑
-  return 'ok';
+  if (HARD_RIGHTS_RE.test(channelTitle || '')) return 'caution'; // 방송사·레이블·스튜디오 공식채널
+  return 'ok'; // 일반 롱폼(개인 크리에이터) → 재가공+출처면 무난
 }
 export async function searchCreativeCommons(query: string, opts: {max?: number; minSec?: number; maxSec?: number; region?: string; language?: string; order?: string; pageToken?: string; license?: 'cc' | 'any'} = {}): Promise<{videos: CcVideo[]; nextPageToken?: string}> {
   if (!query.trim()) throw new Error('검색어를 입력하세요.');
@@ -164,7 +166,7 @@ export async function searchCreativeCommons(query: string, opts: {max?: number; 
       videoId: it.id, title: sn.title || '', channel: sn.channelTitle || '', channelId: sn.channelId || '',
       thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || '',
       publishedAt: sn.publishedAt || '', durationSec: dur, views: Number(it.statistics?.viewCount || 0),
-      license, risk: riskOf(license, sn.categoryId || '', it.contentDetails?.licensedContent === true),
+      license, risk: riskOf(license, sn.categoryId || '', sn.channelTitle || ''),
     });
   }
   // 정렬 재적용(videos.list는 id 순서라 search order가 흐트러짐). 조회수순/최신순 확실히.
@@ -191,7 +193,7 @@ export async function getVideoMeta(videoId: string): Promise<VideoMeta> {
   const sn = it.snippet || {};
   const dur = iso8601ToSec(it.contentDetails?.duration || '');
   const license: string = it.status?.license || 'youtube'; // 'creativeCommon' | 'youtube'
-  const risk = riskOf(license, sn.categoryId || '', it.contentDetails?.licensedContent === true);
+  const risk = riskOf(license, sn.categoryId || '', sn.channelTitle || '');
   return {
     videoId: it.id, title: sn.title || '', channel: sn.channelTitle || '', channelId: sn.channelId || '',
     thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || '',
