@@ -101,11 +101,23 @@ async function accessToken(): Promise<string> {
 export type CcVideo = {
   videoId: string; title: string; channel: string; channelId: string;
   thumb: string; publishedAt: string; durationSec: number; views: number;
+  license?: string; // 'creativeCommon' | 'youtube'
+  risk?: RiskLevel; // cc(안전)·ok(무난)·caution(저작권 주의)
 };
 function iso8601ToSec(d: string): number {
   const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d || '');
   if (!m) return 0;
   return (Number(m[1] || 0) * 3600) + (Number(m[2] || 0) * 60) + Number(m[3] || 0);
+}
+// ── 저작권 위험도 판정(전체 모드에서 소재 고를 때 '무난/주의' 체크) ──
+//  cc=원작자가 재사용 허락(제일 안전) / caution=강성 저작권(영화·음원·스포츠) 또는 Content ID 관리 콘텐츠 / ok=일반 롱폼(재가공+출처면 무난)
+export type RiskLevel = 'cc' | 'ok' | 'caution';
+function riskOf(license: string, categoryId: string, licensed: boolean): RiskLevel {
+  if (license === 'creativeCommon') return 'cc';
+  // 유튜브 카테고리: 1=영화/애니, 10=음악, 17=스포츠 → 방송·영화·음원·스포츠 강성 저작권
+  if (['1', '10', '17', '30', '44'].includes(String(categoryId))) return 'caution';
+  if (licensed === true) return 'caution'; // Content ID로 관리되는(파트너 소유) 콘텐츠 → 클레임 가능성↑
+  return 'ok';
 }
 export async function searchCreativeCommons(query: string, opts: {max?: number; minSec?: number; maxSec?: number; region?: string; language?: string; order?: string; pageToken?: string; license?: 'cc' | 'any'} = {}): Promise<{videos: CcVideo[]; nextPageToken?: string}> {
   if (!query.trim()) throw new Error('검색어를 입력하세요.');
@@ -133,8 +145,8 @@ export async function searchCreativeCommons(query: string, opts: {max?: number; 
   const nextPageToken: string | undefined = sd.nextPageToken || undefined;
   const ids: string[] = (sd.items || []).map((it: any) => it.id?.videoId).filter(Boolean);
   if (!ids.length) return {videos: [], nextPageToken};
-  // 2) videos.list — 길이(duration)·조회수 가져와 필터/정렬에 사용.
-  const vp = new URLSearchParams({part: 'contentDetails,statistics,snippet', id: ids.join(',')});
+  // 2) videos.list — 길이(duration)·조회수·라이선스·카테고리 가져와 필터/정렬/위험도에 사용.
+  const vp = new URLSearchParams({part: 'contentDetails,statistics,snippet,status', id: ids.join(',')});
   const vr = await fetch('https://www.googleapis.com/youtube/v3/videos?' + vp.toString(), {
     headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
   });
@@ -147,10 +159,12 @@ export async function searchCreativeCommons(query: string, opts: {max?: number; 
     const dur = iso8601ToSec(it.contentDetails?.duration || '');
     if (dur < minSec || dur > maxSec) continue; // 너무 짧은(쇼츠)·너무 긴(장편) 건 제외
     const sn = it.snippet || {};
+    const license: string = it.status?.license || 'youtube';
     out.push({
       videoId: it.id, title: sn.title || '', channel: sn.channelTitle || '', channelId: sn.channelId || '',
       thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || '',
       publishedAt: sn.publishedAt || '', durationSec: dur, views: Number(it.statistics?.viewCount || 0),
+      license, risk: riskOf(license, sn.categoryId || '', it.contentDetails?.licensedContent === true),
     });
   }
   // 정렬 재적용(videos.list는 id 순서라 search order가 흐트러짐). 조회수순/최신순 확실히.
@@ -162,7 +176,7 @@ export async function searchCreativeCommons(query: string, opts: {max?: number; 
 
 // ── 영상 1개 메타 조회(URL 붙여넣기 모드) ──
 // videoId로 제목·채널·길이·조회수 + 라이선스(CC여부)를 가져온다. 붙여넣은 롱폼이 '재사용 허가(CC)'인지 바로 알려주기 위함.
-export type VideoMeta = CcVideo & {license: string; isCc: boolean};
+export type VideoMeta = CcVideo & {license: string; isCc: boolean; risk: RiskLevel};
 export async function getVideoMeta(videoId: string): Promise<VideoMeta> {
   if (!/^[\w-]{11}$/.test(videoId)) throw new Error('유튜브 영상 URL을 확인하세요.');
   const token = await accessToken();
@@ -177,11 +191,12 @@ export async function getVideoMeta(videoId: string): Promise<VideoMeta> {
   const sn = it.snippet || {};
   const dur = iso8601ToSec(it.contentDetails?.duration || '');
   const license: string = it.status?.license || 'youtube'; // 'creativeCommon' | 'youtube'
+  const risk = riskOf(license, sn.categoryId || '', it.contentDetails?.licensedContent === true);
   return {
     videoId: it.id, title: sn.title || '', channel: sn.channelTitle || '', channelId: sn.channelId || '',
     thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || '',
     publishedAt: sn.publishedAt || '', durationSec: dur, views: Number(it.statistics?.viewCount || 0),
-    license, isCc: license === 'creativeCommon',
+    license, isCc: license === 'creativeCommon', risk,
   };
 }
 

@@ -333,10 +333,19 @@
     seg.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => { seg.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); count = Number(b.dataset.n); saveState(); }));
     if ($('hl-maxnote')) $('hl-maxnote').textContent = picked ? `— 이 영상(${fmtDur(picked.durationSec)})에서 최대 ${max}편까지 추천` : '— 영상을 고르면 그 길이에 맞게 추천해요';
   }
-  function cardHtml(v, isCc) {
-    return `<button type="button" class="hl-card" data-id="${v.videoId}" data-title="${esc(v.title)}" data-channel="${esc(v.channel)}" data-dur="${v.durationSec}" data-cc="${isCc ? '1' : '0'}">
+  // 저작권 위험도 뱃지: cc(안전)·ok(무난)·caution(주의)
+  function riskInfo(risk) {
+    if (risk === 'cc') return {cls: 'cc', label: '✅ 재사용 허가'};
+    if (risk === 'caution') return {cls: 'caution', label: '⚠️ 저작권 주의'};
+    return {cls: 'ok', label: '🆗 무난'};
+  }
+  function cardHtml(v) {
+    const risk = v.risk || (v.isCc ? 'cc' : 'ok');
+    const r = riskInfo(risk);
+    return `<button type="button" class="hl-card" data-id="${v.videoId}" data-title="${esc(v.title)}" data-channel="${esc(v.channel)}" data-dur="${v.durationSec}" data-cc="${risk === 'cc' ? '1' : '0'}" data-risk="${esc(risk)}">
       <img src="${v.thumb}" alt="" loading="lazy" />
       <div class="hl-play">▶ 미리보기</div>
+      <span class="hl-risk ${r.cls}">${r.label}</span>
       <div class="hl-meta"><b>${esc(v.title)}</b><span>${esc(v.channel)} · ${fmtDur(v.durationSec)} · 조회 ${Number(v.views).toLocaleString('ko-KR')}</span></div>
     </button>`;
   }
@@ -346,7 +355,7 @@
       b.setAttribute('data-w', '1');
       b.addEventListener('click', () => openPreview({
         videoId: b.dataset.id, title: b.dataset.title, channel: b.dataset.channel,
-        durationSec: Number(b.dataset.dur) || 300, isCc: b.dataset.cc === '1',
+        durationSec: Number(b.dataset.dur) || 300, isCc: b.dataset.cc === '1', risk: b.dataset.risk || '',
       }));
     });
   }
@@ -360,9 +369,12 @@
   }
   // 크게보기 — 온비디오 안에서 유튜브 영상을 바로 재생해 내용을 미리 본다(제작 전).
   function openPreview(v) {
-    const badge = v.isCc
+    const risk = v.risk || (v.isCc ? 'cc' : 'ok');
+    const badge = risk === 'cc'
       ? '<span style="color:#2bb673;font-weight:700">✅ 재사용 허가(CC) — 출처만 밝히면 합법 수익화</span>'
-      : '<span style="color:#d08700;font-weight:700">⚠️ 표준 라이선스 — 내 영상·권한 있는 영상만 사용하세요</span>';
+      : risk === 'caution'
+      ? '<span style="color:#e5484d;font-weight:700">⚠️ 저작권 주의 — 영화·방송·음원·스포츠일 수 있어요. 재가공해도 위험하니 가급적 피하세요.</span>'
+      : '<span style="color:#d08700;font-weight:700">🆗 무난 — 일반 롱폼. 해설·자막으로 재가공 + 출처를 남기면 안전 범위예요.</span>';
     modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2 style="margin:0">미리보기</h2><button class="ghost-btn" data-x="close">✕</button></div>
       <div style="position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden">
         <iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.videoId)}?rel=0&autoplay=1" title="미리보기" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe>
@@ -391,7 +403,7 @@
       $('hl-sort-row').classList.remove('hidden');
       pageToken = d.nextPageToken || ''; loadedCount += vids.length;
       if (!append && !vids.length) { st.textContent = '결과가 없어요. 다른 주제나 검색어로 시도해보세요.'; return; }
-      box.insertAdjacentHTML('beforeend', vids.map((v) => cardHtml(v, license === 'cc')).join(''));
+      box.insertAdjacentHTML('beforeend', vids.map(cardHtml).join(''));
       wireCards(box);
       st.textContent = `${loadedCount}개 표시 중${pageToken ? ' — 더 있어요' : ' (끝)'} · 하나 고르세요`;
       addLog(append ? `➕ ${vids.length}개 더 불러옴 (총 ${loadedCount}개)` : `🔎 "${query}" 검색 완료 — ${loadedCount}개 (${order === 'viewCount' ? '조회수순' : order === 'date' ? '최신순' : '관련도순'})`);
@@ -421,9 +433,13 @@
   // ── 영상 범위(라이선스) 토글 — 기본 CC(안전) ──
   function applyLicenseNote() {
     const n = $('hl-lic-note'); if (!n) return;
-    n.innerHTML = license === 'all'
-      ? '전체 유튜브 영상을 보여줘요. 영상은 많지만 대부분 "표준 라이선스"라, 내 채널에 올리면 저작권 신고가 들어올 수 있어요(보통 영상 삭제가 아니라, 그 영상 광고수익이 원작자에게 가는 "클레임"이에요).'
-      : '원작자가 "가져다 써도 좋다"고 허락한 CC 영상만 보여줘요. 출처만 밝히면 합법 수익화돼요.';
+    if (license === 'all') {
+      n.classList.add('warn');
+      n.innerHTML = '⚠️ <b>전체 모드</b> — 영화·방송(지상파·케이블)·음원·스포츠 중계 같은 <b>강성 저작권</b>은 해설을 얹어도 위험해요(수동 신고·삭제). 아래 결과의 <b>🆗 무난</b>·<b>✅ 재사용 허가</b> 위주로 고르고 <b>⚠️ 저작권 주의</b>는 피하세요. 해설·자막으로 재가공하면 안전 범위가 넓어지고, 출처는 자동으로 붙어요.';
+    } else {
+      n.classList.remove('warn');
+      n.innerHTML = '원작자가 "가져다 써도 좋다"고 허락한 CC 영상만 보여줘요. 출처만 밝히면 합법 수익화돼요.';
+    }
   }
   document.querySelectorAll('.hl-lic').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-lic').forEach((x) => x.classList.remove('active')); b.classList.add('active');
@@ -445,7 +461,7 @@
       if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
       const fresh = (d.videos || []).filter((v) => !existing.has(v.videoId));
       if (!fresh.length) { st.textContent = `업데이트할 새 영상이 없어요 (지금 ${existing.size}개).`; addLog('↻ 최신 가져오기 — 새 영상 없음'); return; }
-      box.insertAdjacentHTML('afterbegin', fresh.map((v) => cardHtml(v, license === 'cc')).join('')); // 새것은 맨 위로
+      box.insertAdjacentHTML('afterbegin', fresh.map(cardHtml).join('')); // 새것은 맨 위로
       wireCards(box); loadedCount = existing.size + fresh.length;
       st.textContent = `✅ ${fresh.length}개 업데이트했습니다 — 맨 위에 추가됐어요 (총 ${existing.size + fresh.length}개)`;
       addLog(`↻ 최신 가져오기 — ${fresh.length}개 업데이트`); saveState();
@@ -472,7 +488,7 @@
     try {
       const d = await (await fetch('/api/yt-video?url=' + encodeURIComponent(raw))).json();
       if (d.error) { st.textContent = '⚠️ ' + d.error; alert(d.error); return; }
-      $('hl-results').innerHTML = cardHtml(d, d.isCc); wireCards($('hl-results'));
+      $('hl-results').innerHTML = cardHtml(d); wireCards($('hl-results'));
       $('hl-sort-row')?.classList.add('hidden');
       st.textContent = d.isCc ? '✅ 재사용 허가(CC) 영상이에요 — 바로 만들 수 있어요.' : '⚠️ 표준 라이선스 영상이에요 — 내 영상·권한 있는 영상만 사용하세요.';
       addLog(`🔗 URL 확인: ${d.title} (${d.isCc ? 'CC 재사용 허가' : '표준 라이선스'})`);

@@ -67,6 +67,15 @@ body {
 .hl-results { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; max-height: 480px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .hl-card { position: relative; display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2); cursor: pointer; }
 .hl-card .hl-play { position: absolute; left: 10px; top: 10px; z-index: 1; font-size: 11px; font-weight: 700; color: #fff; background: rgba(0,0,0,0.62); border-radius: 999px; padding: 3px 8px; pointer-events: none; }
+.hl-card .hl-risk { position: absolute; right: 8px; top: 8px; z-index: 1; font-size: 10px; font-weight: 800; border-radius: 999px; padding: 3px 8px; pointer-events: none; }
+.hl-card .hl-risk.cc { background: #e4f8ee; color: #1a9d63; }
+.hl-card .hl-risk.ok { background: #fff3d6; color: #a9730a; }
+.hl-card .hl-risk.caution { background: #fde3e4; color: #d23640; }
+[data-theme="dark"] .hl-card .hl-risk.cc { background: #123; color: #4fd597; }
+[data-theme="dark"] .hl-card .hl-risk.ok { background: #332a10; color: #e7b64a; }
+[data-theme="dark"] .hl-card .hl-risk.caution { background: #3a1416; color: #f07077; }
+#hl-lic-note.warn { background: #fde8e0; border: 1px solid #f6c3b0; color: #9a3b1e; border-radius: 10px; padding: 9px 11px; line-height: 1.55; }
+[data-theme="dark"] #hl-lic-note.warn { background: #3a1e14; border-color: #6b3a28; color: #f0b59c; }
 .hl-card.active { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(18,169,152,0.3); }
 .hl-card img { width: 128px; height: 72px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: #000; }
 .hl-card .hl-meta { min-width: 0; }
