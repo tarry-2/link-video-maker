@@ -138,10 +138,11 @@ export const Scene: React.FC<SceneData> = ({
               boxShadow: `0 12px 44px rgba(0,0,0,0.55), 0 0 32px ${accentColor}44`,
             }}>
               {hookTop && <div style={{fontFamily: blackFont, fontSize: L.fsHookTop, color: '#fff',
-                lineHeight: 1.08, textShadow: outline(3), letterSpacing: -1}}>{hookTop}</div>}
+                lineHeight: 1.08, textShadow: outline(3), letterSpacing: -1,
+                wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookTop}</div>}
               {hookAccent && <div style={{fontFamily: blackFont, fontSize: L.fsHookAccent, color: accentColor,
                 lineHeight: 1.12, marginTop: 4, textShadow: `0 3px 14px ${accentColor}66, ${outline(3)}`,
-                letterSpacing: -1}}>{hookAccent}</div>}
+                letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookAccent}</div>}
             </div>
           </div>
         )}
@@ -269,6 +270,8 @@ export const Scene: React.FC<SceneData> = ({
             color: '#fff',
             textShadow: outline(5),
             letterSpacing: -1,
+            wordBreak: 'keep-all',
+            overflowWrap: 'anywhere',
           }}
         >
           {hookTop}
@@ -282,6 +285,8 @@ export const Scene: React.FC<SceneData> = ({
             textShadow: outline(6),
             marginTop: 6,
             letterSpacing: -1,
+            wordBreak: 'keep-all',
+            overflowWrap: 'anywhere',
           }}
         >
           {hookAccent}
