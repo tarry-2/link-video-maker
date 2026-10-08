@@ -1331,15 +1331,29 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
   // ── 재사용(CC) 유튜브 영상 → 하이라이트 숏폼 여러 편 ──
   // ── 본인 영상 업로드(하이라이트 소재) — raw 바이너리 PUT. 파일명은 X-Filename 헤더. 반환 {uploadId, duration, title} ──
   if (p === '/api/highlight/upload' && req.method === 'POST') {
+    const rawName = decodeURIComponent(String(req.headers['x-filename'] || 'upload.mp4'));
+    const ext = (rawName.match(/\.(mp4|mov|m4v|webm|mkv|avi)$/i) || ['', 'mp4'])[1].toLowerCase();
+    fs.mkdirSync(HL_UPLOAD_DIR, {recursive: true});
+    const uploadId = randomUUID().slice(0, 12);
+    const dest = path.join(HL_UPLOAD_DIR, `${uploadId}.${ext}`);
+    // ★큰 영상(수백 MB)을 메모리에 통째로 담으면 Railway 컨테이너가 OOM으로 죽어 "업로드 실패"가 난다.
+    //   → 받는 즉시 디스크로 스트리밍(메모리 일정). 300MB짜리도 메모리 몇 MB만 쓴다.
     try {
-      const buf = await readRaw(req, 600 * 1024 * 1024); // 최대 600MB
-      if (buf.length < 1000) return json(res, 400, {error: '영상 파일이 비어있어요.'});
-      const rawName = decodeURIComponent(String(req.headers['x-filename'] || 'upload.mp4'));
-      const ext = (rawName.match(/\.(mp4|mov|m4v|webm|mkv|avi)$/i) || ['', 'mp4'])[1].toLowerCase();
-      fs.mkdirSync(HL_UPLOAD_DIR, {recursive: true});
-      const uploadId = randomUUID().slice(0, 12);
-      const dest = path.join(HL_UPLOAD_DIR, `${uploadId}.${ext}`);
-      fs.writeFileSync(dest, buf);
+      const MAX = 600 * 1024 * 1024;
+      let total = 0, aborted = '';
+      await new Promise<void>((resolve, reject) => {
+        const ws = fs.createWriteStream(dest);
+        req.on('data', (c: Buffer) => {
+          total += c.length;
+          if (total > MAX && !aborted) { aborted = '파일이 너무 커요(최대 600MB).'; req.destroy(); ws.destroy(); }
+        });
+        req.on('error', reject);
+        ws.on('error', reject);
+        ws.on('finish', () => resolve());
+        req.pipe(ws);
+      });
+      if (aborted) { try { fs.rmSync(dest, {force: true}); } catch {} return json(res, 400, {error: aborted}); }
+      if (total < 1000) { try { fs.rmSync(dest, {force: true}); } catch {} return json(res, 400, {error: '영상 파일이 비어있어요.'}); }
       // 길이 측정(ffprobe). 실패하면 0(프론트에서 안내).
       let duration = 0;
       try {
@@ -1348,8 +1362,8 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         duration = Math.floor(Number(out.trim()) || 0);
       } catch {}
       const title = rawName.replace(/\.[^.]+$/, '').slice(0, 120) || '내 영상';
-      return json(res, 200, {uploadId, duration, title, sizeMB: Math.round(buf.length / 1048576)});
-    } catch (e: any) { return json(res, 400, {error: '업로드 실패: ' + (e?.message || e)}); }
+      return json(res, 200, {uploadId, duration, title, sizeMB: Math.round(total / 1048576)});
+    } catch (e: any) { try { fs.rmSync(dest, {force: true}); } catch {} return json(res, 400, {error: '업로드 실패: ' + (e?.message || e)}); }
   }
 
   if (p === '/api/generate-highlights' && req.method === 'POST') {

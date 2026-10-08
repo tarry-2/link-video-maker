@@ -579,6 +579,14 @@
     $('hl-url-panel')?.classList.toggle('hidden', mode !== 'url');
     $('hl-upload-panel')?.classList.toggle('hidden', mode !== 'upload');
     $('hl-archive-panel')?.classList.toggle('hidden', mode !== 'archive');
+    // ★내 영상 올리기 모드에선 다른 영상(검색 결과·주제·정렬)이 보일 필요 없음 → 전부 숨김(내 영상만 집중).
+    //   다른 모드로 돌아오면 결과 카드가 있을 때만 다시 보여준다(없으면 계속 숨김).
+    const hideOthers = mode === 'upload';
+    const hasResults = !!$('hl-results')?.querySelector('.hl-card');
+    $('hl-results')?.classList.toggle('hidden', hideOthers);
+    $('hl-search-state')?.classList.toggle('hidden', hideOthers);
+    if (hideOthers) $('hl-sort-row')?.classList.add('hidden');
+    else if (hasResults && mode === 'search') $('hl-sort-row')?.classList.remove('hidden');
     document.querySelectorAll('.hl-mode').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   }
   document.querySelectorAll('.hl-mode').forEach((b) => b.addEventListener('click', () => {
@@ -653,24 +661,34 @@
   function uploadMyVideo(file) {
     const wrap = $('hl-up-bar-wrap'), bar = $('hl-up-bar'), st = $('hl-up-state');
     wrap.style.display = ''; bar.style.width = '0%'; st.textContent = '올리는 중…'; st.style.color = '';
+    const sizeMB = Math.round(file.size / 1048576);
+    addLog(`📤 내 영상 올리는 중… ${file.name} (${sizeMB}MB)`);
+    let lastPct = 0;
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/highlight/upload');
     xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
-    xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = Math.round(e.loaded / e.total * 100) + '%'; };
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.round(e.loaded / e.total * 100);
+      bar.style.width = pct + '%';
+      // 로그는 25% 단위로만(도배 방지) — "영상 올리는 중"이 로그에 보이게.
+      if (pct >= lastPct + 25 && pct < 100) { lastPct = pct; addLog(`📤 올리는 중… ${pct}%`); }
+    };
     xhr.onload = () => {
       try {
         const d = JSON.parse(xhr.responseText);
-        if (xhr.status !== 200 || d.error) { st.textContent = '⚠️ ' + (d.error || '업로드 실패'); st.style.color = '#e23d3d'; return; }
+        if (xhr.status !== 200 || d.error) { st.textContent = '⚠️ ' + (d.error || '업로드 실패'); st.style.color = '#e23d3d'; addLog('⚠️ 업로드 실패: ' + (d.error || ('HTTP ' + xhr.status)), 'fail'); return; }
         bar.style.width = '100%';
         const durTxt = d.duration ? fmtDur(d.duration) : '길이 확인 안됨';
         st.textContent = `✅ 업로드 완료 (${durTxt}) — 아래 옵션 정하고 "하이라이트 숏폼 만들기"를 누르세요.`; st.style.color = '#2bb673';
+        addLog(`✅ 내 영상 업로드 완료 — ${d.title || '내 영상'} (${durTxt}, ${d.sizeMB || sizeMB}MB)`, 'done');
         // picked를 업로드 영상으로 — 저작권 자유(risk 없음), uploadId로 생성.
         picked = {uploadId: d.uploadId, title: d.title || '내 영상', channel: '내 영상', durationSec: d.duration || 0, isCc: true, risk: 'cc', mine: true};
         $('hl-options')?.scrollIntoView({behavior: 'smooth'});
         saveState();
-      } catch { st.textContent = '⚠️ 업로드 응답 오류'; st.style.color = '#e23d3d'; }
+      } catch { st.textContent = '⚠️ 업로드 응답 오류'; st.style.color = '#e23d3d'; addLog('⚠️ 업로드 응답 오류', 'fail'); }
     };
-    xhr.onerror = () => { st.textContent = '⚠️ 업로드 중 네트워크 오류'; st.style.color = '#e23d3d'; };
+    xhr.onerror = () => { st.textContent = '⚠️ 업로드 중 네트워크 오류'; st.style.color = '#e23d3d'; addLog('⚠️ 업로드 중 네트워크 오류', 'fail'); };
     xhr.send(file);
   }
   // URL 모드: 붙여넣은 롱폼 확인 → 카드 1개로 띄우고 바로 크게보기 → '이 영상으로 만들기'
