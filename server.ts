@@ -10,6 +10,7 @@ import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
 import {makeHighlights, backfillHighlightProjects, reRenderHighlight} from './lib/youtube-highlight';
+import {searchArchiveChannel} from './lib/youtube-clip';
 import {generateCardStoryboard} from './lib/cards';
 import {PRESETS, RECOMMEND_STYLE, getPreset} from './lib/presets';
 import {STYLES, STYLE_IDS} from './lib/styles';
@@ -895,6 +896,25 @@ const server = http.createServer(async (req, res) => {
       return json(res, 502, {error: e?.message || '검색 실패'});
     }
   }
+  // ── 아카이브 긁기(📼 아카이브 탭) — 특정 방송 아카이브 채널에서 주제로 영상 목록을 가져온다. ──
+  //   소스는 화이트리스트로만(임의 채널 긁기 방지). 실제 숏폼/롱폼 제작은 기존 하이라이트 엔진 재사용.
+  if (p === '/api/archive-search' && req.method === 'GET') {
+    const ARCHIVE_CHANNELS: Record<string, {channel: string; label: string}> = {
+      kbs: {channel: 'KBSArchive', label: '옛날티비 (KBS 아카이브)'},
+    };
+    const src = u.searchParams.get('src') || 'kbs';
+    const q = (u.searchParams.get('q') || '').trim();
+    const srcInfo = ARCHIVE_CHANNELS[src];
+    if (!srcInfo) return json(res, 400, {error: '알 수 없는 아카이브 소스입니다.'});
+    if (!q) return json(res, 400, {error: '주제를 입력하세요.'});
+    try {
+      const videos = await searchArchiveChannel(srcInfo.channel, q, 30, () => {});
+      return json(res, 200, {videos, source: srcInfo.label});
+    } catch (e: any) {
+      return json(res, 502, {error: e?.message || '아카이브 긁기 실패'});
+    }
+  }
+
   // ── 영상 1개 메타 조회(URL 붙여넣기 모드) — 붙여넣은 롱폼의 제목·길이·CC여부를 확인 ──
   if (p === '/api/yt-video' && req.method === 'GET') {
     const raw = (u.searchParams.get('url') || u.searchParams.get('id') || '').trim();

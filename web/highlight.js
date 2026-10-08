@@ -343,7 +343,7 @@
     if (!s) return false;
     region = s.region || 'kr'; order = s.order || 'viewCount'; cat = s.cat || ''; orient = s.orient || 'portrait';
     reframeMode = s.reframeMode === 'letterbox' ? 'letterbox' : 'track';
-    license = s.license === 'all' ? 'all' : 'cc'; mode = ['url', 'upload'].includes(s.mode) ? s.mode : 'search';
+    license = s.license === 'all' ? 'all' : 'cc'; mode = ['url', 'upload', 'archive'].includes(s.mode) ? s.mode : 'search';
     document.querySelectorAll('.hl-lic').forEach((b) => b.classList.toggle('active', b.dataset.lic === license));
     applyLicenseNote(); applyMode();
     document.querySelectorAll('.hl-orient').forEach((b) => b.classList.toggle('active', b.dataset.o === orient));
@@ -432,6 +432,7 @@
   // 저작권 위험도 뱃지: cc(안전)·ok(무난)·caution(주의)
   function riskInfo(risk) {
     if (risk === 'cc') return {cls: 'cc', label: '✅ 재사용 허가'};
+    if (risk === 'archive') return {cls: 'archive', label: '📼 공개 아카이브'};
     if (risk === 'caution') return {cls: 'caution', label: '⚠️ 저작권 주의'};
     return {cls: 'ok', label: '🆗 무난'};
   }
@@ -456,7 +457,7 @@
     });
   }
   function selectPicked(v) {
-    picked = {videoId: v.videoId, title: v.title, channel: v.channel, durationSec: Number(v.durationSec) || 300, isCc: v.isCc !== false};
+    picked = {videoId: v.videoId, title: v.title, channel: v.channel, durationSec: Number(v.durationSec) || 300, isCc: v.isCc !== false, risk: v.risk || ''};
     document.querySelectorAll('.hl-card').forEach((x) => x.classList.toggle('active', x.dataset.id === picked.videoId));
     $('hl-picked').textContent = `선택: ${picked.title}`;
     renderCountSeg(); saveState();
@@ -468,6 +469,8 @@
     const risk = v.risk || (v.isCc ? 'cc' : 'ok');
     const badge = risk === 'cc'
       ? '<span style="color:#2bb673;font-weight:700">✅ 재사용 허가(CC) — 출처만 밝히면 합법 수익화</span>'
+      : risk === 'archive'
+      ? '<span style="color:#2f5fd0;font-weight:700">📼 공개 아카이브 — KBS가 공식 개방한 소재예요. 출처만 밝히면 안전하게 재가공·수익화할 수 있어요.</span>'
       : risk === 'caution'
       ? '<span style="color:#e5484d;font-weight:700">⚠️ 저작권 주의 — 영화·방송·음원·스포츠일 수 있어요. 재가공해도 위험하니 가급적 피하세요.</span>'
       : '<span style="color:#d08700;font-weight:700">🆗 무난 — 일반 롱폼. 해설·자막으로 재가공 + 출처를 남기면 안전 범위예요.</span>';
@@ -571,11 +574,68 @@
     $('hl-search-panel')?.classList.toggle('hidden', mode !== 'search');
     $('hl-url-panel')?.classList.toggle('hidden', mode !== 'url');
     $('hl-upload-panel')?.classList.toggle('hidden', mode !== 'upload');
+    $('hl-archive-panel')?.classList.toggle('hidden', mode !== 'archive');
     document.querySelectorAll('.hl-mode').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   }
   document.querySelectorAll('.hl-mode').forEach((b) => b.addEventListener('click', () => {
-    mode = ['url', 'upload'].includes(b.dataset.mode) ? b.dataset.mode : 'search'; applyMode(); saveState();
+    mode = ['url', 'upload', 'archive'].includes(b.dataset.mode) ? b.dataset.mode : 'search'; applyMode(); saveState();
   }));
+
+  // ── 📼 아카이브 — 방송사 공식 공개 아카이브(옛날티비/KBS)에서 주제로 영상을 가져온다. ──
+  //   검색 결과를 기존 하이라이트 카드 형식으로 매핑 → 미리보기·선택·제작(기존 엔진)을 그대로 재사용.
+  let archiveSrc = 'kbs';
+  const ARC_CATS = [
+    {ko:'옛날 예능', q:'예능'},
+    {ko:'드라마', q:'드라마'},
+    {ko:'7080 추억', q:'7080'},
+    {ko:'만화·둘리', q:'만화'},
+    {ko:'가요·음악', q:'가요무대'},
+    {ko:'다큐', q:'다큐멘터리'},
+    {ko:'코미디', q:'코미디'},
+    {ko:'뉴스·시사', q:'뉴스'},
+  ];
+  function renderArcCats() {
+    const box = $('hl-arc-cats'); if (!box) return;
+    box.innerHTML = ARC_CATS.map((c) => `<button type="button" class="hl-cat hl-arc-cat" data-q="${esc(c.q)}" data-ko="${esc(c.ko)}">${c.ko}</button>`).join('');
+    box.querySelectorAll('.hl-arc-cat').forEach((b) => b.addEventListener('click', () => {
+      box.querySelectorAll('.hl-arc-cat').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+      cat = b.dataset.ko; if ($('hl-arc-query')) $('hl-arc-query').value = '';
+      addLog(`📼 아카이브 주제: ${cat} (옛날티비)`);
+      archiveSearch(b.dataset.q);
+    }));
+  }
+  // 아카이브 영상 → 하이라이트 카드 형식으로 매핑(미리보기·선택·제작 재사용).
+  function arcToCard(v) {
+    return {videoId: v.id, title: v.title, channel: '옛날티비', durationSec: v.duration || 0, thumb: v.thumbnail, views: v.viewCount || 0, isCc: false, risk: 'archive'};
+  }
+  async function archiveSearch(forcedQuery) {
+    const box = $('hl-results'), st = $('hl-search-state');
+    const q = (forcedQuery != null ? forcedQuery : ($('hl-arc-query')?.value || '')).trim();
+    if (!q) { alert('주제를 고르거나 검색어를 입력하세요.'); return; }
+    query = q; pageToken = ''; loadedCount = 0;
+    box.innerHTML = ''; picked = null; $('hl-picked').textContent = ''; renderCountSeg();
+    $('hl-sort-row')?.classList.add('hidden'); // 아카이브는 조회수/최신 정렬 없음
+    st.textContent = '옛날티비(KBS) 아카이브에서 찾는 중…';
+    try {
+      const d = await (await fetch(`/api/archive-search?src=${encodeURIComponent(archiveSrc)}&q=${encodeURIComponent(q)}`)).json();
+      if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
+      const vids = (d.videos || []).map(arcToCard);
+      loadedCount = vids.length;
+      if (!vids.length) { st.textContent = '결과가 없어요. 다른 주제나 검색어로 시도해보세요.'; return; }
+      box.insertAdjacentHTML('beforeend', vids.map(cardHtml).join(''));
+      wireCards(box);
+      st.textContent = `${loadedCount}개 표시 중 · 하나 고르세요`;
+      addLog(`📼 아카이브 "${q}" 검색 완료 — ${loadedCount}개`);
+      saveState();
+    } catch { st.textContent = '아카이브를 불러오지 못했어요. 잠시 후 다시 시도하세요.'; }
+  }
+  renderArcCats();
+  document.querySelectorAll('.hl-arc-src').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-arc-src').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+    archiveSrc = b.dataset.src || 'kbs';
+  }));
+  $('hl-arc-search')?.addEventListener('click', () => { document.querySelector('.hl-arc-cat.active')?.classList.remove('active'); archiveSearch(); });
+  $('hl-arc-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.querySelector('.hl-arc-cat.active')?.classList.remove('active'); archiveSearch(); } });
 
   // ── 내 영상 올리기 — 업로드 → picked(uploadId) 설정 → 바로 '만들기' 가능(저작권 자유) ──
   $('hl-file-pick')?.addEventListener('click', () => $('hl-file')?.click());
@@ -716,6 +776,8 @@
 
   renderCats();
   restoreState(); // 탭 나갔다 와도 선택·검색결과 유지(초기화 전까지)
+  // 네비에서 "📼 아카이브"로 들어오면(?mode=archive) 바로 아카이브 모드로.
+  try { if (new URLSearchParams(location.search).get('mode') === 'archive') { mode = 'archive'; applyMode(); saveState(); } } catch {}
   renderCountSeg(); // 편수 버튼을 처음부터 보이게(영상 고르기 전에도)
 
   // ── 생성 ──
@@ -794,8 +856,8 @@
       }
     }
     addLog('──────── 하이라이트 제작 시작 ────────', 'done');
-    addLog(`• 소재: ${picked.mine ? '📁 내 영상(저작권 자유)' : (mode === 'url' ? 'URL 직접 입력' : (region === 'global' ? '해외' : '한국') + ' · ' + (cat || '직접 검색'))}`);
-    addLog(`• 라이선스: ${picked.mine ? '내 소유(차단 걱정 없음)' : (picked.isCc !== false ? '재사용 허가(CC)' : '표준 라이선스(권한 확인 필요)')}`);
+    addLog(`• 소재: ${picked.mine ? '📁 내 영상(저작권 자유)' : (mode === 'archive' ? '📼 옛날티비(KBS 아카이브) · ' + (cat || '직접 검색') : (mode === 'url' ? 'URL 직접 입력' : (region === 'global' ? '해외' : '한국') + ' · ' + (cat || '직접 검색')))}`);
+    addLog(`• 라이선스: ${picked.mine ? '내 소유(차단 걱정 없음)' : (picked.risk === 'archive' ? 'KBS 공식 공개 아카이브(출처 표기 시 안전)' : (picked.isCc !== false ? '재사용 허가(CC)' : '표준 라이선스(권한 확인 필요)'))}`);
     addLog(`• 원본 영상: ${picked.title}`);
     addLog(`• 원본 길이: ${fmtDur(picked.durationSec)} → 클립 ${sec}초짜리`);
     addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}${orient === 'portrait' ? ' · ' + (reframeMode === 'letterbox' ? '전체 보존(블러)' : '인물 꽉채움') : ''}`);

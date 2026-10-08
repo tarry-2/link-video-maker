@@ -70,6 +70,33 @@ async function buildCommon(log: (m: string) => void): Promise<{common: string[];
   return {common, cookieUsed};
 }
 
+// ── 아카이브 긁기 — 특정 유튜브 채널(KBS 아카이브 등) 안에서 주제(키워드)로 영상 목록을 가져온다. ──
+//   다운로드 아니라 '목록 메타'만(--flat-playlist) 긁으므로 가볍다. 실제 제작은 기존 하이라이트 엔진 재사용.
+export type ArchiveVideo = {id: string; title: string; duration: number; viewCount: number; thumbnail: string; url: string};
+
+export async function searchArchiveChannel(
+  channel: string, query: string, max: number, log: (m: string) => void,
+): Promise<ArchiveVideo[]> {
+  const {common} = await buildCommon(log);
+  const flat = common.filter((a) => a !== '--no-playlist'); // 채널 검색은 플레이리스트라 --no-playlist 제거
+  const url = `https://www.youtube.com/@${channel}/search?query=${encodeURIComponent(query)}`;
+  log(`[아카이브] "${channel}" 채널에서 "${query}" 검색…`);
+  const out = await run(YTDLP, [...flat, '--flat-playlist', '--playlist-end', String(Math.max(1, Math.min(40, max))), '-J', url], log, 60000);
+  let data: any;
+  try { data = JSON.parse(out); } catch { throw new Error('목록을 읽지 못했습니다(응답 형식 오류).'); }
+  const entries: any[] = Array.isArray(data?.entries) ? data.entries : [];
+  const list = entries.filter((e) => e && e.id).map((e): ArchiveVideo => ({
+    id: e.id,
+    title: e.title || '(제목 없음)',
+    duration: Math.round(e.duration || 0),
+    viewCount: e.view_count || 0,
+    thumbnail: `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg`, // flat 응답엔 썸네일이 불완전 → 안정적인 고정 URL
+    url: `https://www.youtube.com/watch?v=${e.id}`,
+  }));
+  log(`[아카이브] ${list.length}개 영상 확보.`);
+  return list;
+}
+
 // ★메타(영상 길이)+자막만 가볍게 받는다. 통짜 영상은 안 받음 — 프록시(주거용 IP)로 39분 1GB는 느려서 타임아웃.
 //   하이라이트 구간을 정한 뒤 그 구간만 받는다(downloadSection) → 데이터·시간 ~10배↓.
 async function fetchMetaAndSubs(

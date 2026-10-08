@@ -74,9 +74,11 @@ body {
 .hl-card .hl-risk.cc { background: #e4f8ee; color: #1a9d63; }
 .hl-card .hl-risk.ok { background: #fff3d6; color: #a9730a; }
 .hl-card .hl-risk.caution { background: #fde3e4; color: #d23640; }
+.hl-card .hl-risk.archive { background: #e7eefc; color: #2f5fd0; }
 [data-theme="dark"] .hl-card .hl-risk.cc { background: #123; color: #4fd597; }
 [data-theme="dark"] .hl-card .hl-risk.ok { background: #332a10; color: #e7b64a; }
 [data-theme="dark"] .hl-card .hl-risk.caution { background: #3a1416; color: #f07077; }
+[data-theme="dark"] .hl-card .hl-risk.archive { background: #16213a; color: #76a3f5; }
 #hl-lic-note.warn { background: #fde8e0; border: 1px solid #f6c3b0; color: #9a3b1e; border-radius: 10px; padding: 9px 11px; line-height: 1.55; }
 [data-theme="dark"] #hl-lic-note.warn { background: #3a1e14; border-color: #6b3a28; color: #f0b59c; }
 .hl-card.active { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(18,169,152,0.3); }

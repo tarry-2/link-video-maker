@@ -29,6 +29,7 @@
     <nav class="topnav">
       <a href="/" class="navtab">✏️ 영상 만들기</a>
       <a href="/highlight" class="navtab active">🎬 유튜브 하이라이트</a>
+      <a href="/highlight?mode=archive" class="navtab">📼 아카이브</a>
       <a href="/voices?tab=voice" class="navtab">🎙 목소리 듣기</a>
       <a href="/voices?tab=pf" class="navtab">🎬 포트폴리오</a>
     </nav>
@@ -47,6 +48,7 @@
           <button type="button" class="seg-btn hl-mode active" data-mode="search">🔎 주제로 찾기</button>
           <button type="button" class="seg-btn hl-mode" data-mode="url">🔗 영상 URL로</button>
           <button type="button" class="seg-btn hl-mode" data-mode="upload">📁 내 영상 올리기</button>
+          <button type="button" class="seg-btn hl-mode" data-mode="archive">📼 아카이브</button>
         </div>
 
         <!-- ▸ 주제로 찾기 패널 -->
@@ -107,6 +109,22 @@
           <div class="energy" style="margin-top:8px;display:none" id="hl-up-bar-wrap"><div id="hl-up-bar" class="energy-fill" style="width:0%"></div></div>
           <p id="hl-up-state" class="mini-state"></p>
           <p class="hint" style="margin-top:4px">✅ <b>내 영상은 저작권 걱정 0</b> — 세로 쇼츠로도 맘껏 만들 수 있어요(차단 없음). 최대 600MB.</p>
+        </div>
+
+        <!-- ▸ 아카이브 패널 — 방송사 공식 공개 아카이브(옛날티비/KBS)에서 추억의 영상을 가져온다. -->
+        <div id="hl-archive-panel" class="hidden" style="margin-top:14px">
+          <label class="field-label">📼 아카이브 소스 <span class="hint">— 방송사가 공식 공개한 레트로 영상이에요</span></label>
+          <div class="seg" style="margin-top:6px">
+            <button type="button" class="seg-btn hl-arc-src active" data-src="kbs">📺 옛날티비 (KBS 아카이브)</button>
+          </div>
+          <p class="hint" style="margin-top:4px">✅ KBS가 "가져다 써도 좋다"고 <b>공식 개방</b>한 소재예요(둘리·7080 추억·옛 예능 등). 조회수 잘 나오는 레트로 콘텐츠로 숏폼/롱폼을 만드세요. 출처는 자동으로 붙어요.</p>
+
+          <label class="field-label" style="margin-top:14px">주제 <span class="hint">— 고르면 그 분야 영상이 쫙 떠요 (직접 검색도 가능)</span></label>
+          <div id="hl-arc-cats" class="hl-cats"></div>
+          <div class="voice-row" style="margin-top:8px">
+            <input id="hl-arc-query" class="input" placeholder="또는 직접 검색 (예: 둘리, 7080, 예능, 드라마…)" />
+            <button id="hl-arc-search" class="ghost-btn" type="button">🔎 검색</button>
+          </div>
         </div>
 
         <p id="hl-search-state" class="mini-state"></p>
