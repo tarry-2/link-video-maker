@@ -14,15 +14,21 @@ const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 export type Highlight = {start: number; end: number; hookTop: string; hookAccent: string; reason: string};
 export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string; transcript?: string};
 
-function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 300000, onLine?: (line: string) => void): Promise<string> {
+function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 300000, onLine?: (line: string) => void, cancelled?: () => boolean): Promise<string> {
   return new Promise((resolve, reject) => {
     const ps = spawn(cmd, args, {stdio: ['ignore', 'pipe', 'pipe']});
-    let out = '', err = '';
+    let out = '', err = '', killedByCancel = false;
     const t = setTimeout(() => { ps.kill('SIGKILL'); reject(new Error(`${cmd} 시간 초과`)); }, timeoutMs);
+    // ★중단 즉시 반영 — 돌아가는 yt-dlp/ffmpeg 자식 프로세스를 바로 죽인다(플래그만 세우면 이 긴 작업이 안 멈춤).
+    const ca = cancelled ? setInterval(() => { if (cancelled()) { killedByCancel = true; try { ps.kill('SIGKILL'); } catch {} } }, 400) : null;
     ps.stdout.on('data', (d) => { out += d; });
     ps.stderr.on('data', (d) => { err += d; if (onLine) String(d).split(/[\r\n]+/).forEach((l) => l && onLine(l)); });
-    ps.on('error', (e) => { clearTimeout(t); reject(e); });
-    ps.on('close', (code) => { clearTimeout(t); code === 0 ? resolve(out) : reject(new Error((err || out).slice(-400))); });
+    ps.on('error', (e) => { clearTimeout(t); if (ca) clearInterval(ca); reject(e); });
+    ps.on('close', (code) => {
+      clearTimeout(t); if (ca) clearInterval(ca);
+      if (killedByCancel) return reject(new Error('사용자가 중단했습니다.'));
+      code === 0 ? resolve(out) : reject(new Error((err || out).slice(-400)));
+    });
   });
 }
 
@@ -33,7 +39,7 @@ export async function ytdlpAvailable(): Promise<boolean> {
 
 // 영상 + 자막 다운로드. 반환: {videoPath, subText(초단위 타임스탬프 포함)}.
 // ★Railway 같은 데이터센터 IP는 유튜브 봇차단이 잦다 → 쿠키(YT_COOKIES_FILE) 있으면 사용, 속도 제한도 건다.
-async function download(videoId: string, dir: string, log: (m: string) => void): Promise<{videoPath: string; subText: string}> {
+async function download(videoId: string, dir: string, log: (m: string) => void, cancelled?: () => boolean): Promise<{videoPath: string; subText: string}> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const base = path.join(dir, 'src');
   // -4=IPv4 강제(데이터센터 IPv6가 더 자주 차단됨), --sleep-requests=레이트리밋 완화.
@@ -51,7 +57,15 @@ async function download(videoId: string, dir: string, log: (m: string) => void):
   } else {
     log('[하이라이트] ⚠️ 유튜브 쿠키 없음 — 데이터센터 IP는 봇차단이 잦아요. 설정에서 쿠키를 등록하세요.');
   }
-  if (process.env.YT_PROXY) common.push('--proxy', process.env.YT_PROXY);
+  if (process.env.YT_PROXY) {
+    common.push('--proxy', process.env.YT_PROXY);
+    // 프록시 주소에서 비번은 가리고 호스트만 보여준다(데이터센터 IP 봇차단 우회의 핵심이라 쓰는지 한눈에).
+    const host = (process.env.YT_PROXY.match(/@([^/]+)/) || [])[1] || process.env.YT_PROXY.replace(/\/\/.*@/, '//');
+    const kr = /__cr\.kr|[_.]kr[;:]|country[-_]?kr/i.test(process.env.YT_PROXY) ? ' · 한국' : '';
+    log(`[하이라이트] 🌐 프록시 사용(주거용 IP로 우회${kr}): ${host}`);
+  } else {
+    log('[하이라이트] 🌐 프록시 미사용(데이터센터 IP 직접 — 봇차단 가능).');
+  }
   // PO토큰 제공자(bgutil, 127.0.0.1:4416) 생존 확인 — 데이터센터 IP 봇차단 우회의 핵심이라 죽어있으면 바로 보이게.
   try {
     await fetch('http://127.0.0.1:4416/ping', {signal: AbortSignal.timeout(3000)});
@@ -64,13 +78,15 @@ async function download(videoId: string, dir: string, log: (m: string) => void):
   log('[하이라이트] 영상 다운로드…(용량에 따라 수 분)');
   let ok = false, lastErr = '';
   for (const client of CLIENTS) {
+    if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
       await run(YTDLP, [...common, ...ca, '-f', 'bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b',
-        '--merge-output-format', 'mp4', '-o', base + '.%(ext)s', url], log, 420000);
+        '--merge-output-format', 'mp4', '-o', base + '.%(ext)s', url], log, 420000, undefined, cancelled);
       ok = true; log(`[하이라이트] 다운로드 성공(${client})`); break;
     } catch (e: any) {
       lastErr = (e?.message || '').slice(0, 200);
+      if (/사용자가 중단/.test(lastErr)) throw new Error('사용자가 중단했습니다.'); // 중단이면 다음 클라이언트 시도 말고 즉시 종료
       // ★실제 실패 사유를 로그에 남긴다(봇차단인지·포맷없음인지·n-challenge인지 한 줄로 구분).
       log(`[하이라이트] ${client} 실패: ${lastErr.replace(/\s+/g, ' ').slice(0, 120)} → 다음 방식 시도`);
     }
@@ -86,12 +102,13 @@ async function download(videoId: string, dir: string, log: (m: string) => void):
   // 2) 자막(자동 생성 포함) — vtt. 영어 우선. 실패해도 영상은 받았으니 균등분할로 진행(여러 클라이언트 시도).
   log('[하이라이트] 자막 다운로드…');
   for (const client of CLIENTS) {
+    if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
       await run(YTDLP, [...common, ...ca, '--skip-download', '--write-subs', '--write-auto-subs',
-        '--sub-langs', 'en,ko', '--sub-format', 'vtt', '-o', base + '.%(ext)s', url], log, 120000);
+        '--sub-langs', 'en,ko', '--sub-format', 'vtt', '-o', base + '.%(ext)s', url], log, 120000, undefined, cancelled);
       if (fs.readdirSync(dir).some(f => /\.vtt$/.test(f))) break;
-    } catch { /* 다음 클라이언트 */ }
+    } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw new Error('사용자가 중단했습니다.'); /* 아니면 다음 클라이언트 */ }
   }
   if (!fs.readdirSync(dir).some(f => /\.vtt$/.test(f))) log('[하이라이트] 자막 없음(균등 분할로 진행)');
   const videoPath = fs.readdirSync(dir).map(f => path.join(dir, f)).find(f => /src\.(mp4|mkv|webm)$/.test(f));
@@ -229,7 +246,7 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
 }
 
 // 한 구간을 잘라낸다. orientation='portrait'=세로9:16(블러레터박스) / 'landscape'=가로16:9(원본 그대로).
-async function cutClip(videoPath: string, h: Highlight, outPath: string, orientation: 'portrait' | 'landscape', log: (m: string) => void): Promise<void> {
+async function cutClip(videoPath: string, h: Highlight, outPath: string, orientation: 'portrait' | 'landscape', log: (m: string) => void, cancelled?: () => boolean): Promise<void> {
   // ★남 채널 워터마크(보통 모서리) 지우기: 입력을 6% 확대 크롭해 가장자리를 화면 밖으로 밀어낸다.
   //   화질 손상 거의 없음(1080p 기준 ~6%). 중앙 큰 워터마크는 못 지움(드묾).
   const dewm = 'crop=iw/1.12:ih/1.12'; // 12% 확대 크롭 — 모서리 워터마크 대부분 제거(상하좌우 ~6%씩 잘림)
@@ -267,7 +284,7 @@ async function cutClip(videoPath: string, h: Highlight, outPath: string, orienta
   //   2분짜리 클립을 medium으로 뽑으면 클립당 수 분씩 걸려 전체가 40분+ 가 되던 걸 줄인다.
   await run(FFMPEG, ['-y', '-ss', String(h.start), '-to', String(h.end), '-i', videoPath,
     ...args, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
-    '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], log, 420000, onLine);
+    '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], log, 420000, onLine, cancelled);
 }
 
 // 전체: videoId → N개 세로 하이라이트 클립 생성. dir는 작업 폴더.
@@ -284,7 +301,7 @@ export async function extractHighlights(
   await fsp.mkdir(dir, {recursive: true});
   if (!(await ytdlpAvailable())) throw new Error('서버에 yt-dlp가 없습니다(배포 환경 확인 필요).');
   stop();
-  const {videoPath, subText} = await download(videoId, dir, log);
+  const {videoPath, subText} = await download(videoId, dir, log, cancelled);
   stop();
   // 자막 상태 로그(왜 구간을 못 찾았는지 바로 보이게).
   if (subText) log(`[하이라이트] 자막 확보: ${subText.length}자 — 내용 기반으로 터질 구간을 고릅니다.`);
@@ -300,9 +317,12 @@ export async function extractHighlights(
     const file = path.join(dir, `clip-${i}.mp4`);
     log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${h.start}s~${h.end}s · ${orientation === 'landscape' ? '가로' : '세로'})…`);
     try {
-      await cutClip(videoPath, h, file, orientation, log);
+      await cutClip(videoPath, h, file, orientation, log, cancelled);
       results.push({file, start: h.start, end: h.end, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end)});
-    } catch (e: any) { log(`[하이라이트] ${i + 1}번 컷 실패(건너뜀): ` + (e?.message || '').slice(0, 120)); }
+    } catch (e: any) {
+      if (/사용자가 중단/.test(e?.message || '')) throw new Error('사용자가 중단했습니다.'); // 중단이면 다음 컷 말고 즉시 종료
+      log(`[하이라이트] ${i + 1}번 컷 실패(건너뜀): ` + (e?.message || '').slice(0, 120));
+    }
   }
   if (!results.length) throw new Error('클립을 하나도 만들지 못했습니다.');
   // 원본 영상 삭제(용량 절약) — 클립만 남긴다.

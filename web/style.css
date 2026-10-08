@@ -228,6 +228,19 @@ select.input { appearance: none; cursor: pointer; }
 .primary-btn:hover { opacity: 0.96; transform: translateY(-2px); box-shadow: 0 10px 26px rgba(18, 169, 152, 0.38); }
 .primary-btn:active { transform: translateY(0) scale(0.98); box-shadow: none; }
 .primary-btn:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
+/* 빨간 '지금 중단' 버튼 — 중단/이어하기/취소를 색으로 명확히 구분 */
+.danger-btn {
+  background: #e23d3d; color: #fff; border: none; border-radius: 10px;
+  padding: 10px 16px; font-size: 14px; font-weight: 800; cursor: pointer;
+  transition: opacity .16s ease, transform .16s ease;
+}
+.danger-btn:hover { opacity: .92; transform: translateY(-1px); }
+.danger-btn:active { transform: scale(.97); }
+.danger-btn:disabled { opacity: .5; cursor: default; }
+/* 제어 버튼 줄: 전체폭 primary를 인라인으로(한 줄에 나란히) */
+.hl-ctl-row .primary-btn, .hl-ctl-row .danger-btn, .hl-ctl-row .ghost-btn {
+  width: auto; margin-top: 0; display: inline-flex; align-items: center;
+}
 .ghost-btn {
   background: transparent; border: 1px solid rgba(18, 169, 152, 0.4); color: var(--text);
   border-radius: 10px; padding: 9px 14px; font-size: 14px; cursor: pointer;

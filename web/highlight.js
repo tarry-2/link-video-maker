@@ -89,8 +89,9 @@
     if (id !== logJobId) { logJobId = id; logCount = 0; } // 로그는 안 비움(초기화 전까지 유지)
     if (!startTs) startTs = Date.now();
     $('progress-block').classList.remove('hidden');
-    $('hl-stop')?.classList.remove('hidden'); // 진행 중엔 중단 버튼 노출
+    $('hl-stop')?.classList.remove('hidden'); // 진행 중엔 '지금 중단'만 노출
     $('hl-resume')?.classList.add('hidden');
+    $('hl-reset')?.classList.add('hidden');
     tick();
     let recv = 0;
     const es = new EventSource('/api/progress?id=' + id); curES = es;
@@ -104,8 +105,9 @@
         try { localStorage.removeItem('onvideo-hljob'); } catch {}
         refreshGpu();
         $('hl-stop')?.classList.add('hidden'); // 끝났으니 중단 버튼 숨김
-        if (m.error) { setEnergy(energyPct, m.error.includes('중단') ? '중단됨' : '실패'); showResume(); }
+        if (m.error) { setEnergy(energyPct, m.error.includes('중단') ? '중단됨' : '실패'); }
         else { setEnergy(100, '완성! 🎉'); const f = $('hl-energy'); if (f) f.classList.remove('anim'); celebrate(); }
+        showStopped(); // 성공·실패 공통: '같은 설정으로 다시' + '취소하고 새 영상' 노출
         if (m.kind === 'highlight' && !m.error) { showResults(m.clips || []); loadHistory(); }
       }
     };
@@ -564,15 +566,37 @@
 
   // ── 생성 ──
   let lastBody = null;
-  function showResume() { const b = $('hl-resume'); if (b && lastBody) b.classList.remove('hidden'); }
+  // 작업이 끝/중단/실패했을 때: 중단버튼 숨기고 '이어서 다시'(설정 그대로) + '취소하고 새 영상'을 보여준다.
+  function showStopped() {
+    $('hl-stop')?.classList.add('hidden');
+    if (lastBody) $('hl-resume')?.classList.remove('hidden');
+    $('hl-reset')?.classList.remove('hidden');
+  }
+  function showResume() { showStopped(); }
+  // 진행 중인 SSE/작업 표시만 즉시 끊어 UI를 풀어준다(서버 작업은 중단요청으로 알아서 죽음).
+  //   → 이걸 해야 '중단' 직후 설정 바꿔 바로 다시 시작할 수 있다(curJobId가 안 풀려 막히던 문제 해결).
+  function detachJob() {
+    if (curES) { try { curES.close(); } catch {} curES = null; }
+    curJobId = null; clearTimeout(tickTimer);
+    try { localStorage.removeItem('onvideo-hljob'); } catch {}
+  }
+  // 전체 초기화 — 로그·진행·결과·에너지바까지 싹 비우고 처음 상태로.
+  function resetAll() {
+    detachJob(); lastBody = null; startTs = 0;
+    if ($('log')) $('log').textContent = ''; logJobId = null; logCount = 0;
+    setEnergy(0, ''); const f = $('hl-energy'); if (f) f.classList.add('anim');
+    $('progress-block')?.classList.add('hidden');
+    $('hl-result-block')?.classList.add('hidden');
+    ['hl-stop','hl-resume','hl-reset'].forEach((id) => $(id)?.classList.add('hidden'));
+  }
   async function generate(body) {
     const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
-    $('hl-resume')?.classList.add('hidden');
+    ['hl-resume','hl-reset'].forEach((id) => $(id)?.classList.add('hidden'));
     try {
       const d = await (await fetch('/api/generate-highlights', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
-      if (d.error) { addLog('[실패] ' + d.error, 'fail'); showResume(); alert(d.error); return; }
+      if (d.error) { addLog('[실패] ' + d.error, 'fail'); showStopped(); alert(d.error); return; }
       if (d.id) attachProgress(d.id);
-    } catch (e) { addLog('[실패] 시작 실패: ' + e.message, 'fail'); showResume(); alert('시작 실패: ' + e.message); }
+    } catch (e) { addLog('[실패] 시작 실패: ' + e.message, 'fail'); showStopped(); alert('시작 실패: ' + e.message); }
     finally { btn.disabled = false; btn.textContent = '🎬 하이라이트 숏폼 만들기'; }
   }
   $('hl-generate')?.addEventListener('click', () => {
@@ -592,19 +616,24 @@
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });
-  // ⏹ 중단 버튼 — 잘못 골랐을 때. 누르면 "계속 진행 / 중단" 선택.
+  // 🗑 취소하고 새 영상 — 로그·진행·결과 싹 비우고 처음부터(다른 영상/설정으로).
+  $('hl-reset')?.addEventListener('click', () => {
+    if (curJobId && !confirm('진행 중인 제작을 멈추고 전부 비울까요?')) return;
+    if (curJobId) { try { fetch('/api/generate-highlights/cancel', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id: curJobId})}); } catch {} }
+    resetAll();
+  });
+  // ⏹ 지금 중단 — 누르면 돌아가던 다운로드/편집을 서버가 바로 죽이고, UI는 즉시 풀려 설정 바꿔 다시 시작 가능.
   $('hl-stop')?.addEventListener('click', async () => {
-    if (!curJobId) return;
-    // confirm: 확인=중단, 취소=계속 진행
-    if (!confirm('지금 만들던 하이라이트를 중단할까요?\n\n[확인] = 중단(취소)\n[취소] = 계속 진행')) {
-      addLog('▶ 계속 진행합니다.'); return;
-    }
-    try {
-      await fetch('/api/generate-highlights/cancel', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: curJobId})});
-      addLog('⏹ 중단 요청됨 — 진행 중인 단계가 끝나는 대로 멈춥니다.');
-      $('hl-stop').disabled = true; $('hl-stop').textContent = '중단 중…';
-      setTimeout(() => { if ($('hl-stop')) { $('hl-stop').disabled = false; $('hl-stop').textContent = '⏹ 중단'; } }, 3000);
-    } catch (e) { alert('중단 요청 실패: ' + e.message); }
+    const jid = curJobId;
+    if (!jid) return;
+    if (!confirm('지금 만들던 하이라이트를 중단할까요? (바로 멈춥니다)')) return;
+    // 서버에 중단 요청 → 돌아가던 yt-dlp/ffmpeg 즉시 kill.
+    try { await fetch('/api/generate-highlights/cancel', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: jid})}); } catch {}
+    // UI 즉시 해제(서버 완료 신호 안 기다림) → '이어서/취소' 노출, 재시작 잠금 해제.
+    detachJob();
+    addLog('⏹ 중단했습니다. 같은 설정으로 다시 하거나, 취소하고 새 영상을 고르세요.', 'fail');
+    setEnergy(energyPct, '중단됨'); const f = $('hl-energy'); if (f) f.classList.remove('anim');
+    showStopped();
   });
 
   // 진행 중이던 하이라이트 작업만 자동 복구(이미 끝났거나 영상 만들기 작업이면 복구 안 함 → 화면 안 막힘).
