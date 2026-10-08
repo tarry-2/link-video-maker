@@ -180,7 +180,9 @@ export async function reframeClip(
       if (pct >= lastPct + 10 && now - lastAt > 2500) { lastPct = pct; lastAt = now; log(`[리프레임] 인물 추적 변환 ${pct}%`); }
     };
     try {
-      await run(FFMPEG, ['-y', '-i', inPath, '-vf', vf, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+      // ★preset ultrafast — 이 리프레임 결과는 '중간물'로 renderHighlightFast가 다시 재인코딩하므로
+      //   속도 최우선이어도 최종 화질에 영향 없다(crf 20 고정). 파일만 조금 커짐.
+      await run(FFMPEG, ['-y', '-i', inPath, '-vf', vf, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20',
         '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], 420000, onLine, cancelled);
     } finally { await fsp.rm(cmdFile, {force: true}).catch(() => {}); }
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size < 1000) return false;

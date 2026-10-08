@@ -75,13 +75,17 @@ async function buildCommon(log: (m: string) => void): Promise<{common: string[];
 export type ArchiveVideo = {id: string; title: string; duration: number; viewCount: number; thumbnail: string; url: string};
 
 export async function searchArchiveChannel(
-  channel: string, query: string, max: number, log: (m: string) => void,
+  channel: string, query: string, max: number, log: (m: string) => void, offset = 0,
 ): Promise<ArchiveVideo[]> {
   const {common} = await buildCommon(log);
   const flat = common.filter((a) => a !== '--no-playlist'); // 채널 검색은 플레이리스트라 --no-playlist 제거
   const url = `https://www.youtube.com/@${channel}/search?query=${encodeURIComponent(query)}`;
-  log(`[아카이브] "${channel}" 채널에서 "${query}" 검색…`);
-  const out = await run(YTDLP, [...flat, '--flat-playlist', '--playlist-end', String(Math.max(1, Math.min(40, max))), '-J', url], log, 60000);
+  // ★offset으로 '더 보기' 페이지네이션 — playlist-start/end로 구간을 지정해 다음 묶음을 가져온다(flat=빠름).
+  const want = Math.max(1, Math.min(120, max)); // 한 번에 최대 120개까지
+  const start = Math.max(1, offset + 1);
+  const end = offset + want;
+  log(`[아카이브] "${channel}" 채널에서 "${query}" 검색…${offset ? ` (${start}~${end}번째)` : ''}`);
+  const out = await run(YTDLP, [...flat, '--flat-playlist', '--playlist-start', String(start), '--playlist-end', String(end), '-J', url], log, 60000);
   let data: any;
   try { data = JSON.parse(out); } catch { throw new Error('목록을 읽지 못했습니다(응답 형식 오류).'); }
   const entries: any[] = Array.isArray(data?.entries) ? data.entries : [];
@@ -349,18 +353,30 @@ async function cutClip(videoPath: string, outPath: string, orientation: 'portrai
     const now = Date.now();
     if (pct >= lastPct + 5 && now - lastAt > 2500) { lastPct = pct; lastAt = now; log(`[하이라이트]   자르는 중… ${pct}%`); }
   };
-  // crf 20 = 선명. preset veryfast = 같은 화질(crf 고정)로 인코딩만 대폭 빠르게(파일이 조금 커질 뿐).
-  //   2분짜리 클립을 medium으로 뽑으면 클립당 수 분씩 걸려 전체가 40분+ 가 되던 걸 줄인다.
+  // crf 20 = 선명(화질 고정). ★preset ultrafast — 이 크롭 결과는 '중간물'로, 뒤 renderHighlightFast가 다시
+  //   재인코딩(후킹·자막 합성)하므로 여기선 속도 최우선이어도 최종 화질에 영향 없다(crf 동일). 파일만 조금 커짐.
   await run(FFMPEG, ['-y', '-i', videoPath,
-    ...args, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+    ...args, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20',
     '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], log, 420000, onLine, cancelled);
 }
 
 // 로컬 파일(본인 업로드 영상)에서 [start,end] 구간만 잘라 sec-i.mp4로. YouTube downloadSection의 로컬판.
+// ★속도: 재인코딩 없이 '-c copy'(스트림 복사=무손실·거의 즉시). 어차피 뒤 단계(크롭/리프레임/무음)에서
+//   재인코딩되므로 여기서 인코딩할 이유가 없다(유튜브 다운로드가 무인코딩인 것과 동일 원리). 화질 손실 0.
+//   -c copy는 시작점이 가장 가까운 키프레임으로 당겨질 수 있어(±1~2초) 구간이 조금 넓어질 수 있으나,
+//   하이라이트엔 무해하고 최종 길이는 뒤에서 -t로 정확히 맞춘다.
 async function cutSectionLocal(src: string, dir: string, idx: number, start: number, end: number, cancelled?: () => boolean): Promise<string> {
   const out = path.join(dir, `sec-${idx}.mp4`);
-  await run(FFMPEG, ['-y', '-ss', String(Math.max(0, Math.floor(start))), '-to', String(Math.ceil(end)), '-i', src,
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out],
+  const ss = Math.max(0, Math.floor(start)), to = Math.ceil(end);
+  try {
+    await run(FFMPEG, ['-y', '-ss', String(ss), '-to', String(to), '-i', src,
+      '-c', 'copy', '-avoid_negative_ts', 'make_zero', '-movflags', '+faststart', out],
+      () => {}, 120000, undefined, cancelled);
+    if (fs.existsSync(out) && fs.statSync(out).size > 1000) return out;
+  } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; }
+  // 복사 실패(코덱/컨테이너 호환 문제) 시에만 재인코딩 폴백(무회귀).
+  await run(FFMPEG, ['-y', '-ss', String(ss), '-to', String(to), '-i', src,
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out],
     () => {}, 240000, undefined, cancelled);
   if (!fs.existsSync(out)) throw new Error('구간 추출 실패');
   return out;
@@ -423,7 +439,7 @@ async function tightenSilence(
   const out = path.join(dir, `tight-${idx}.mp4`);
   try {
     await run(FFMPEG, ['-y', '-i', input, '-filter_complex', fc, '-map', '[v]', '-map', '[a]',
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out],
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out],
       () => {}, 300000, undefined, cancelled);
   } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; log('[무음제거] 처리 실패 — 원본 유지: ' + (e?.message || '').slice(0, 80)); return input; }
   if (!fs.existsSync(out)) return input;
