@@ -22,7 +22,14 @@ export type PortfolioItem = {
   images?: string[]; // card-post: data/studio/{projectId}/{name} PNG 파일명들(캐러셀 순서).
   score?: number; // 하이라이트: AI 바이럴 점수(0~100). 카드 뱃지·정렬에 사용.
   source?: 'search' | 'url' | 'upload' | 'archive'; // 하이라이트 소재 출처(작업내역 탭별 이원화). 없으면 search 폴백.
+  sourceKey?: string; // 같은 원본 소재 식별(videoId 또는 업로드 제목) — 'N편' 누적 회차 계산용.
 };
+
+// 같은 소재(sourceKey)로 지금까지 만든 하이라이트 편 수 — 다음 편 회차('N편') 계산에 쓴다.
+export function countBySourceKey(sourceKey: string): number {
+  if (!sourceKey) return 0;
+  try { return listPortfolio().filter((x) => x.sourceKey === sourceKey).length; } catch { return 0; }
+}
 
 // 특정 항목에 유튜브 링크 기록(업로드 완료 후).
 export function setPortfolioYouTube(projectId: string, youtubeUrl: string) {

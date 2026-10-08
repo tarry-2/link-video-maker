@@ -12,7 +12,7 @@ import {pipelineKeys} from './keys';
 import {extractHighlights} from './youtube-clip';
 import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {renderHighlightFast} from './highlight-fast';
-import {addPortfolio, listPortfolio} from './portfolio';
+import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
 import {geminiGenerate} from './gemini';
 import {generateImageFlux} from './image';
@@ -202,6 +202,11 @@ export async function makeHighlights(
       : `출처: ${meta.channel} — https://youtu.be/${videoId} (Creative Commons BY)`);
   const results: HighlightJobResult = [];
 
+  // ★누적 회차('N편') — 같은 소재로 지금까지 만든 편 수에 이어서 번호를 붙인다(배포 구분 편하게).
+  //   소재 식별: 유튜브/아카이브=videoId, 업로드=영상 제목. 이번 제작의 첫 편은 (기존수+1)편부터.
+  const sourceKey = isMine ? ('upload:' + (meta.title || '').trim()) : ('yt:' + videoId);
+  const startEpisode = countBySourceKey(sourceKey);
+
   for (let i = 0; i < clips.length; i++) {
     stopIfCancelled();
     const c = clips[i];
@@ -345,7 +350,10 @@ export async function makeHighlights(
       await fsp.rm(pubClipDir, {recursive: true, force: true}); // 렌더 끝났으니 public 클립 정리
     }
 
-    const title = c.hookTop ? c.hookTop.slice(0, 80) : cleanTitle(meta.title, 80);
+    // 후킹 그대로 + 끝에 누적 회차('N편'). 같은 소재 몇 번을 만들든 이어서 번호가 붙어 배포 구분이 쉽다.
+    const episode = startEpisode + i + 1;
+    const baseT = c.hookTop ? c.hookTop.slice(0, 74) : cleanTitle(meta.title, 74);
+    const title = `${baseT} ${episode}편`;
     const createdAt = new Date().toISOString();
 
     // ★서버의 업로드·상세설명·서빙 스택(resolveVideo·ensureInstaVideoR2·readProject*·/portfolio-item)은
@@ -427,6 +435,7 @@ export async function makeHighlights(
         voice: '원본 음성(CC)', category: '🎬 유튜브 하이라이트', goal: 'info',
         createdAt, orientation, kind: 'highlight', score: c.score,
         source: opts.source || (isMine ? 'upload' : 'search'), // 작업내역 탭별 이원화용 소재 출처
+        sourceKey, // 같은 소재 누적 회차('N편') 계산용
       });
     } catch (e: any) { log('[하이라이트] 포트폴리오 등록 건너뜀: ' + (e?.message || '')); }
     // 출처(attribution)를 프로젝트 폴더에도 남긴다(상세설명 폴백 — project.json 읽기 실패 대비).
@@ -609,7 +618,11 @@ export async function reRenderHighlight(
   // 4) output·썸네일 교체 + project.json 갱신(R2 포함). 옛 output은 교체되므로 R2 키만 바꾸면 됨.
   const oldOutput = proj.output;
   proj.output = output;
-  proj.title = (hookTop || proj.title || e.baseTitle || '하이라이트').slice(0, 80);
+  // 편집(후킹 변경)해도 끝의 누적 회차('N편')는 유지한다. 기존 제목에서 회차를 떼어내 새 후킹 뒤에 다시 붙임.
+  const epM = /\s(\d+편)\s*$/.exec(proj.title || '');
+  const epSuffix = epM ? ' ' + epM[1] : '';
+  const newBase = (hookTop || (proj.title || '').replace(/\s\d+편\s*$/, '') || e.baseTitle || '하이라이트').slice(0, 74);
+  proj.title = (newBase + epSuffix).slice(0, 80);
   proj.hlEdit = {...e, hookTop, hookAccent, template: tpl.id};
   if (r2Enabled()) {
     try {
