@@ -52,6 +52,11 @@ async function download(videoId: string, dir: string, log: (m: string) => void):
     log('[하이라이트] ⚠️ 유튜브 쿠키 없음 — 데이터센터 IP는 봇차단이 잦아요. 설정에서 쿠키를 등록하세요.');
   }
   if (process.env.YT_PROXY) common.push('--proxy', process.env.YT_PROXY);
+  // PO토큰 제공자(bgutil, 127.0.0.1:4416) 생존 확인 — 데이터센터 IP 봇차단 우회의 핵심이라 죽어있으면 바로 보이게.
+  try {
+    await fetch('http://127.0.0.1:4416/ping', {signal: AbortSignal.timeout(3000)});
+    log('[하이라이트] 🛡 PO토큰 서버 작동중 — 데이터센터 IP 봇차단 우회(쿠키+PO토큰).');
+  } catch { log('[하이라이트] ⚠️ PO토큰 서버 응답없음 — PO토큰 없이 시도(데이터센터 IP면 봇차단 가능).'); }
   // ★다운로드 뚫기(2026-10 기준): 쿠키 인증 환경에선 tv_downgraded가 "page needs to be reloaded"를 내므로 제외.
   //   web_embedded/default가 쿠키와 가장 잘 맞고, android/ios는 쿠키 없을 때 봇차단 우회용. 순서대로 시도.
   const CLIENTS = ['web_embedded', 'default', 'android', 'ios', 'web_safari'];
