@@ -114,12 +114,19 @@ function iso8601ToSec(d: string): number {
 export type RiskLevel = 'cc' | 'ok' | 'caution';
 // 방송사·음원 레이블·영화/드라마 스튜디오로 보이는 채널명(강성 저작권자) → 재가공해도 수동 신고·삭제 위험.
 const HARD_RIGHTS_RE = /tvN|KBS|MBC|SBS|JTBC|Mnet|EBS|YTN|ENA|채널\s?A|Channel\s?A|Official|공식\s?채널|Records|Entertainment|\bENT\b|Studios?|스튜디오|Pictures|HYBE|SMTOWN|\bSM\b|\bJYP\b|\bYG\b|방송|Network|Niziu|Netflix|Disney|Warner|Universal/i;
-function riskOf(license: string, categoryId: string, channelTitle: string): RiskLevel {
+// ★방송 콘텐츠(드라마·예능·영화·음방) 신호 — 제목·채널 어디든 걸리면 차단 위험 높음(Content ID/Rights Manager가
+//   유튜브·인스타 둘 다 바로 막음). "DRAMA Voyage" 같은 재업로드 채널은 HARD_RIGHTS_RE에 안 걸려서 이게 필요.
+const BROADCAST_RE = /드라마|drama|예능|명장면|명대사|방송|\bEP\.?\s?\d|\d{1,3}\s?회|회차|full|풀\s?영상|하이라이트\s?모음|클립|clip|OST|뮤직비디오|\bM\/?V\b|무대|교차편집|직캠|영화|movie|\b시즌\b|season|넷플릭스|디즈니|티빙|웨이브|쿠팡플레이|wavve|tving|\d{6}\s?방송/i;
+function riskOf(license: string, categoryId: string, channelTitle: string, title = ''): RiskLevel {
   if (license === 'creativeCommon') return 'cc';
-  // 유튜브 카테고리: 1=영화/애니, 10=음악, 17=스포츠, 30=영화, 44=예고편 → 강성 저작권
+  const hay = `${title} ${channelTitle}`;
+  // 유튜브 카테고리: 1=영화/애니, 10=음악, 17=스포츠, 24=엔터(드라마·예능), 30=영화, 44=예고편 → 강성 저작권
   if (['1', '10', '17', '30', '44'].includes(String(categoryId))) return 'caution';
-  if (HARD_RIGHTS_RE.test(channelTitle || '')) return 'caution'; // 방송사·레이블·스튜디오 공식채널
-  return 'ok'; // 일반 롱폼(개인 크리에이터) → 재가공+출처면 무난
+  if (HARD_RIGHTS_RE.test(hay)) return 'caution'; // 방송사·레이블·스튜디오(채널·제목 어디든)
+  if (BROADCAST_RE.test(hay)) return 'caution'; // 드라마·예능·영화·음방 클립(재업로드 채널 포함)
+  // 엔터 카테고리(24)는 방송 신호 없어도 보수적으로 주의(연예·방송 재업로드가 대부분).
+  if (String(categoryId) === '24') return 'caution';
+  return 'ok'; // 일반 롱폼(개인 크리에이터·정보·브이로그 등) → 재가공+출처면 무난
 }
 export async function searchCreativeCommons(query: string, opts: {max?: number; minSec?: number; maxSec?: number; region?: string; language?: string; order?: string; pageToken?: string; license?: 'cc' | 'any'} = {}): Promise<{videos: CcVideo[]; nextPageToken?: string}> {
   if (!query.trim()) throw new Error('검색어를 입력하세요.');
@@ -166,7 +173,7 @@ export async function searchCreativeCommons(query: string, opts: {max?: number; 
       videoId: it.id, title: sn.title || '', channel: sn.channelTitle || '', channelId: sn.channelId || '',
       thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || '',
       publishedAt: sn.publishedAt || '', durationSec: dur, views: Number(it.statistics?.viewCount || 0),
-      license, risk: riskOf(license, sn.categoryId || '', sn.channelTitle || ''),
+      license, risk: riskOf(license, sn.categoryId || '', sn.channelTitle || '', sn.title || ''),
     });
   }
   // 정렬 재적용(videos.list는 id 순서라 search order가 흐트러짐). 조회수순/최신순 확실히.
@@ -193,7 +200,7 @@ export async function getVideoMeta(videoId: string): Promise<VideoMeta> {
   const sn = it.snippet || {};
   const dur = iso8601ToSec(it.contentDetails?.duration || '');
   const license: string = it.status?.license || 'youtube'; // 'creativeCommon' | 'youtube'
-  const risk = riskOf(license, sn.categoryId || '', sn.channelTitle || '');
+  const risk = riskOf(license, sn.categoryId || '', sn.channelTitle || '', sn.title || '');
   return {
     videoId: it.id, title: sn.title || '', channel: sn.channelTitle || '', channelId: sn.channelId || '',
     thumb: sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || '',
