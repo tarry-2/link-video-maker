@@ -61,9 +61,9 @@
   });
 
   // ── 에너지바 + 경과시간 ──
-  let energyPct = 0, startTs = 0, tickTimer = null;
+  let energyPct = 0, startTs = 0, tickTimer = null, estTotalText = '';
   function setEnergy(pct, label) { energyPct = Math.max(0, Math.min(100, pct)); const f = $('hl-energy'); if (f) f.style.width = energyPct + '%'; if ($('hl-energy-label')) $('hl-energy-label').textContent = `${Math.round(energyPct)}% · ${label || ''}`; }
-  function elapsedText() { if (!startTs) return ''; const s = Math.floor((Date.now() - startTs) / 1000); return `⏱ ${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+  function elapsedText() { if (!startTs) return ''; const s = Math.floor((Date.now() - startTs) / 1000); const base = `⏱ ${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; return estTotalText ? `${base} · 예상 ${estTotalText}` : base; }
   function tick() { clearTimeout(tickTimer); const n = $('hl-elapsed'); if (!n) return; n.textContent = elapsedText(); tickTimer = setTimeout(tick, 1000); }
   function energyFromLog(line) {
     if (/소재를 뽑습니다|자막/.test(line)) setEnergy(Math.max(energyPct, 15), '소재 분석 중…');
@@ -582,7 +582,7 @@
   }
   // 전체 초기화 — 로그·진행·결과·에너지바까지 싹 비우고 처음 상태로.
   function resetAll() {
-    detachJob(); lastBody = null; startTs = 0;
+    detachJob(); lastBody = null; startTs = 0; estTotalText = '';
     if ($('log')) $('log').textContent = ''; logJobId = null; logCount = 0;
     setEnergy(0, ''); const f = $('hl-energy'); if (f) f.classList.add('anim');
     $('progress-block')?.classList.add('hidden');
@@ -610,6 +610,11 @@
     addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}`);
     addLog(`• 만들 편수: ${count}편`);
     addLog(`• 해설: ${commentary ? 'AI 해설 입힘 (' + ($('hl-voice')?.selectedOptions[0]?.textContent || voice) + ')' : '원본 그대로'}`);
+    // 예상 소요 — 편수·한 편 길이 기준 러프 추정(렌더가 대부분이라 길이·편수에 비례). 서버 상황 따라 달라짐.
+    const estBase = 2 + count * (sec * 3.5 / 60 + 0.5) + (commentary ? count * 0.4 : 0);
+    const estLo = Math.max(2, Math.round(estBase * 0.8)), estHi = Math.round(estBase * 1.2);
+    estTotalText = `약 ${estLo}~${estHi}분`;
+    addLog(`• 예상 소요: ${estTotalText} (서버 상황 따라 달라져요 · 길이·편수 줄이면 빨라짐)`);
     addLog('────────────────────────────');
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
     lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, commentary: !!commentary, voice, isCc: picked.isCc !== false};

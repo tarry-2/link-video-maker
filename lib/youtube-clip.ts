@@ -59,12 +59,11 @@ async function download(videoId: string, dir: string, log: (m: string) => void, 
   }
   if (process.env.YT_PROXY) {
     common.push('--proxy', process.env.YT_PROXY);
-    // 프록시 주소에서 비번은 가리고 호스트만 보여준다(데이터센터 IP 봇차단 우회의 핵심이라 쓰는지 한눈에).
-    const host = (process.env.YT_PROXY.match(/@([^/]+)/) || [])[1] || process.env.YT_PROXY.replace(/\/\/.*@/, '//');
-    const kr = /__cr\.kr|[_.]kr[;:]|country[-_]?kr/i.test(process.env.YT_PROXY) ? ' · 한국' : '';
-    log(`[하이라이트] 🌐 프록시 사용(주거용 IP로 우회${kr}): ${host}`);
+    // 사용자에겐 "쓰는지 여부"만 알려주면 됨(주소·비번 노출 불필요).
+    const kr = /__cr\.kr|[_.]kr[;:]|country[-_]?kr/i.test(process.env.YT_PROXY) ? '한국 ' : '';
+    log(`[하이라이트] 🌐 프록시 사용 중 (${kr}주거용 IP로 우회 — 봇차단 회피).`);
   } else {
-    log('[하이라이트] 🌐 프록시 미사용(데이터센터 IP 직접 — 봇차단 가능).');
+    log('[하이라이트] 🌐 프록시 미사용 (데이터센터 IP 직접 — 봇차단 가능).');
   }
   // PO토큰 제공자(bgutil, 127.0.0.1:4416) 생존 확인 — 데이터센터 IP 봇차단 우회의 핵심이라 죽어있으면 바로 보이게.
   try {
