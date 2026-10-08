@@ -459,6 +459,12 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'web', 'icon-512.png'), 'image/png');
   if (p === '/favicon.svg')
     return serveFile(res, path.join(ROOT, 'web', 'favicon.svg'), 'image/svg+xml; charset=utf-8');
+  // 디자인 템플릿 미리보기 이미지(공개) — web/tpl-preview/{id}.png. id는 알려진 템플릿만 허용(경로우회 방지).
+  if (p.startsWith('/tpl-preview/')) {
+    const m = p.match(/^\/tpl-preview\/([a-z]+)\.png$/);
+    if (!m) { res.writeHead(404); return res.end('not found'); }
+    return serveFile(res, path.join(ROOT, 'web', 'tpl-preview', `${m[1]}.png`), 'image/png');
+  }
   // 목소리 포트폴리오 샘플 영상(공개, 로그인 전에도 /voices에서 재생)
   if (p.startsWith('/portfolio/')) {
     const name = path.basename(p); // path traversal 방지

@@ -3,6 +3,7 @@ import {Composition} from 'remotion';
 import {Video, videoSchema} from './Video';
 import {Thumbnail, thumbnailSchema} from './Thumbnail';
 import {HookStill, hookStillSchema} from './HookStill';
+import {TemplatePreview, templatePreviewSchema} from './TemplatePreview';
 import {CardVideo, cardVideoSchema} from './CardVideo';
 import {Card, cardSchema} from './Card';
 import type {SceneData} from './Scene';
@@ -170,6 +171,24 @@ export const RemotionRoot: React.FC = () => {
       calculateMetadata={({props}) => {
         const landscape = props.orientation === 'landscape';
         return {width: landscape ? 1920 : 1080, height: landscape ? 1080 : 1920};
+      }}
+    />
+    {/* 디자인 템플릿 미리보기 — 선택 버튼용 샘플 스틸(renderStill 전용). 샘플 이미지 위 후킹+자막. */}
+    <Composition
+      id="TemplatePreview"
+      component={TemplatePreview}
+      durationInFrames={1}
+      fps={30}
+      width={1080}
+      height={1920}
+      schema={templatePreviewSchema}
+      defaultProps={{
+        template: 'variety',
+        image: 'news2.jpg',
+        hookTop: '아무도 몰랐던',
+        hookAccent: '이 장면',
+        subWords: ['이', '부분', '진짜', '소름', '돋아요'],
+        subActiveIndex: 3,
       }}
     />
     </>

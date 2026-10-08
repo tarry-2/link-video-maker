@@ -186,9 +186,9 @@
           <label class="field-label" style="margin-top:8px">강조 문구 <span class="hint">(아랫줄·색강조)</span></label>
           <input id="ed-acc" class="input" maxlength="20" value="${esc(info.hookAccent || '')}">
           <button id="ed-ai" class="ghost-btn small" type="button" style="margin-top:8px">✨ AI로 후킹 다시 추천</button>
-          <label class="field-label" style="margin-top:12px">🎨 디자인 템플릿</label>
-          <div id="ed-tpl" class="seg" style="margin-top:6px;flex-wrap:wrap">
-            ${TPLS.map(([v,l]) => `<button type="button" class="seg-btn ed-tpl-b ${v===curTpl?'active':''}" data-t="${v}">${l}</button>`).join('')}
+          <label class="field-label" style="margin-top:12px">🎨 디자인 템플릿 <span class="hint">— 미리보기를 보고 골라요</span></label>
+          <div id="ed-tpl" class="tpl-grid">
+            ${TPLS.map(([v,l]) => `<button type="button" class="tpl-card ed-tpl-b ${v===curTpl?'active':''}" data-t="${v}"><span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/${v}.png" alt="${l} 미리보기" loading="lazy"></span><span class="tpl-name">${l}</span></button>`).join('')}
           </div>
           <button id="ed-save" class="primary-btn" style="margin-top:14px">💾 저장하고 다시 만들기</button>
           <p class="mini-state">저장하면 이 편만 새 디자인으로 다시 렌더해요(1~3분). 완성되면 자동으로 새로고침됩니다.</p>
@@ -676,6 +676,22 @@
   document.querySelectorAll('.hl-tpl').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-tpl').forEach((x) => x.classList.remove('active')); b.classList.add('active'); tplMode = b.dataset.t; saveState();
   }));
+  // 🔍 템플릿 미리보기 크게 보기 — 버튼 선택과 분리(stopPropagation), 샘플 이미지를 모달로 크게.
+  document.querySelectorAll('.tpl-zoom').forEach((z) => z.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const id = z.dataset.zoom; const name = z.dataset.zname || '';
+    modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2 style="margin:0">🎨 ${name}</h2><button class="ghost-btn" data-x="close">✕</button></div>
+      <img src="/tpl-preview/${id}.png" alt="${name} 미리보기" style="width:100%;max-width:300px;display:block;margin:0 auto;border-radius:12px;background:#000">
+      <p class="hint" style="text-align:center;margin-top:10px">후킹·자막이 이 스타일로 영상에 얹혀요. 마음에 들면 아래 카드를 눌러 선택하세요.</p>
+      <button class="primary-btn" data-pick="${id}" type="button" style="margin-top:8px">이 템플릿으로 선택</button>`,
+    (box, close) => {
+      box.querySelector('[data-pick]')?.addEventListener('click', () => {
+        const card = document.querySelector(`.hl-tpl[data-t="${id}"]`);
+        if (card) card.click();
+        close();
+      });
+    });
+  }));
   applyReframeRow();
   // ── 유튜브 쿠키 등록(봇차단 뚫기) ──
   async function refreshCookieStatus() {
@@ -786,7 +802,7 @@
     addLog(`• 만들 편수: ${count}편`);
     addLog(`• 해설: ${commentary ? 'AI 해설 입힘 (' + ($('hl-voice')?.selectedOptions[0]?.textContent || voice) + ')' : '원본 그대로'}`);
     addLog(`• 원본 소리: ${muteOriginal ? '제거(저작권 회피)' : '살리기'}`);
-    addLog(`• 디자인: ${document.querySelector('.hl-tpl.active')?.textContent?.trim() || tplMode}`);
+    addLog(`• 디자인: ${document.querySelector('.hl-tpl.active')?.dataset.name || tplMode}`);
     if (muteOriginal && !commentary) addLog('⚠️ 소리를 뺐는데 해설이 꺼져 있어요 — 영상이 무음이 됩니다. 해설을 켜는 걸 권장!', 'fail');
     // 예상 소요 — 편수·한 편 길이 기준 러프 추정(렌더가 대부분이라 길이·편수에 비례). 서버 상황 따라 달라짐.
     const estBase = 2 + count * (sec * 3.5 / 60 + 0.5) + (commentary ? count * 0.4 : 0);

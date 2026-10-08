@@ -170,15 +170,36 @@
           <p class="hint" style="margin-top:4px">원본 소리를 완전히 빼면 유튜브·인스타의 <b>'소리 저작권(Content ID)'</b> 매칭을 피해 통과율이 올라가요(100%는 아님). ※소리를 빼면 <b>AI 해설을 같이 켜는 게</b> 좋아요(안 그러면 영상이 무음).</p>
 
           <!-- 디자인 템플릿 — 후킹 글자·배경·자막 스타일 묶음. '자동'은 편마다 주제에 맞게 매칭 -->
-          <label class="field-label" style="margin-top:14px">🎨 디자인 템플릿 <span class="hint">— 후킹·자막 글꼴과 스타일</span></label>
-          <div id="hl-tpl-seg" class="seg" style="margin-top:6px;flex-wrap:wrap">
-            <button type="button" class="seg-btn hl-tpl active" data-t="auto">✨ 자동(주제별)</button>
-            <button type="button" class="seg-btn hl-tpl" data-t="variety">예능 자막</button>
-            <button type="button" class="seg-btn hl-tpl" data-t="impact">임팩트 레드</button>
-            <button type="button" class="seg-btn hl-tpl" data-t="cinema">감성 시네마</button>
-            <button type="button" class="seg-btn hl-tpl" data-t="neon">네온 힙</button>
-            <button type="button" class="seg-btn hl-tpl" data-t="magazine">매거진 다큐</button>
-            <button type="button" class="seg-btn hl-tpl" data-t="pop">버블 팝</button>
+          <label class="field-label" style="margin-top:14px">🎨 디자인 템플릿 <span class="hint">— 미리보기를 보고 골라요 (🔍 누르면 크게)</span></label>
+          <div id="hl-tpl-seg" class="tpl-grid">
+            <button type="button" class="tpl-card hl-tpl active" data-t="auto" data-name="자동(주제별)">
+              <span class="tpl-auto">✨</span>
+              <span class="tpl-name">자동<small>주제별 자동매칭</small></span>
+            </button>
+            <button type="button" class="tpl-card hl-tpl" data-t="variety" data-name="예능 자막">
+              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/variety.png" alt="예능 자막 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="variety" data-zname="예능 자막" title="크게 보기">🔍</span></span>
+              <span class="tpl-name">예능 자막</span>
+            </button>
+            <button type="button" class="tpl-card hl-tpl" data-t="impact" data-name="임팩트 레드">
+              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/impact.png" alt="임팩트 레드 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="impact" data-zname="임팩트 레드" title="크게 보기">🔍</span></span>
+              <span class="tpl-name">임팩트 레드</span>
+            </button>
+            <button type="button" class="tpl-card hl-tpl" data-t="cinema" data-name="감성 시네마">
+              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/cinema.png" alt="감성 시네마 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="cinema" data-zname="감성 시네마" title="크게 보기">🔍</span></span>
+              <span class="tpl-name">감성 시네마</span>
+            </button>
+            <button type="button" class="tpl-card hl-tpl" data-t="neon" data-name="네온 힙">
+              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/neon.png" alt="네온 힙 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="neon" data-zname="네온 힙" title="크게 보기">🔍</span></span>
+              <span class="tpl-name">네온 힙</span>
+            </button>
+            <button type="button" class="tpl-card hl-tpl" data-t="magazine" data-name="매거진 다큐">
+              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/magazine.png" alt="매거진 다큐 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="magazine" data-zname="매거진 다큐" title="크게 보기">🔍</span></span>
+              <span class="tpl-name">매거진 다큐</span>
+            </button>
+            <button type="button" class="tpl-card hl-tpl" data-t="pop" data-name="버블 팝">
+              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/pop.png" alt="버블 팝 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="pop" data-zname="버블 팝" title="크게 보기">🔍</span></span>
+              <span class="tpl-name">버블 팝</span>
+            </button>
           </div>
           <p class="mini-state" id="hl-picked"></p>
           <button id="hl-generate" class="primary-btn" type="button" style="margin-top:12px">🎬 하이라이트 숏폼 만들기</button>

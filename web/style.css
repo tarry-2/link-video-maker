@@ -473,6 +473,18 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .seg { display: flex; gap: 8px; background: var(--card2); border-radius: 12px; padding: 5px; }
 .seg-btn { flex: 1; border: none; background: transparent; color: var(--muted); font-weight: 700; font-size: 13.5px; padding: 11px 8px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
 .seg-btn.active { background: var(--grad); color: #fff; box-shadow: 0 4px 12px rgba(18,169,152,0.3); }
+/* 디자인 템플릿 미리보기 그리드 — 샘플 썸네일(9:16) + 이름, 선택 강조, 🔍 크게보기 */
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-top: 8px; }
+.tpl-card { position: relative; border: 2px solid var(--line); background: var(--card2); border-radius: 12px; padding: 8px 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; transition: border-color .15s, transform .1s, box-shadow .15s; }
+.tpl-card:hover { transform: translateY(-2px); }
+.tpl-card.active { border-color: var(--teal); box-shadow: 0 4px 14px rgba(18,169,152,0.25); }
+.tpl-thumb-wrap { position: relative; width: 100%; }
+.tpl-thumb { width: 100%; aspect-ratio: 9/16; object-fit: cover; border-radius: 8px; display: block; background: #000; }
+.tpl-zoom { position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+.tpl-zoom:hover { background: rgba(0,0,0,0.85); }
+.tpl-auto { width: 100%; aspect-ratio: 9/16; display: flex; align-items: center; justify-content: center; font-size: 34px; background: var(--card); border-radius: 8px; }
+.tpl-name { font-size: 12.5px; font-weight: 700; color: var(--text); text-align: center; line-height: 1.2; }
+.tpl-name small { display: block; font-weight: 600; color: var(--muted); font-size: 10.5px; margin-top: 2px; }
 /* 카드 게시물(캐러셀) 결과 그리드 */
 .post-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin: 6px 0 16px; }
 .post-card { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); aspect-ratio: 4/5; background: var(--card2); }
