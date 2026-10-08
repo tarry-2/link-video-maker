@@ -54,9 +54,8 @@ export const TemplatePreview: React.FC<TemplatePreviewData> = ({template, image,
   const lightBg = T.hookStyle === 'bubble';
   const olTop = lightBg ? 0 : 3;
 
-  const barBg = T.subStyle === 'bar'
-    ? 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 20%, rgba(0,0,0,0.9) 80%, rgba(0,0,0,0) 100%)'
-    : 'transparent';
+  // ★Scene.tsx와 동일: 띠·박스 제거(영상 안 가림). 가독성은 외곽선+소프트 섀도로. 시네마(plain)는 외곽선만.
+  const plain = T.subStyle === 'plain';
 
   return (
     <AbsoluteFill style={{backgroundColor: '#000'}}>
@@ -84,17 +83,16 @@ export const TemplatePreview: React.FC<TemplatePreviewData> = ({template, image,
         <div style={{
           position: 'absolute', left: 0, right: 0, top: L.hlSubTop, height: L.hlSubH,
           display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center',
-          gap: L.subGap, padding: L.subPad, boxSizing: 'border-box', background: barBg,
+          gap: L.subGap, padding: L.subPad, boxSizing: 'border-box', background: 'transparent',
         }}>
           {subWords.map((t, i) => {
             const active = i === subActiveIndex;
-            const boxed = T.subStyle === 'box';
             return (
               <span key={i} style={{
                 fontFamily: T.subFont, fontWeight: 800, fontSize: L.fsSub,
-                color: active ? T.subActive : '#fff', textShadow: outline(active ? 5 : 4),
+                color: active ? T.subActive : '#fff',
+                textShadow: plain ? outline(active ? 5 : 4) : `${outline(active ? 5 : 4)}, 0 2px 12px rgba(0,0,0,0.95)`,
                 transform: active ? 'scale(1.14)' : 'scale(1)', display: 'inline-block',
-                ...(boxed ? {background: active ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.6)', padding: '4px 14px', borderRadius: 10} : {}),
               }}>{t}</span>
             );
           })}

@@ -180,24 +180,25 @@ export const Scene: React.FC<SceneData> = ({
           if (cur < 0) cur = 0;
           const start = Math.max(0, Math.min(cur - 1, words.length - WIN));
           const win = words.slice(start, start + WIN);
-          const barBg = T.subStyle === 'bar'
-            ? 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 20%, rgba(0,0,0,0.9) 80%, rgba(0,0,0,0) 100%)'
-            : 'transparent';
+          // ★영상을 최대한 가리지 않기: 띠(bar)·단어 박스(box)를 모두 없애고 글자만 렌더한다(감성 시네마=plain과 동일 원리).
+          //   가독성은 두꺼운 검정 외곽선 + 부드러운 드롭섀도로 확보(배경 띠 없이도 어떤 영상 위에서도 읽힘).
+          //   템플릿 구분은 상단 후킹 스타일·폰트(subFont)·강조색(subActive)으로 유지된다.
+          const plain = T.subStyle === 'plain'; // 시네마는 기존 그대로(순수 외곽선만)
           return (
             <div style={{
               position: 'absolute', left: 0, right: 0, top: L.hlSubTop, height: L.hlSubH,
               display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center',
-              gap: L.subGap, padding: L.subPad, boxSizing: 'border-box', background: barBg,
+              gap: L.subGap, padding: L.subPad, boxSizing: 'border-box', background: 'transparent',
             }}>
               {win.map((w, i) => {
                 const active = frame >= w.s && frame < w.e;
-                const boxed = T.subStyle === 'box';
                 return (
                   <span key={start + i} style={{
                     fontFamily: T.subFont, fontWeight: 800, fontSize: L.fsSub,
-                    color: active ? T.subActive : '#fff', textShadow: outline(active ? 5 : 4),
+                    color: active ? T.subActive : '#fff',
+                    // 시네마(plain)는 기존 외곽선만, 나머지는 외곽선 + 소프트 섀도(띠 없이 가독성 보강).
+                    textShadow: plain ? outline(active ? 5 : 4) : `${outline(active ? 5 : 4)}, 0 2px 12px rgba(0,0,0,0.95)`,
                     transform: active ? 'scale(1.14)' : 'scale(1)', display: 'inline-block',
-                    ...(boxed ? {background: active ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.6)', padding: '4px 14px', borderRadius: 10} : {}),
                   }}>{w.t}</span>
                 );
               })}
