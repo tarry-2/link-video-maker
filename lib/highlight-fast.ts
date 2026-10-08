@@ -160,14 +160,24 @@ export async function renderHighlightFast(opts: {
     for (const b of broll) { inputs.push('-loop', '1', '-i', b.path); brollIdx.push(idx++); }
     if (narrationAbs && fs.existsSync(narrationAbs)) { inputs.push('-i', narrationAbs); narrIdx = idx++; }
 
-    // 비디오 필터: 클립을 정확히 9:16/16:9로(이미 맞지만 안전) → 후킹 오버레이(페이드인) → 자막.
+    // 비디오 필터: 클립을 정확히 9:16/16:9로 → ★초반 3초 임팩트(줌펀치+플래시) → 후킹 팝 → 자막.
     const vParts: string[] = [];
     // tpad=clone: 나레이션 '여운'(클립보다 길 때) 동안 마지막 프레임 유지(검은 꼬리 방지). -t로 정확히 자름.
-    vParts.push(`[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},tpad=stop_mode=clone:stop_duration=3,setsar=1[bg]`);
+    //   ★초반 줌펀치 — 첫 0.5초 살짝 크게 시작해 빠르게 제자리로(스크롤 멈춤 임팩트, 시청 유지율↑).
+    //   zoompan은 전체를 다시 그려 느리므로, scale 확대+crop을 시간식(enable)으로 흉내내지 않고 가벼운 방법 사용:
+    //   첫 구간만 1.12배 확대했다가 선형 축소 → overlay로는 어려워 scale2ref 대신 'crop 흔들림'은 과함. 간단·안전하게
+    //   전체에 아주 약한 상시 스케일 대신, 첫 0.35초 흰 플래시 + 후킹 바운스로 임팩트를 준다(렌더 비용 거의 0).
+    vParts.push(`[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},tpad=stop_mode=clone:stop_duration=3,setsar=1[bgc]`);
+    // 첫 0.18초 짧은 흰 플래시(임팩트) — 이후 사라짐. (color input 대신 drawbox로 가볍게)
+    vParts.push(`[bgc]drawbox=x=0:y=0:w=${W}:h=${H}:color=white@0.55:t=fill:enable='lt(t,0.12)',drawbox=x=0:y=0:w=${W}:h=${H}:color=white@0.28:t=fill:enable='between(t,0.12,0.22)'[bg]`);
     let vlab = '[bg]';
     if (hasHook) {
-      vParts.push(`[${hookIdx}:v]format=rgba,fade=in:st=0:d=0.35:alpha=1[hk]`);
-      vParts.push(`${vlab}[hk]overlay=0:0[vo]`); vlab = '[vo]';
+      // ★후킹 '팝' 등장 — 작게 시작→튕기며 커짐(0.9→1.08→1.0). 부드러운 fade 대신 시선을 확 잡는다.
+      //   overlay 위치를 scale과 함께 쓰려면 후킹을 매 프레임 scale해야 하므로, 간단히 0.28초 빠른 페이드+초반 살짝
+      //   확대 후 안정(scale 식). hook.png를 시간에 따라 scale: 0~0.12s 1.12배 → 0.28s 1.0배.
+      vParts.push(`[${hookIdx}:v]format=rgba,fade=in:st=0:d=0.22:alpha=1,scale=w='iw*if(lt(t,0.12),1.12,if(lt(t,0.28),1.12-0.12*(t-0.12)/0.16,1.0))':h=-1:eval=frame[hk]`);
+      // 확대되면 좌상단 기준이 아니라 중앙 정렬이 되게 overlay x/y를 음수 보정.
+      vParts.push(`${vlab}[hk]overlay=x='(W-w)/2':y='0':eval=frame[vo]`); vlab = '[vo]';
     }
     // b-roll 팝업 — 관련 이미지를 화면 중앙(후킹 아래·자막 위)에 카드로 잠깐 띄웠다 사라지게(페이드).
     //   원본 영상은 계속 틀면서 핵심 순간에만 '팝'. 흰 테두리 카드 + enable 구간 동안만 표시.
