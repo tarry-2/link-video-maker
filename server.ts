@@ -1544,15 +1544,22 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       const e = proj.hlEdit || {};
       const k = pipelineKeys();
       if (!k.gemini?.length) return json(res, 200, {hookTop: '', hookAccent: ''});
-      const prompt = `쇼츠 상단에 넣을 '후킹 자막'을 다시 뽑아줘. 궁금증·과장으로 스크롤을 멈추게.
+      // ★영상 '내용'을 보고 뽑는다 — 이 클립의 실제 대사(transcript)를 근거로. 대사가 있으면 그 장면에 딱 맞는
+      //   후킹을, 없으면(자막 없는 영상) 제목으로 추론. (사람이 영상을 안 보고도 알 수 있게 — 테리 요구)
+      const transcript = (e.transcript || '').slice(0, 1000).trim();
+      const prompt = `너는 쇼츠 편집자다. 아래 '이 장면의 실제 대사'를 읽고, 그 내용에 딱 맞는 상단 후킹 자막을 뽑아라.
+스크롤을 멈추게 하는 궁금증·반전·감정·핵심을 담되, 장면과 동떨어진 낚시는 금지(내용 기반).
+
 영상 제목: ${e.baseTitle || proj.title || ''}
-지금 후킹: ${e.hookTop || ''} / ${e.hookAccent || ''}
-규칙: hookTop=한국어 12자 내외, hookAccent=강조 단어 6자 내. 지금과 다른 각도로.
+${transcript ? `이 장면의 실제 대사:\n"""${transcript}"""` : '(이 장면은 대사가 없어요 — 제목으로 맥락을 추론해서 뽑아요.)'}
+지금 후킹(참고, 다른 각도로): ${e.hookTop || ''} / ${e.hookAccent || ''}
+
+규칙: hookTop=한국어 12자 내외(장면 내용과 맞게), hookAccent=강조 단어 6자 내.
 JSON만: {"hookTop":"...","hookAccent":"..."}`;
-      const raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 256, temperature: 1.0});
+      const raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 256, temperature: 0.9});
       const m = raw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
       const j = m ? JSON.parse(m[0]) : {};
-      return json(res, 200, {hookTop: String(j.hookTop || '').slice(0, 24), hookAccent: String(j.hookAccent || '').slice(0, 12)});
+      return json(res, 200, {hookTop: String(j.hookTop || '').slice(0, 24), hookAccent: String(j.hookAccent || '').slice(0, 12), basedOn: transcript ? 'transcript' : 'title'});
     } catch (e: any) { return json(res, 500, {error: 'hook-suggest 실패: ' + (e?.message || e)}); }
   }
 

@@ -212,10 +212,14 @@
         let tpl = curTpl;
         box.querySelectorAll('.ed-tpl-b').forEach((b) => b.onclick = () => { box.querySelectorAll('.ed-tpl-b').forEach((x) => x.classList.remove('active')); b.classList.add('active'); tpl = b.dataset.t; });
         box.querySelector('#ed-ai').onclick = async (ev) => {
-          const btn = ev.target; btn.disabled = true; const o = btn.textContent; btn.textContent = '✨ 생각 중…';
+          const btn = ev.target; btn.disabled = true; const o = btn.textContent; btn.textContent = '✨ 영상 보고 생각 중…';
           try { const d = await (await fetch('/api/highlight/hook-suggest/' + encodeURIComponent(projectId))).json();
             if (d.hookTop) box.querySelector('#ed-top').value = d.hookTop;
             if (d.hookAccent) box.querySelector('#ed-acc').value = d.hookAccent;
+            // 영상 대사를 보고 뽑았는지 알려줘 신뢰감 — 자막 없으면 제목 기반.
+            box.querySelector('#ed-msg').textContent = d.basedOn === 'transcript'
+              ? '✅ 이 장면의 실제 대사를 보고 추천했어요.'
+              : 'ℹ️ 이 영상은 대사(자막)가 없어 제목으로 추천했어요.';
           } catch { box.querySelector('#ed-msg').textContent = 'AI 추천 실패 — 직접 입력하세요.'; }
           finally { btn.disabled = false; btn.textContent = o; }
         };

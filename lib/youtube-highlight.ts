@@ -375,6 +375,7 @@ export async function makeHighlights(
         hookTop: scene.hookTop, hookAccent: scene.hookAccent, template: tpl.id,
         words, durFrames: scene.durationInFrames, muteOriginal: !!opts.muteOriginal,
         hasNarration: !!voiceRel, orientation, baseTitle: meta.title,
+        transcript: (c.transcript || '').slice(0, 1200), // ★AI 후킹 추천이 '영상 내용'을 보고 뽑도록 대사 저장
       },
     };
     // ★편집 소스 보존 — 후킹 글자 없는 '깨끗한' 클립(c.file) + 나레이션. R2 우선(볼륨 ENOSPC 회피), 없으면 볼륨.
