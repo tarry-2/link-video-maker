@@ -114,7 +114,9 @@ async function genBroll(
   geminiKeys: string[], replicateKey: string, title: string, transcript: string, hook: string,
   durSec: number, pubClipDir: string, jobRel: string, log: (m: string) => void,
 ): Promise<{path: string; start: number; end: number}[]> {
-  const n = durSec >= 25 ? 2 : 1; // 긴 클립은 2장, 짧으면 1장(비용 최소)
+  // ★90초 미만=1장, 90초 이상=2장(테리 결정). 짧은 쇼츠(대부분 59초)는 1장으로 비용·시간 절약,
+  //   긴 롱폼일 때만 2장. (예전 25초 기준은 59초 영상도 전부 2장이라 편당 2분·돈 낭비였음)
+  const n = durSec >= 90 ? 2 : 1;
   // 1) Gemini로 이 장면에 어울리는 '영어 이미지 묘사' n개(flux는 영어가 안정적).
   let prompts: string[] = [];
   try {
