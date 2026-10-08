@@ -62,7 +62,7 @@ JSON만 출력: {"commentary":"..."}`;
   } catch { return ''; }
 }
 
-export type HighlightJobResult = {projectId: string; file: string; title: string; hookTop: string}[];
+export type HighlightJobResult = {projectId: string; file: string; title: string; hookTop: string; score: number}[];
 
 // videoId(CC 영상) → N편의 완성 하이라이트 숏폼. 각 편은 독립 projectId(포폴·업로드 재사용).
 export async function makeHighlights(
@@ -203,6 +203,7 @@ export async function makeHighlights(
       scenes: [{narration: narrationSeed, voice: {frames: Math.round(durSec * FPS)}}],
       input: {duration: Math.round(durSec)},
       kind: 'highlight',
+      score: c.score, // AI 바이럴 점수(0~100)
       attribution, // CC BY 출처 — 상세설명/캡션에 자동 포함
     };
     // ★썸네일(커버) — 위에서 만든 디자인 커버(thumbAbs)를 project.json에 연결 + R2 업로드.
@@ -237,13 +238,13 @@ export async function makeHighlights(
       addPortfolio({
         projectId, title, output,
         voice: '원본 음성(CC)', category: '🎬 유튜브 하이라이트', goal: 'info',
-        createdAt, orientation, kind: 'highlight',
+        createdAt, orientation, kind: 'highlight', score: c.score,
       });
     } catch (e: any) { log('[하이라이트] 포트폴리오 등록 건너뜀: ' + (e?.message || '')); }
     // 출처(attribution)를 프로젝트 폴더에도 남긴다(상세설명 폴백 — project.json 읽기 실패 대비).
     try { fs.writeFileSync(path.join(studioDir, 'attribution.txt'), attribution); } catch {}
 
-    results.push({projectId, file: output, title, hookTop: c.hookTop || ''});
+    results.push({projectId, file: output, title, hookTop: c.hookTop || '', score: c.score});
     log(`[하이라이트] ${i + 1}편 완성: ${title}`);
   }
 

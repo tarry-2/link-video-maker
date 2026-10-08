@@ -117,15 +117,25 @@
     };
   }
 
-  // ── 완성 결과(여러 편) ──
+  // 바이럴 점수 뱃지 — 80+ 핫(빨강), 65~79 좋음(주황), 그 아래 보통(회색). score 없으면 빈 문자열.
+  function scoreBadge(score, overlay) {
+    if (typeof score !== 'number' || !isFinite(score)) return '';
+    const s = Math.round(score);
+    const cls = s >= 80 ? 'hot' : s >= 65 ? 'good' : 'mild';
+    return `<span class="score-badge ${cls}${overlay ? ' ov' : ''}" title="AI 예상 바이럴 점수">🔥 ${s}</span>`;
+  }
+
+  // ── 완성 결과(여러 편) — 점수순 정렬(터질 것부터 위로) ──
   function showResults(clips) {
     const box = $('hl-result-block'); if (!box) return;
     box.classList.remove('hidden');
     if (!clips.length) { box.innerHTML = '<p class="mini-state">완성된 클립이 없어요.</p>'; return; }
+    clips = clips.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
     box.innerHTML = `<h2 style="margin:0 0 4px">🎬 하이라이트 ${clips.length}편 완성!</h2>
-      <p class="mini-state" style="margin-bottom:12px">각 편을 확인하고 유튜브·인스타로 바로 올릴 수 있어요. 작업 내역에도 저장됐어요.</p>
+      <p class="mini-state" style="margin-bottom:12px">🔥 점수 = AI가 예측한 "터질 확률". 높은 순으로 정렬했어요. 유튜브·인스타로 바로 올릴 수 있고, 작업 내역에도 저장됐어요.</p>
       <div class="hl-result-grid">${clips.map((c, i) => `
-        <div class="hl-result-item ${orient === 'landscape' ? 'land' : ''}">
+        <div class="hl-result-item ${orient === 'landscape' ? 'land' : ''}" style="position:relative">
+          ${scoreBadge(c.score, true)}
           <video poster="/portfolio-thumb/${c.projectId}.png" src="/portfolio-item/${c.projectId}.mp4#t=0.5" controls playsinline preload="metadata"></video>
           <b style="display:block;margin:6px 0">${esc(c.title || ('하이라이트 ' + (i+1)))}</b>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -205,12 +215,13 @@
     const box = $('hl-history'); if (!box) return;
     try {
       const d = await (await fetch('/api/portfolio', {cache: 'no-store'})).json();
-      const items = (Array.isArray(d.items) ? d.items : []).filter((it) => it.kind === 'mine' && it.media === 'highlight');
+      const items = (Array.isArray(d.items) ? d.items : []).filter((it) => it.kind === 'mine' && it.media === 'highlight')
+        .sort((a, b) => (b.score || 0) - (a.score || 0)); // 점수순(터질 것부터)
       box.innerHTML = items.length ? items.map((it) => {
         const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
         const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
         const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
-        return `<div class="history-item"><span><strong>${esc(it.title)}</strong><small>${esc(when)} · 🎬 하이라이트${yt}${ig}</small></span>
+        return `<div class="history-item"><span><strong>${scoreBadge(it.score)} ${esc(it.title)}</strong><small>${esc(when)} · 🎬 하이라이트${yt}${ig}</small></span>
           <span class="hi-actions">
             <a class="ghost-btn small" href="${esc(it.video)}" download="${esc(it.title)}.mp4">⬇</a>
             <button type="button" class="ghost-btn small hh-yt" data-id="${esc(it.id)}">📺</button>

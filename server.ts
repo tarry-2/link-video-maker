@@ -330,7 +330,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string}[]; cancelled?: boolean};
+type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean};
 // ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
 function jlog(job: Job, s: string) {
   const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
@@ -478,6 +478,7 @@ const server = http.createServer(async (req, res) => {
         video: isPost ? '' : `/portfolio-item/${it.projectId}.mp4`,
         images: isPost ? (it.images || []).map((_, i) => `/portfolio-card/${it.projectId}/${i + 1}.png`) : undefined,
         thumb: readProjectThumb(it.projectId).thumb ? `/portfolio-thumb/${it.projectId}.png` : '',
+        score: typeof it.score === 'number' ? it.score : undefined, // 하이라이트 바이럴 점수
       };
     });
     const sampleYt = loadSampleYouTube();
@@ -1306,7 +1307,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       try {
         const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
         job.kind = 'highlight';
-        job.clips = clips.map((c) => ({projectId: c.projectId, file: c.file, title: c.title}));
+        job.clips = clips.map((c) => ({projectId: c.projectId, file: c.file, title: c.title, score: c.score}));
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }
         job.done = true; job.doneAt = Date.now();
       } catch (e: any) {

@@ -11,8 +11,8 @@ import {geminiGenerate} from './gemini';
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 
-export type Highlight = {start: number; end: number; hookTop: string; hookAccent: string; reason: string};
-export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string; transcript?: string};
+export type Highlight = {start: number; end: number; hookTop: string; hookAccent: string; reason: string; score: number};
+export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string; transcript?: string; score: number; reason?: string};
 
 function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 300000, onLine?: (line: string) => void, cancelled?: () => boolean): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -184,7 +184,7 @@ function splitEvenly(durationSec: number, n: number, clipSec: number): Highlight
   for (let i = 0; i < n; i++) {
     const start = Math.min(usable - clipSec, i * gap);
     if (start < 0) break;
-    hs.push({start: Math.max(0, start), end: Math.min(durationSec, start + clipSec), hookTop: '', hookAccent: '', reason: ''});
+    hs.push({start: Math.max(0, start), end: Math.min(durationSec, start + clipSec), hookTop: '', hookAccent: '', reason: '', score: 60});
   }
   return hs;
 }
@@ -214,11 +214,12 @@ async function pickHighlights(geminiKeys: string[], subText: string, durationSec
 - hookTop: 상단 후킹(한국어 12자 내외, 그 구간 내용과 맞게, 궁금증·과장 OK).
 - hookAccent: 강조 단어(한국어 6자 내).
 - reason: 왜 좋은지 15자 내.
+- score: 이 구간이 쇼츠로 "터질" 확률 0~100 정수(후킹 세기·감정·반전·정보가치로 냉정하게 차등. 80+는 진짜 강한 것만, 평범하면 50~65).
 
 자막:
 ${subText}
 
-JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hookAccent":"...","reason":"..."}]}`;
+JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hookAccent":"...","reason":"...","score":78}]}`;
   let hs: Highlight[] = [];
   try {
     const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 2048, temperature: 0.7, log});
@@ -229,6 +230,7 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
       hookTop: String(h.hookTop || '').slice(0, 24),
       hookAccent: String(h.hookAccent || '').slice(0, 12),
       reason: String(h.reason || '').slice(0, 24),
+      score: Math.max(0, Math.min(100, Math.round(Number(h.score) || 65))),
     })).filter((h: Highlight) => h.end > h.start + 2);
   } catch (e: any) {
     log('[하이라이트] 자막 분석 실패 → 순서대로 나눕니다: ' + (e?.message || '').slice(0, 80));
@@ -258,7 +260,7 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
   }
   hs.sort((a, b) => a.start - b.start);
   log(`[하이라이트] 구간 ${hs.length}개 확정`);
-  hs.forEach((h, i) => log(`[하이라이트]   ${i + 1}. ${h.start}~${h.end}초${h.reason ? ' · ' + h.reason : ''}`));
+  hs.forEach((h, i) => log(`[하이라이트]   ${i + 1}. ${h.start}~${h.end}초 · 🔥${h.score}점${h.reason ? ' · ' + h.reason : ''}`));
   return hs;
 }
 
@@ -343,7 +345,7 @@ export async function extractHighlights(
       log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${orientation === 'landscape' ? '가로' : '세로'})…`);
       await cutClip(raw, file, orientation, log, secDur, cancelled);
       try { fs.rmSync(raw, {force: true}); } catch {} // 섹션 원본은 크롭 후 삭제(용량 절약)
-      results.push({file, start: h.start, end: h.end, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end)});
+      results.push({file, start: h.start, end: h.end, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end), score: h.score, reason: h.reason});
     } catch (e: any) {
       if (/사용자가 중단/.test(e?.message || '')) throw new Error('사용자가 중단했습니다.'); // 중단이면 다음 컷 말고 즉시 종료
       log(`[하이라이트] ${i + 1}번 구간 실패(건너뜀): ` + (e?.message || '').slice(0, 120));

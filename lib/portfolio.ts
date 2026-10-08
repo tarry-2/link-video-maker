@@ -20,6 +20,7 @@ export type PortfolioItem = {
   // ★작업내역 분리: 영상(video) / 카드영상(card) / 카드게시물=캐러셀(card-post) / 유튜브하이라이트(highlight). 없으면 video(레거시).
   kind?: 'video' | 'card' | 'card-post' | 'highlight';
   images?: string[]; // card-post: data/studio/{projectId}/{name} PNG 파일명들(캐러셀 순서).
+  score?: number; // 하이라이트: AI 바이럴 점수(0~100). 카드 뱃지·정렬에 사용.
 };
 
 // 특정 항목에 유튜브 링크 기록(업로드 완료 후).

@@ -241,6 +241,12 @@ select.input { appearance: none; cursor: pointer; }
 .hl-ctl-row .primary-btn, .hl-ctl-row .danger-btn, .hl-ctl-row .ghost-btn {
   width: auto; margin-top: 0; display: inline-flex; align-items: center;
 }
+/* 바이럴 점수 뱃지 — 인라인 pill(히스토리) + .ov 오버레이(결과 카드 좌상단) */
+.score-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 9px; line-height: 1; white-space: nowrap; color: #fff; vertical-align: middle; }
+.score-badge.hot { background: #e23d3d; }
+.score-badge.good { background: #f5921b; }
+.score-badge.mild { background: #8a8a92; }
+.score-badge.ov { position: absolute; top: 10px; left: 10px; z-index: 2; font-size: 14px; padding: 5px 11px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
 .ghost-btn {
   background: transparent; border: 1px solid rgba(18, 169, 152, 0.4); color: var(--text);
   border-radius: 10px; padding: 9px 14px; font-size: 14px; cursor: pointer;
