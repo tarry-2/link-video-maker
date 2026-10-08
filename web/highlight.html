@@ -43,9 +43,10 @@
       <!-- 하이라이트 만들기 -->
       <section class="card">
         <!-- 소재 가져오는 방법: 주제로 찾기 / 영상 URL 붙여넣기 -->
-        <div class="seg" style="margin-top:2px">
+        <div class="seg" style="margin-top:2px;flex-wrap:wrap">
           <button type="button" class="seg-btn hl-mode active" data-mode="search">🔎 주제로 찾기</button>
           <button type="button" class="seg-btn hl-mode" data-mode="url">🔗 영상 URL로</button>
+          <button type="button" class="seg-btn hl-mode" data-mode="upload">📁 내 영상 올리기</button>
         </div>
 
         <!-- ▸ 주제로 찾기 패널 -->
@@ -93,6 +94,19 @@
             <button id="hl-url-go" class="ghost-btn" type="button">확인</button>
           </div>
           <p class="hint" style="margin-top:6px">✅ <b>CC(재사용 허가) 영상 · 내 영상 · 클리핑 캠페인 영상</b>을 넣으세요. 이런 영상은 출처만 밝히면 <b>합법 수익화</b>됩니다. 출처는 자동으로 붙어요.</p>
+        </div>
+
+        <!-- ▸ 내 영상 올리기 패널 — 저작권 100% 자유(본인 소유). 세로 쇼츠로도 맘껏. -->
+        <div id="hl-upload-panel" class="hidden" style="margin-top:14px">
+          <label class="field-label">📁 내 영상 파일 올리기 <span class="hint">— 직접 찍은/만든 영상을 하이라이트 숏폼으로</span></label>
+          <input id="hl-file" type="file" accept="video/mp4,video/quicktime,video/x-m4v,video/webm,.mp4,.mov,.m4v,.webm,.mkv" style="display:none" />
+          <div class="voice-row" style="margin-top:6px">
+            <button id="hl-file-pick" class="ghost-btn" type="button">📁 영상 선택</button>
+            <span id="hl-file-name" class="hint">선택된 파일 없음</span>
+          </div>
+          <div class="energy" style="margin-top:8px;display:none" id="hl-up-bar-wrap"><div id="hl-up-bar" class="energy-fill" style="width:0%"></div></div>
+          <p id="hl-up-state" class="mini-state"></p>
+          <p class="hint" style="margin-top:4px">✅ <b>내 영상은 저작권 걱정 0</b> — 세로 쇼츠로도 맘껏 만들 수 있어요(차단 없음). 최대 600MB.</p>
         </div>
 
         <p id="hl-search-state" class="mini-state"></p>

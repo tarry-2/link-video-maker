@@ -308,10 +308,20 @@ async function cutClip(videoPath: string, outPath: string, orientation: 'portrai
     '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], log, 420000, onLine, cancelled);
 }
 
-// 전체: videoId → N개 세로 하이라이트 클립 생성. dir는 작업 폴더.
+// 로컬 파일(본인 업로드 영상)에서 [start,end] 구간만 잘라 sec-i.mp4로. YouTube downloadSection의 로컬판.
+async function cutSectionLocal(src: string, dir: string, idx: number, start: number, end: number, cancelled?: () => boolean): Promise<string> {
+  const out = path.join(dir, `sec-${idx}.mp4`);
+  await run(FFMPEG, ['-y', '-ss', String(Math.max(0, Math.floor(start))), '-to', String(Math.ceil(end)), '-i', src,
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out],
+    () => {}, 240000, undefined, cancelled);
+  if (!fs.existsSync(out)) throw new Error('구간 추출 실패');
+  return out;
+}
+
+// 전체: videoId(또는 로컬 업로드 파일) → N개 하이라이트 클립 생성. dir는 작업 폴더.
 export async function extractHighlights(
   videoId: string, dir: string, geminiKeys: string[],
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; reframe?: 'track' | 'letterbox'} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; reframe?: 'track' | 'letterbox'; localFile?: string} = {},
 ): Promise<ClipResult[]> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -320,16 +330,25 @@ export async function extractHighlights(
   const reframe = opts.reframe === 'letterbox' ? 'letterbox' : 'track'; // 세로 변환 방식(기본=인물 추적)
   const count = Math.max(1, Math.min(10, opts.count || 3));
   const clipSec = Math.max(15, Math.min(600, opts.clipSec || 30)); // 최대 10분(길게 커스텀 가능)
+  const isLocal = !!opts.localFile; // 본인 업로드 영상(유튜브 다운로드·프록시·쿠키 불필요)
   await fsp.mkdir(dir, {recursive: true});
-  if (!(await ytdlpAvailable())) throw new Error('서버에 yt-dlp가 없습니다(배포 환경 확인 필요).');
   stop();
-  // 1) 쿠키/프록시/PO 준비 + 자막·길이만 가볍게(통짜 다운로드 안 함 — 프록시로 1GB는 타임아웃).
-  const {common, cookieUsed} = await buildCommon(log);
+  let subText = '', dur = 0, common: string[] = [];
+  if (isLocal) {
+    // 본인 영상: 다운로드/자막 없음 → 길이만 측정하고 균등 분할(자막 없는 유튜브와 동일 처리).
+    log('[하이라이트] 내 영상에서 구간을 나눕니다(자막 없이 균등 분할).');
+    dur = await durationOf(opts.localFile!);
+  } else {
+    if (!(await ytdlpAvailable())) throw new Error('서버에 yt-dlp가 없습니다(배포 환경 확인 필요).');
+    // 1) 쿠키/프록시/PO 준비 + 자막·길이만 가볍게(통짜 다운로드 안 함 — 프록시로 1GB는 타임아웃).
+    const built = await buildCommon(log); common = built.common;
+    stop();
+    const meta = await fetchMetaAndSubs(videoId, dir, log, common, built.cookieUsed, cancelled);
+    subText = meta.subText; dur = meta.duration;
+    if (subText) log(`[하이라이트] 자막 확보: ${subText.length}자 — 내용 기반으로 터질 구간을 고릅니다.`);
+    else log('[하이라이트] ⚠️ 자막이 없습니다. 자막(대사)이 있는 영상이라야 하이라이트를 고를 수 있어요.');
+  }
   stop();
-  const {subText, duration: dur} = await fetchMetaAndSubs(videoId, dir, log, common, cookieUsed, cancelled);
-  stop();
-  if (subText) log(`[하이라이트] 자막 확보: ${subText.length}자 — 내용 기반으로 터질 구간을 고릅니다.`);
-  else log('[하이라이트] ⚠️ 자막이 없습니다. 자막(대사)이 있는 영상이라야 하이라이트를 고를 수 있어요.');
   if (!dur) throw new Error('영상 길이를 읽지 못했습니다.');
   const highlights = await pickHighlights(geminiKeys, subText, dur, count, clipSec, log);
   if (!highlights.length) throw new Error('하이라이트 구간을 찾지 못했습니다.');
@@ -339,9 +358,11 @@ export async function extractHighlights(
     const h = highlights[i];
     const file = path.join(dir, `clip-${i}.mp4`);
     try {
-      // 2) 이 구간만 다운로드(프록시 데이터 절약) → 3) 9:16/16:9 크롭.
-      log(`[하이라이트] ${i + 1}/${highlights.length} 구간 받는 중 (${h.start}s~${h.end}s)…`);
-      const raw = await downloadSection(videoId, dir, i, h.start, h.end, log, common, cancelled);
+      // 2) 구간 추출(본인 영상=로컬 컷 / 유튜브=프록시로 그 구간만 다운) → 3) 9:16/16:9 크롭.
+      log(`[하이라이트] ${i + 1}/${highlights.length} 구간 ${isLocal ? '자르는' : '받는'} 중 (${h.start}s~${h.end}s)…`);
+      const raw = isLocal
+        ? await cutSectionLocal(opts.localFile!, dir, i, h.start, h.end, cancelled)
+        : await downloadSection(videoId, dir, i, h.start, h.end, log, common, cancelled);
       stop();
       const secDur = (await durationOf(raw)) || (h.end - h.start);
       // 세로+인물추적 모드면 리프레임(인물 꽉채움) 시도 → 실패 시 블러레터박스로 폴백(무회귀).

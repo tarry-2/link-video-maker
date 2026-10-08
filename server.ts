@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID, createHmac, timingSafeEqual} from 'node:crypto';
+import {execFileSync as cpExecFileSync} from 'node:child_process';
 import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
@@ -374,6 +375,18 @@ async function readBody(req: http.IncomingMessage): Promise<any> {
     return {};
   }
 }
+// 원본 바이너리 본문(파일 업로드용) — 최대 maxBytes 제한.
+async function readRaw(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = []; let total = 0;
+  for await (const c of req) {
+    total += (c as Buffer).length;
+    if (total > maxBytes) throw new Error('파일이 너무 큽니다.');
+    chunks.push(c as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+// 업로드 원본 보관 폴더(본인 영상 하이라이트). 오래된 파일은 부팅 시 정리.
+const HL_UPLOAD_DIR = path.join(STUDIO_DATA_DIR, 'hl-uploads');
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url || '/', `http://localhost:${PORT}`);
@@ -1287,10 +1300,43 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
   }
 
   // ── 재사용(CC) 유튜브 영상 → 하이라이트 숏폼 여러 편 ──
+  // ── 본인 영상 업로드(하이라이트 소재) — raw 바이너리 PUT. 파일명은 X-Filename 헤더. 반환 {uploadId, duration, title} ──
+  if (p === '/api/highlight/upload' && req.method === 'POST') {
+    try {
+      const buf = await readRaw(req, 600 * 1024 * 1024); // 최대 600MB
+      if (buf.length < 1000) return json(res, 400, {error: '영상 파일이 비어있어요.'});
+      const rawName = decodeURIComponent(String(req.headers['x-filename'] || 'upload.mp4'));
+      const ext = (rawName.match(/\.(mp4|mov|m4v|webm|mkv|avi)$/i) || ['', 'mp4'])[1].toLowerCase();
+      fs.mkdirSync(HL_UPLOAD_DIR, {recursive: true});
+      const uploadId = randomUUID().slice(0, 12);
+      const dest = path.join(HL_UPLOAD_DIR, `${uploadId}.${ext}`);
+      fs.writeFileSync(dest, buf);
+      // 길이 측정(ffprobe). 실패하면 0(프론트에서 안내).
+      let duration = 0;
+      try {
+        const probe = (process.env.FFPROBE_PATH || (process.env.FFMPEG_PATH || 'ffmpeg').replace(/ffmpeg$/, 'ffprobe'));
+        const out = cpExecFileSync(probe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', dest], {timeout: 20000}).toString();
+        duration = Math.floor(Number(out.trim()) || 0);
+      } catch {}
+      const title = rawName.replace(/\.[^.]+$/, '').slice(0, 120) || '내 영상';
+      return json(res, 200, {uploadId, duration, title, sizeMB: Math.round(buf.length / 1048576)});
+    } catch (e: any) { return json(res, 400, {error: '업로드 실패: ' + (e?.message || e)}); }
+  }
+
   if (p === '/api/generate-highlights' && req.method === 'POST') {
     const b = await readBody(req);
     const videoId = String(b.videoId || '').trim();
-    if (!/^[\w-]{11}$/.test(videoId)) return json(res, 400, {error: '영상을 선택하세요.'});
+    // 본인 업로드 영상이면 uploadId로, 아니면 videoId(유튜브 11자)로.
+    const uploadId = String(b.uploadId || '').trim();
+    let localFile: string | undefined;
+    if (uploadId) {
+      if (!/^[\w-]{12}$/.test(uploadId)) return json(res, 400, {error: '업로드를 다시 해주세요.'});
+      const found = fs.existsSync(HL_UPLOAD_DIR) ? fs.readdirSync(HL_UPLOAD_DIR).find((f) => f.startsWith(uploadId + '.')) : undefined;
+      if (!found) return json(res, 400, {error: '업로드한 영상을 찾을 수 없어요. 다시 올려주세요.'});
+      localFile = path.join(HL_UPLOAD_DIR, found);
+    } else if (!/^[\w-]{11}$/.test(videoId)) {
+      return json(res, 400, {error: '영상을 선택하세요.'});
+    }
     const title = String(b.title || '').slice(0, 200);
     const channel = String(b.channel || '').slice(0, 120);
     const count = Math.max(1, Math.min(10, Number(b.count) || 3));
@@ -1309,8 +1355,9 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       try {
         job.kind = 'highlight';
         job.clips = []; // 완성되는 편마다 누적(먼저 끝난 편을 SSE로 바로 흘림)
-        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, muteOriginal, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
+        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, muteOriginal, localFile, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
           onClip: (c) => { if (!job.clips!.some((x) => x.projectId === c.projectId)) job.clips!.push(c); }});
+        if (localFile) { try { fs.rmSync(localFile, {force: true}); } catch {} } // 업로드 원본은 작업 끝나면 정리
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }
         job.done = true; job.doneAt = Date.now();
       } catch (e: any) {

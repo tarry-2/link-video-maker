@@ -70,24 +70,29 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
   const stopIfCancelled = () => { if (cancelled()) throw new Error('사용자가 중단했습니다.'); };
   const orientation = opts.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const isMine = !!opts.localFile; // 본인 업로드 영상(저작권 자유)
   const k = pipelineKeys();
-  // 1) 다운로드 + 하이라이트 구간 추출 + 크롭(세로=블러레터박스 / 가로=원본) (임시 폴더)
-  const workDir = path.join(os.tmpdir(), `onvideo-hl-${videoId}-${Date.now()}`);
-  log(`[하이라이트] 재사용 영상에서 숏폼 소재를 뽑습니다…(${orientation === 'landscape' ? '가로 16:9' : '세로 9:16'})`);
-  const clips = await extractHighlights(videoId, workDir, k.gemini, {count: opts.count, clipSec: opts.clipSec, log, isCancelled: cancelled, orientation, reframe: opts.reframe});
+  // 1) 다운로드(또는 로컬 파일) + 하이라이트 구간 추출 + 크롭 (임시 폴더)
+  const workDir = path.join(os.tmpdir(), `onvideo-hl-${videoId || 'mine'}-${Date.now()}`);
+  log(isMine
+    ? `[하이라이트] 내 영상에서 숏폼을 만듭니다…(${orientation === 'landscape' ? '가로 16:9' : '세로 9:16'})`
+    : `[하이라이트] 재사용 영상에서 숏폼 소재를 뽑습니다…(${orientation === 'landscape' ? '가로 16:9' : '세로 9:16'})`);
+  const clips = await extractHighlights(videoId, workDir, k.gemini, {count: opts.count, clipSec: opts.clipSec, log, isCancelled: cancelled, orientation, reframe: opts.reframe, localFile: opts.localFile});
   stopIfCancelled();
   log(`[하이라이트] ${clips.length}개 구간 확보 — 후킹 자막 얹어 완성합니다.`);
 
-  // 출처 표기. CC 영상이면 (Creative Commons BY)까지 명시(합법 재사용 근거). 비-CC면 거짓표기하지 않고 출처만.
-  const attribution = meta.isCc === false
-    ? `출처: ${meta.channel} — https://youtu.be/${videoId}`
-    : `출처: ${meta.channel} — https://youtu.be/${videoId} (Creative Commons BY)`;
+  // 출처 표기. 본인 영상=출처 불필요. CC 영상이면 (Creative Commons BY) 명시. 비-CC면 거짓표기 없이 출처만.
+  const attribution = isMine
+    ? ''
+    : (meta.isCc === false
+      ? `출처: ${meta.channel} — https://youtu.be/${videoId}`
+      : `출처: ${meta.channel} — https://youtu.be/${videoId} (Creative Commons BY)`);
   const results: HighlightJobResult = [];
 
   for (let i = 0; i < clips.length; i++) {

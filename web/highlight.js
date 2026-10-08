@@ -103,7 +103,7 @@
       if (m.done) {
         es.close(); curES = null; curJobId = null;
         clearTimeout(tickTimer);
-        try { localStorage.removeItem('onvideo-hljob'); } catch {}
+        try { localStorage.removeItem('onvideo-hljob'); localStorage.removeItem('onvideo-hljob-meta'); } catch {}
         refreshGpu();
         $('hl-stop')?.classList.add('hidden'); // 끝났으니 중단 버튼 숨김
         if (m.error) { setEnergy(energyPct, m.error.includes('중단') ? '중단됨' : '실패'); }
@@ -282,7 +282,7 @@
     if (!s) return false;
     region = s.region || 'kr'; order = s.order || 'viewCount'; cat = s.cat || ''; orient = s.orient || 'portrait';
     reframeMode = s.reframeMode === 'letterbox' ? 'letterbox' : 'track';
-    license = s.license === 'all' ? 'all' : 'cc'; mode = s.mode === 'url' ? 'url' : 'search';
+    license = s.license === 'all' ? 'all' : 'cc'; mode = ['url', 'upload'].includes(s.mode) ? s.mode : 'search';
     document.querySelectorAll('.hl-lic').forEach((b) => b.classList.toggle('active', b.dataset.lic === license));
     applyLicenseNote(); applyMode();
     document.querySelectorAll('.hl-orient').forEach((b) => b.classList.toggle('active', b.dataset.o === orient));
@@ -507,11 +507,45 @@
   function applyMode() {
     $('hl-search-panel')?.classList.toggle('hidden', mode !== 'search');
     $('hl-url-panel')?.classList.toggle('hidden', mode !== 'url');
+    $('hl-upload-panel')?.classList.toggle('hidden', mode !== 'upload');
     document.querySelectorAll('.hl-mode').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
   }
   document.querySelectorAll('.hl-mode').forEach((b) => b.addEventListener('click', () => {
-    mode = b.dataset.mode === 'url' ? 'url' : 'search'; applyMode(); saveState();
+    mode = ['url', 'upload'].includes(b.dataset.mode) ? b.dataset.mode : 'search'; applyMode(); saveState();
   }));
+
+  // ── 내 영상 올리기 — 업로드 → picked(uploadId) 설정 → 바로 '만들기' 가능(저작권 자유) ──
+  $('hl-file-pick')?.addEventListener('click', () => $('hl-file')?.click());
+  $('hl-file')?.addEventListener('change', () => {
+    const f = $('hl-file').files && $('hl-file').files[0];
+    if (!f) return;
+    if (f.size > 600 * 1024 * 1024) { alert('파일이 너무 커요(최대 600MB). 더 짧거나 낮은 화질로 올려주세요.'); return; }
+    $('hl-file-name').textContent = f.name + ` (${Math.round(f.size/1048576)}MB)`;
+    uploadMyVideo(f);
+  });
+  function uploadMyVideo(file) {
+    const wrap = $('hl-up-bar-wrap'), bar = $('hl-up-bar'), st = $('hl-up-state');
+    wrap.style.display = ''; bar.style.width = '0%'; st.textContent = '올리는 중…'; st.style.color = '';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/highlight/upload');
+    xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = Math.round(e.loaded / e.total * 100) + '%'; };
+    xhr.onload = () => {
+      try {
+        const d = JSON.parse(xhr.responseText);
+        if (xhr.status !== 200 || d.error) { st.textContent = '⚠️ ' + (d.error || '업로드 실패'); st.style.color = '#e23d3d'; return; }
+        bar.style.width = '100%';
+        const durTxt = d.duration ? fmtDur(d.duration) : '길이 확인 안됨';
+        st.textContent = `✅ 업로드 완료 (${durTxt}) — 아래 옵션 정하고 "하이라이트 숏폼 만들기"를 누르세요.`; st.style.color = '#2bb673';
+        // picked를 업로드 영상으로 — 저작권 자유(risk 없음), uploadId로 생성.
+        picked = {uploadId: d.uploadId, title: d.title || '내 영상', channel: '내 영상', durationSec: d.duration || 0, isCc: true, risk: 'cc', mine: true};
+        $('hl-options')?.scrollIntoView({behavior: 'smooth'});
+        saveState();
+      } catch { st.textContent = '⚠️ 업로드 응답 오류'; st.style.color = '#e23d3d'; }
+    };
+    xhr.onerror = () => { st.textContent = '⚠️ 업로드 중 네트워크 오류'; st.style.color = '#e23d3d'; };
+    xhr.send(file);
+  }
   // URL 모드: 붙여넣은 롱폼 확인 → 카드 1개로 띄우고 바로 크게보기 → '이 영상으로 만들기'
   async function loadUrl() {
     const raw = $('hl-url').value.trim();
@@ -616,7 +650,7 @@
   function detachJob() {
     if (curES) { try { curES.close(); } catch {} curES = null; }
     curJobId = null; clearTimeout(tickTimer);
-    try { localStorage.removeItem('onvideo-hljob'); } catch {}
+    try { localStorage.removeItem('onvideo-hljob'); localStorage.removeItem('onvideo-hljob-meta'); } catch {}
   }
   // 전체 초기화 — 로그·진행·결과·에너지바까지 싹 비우고 처음 상태로.
   function resetAll() {
@@ -678,8 +712,8 @@
       }
     }
     addLog('──────── 하이라이트 제작 시작 ────────', 'done');
-    addLog(`• 소재: ${mode === 'url' ? 'URL 직접 입력' : (region === 'global' ? '해외' : '한국') + ' · ' + (cat || '직접 검색')}`);
-    addLog(`• 라이선스: ${picked.isCc !== false ? '재사용 허가(CC)' : '표준 라이선스(권한 확인 필요)'}`);
+    addLog(`• 소재: ${picked.mine ? '📁 내 영상(저작권 자유)' : (mode === 'url' ? 'URL 직접 입력' : (region === 'global' ? '해외' : '한국') + ' · ' + (cat || '직접 검색'))}`);
+    addLog(`• 라이선스: ${picked.mine ? '내 소유(차단 걱정 없음)' : (picked.isCc !== false ? '재사용 허가(CC)' : '표준 라이선스(권한 확인 필요)')}`);
     addLog(`• 원본 영상: ${picked.title}`);
     addLog(`• 원본 길이: ${fmtDur(picked.durationSec)} → 클립 ${sec}초짜리`);
     addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}${orient === 'portrait' ? ' · ' + (reframeMode === 'letterbox' ? '전체 보존(블러)' : '인물 꽉채움') : ''}`);
@@ -694,7 +728,9 @@
     addLog(`• 예상 소요: ${estTotalText} (서버 상황 따라 달라져요 · 길이·편수 줄이면 빨라짐)`);
     addLog('────────────────────────────');
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
-    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, commentary: !!commentary, voice, isCc: picked.isCc !== false};
+    // 새로고침해도 경과·예상시간이 안 사라지게 저장(복원 시 읽음).
+    try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
+    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, commentary: !!commentary, voice, isCc: picked.isCc !== false};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });
@@ -724,8 +760,12 @@
     if (!id) return;
     try {
       const d = await (await fetch('/api/jobs/current')).json();
-      if (d.id === id) attachProgress(id); // 지금도 진행 중인 그 작업일 때만
-      else { try { localStorage.removeItem('onvideo-hljob'); } catch {} } // 끝난 작업이면 흔적 지움
+      if (d.id === id) {
+        // 경과·예상시간 복원(새로고침해도 안 사라지게).
+        try { const mt = JSON.parse(localStorage.getItem('onvideo-hljob-meta') || 'null');
+          if (mt) { if (mt.startTs) startTs = mt.startTs; estTotalText = mt.estTotalText || ''; } } catch {}
+        attachProgress(id); // 지금도 진행 중인 그 작업일 때만
+      } else { try { localStorage.removeItem('onvideo-hljob'); localStorage.removeItem('onvideo-hljob-meta'); } catch {} } // 끝난 작업이면 흔적 지움
     } catch {}
   })();
 })();
