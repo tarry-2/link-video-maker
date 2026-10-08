@@ -40,7 +40,8 @@ async function writeCommentary(
   geminiKeys: string[], title: string, transcript: string, hook: string, clipSec: number,
 ): Promise<string> {
   if (!geminiKeys.length) return '';
-  const targetChars = Math.max(40, Math.round(clipSec * 3.0));
+  // ★분량을 클립 길이에 맞게 꽉 채운다 — 한국어 나레이션 ~4.4자/초(TTS 기준). 너무 적으면 뒤가 허전해짐.
+  const targetChars = Math.max(60, Math.round(clipSec * 4.4));
   const prompt = `너는 유튜브 '리뷰·해설' 채널 운영자다. 아래는 남의 영상(재사용)에서 가져온 한 장면이다.
 이 장면에 '네 관점의 해설/논평'을 한국어로 입혀 영상에 깔 나레이션을 써라. 장면을 그대로 중계·낭독하지 말고,
 배경·맥락 설명, 왜 중요한지, 포인트 짚기, 너의 해석 한마디를 넣어 '원본과 구별되는 가치'를 더해라.
@@ -50,13 +51,14 @@ async function writeCommentary(
 장면 대사/내용: ${transcript || '(대사 없음 — 제목과 후킹으로 맥락 추론)'}
 
 [규칙]
-- 분량: 약 ${targetChars}자(이 장면 ${clipSec}초에 얹을 분량). 넘지 마라.
+- 분량: ${targetChars}자 내외로 '꽉' 채워라(이 장면 ${clipSec}초 거의 끝까지 말이 이어지게). 너무 짧으면 뒤가 허전하다. ±15%.
 - 구어체로 말하듯. 첫 문장은 시청자를 붙잡는 한마디.
 - 해설·논평·맥락 중심(받아쓰기·중계 금지).
+- ★마지막 문장은 깔끔한 마무리(핵심 정리나 여운 있는 한마디)로 끝내라 — 말이 뚝 끊기지 않게.
 - 해시태그·이모지·따옴표 없이 '읽을 문장'만.
 JSON만 출력: {"commentary":"..."}`;
   try {
-    const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 512, temperature: 0.8});
+    const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 1024, temperature: 0.8});
     const m = raw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
     return m ? String(JSON.parse(m[0]).commentary || '').trim() : '';
   } catch { return ''; }
@@ -111,8 +113,10 @@ export async function makeHighlights(
     let words: Word[] = [];
     let voiceRel: string | undefined;
     let narrFrames = 0;
+    let commentaryText = ''; // 실제 해설 대본 — 업로드 상세설명도 이걸 기반으로 쓴다(나레이션↔설명 일치).
     if (opts.commentary) {
       const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', Math.round(durSec));
+      commentaryText = commentary || '';
       if (commentary && k.elevenlabs) {
         log(`[하이라이트] ${i + 1}편 해설 나레이션 생성…`);
         try {
@@ -137,8 +141,9 @@ export async function makeHighlights(
       accentColor: '#FFE24B',
       words, // 해설 있으면 카라오케 자막, 없으면 []
       duckAudio: !!voiceRel, // 해설 깔면 원본 소리를 줄인다
-      // 해설이 클립보다 길면 나레이션 끝까지 담는다(안 그러면 말이 잘림).
-      durationInFrames: Math.max(clipFrames, narrFrames),
+      // ★해설 있으면 "나레이션 끝나는 지점 + 1.3초 여운"까지만(뒤 허전함 제거). 나레이션이 더 길면 그만큼.
+      //   해설 없으면 클립 전체.
+      durationInFrames: words.length ? narrFrames + Math.round(FPS * 1.3) : clipFrames,
     };
 
     // ★디자인 썸네일용 배경 = 후킹 글자 없는 '깨끗한' 원본 클립 프레임(c.file). 완성 mp4엔 후킹이 박혀
@@ -191,7 +196,11 @@ export async function makeHighlights(
     //   전부 data/studio/{id}/project.json을 디스크에서 직접 읽는다. 영상·카드와 "똑같은 모양"의
     //   project.json을 써줘야 유튜브·인스타 업로드와 제목·설명 자동생성이 작동한다.
     //   (안 쓰면 resolveVideo가 null → "영상을 찾을 수 없습니다" / 상세설명 생성 실패.)
-    const narrationSeed = [c.hookTop, c.hookAccent].filter(Boolean).join(' ').trim() || title;
+    // ★상세설명(유튜브·인스타) 생성 재료 = 실제 해설 대본(있으면). 없으면 후킹·제목.
+    //   이렇게 해야 "말하는 나레이션 내용"과 "설명글"이 일치한다(테리 지적: 둘이 동떨어짐).
+    const narrationSeed = (commentaryText && commentaryText.length > 15)
+      ? commentaryText
+      : ([c.hookTop, c.hookAccent].filter(Boolean).join(' ').trim() || title);
     const proj: any = {
       id: projectId,
       title,
