@@ -265,13 +265,47 @@ function splitEvenly(durationSec: number, n: number, clipSec: number): Highlight
 
 // 하이라이트 N개 선정. 자막 있으면 Gemini가 "터지는 순간"을 우선 고르고, 부족하면 순차 분할로 채워 N개 보장.
 //   자막 없어도 순차 분할로 진행(이미 하이라이트 모음인 영상도 많으니 실패시키지 않는다 — 테리 지시).
-async function pickHighlights(geminiKeys: string[], subText: string, durationSec: number, count: number, clipSec: number, log: (m: string) => void): Promise<Highlight[]> {
+// 자막 없는 영상(둘리·만화·옛날티비 등)용 — 제목만으로 편마다 '빡센 궁금증 훅'을 만든다.
+//   ★제목에 실제로 있는 소재/인물/상황만 써서(거짓 낚시 금지), 궁금증·충격·반전으로 세게.
+async function hooksFromTitle(geminiKeys: string[], title: string, n: number, log: (m: string) => void): Promise<{hookTop: string; hookAccent: string; score: number}[]> {
+  const prompt = `유튜브 쇼츠 ${n}개에 붙일 '상단 후킹 자막'을 만들어라. 아래는 원본 영상 제목이다(자막·대사 정보는 없음).
+영상 제목: "${title}"
+
+[규칙 — 첫 3초에 스크롤을 멈추게 하는 게 전부]
+- 제목에 실제로 담긴 소재·인물·상황만 근거로(없는 내용 지어내기=거짓 낚시 금지). 추측이면 '~일까?' 식 질문으로.
+- '제목 요약'이 아니라 '궁금증 폭탄'으로. 공식: 정보격차("아무도 모르는 ○○")·충격반전("설마 했는데")·숫자·경고("절대")·질문("왜 ○○?").
+- ${n}개를 서로 '다른 각도'로(같은 영상의 다른 장면이라고 가정). 밋밋한 제목 반복 금지.
+- hookTop=한국어 12~16자(자극적, 열린 고리), hookAccent=가장 센 단어 1~2개(6자내), score=이 후킹이 터질 확률 55~90 정수(세면 높게).
+
+JSON만: {"hooks":[{"hookTop":"...","hookAccent":"...","score":72}]}`;
+  try {
+    const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 900, temperature: 0.95, log});
+    const j = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    return (j.hooks || []).slice(0, n).map((h: any) => ({
+      hookTop: String(h.hookTop || '').slice(0, 24),
+      hookAccent: String(h.hookAccent || '').slice(0, 12),
+      score: Math.max(0, Math.min(100, Math.round(Number(h.score) || 65))),
+    })).filter((h: any) => h.hookTop);
+  } catch { return []; }
+}
+
+async function pickHighlights(geminiKeys: string[], subText: string, durationSec: number, count: number, clipSec: number, log: (m: string) => void, title = ''): Promise<Highlight[]> {
   const n = Math.max(1, Math.min(10, count));
 
-  // 자막이 없으면 바로 순차 분할(내용을 모르니 베스트를 고를 수 없음 — 그래도 진행).
+  // 자막이 없으면 순차 분할하되, ★제목으로라도 '빡센 궁금증 훅'을 편마다 만들어 넣는다(제목 그대로 쓰면 밋밋).
   if (!subText || !geminiKeys.length) {
+    const base = splitEvenly(durationSec, n, clipSec);
+    if (geminiKeys.length && title.trim()) {
+      try {
+        const hooks = await hooksFromTitle(geminiKeys, title.trim(), base.length, log);
+        if (hooks.length) {
+          log(`[하이라이트] 자막이 없어 '${title.slice(0, 30)}' 제목으로 편마다 후킹을 만들었어요.`);
+          return base.map((h, i) => hooks[i] ? {...h, hookTop: hooks[i].hookTop, hookAccent: hooks[i].hookAccent, score: hooks[i].score} : h);
+        }
+      } catch (e: any) { log('[하이라이트] 제목 후킹 생성 실패(제목 그대로 진행): ' + (e?.message || '').slice(0, 60)); }
+    }
     log('[하이라이트] 자막이 없어 영상을 앞에서부터 순서대로 나눕니다(이미 하이라이트인 영상에 적합).');
-    return splitEvenly(durationSec, n, clipSec);
+    return base;
   }
 
   const prompt = `너는 유튜브 영상에서 쇼츠로 쓸 구간을 고르는 편집자다. 아래는 한 영상의 자막(초 단위)이다.
@@ -478,7 +512,7 @@ async function tightenSilence(
 
 export async function extractHighlights(
   videoId: string, dir: string, geminiKeys: string[],
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; reframe?: 'track' | 'letterbox'; localFile?: string; removeSilence?: boolean} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; reframe?: 'track' | 'letterbox'; localFile?: string; removeSilence?: boolean; title?: string} = {},
 ): Promise<ClipResult[]> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -507,7 +541,7 @@ export async function extractHighlights(
   }
   stop();
   if (!dur) throw new Error('영상 길이를 읽지 못했습니다.');
-  const highlights = await pickHighlights(geminiKeys, subText, dur, count, clipSec, log);
+  const highlights = await pickHighlights(geminiKeys, subText, dur, count, clipSec, log, opts.title || '');
   if (!highlights.length) throw new Error('하이라이트 구간을 찾지 못했습니다.');
   const results: ClipResult[] = [];
   for (let i = 0; i < highlights.length; i++) {

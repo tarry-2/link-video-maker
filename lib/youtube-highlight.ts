@@ -190,7 +190,7 @@ export async function makeHighlights(
   log(isMine
     ? `[하이라이트] 내 영상에서 숏폼을 만듭니다…(${orientation === 'landscape' ? '가로 16:9' : '세로 9:16'})`
     : `[하이라이트] 재사용 영상에서 숏폼 소재를 뽑습니다…(${orientation === 'landscape' ? '가로 16:9' : '세로 9:16'})`);
-  const clips = await extractHighlights(videoId, workDir, k.gemini, {count: opts.count, clipSec: opts.clipSec, log, isCancelled: cancelled, orientation, reframe: opts.reframe, localFile: opts.localFile, removeSilence: opts.removeSilence});
+  const clips = await extractHighlights(videoId, workDir, k.gemini, {count: opts.count, clipSec: opts.clipSec, log, isCancelled: cancelled, orientation, reframe: opts.reframe, localFile: opts.localFile, removeSilence: opts.removeSilence, title: meta.title});
   stopIfCancelled();
   log(`[하이라이트] ${clips.length}개 구간 확보 — 후킹 자막 얹어 완성합니다.`);
 
