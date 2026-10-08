@@ -42,12 +42,24 @@ function assTime(sec: number): string {
 
 // words(프레임 단위 타이밍) → ASS 카라오케 자막. 활성 단어는 템플릿 강조색으로 바뀐다(카라오케 \k).
 //   단어를 '줄'로 묶어(최대 ~7자*4어 또는 빈틈>0.6s에서 끊음) 표준 쇼츠 자막 느낌.
-function buildAss(words: Word[], template: string, orientation: 'portrait' | 'landscape'): string {
+function buildAss(words: Word[], template: string, orientation: 'portrait' | 'landscape', subLines?: {text: string; s: number; e: number}[]): string {
   const T = getHlTemplate(template);
   const land = orientation === 'landscape';
   const W = land ? 1920 : 1080, H = land ? 1080 : 1920;
   const fontSize = land ? 56 : 64;
-  const marginV = land ? 70 : 260; // 하단에서 띄움(원본 자막 위치 가림 겸)
+  // ★자막을 '유튜브 쇼츠 하단 UI(계정·태그·버튼·시크바)' 위로 올린다 — 하단에 두면 그 UI가 자막을 가린다(테리 지적).
+  //   한국어만: 하단 UI 위. 한국어+영어: 둘을 더 위로 올려 둘 다 UI에 안 가리고 서로 안 겹치게.
+  const hasEn = !!(subLines && subLines.length);
+  const marginV = land ? (hasEn ? 150 : 90) : (hasEn ? 560 : 470); // 세로: UI(하단 ~400px) 위로
+  const enFontSize = land ? 40 : 46;
+  const enMarginV = land ? 70 : 460; // 한국어 줄 바로 아래(그래도 UI 위)
+  // 영어 문장은 길어서 한 줄이면 좌우로 넘친다(WrapStyle 2=자동 줄바꿈 없음) → 단어 단위로 \N 줄바꿈.
+  const wrapEn = (s: string, max = 30): string => {
+    const words = s.split(/\s+/); const lines: string[] = []; let cur = '';
+    for (const w of words) { if (cur && (cur + ' ' + w).length > max) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; }
+    if (cur) lines.push(cur);
+    return lines.slice(0, 2).join('\\N'); // 최대 2줄(공간 보호)
+  };
   // 자막 스타일: BorderStyle 1=외곽선. subStyle='box'면 3=불투명 박스.
   const borderStyle = T.subStyle === 'box' ? 3 : 1;
   const outlineW = T.subStyle === 'box' ? 4 : 5;
@@ -65,6 +77,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Sub,${T.subFont},${fontSize},${primary},${secondary},&H00000000,${backColour},-1,0,0,0,100,100,0,0,${borderStyle},${outlineW},0,2,80,80,${marginV},1
+Style: SubEn,${T.subFont},${enFontSize},&H00E6E6E6,&H00E6E6E6,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,0,2,80,80,${enMarginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -90,7 +103,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     }).join('').trim();
     return `Dialogue: 0,${assTime(ln.s / FPS)},${assTime((ln.e + 6) / FPS)},Sub,,0,0,0,,${text}`;
   }).join('\n');
-  return head + events + '\n';
+  // 영어 번역 줄(문장 단위) — 한국어 카라오케 아래에 함께 표시(이중 자막). 특수문자 이스케이프.
+  const enEvents = hasEn ? '\n' + subLines!.map((l) => {
+    const t = (l.text || '').replace(/[\r\n]+/g, ' ').replace(/[{}]/g, '').trim();
+    if (!t) return '';
+    return `Dialogue: 0,${assTime(l.s / FPS)},${assTime((l.e + 6) / FPS)},SubEn,,0,0,0,,${wrapEn(t)}`;
+  }).filter(Boolean).join('\n') : '';
+  return head + events + enEvents + '\n';
 }
 
 // ffmpeg 경로 이스케이프(filter_complex subtitles용) — 작은따옴표로 감싸고 내부 따옴표/백슬래시 처리.
@@ -107,6 +126,7 @@ export async function renderHighlightFast(opts: {
   durationSec: number;
   orientation: 'portrait' | 'landscape';
   broll?: {path: string; start: number; end: number}[]; // AI b-roll 팝업(관련 이미지가 화면 중앙에 잠깐 떴다 사라짐)
+  subLines?: {text: string; s: number; e: number}[];    // 영어 번역 자막(문장 단위, 프레임) — 한국어 카라오케 아래 함께
   log: (m: string) => void;
   isCancelled?: () => boolean;
 }): Promise<boolean> {
@@ -127,7 +147,7 @@ export async function renderHighlightFast(opts: {
     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
     // 2) 자막 ASS(해설 있을 때만).
     let assPath = '';
-    if (words.length) { assPath = path.join(work, 'sub.ass'); await fsp.writeFile(assPath, buildAss(words, template, orientation)); }
+    if (words.length) { assPath = path.join(work, 'sub.ass'); await fsp.writeFile(assPath, buildAss(words, template, orientation, opts.subLines)); }
 
     // 3) ffmpeg 합성. 입력: 0=클립, (후킹 있으면)1=hook.png, (나레이션 있으면)다음=narration.
     const inputs: string[] = ['-i', clipAbs];

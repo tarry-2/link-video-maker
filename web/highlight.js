@@ -326,6 +326,7 @@
   // 세로일 때만 "세로 변환 방식" 노출(가로는 무의미).
   function applyReframeRow() { const r = $('hl-reframe-row'); if (r) r.style.display = orient === 'portrait' ? '' : 'none'; }
   let commentary = 0, voice = ''; // 해설 넣기(0/1) · 해설 목소리
+  let captionEn = 0; // 영어 번역 자막 함께(0/1, 해설 켤 때만)
   let license = 'cc'; // 영상 범위: cc(안전·재사용 허가만) / all(전체)
   let mode = 'search'; // 소재 가져오는 방법: search(주제로 찾기) / url(영상 URL 붙여넣기)
 
@@ -334,7 +335,7 @@
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, voice, query, pageToken, loadedCount, picked, license, mode,
+        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, captionEn, voice, query, pageToken, loadedCount, picked, license, mode,
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -363,9 +364,12 @@
     applyReframeRow();
     count = s.count || 3; sec = s.sec || 30; query = s.query || ''; pageToken = s.pageToken || ''; loadedCount = s.loadedCount || 0;
     commentary = s.commentary || 0; voice = s.voice || '';
+    captionEn = s.captionEn ? 1 : 0;
     picked = s.picked || null;
     document.querySelectorAll('.hl-cm').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === commentary));
     $('hl-voice-row')?.classList.toggle('hidden', !commentary);
+    $('hl-en-row')?.classList.toggle('hidden', !commentary);
+    document.querySelectorAll('.hl-en').forEach((b) => b.classList.toggle('active', Number(b.dataset.en) === captionEn));
     // 버튼 활성 복원
     document.querySelectorAll('.hl-region').forEach((b) => b.classList.toggle('active', b.dataset.region === region));
     document.querySelectorAll('.hl-order').forEach((b) => b.classList.toggle('active', b.dataset.order === order));
@@ -738,7 +742,10 @@
   // 해설 넣기 토글
   document.querySelectorAll('.hl-cm').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-cm').forEach((x) => x.classList.remove('active')); b.classList.add('active');
-    commentary = Number(b.dataset.c); $('hl-voice-row')?.classList.toggle('hidden', !commentary); saveState();
+    commentary = Number(b.dataset.c); $('hl-voice-row')?.classList.toggle('hidden', !commentary); $('hl-en-row')?.classList.toggle('hidden', !commentary); saveState();
+  }));
+  document.querySelectorAll('.hl-en').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-en').forEach((x) => x.classList.remove('active')); b.classList.add('active'); captionEn = Number(b.dataset.en); saveState();
   }));
   $('hl-voice')?.addEventListener('change', () => { voice = $('hl-voice').value; saveState(); });
   // 해설 목소리 목록 채우기(영상 만들기와 같은 ElevenLabs 목소리 재사용).
@@ -898,6 +905,7 @@
     addLog(`• 원본 소리: ${muteOriginal ? '제거(저작권 회피)' : '살리기'}`);
     addLog(`• 무음 제거: ${removeSilence ? '✂️ 켜짐(템포 UP)' : '끄기'}`);
     addLog(`• AI B-roll: ${broll ? '🖼 켜짐(이미지 생성 — 비용 발생)' : '끄기'}`);
+    if (commentary) addLog(`• 영어 자막: ${captionEn ? '🌐 한국어+English 함께' : '한국어만'}`);
     addLog(`• 디자인: ${document.querySelector('.hl-tpl.active')?.dataset.name || tplMode}`);
     if (muteOriginal && !commentary) addLog('⚠️ 소리를 뺐는데 해설이 꺼져 있어요 — 영상이 무음이 됩니다. 해설을 켜는 걸 권장!', 'fail');
     // 예상 소요 — 편수·한 편 길이 기준 러프 추정(렌더가 대부분이라 길이·편수에 비례). 서버 상황 따라 달라짐.
@@ -909,7 +917,7 @@
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
     // 새로고침해도 경과·예상시간이 안 사라지게 저장(복원 시 읽음).
     try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
-    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, voice, isCc: picked.isCc !== false};
+    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, captionEn: !!captionEn, voice, isCc: picked.isCc !== false};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });

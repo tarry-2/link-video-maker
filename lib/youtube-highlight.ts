@@ -115,13 +115,50 @@ Give ${n} vivid ENGLISH image prompt(s) for B-roll illustrations that visually m
   return out;
 }
 
+// ── 영어 번역 자막(이중 자막) ──
+// 한국어 해설을 문장 단위로 영어로 번역하고, 각 문장을 한국어 나레이션의 '단어 타이밍'에 맞춰 배치한다.
+// (한국어 카라오케 자막 아래에 영어가 문장 단위로 따라붙는다 — 해외 시청자용.)
+async function translateCaptionLines(
+  geminiKeys: string[], koText: string, words: Word[], log: (m: string) => void,
+): Promise<{text: string; s: number; e: number}[]> {
+  if (!koText || !words.length || !geminiKeys.length) return [];
+  // 1) 문장 분리(마침표·물음표·느낌표·줄바꿈 기준).
+  const sentences = koText.split(/(?<=[.!?。…])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  if (!sentences.length) return [];
+  // 2) 영어 번역(한 번에, 배열 in/out — 문장 수 유지).
+  let en: string[] = [];
+  try {
+    const raw = await geminiGenerate(geminiKeys,
+      `Translate each Korean sentence into natural, concise English subtitles (keep the same count & order; spoken tone).
+Korean sentences (JSON): ${JSON.stringify(sentences)}
+Return JSON only: {"en":["...","..."]}`,
+      {json: true, maxTokens: 1200, temperature: 0.3});
+    const m = raw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
+    if (m) en = (JSON.parse(m[0]).en || []).map((s: any) => String(s).trim());
+  } catch (e: any) { log('[번역] 영어 자막 생성 실패 — 한국어만: ' + (e?.message || '').slice(0, 60)); return []; }
+  if (!en.length) return [];
+  // 3) 각 문장을 단어 타이밍에 매핑(문장 길이 비례로 단어 인덱스 분배).
+  const totalChars = sentences.reduce((a, s) => a + s.length, 0) || 1;
+  const N = words.length;
+  const out: {text: string; s: number; e: number}[] = [];
+  let cum = 0;
+  for (let i = 0; i < sentences.length && i < en.length; i++) {
+    const before = cum, after = cum + sentences[i].length; cum = after;
+    const startIdx = Math.min(N - 1, Math.max(0, Math.floor((before / totalChars) * N)));
+    const endIdx = Math.min(N - 1, Math.max(startIdx, Math.ceil((after / totalChars) * N) - 1));
+    if (en[i]) out.push({text: en[i], s: words[startIdx].s, e: words[endIdx].e});
+  }
+  log(`[번역] 영어 자막 ${out.length}문장 — 한국어 아래 함께 표시.`);
+  return out;
+}
+
 export type HighlightJobResult = {projectId: string; file: string; title: string; hookTop: string; score: number}[];
 
 // videoId(CC 영상) → N편의 완성 하이라이트 숏폼. 각 편은 독립 projectId(포폴·업로드 재사용).
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; removeSilence?: boolean; broll?: boolean; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -231,6 +268,14 @@ export async function makeHighlights(
       ? path.join(os.tmpdir(), `onvideo-hl-out-${projectId}-${output}`)
       : path.join(studioDir, output);
     let thumbOk = false;
+    // ── 영어 번역 자막(선택) — 해설(한국어 나레이션)이 있을 때만. 한국어 카라오케 아래에 영어 문장을 함께. ──
+    let enLines: {text: string; s: number; e: number}[] = [];
+    if (opts.captionEn && words.length && commentaryText) {
+      try { enLines = await translateCaptionLines(k.gemini, commentaryText, words, log); } catch (e: any) { log('[번역] 건너뜀: ' + (e?.message || '').slice(0, 60)); }
+    } else if (opts.captionEn && !words.length) {
+      log('[번역] 영어 자막은 \'AI 해설\'을 켜야 나옵니다(해설 나레이션에 번역을 붙이는 방식).');
+    }
+
     // ── AI B-roll 팝업(선택) — 관련 이미지를 화면 중앙에 잠깐 띄웠다 사라지게. replicate 키 있을 때만(비용 발생). ──
     let brollCuts: {path: string; start: number; end: number}[] = [];
     if (opts.broll && k.replicate) {
@@ -247,7 +292,7 @@ export async function makeHighlights(
         clipAbs: c.file, outPath: outAbs, hookTop: scene.hookTop, hookAccent: scene.hookAccent, template: tpl.id,
         words, narrationAbs: voiceRel ? path.join(pubClipDir, 'narration.mp3') : undefined,
         muteOriginal: !!opts.muteOriginal, duckAudio: !!voiceRel,
-        durationSec: scene.durationInFrames / FPS, orientation, broll: brollCuts, log, isCancelled: cancelled,
+        durationSec: scene.durationInFrames / FPS, orientation, broll: brollCuts, subLines: enLines, log, isCancelled: cancelled,
       });
       if (!fast) await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
       // 디자인 썸네일(일반영상과 동일 Thumbnail 컴포지션) — 깨끗한 프레임 배경 + 후킹 큰글자 + 강조 뱃지.

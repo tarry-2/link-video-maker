@@ -178,6 +178,16 @@
           </div>
           <p class="hint" id="hl-cm-note" style="margin-top:4px">원본에 'AI 해설(내 관점)'을 깔면 유튜브가 '리뷰·논평'으로 인정해 재사용 수익화에 유리합니다. 원본 소리는 자동으로 줄어듭니다.</p>
 
+          <!-- 영어 번역 자막(이중 자막) — 해설 켤 때만. 한국어 카라오케 아래 영어 문장 함께 -->
+          <div id="hl-en-row" class="hidden" style="margin-top:12px">
+            <label class="field-label">🌐 영어 자막 함께 <span class="hint">— 해외 시청자용 (한국어 + English)</span></label>
+            <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+              <button type="button" class="seg-btn hl-en active" data-en="0">한국어만</button>
+              <button type="button" class="seg-btn hl-en" data-en="1">🌐 영어 같이</button>
+            </div>
+            <p class="hint" style="margin-top:4px">AI 해설(한국어)을 영어로 번역해 <b>한국어 자막 아래에 영어 문장</b>을 함께 띄워요. 해외 시청자도 볼 수 있어 도달이 넓어져요. (해설을 켜야 나와요)</p>
+          </div>
+
           <!-- 원본 소리 처리 — 완전 제거 시 저작권 '소리 지문' 매칭 회피(통과율↑, 완벽X) -->
           <label class="field-label" style="margin-top:14px">🔊 원본 소리</label>
           <div class="seg" style="margin-top:6px;flex-wrap:wrap">
