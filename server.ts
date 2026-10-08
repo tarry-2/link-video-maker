@@ -1298,6 +1298,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const orientation = b.orientation === 'landscape' ? 'landscape' : 'portrait';
     const commentary = !!b.commentary; // 해설 나레이션 입히기(수익화 변형 가치)
     const voice = typeof b.voice === 'string' ? b.voice : undefined;
+    const reframe = b.reframe === 'letterbox' ? 'letterbox' : 'track'; // 세로 변환 방식(기본=인물 추적)
     const isCc = b.isCc !== false; // 기본 CC(안전). URL 모드에서 비-CC 영상이면 false로 와서 출처에 CC BY를 거짓표기하지 않는다.
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
@@ -1305,7 +1306,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     currentGenJob = id;
     (async () => {
       try {
-        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
+        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
         job.kind = 'highlight';
         job.clips = clips.map((c) => ({projectId: c.projectId, file: c.file, title: c.title, score: c.score}));
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }

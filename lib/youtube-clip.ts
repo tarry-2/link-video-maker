@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {geminiGenerate} from './gemini';
+import {reframeClip} from './reframe';
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
@@ -310,12 +311,13 @@ async function cutClip(videoPath: string, outPath: string, orientation: 'portrai
 // 전체: videoId → N개 세로 하이라이트 클립 생성. dir는 작업 폴더.
 export async function extractHighlights(
   videoId: string, dir: string, geminiKeys: string[],
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; reframe?: 'track' | 'letterbox'} = {},
 ): Promise<ClipResult[]> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
   const stop = () => { if (cancelled()) throw new Error('사용자가 중단했습니다.'); };
   const orientation = opts.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const reframe = opts.reframe === 'letterbox' ? 'letterbox' : 'track'; // 세로 변환 방식(기본=인물 추적)
   const count = Math.max(1, Math.min(10, opts.count || 3));
   const clipSec = Math.max(15, Math.min(600, opts.clipSec || 30)); // 최대 10분(길게 커스텀 가능)
   await fsp.mkdir(dir, {recursive: true});
@@ -342,8 +344,16 @@ export async function extractHighlights(
       const raw = await downloadSection(videoId, dir, i, h.start, h.end, log, common, cancelled);
       stop();
       const secDur = (await durationOf(raw)) || (h.end - h.start);
-      log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${orientation === 'landscape' ? '가로' : '세로'})…`);
-      await cutClip(raw, file, orientation, log, secDur, cancelled);
+      // 세로+인물추적 모드면 리프레임(인물 꽉채움) 시도 → 실패 시 블러레터박스로 폴백(무회귀).
+      let done = false;
+      if (orientation === 'portrait' && reframe === 'track') {
+        log(`[하이라이트] ${i + 1}/${highlights.length} 인물 추적으로 세로 변환…`);
+        done = await reframeClip(raw, file, log, cancelled);
+      }
+      if (!done) {
+        log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${orientation === 'landscape' ? '가로' : '세로 블러'})…`);
+        await cutClip(raw, file, orientation, log, secDur, cancelled);
+      }
       try { fs.rmSync(raw, {force: true}); } catch {} // 섹션 원본은 크롭 후 삭제(용량 절약)
       results.push({file, start: h.start, end: h.end, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end), score: h.score, reason: h.reason});
     } catch (e: any) {

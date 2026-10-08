@@ -6,10 +6,19 @@ RUN apt-get update && apt-get install -y \
   libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev libasound2 libxrandr2 \
   libxkbcommon-dev libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 \
   libpango-1.0-0 libcairo2 libcups2 ffmpeg fonts-noto-cjk \
-  python3 curl unzip git \
+  python3 python3-pip libgl1 libglib2.0-0 curl unzip git \
   && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
   && chmod a+rx /usr/local/bin/yt-dlp \
   && rm -rf /var/lib/apt/lists/*
+
+# ★스마트 리프레임(인물 추적 세로변환)용 opencv + YuNet 얼굴감지 모델.
+#   libgl1/libglib2.0-0 = opencv 런타임 의존. YuNet(337KB)=가볍고 정확한 최신 얼굴감지기.
+#   설치 실패해도 앱은 뜨고(리프레임만 블러레터박스로 폴백) — lib/reframe.ts가 방어적.
+RUN pip3 install --no-cache-dir --break-system-packages opencv-python-headless numpy || echo "opencv install skipped"
+RUN mkdir -p /opt/models \
+  && curl -fL https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx -o /opt/models/yunet.onnx \
+  || echo "yunet model download skipped(haar 폴백)"
+ENV YUNET_MODEL=/opt/models/yunet.onnx
 
 # ★유튜브 n-challenge(2026-09~) 해결용 JS 런타임 Deno — 없으면 모든 다운로드 실패.
 RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh \

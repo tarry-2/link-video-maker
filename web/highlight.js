@@ -244,7 +244,9 @@
 
   // ── 검색/선택/설정 ──
   let picked = null, region = 'kr', order = 'viewCount', cat = '';
-  let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait';
+  let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait', reframeMode = 'track';
+  // 세로일 때만 "세로 변환 방식" 노출(가로는 무의미).
+  function applyReframeRow() { const r = $('hl-reframe-row'); if (r) r.style.display = orient === 'portrait' ? '' : 'none'; }
   let commentary = 0, voice = ''; // 해설 넣기(0/1) · 해설 목소리
   let license = 'cc'; // 영상 범위: cc(안전·재사용 허가만) / all(전체)
   let mode = 'search'; // 소재 가져오는 방법: search(주제로 찾기) / url(영상 URL 붙여넣기)
@@ -254,7 +256,7 @@
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, commentary, voice, query, pageToken, loadedCount, picked, license, mode,
+        region, order, cat, count, sec, orient, reframeMode, commentary, voice, query, pageToken, loadedCount, picked, license, mode,
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -266,10 +268,13 @@
     let s; try { s = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch {}
     if (!s) return false;
     region = s.region || 'kr'; order = s.order || 'viewCount'; cat = s.cat || ''; orient = s.orient || 'portrait';
+    reframeMode = s.reframeMode === 'letterbox' ? 'letterbox' : 'track';
     license = s.license === 'all' ? 'all' : 'cc'; mode = s.mode === 'url' ? 'url' : 'search';
     document.querySelectorAll('.hl-lic').forEach((b) => b.classList.toggle('active', b.dataset.lic === license));
     applyLicenseNote(); applyMode();
     document.querySelectorAll('.hl-orient').forEach((b) => b.classList.toggle('active', b.dataset.o === orient));
+    document.querySelectorAll('.hl-rf').forEach((b) => b.classList.toggle('active', b.dataset.rf === reframeMode));
+    applyReframeRow();
     count = s.count || 3; sec = s.sec || 30; query = s.query || ''; pageToken = s.pageToken || ''; loadedCount = s.loadedCount || 0;
     commentary = s.commentary || 0; voice = s.voice || '';
     picked = s.picked || null;
@@ -548,8 +553,12 @@
     } catch {}
   })();
   document.querySelectorAll('.hl-orient').forEach((b) => b.addEventListener('click', () => {
-    document.querySelectorAll('.hl-orient').forEach((x) => x.classList.remove('active')); b.classList.add('active'); orient = b.dataset.o; saveState();
+    document.querySelectorAll('.hl-orient').forEach((x) => x.classList.remove('active')); b.classList.add('active'); orient = b.dataset.o; applyReframeRow(); saveState();
   }));
+  document.querySelectorAll('.hl-rf').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-rf').forEach((x) => x.classList.remove('active')); b.classList.add('active'); reframeMode = b.dataset.rf; saveState();
+  }));
+  applyReframeRow();
   // ── 유튜브 쿠키 등록(봇차단 뚫기) ──
   async function refreshCookieStatus() {
     try { const d = await (await fetch('/api/youtube-cookies')).json();
@@ -618,7 +627,7 @@
     addLog(`• 라이선스: ${picked.isCc !== false ? '재사용 허가(CC)' : '표준 라이선스(권한 확인 필요)'}`);
     addLog(`• 원본 영상: ${picked.title}`);
     addLog(`• 원본 길이: ${fmtDur(picked.durationSec)} → 클립 ${sec}초짜리`);
-    addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}`);
+    addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}${orient === 'portrait' ? ' · ' + (reframeMode === 'letterbox' ? '전체 보존(블러)' : '인물 꽉채움') : ''}`);
     addLog(`• 만들 편수: ${count}편`);
     addLog(`• 해설: ${commentary ? 'AI 해설 입힘 (' + ($('hl-voice')?.selectedOptions[0]?.textContent || voice) + ')' : '원본 그대로'}`);
     // 예상 소요 — 편수·한 편 길이 기준 러프 추정(렌더가 대부분이라 길이·편수에 비례). 서버 상황 따라 달라짐.
@@ -628,7 +637,7 @@
     addLog(`• 예상 소요: ${estTotalText} (서버 상황 따라 달라져요 · 길이·편수 줄이면 빨라짐)`);
     addLog('────────────────────────────');
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
-    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, commentary: !!commentary, voice, isCc: picked.isCc !== false};
+    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, commentary: !!commentary, voice, isCc: picked.isCc !== false};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });
