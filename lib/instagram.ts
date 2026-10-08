@@ -10,6 +10,30 @@ const DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data')
 const FILE = path.join(DATA_DIR, 'instagram.json');
 const API = 'v21.0';
 
+// media_publish 재시도 — 컨테이너가 FINISHED여도 인스타가 간헐적으로 "미디어 준비 안됨"(code 9007 등)을
+//   내고 잠시 뒤 재시도하면 성공한다(유튜브엔 없는 인스타 특유 현상 — 테리: 재시도하면 됨). 최대 5회·4초 간격.
+async function publishWithRetry(base: string, igUserId: string, creationId: string, token: string, log?: (m: string) => void): Promise<any> {
+  let last = '';
+  for (let a = 0; a < 5; a++) {
+    if (a > 0) { await new Promise((r) => setTimeout(r, 4000)); log?.(`[인스타] 게시 재시도 ${a + 1}/5…`); }
+    try {
+      const pub = await fetch(`${base}/${API}/${igUserId}/media_publish`, {
+        method: 'POST', body: new URLSearchParams({creation_id: creationId, access_token: token}),
+      });
+      const pd: any = await pub.json();
+      if (pub.ok && pd.id) return pd;
+      const e = pd?.error || {};
+      last = [e.message, e.error_subcode && ('subcode ' + e.error_subcode)].filter(Boolean).join(' | ') || JSON.stringify(pd).slice(0, 200);
+      // 영구 에러(권한·토큰 만료)면 재시도 무의미 → 즉시 중단. 그 외(준비안됨·일시)는 재시도.
+      if (/OAuth|permission|토큰|권한|expired|190|again later is not/i.test(last)) throw new Error('게시 실패: ' + last);
+    } catch (e: any) {
+      last = e?.message || String(e);
+      if (/^게시 실패:/.test(last)) throw e;
+    }
+  }
+  throw new Error('게시 실패(재시도 소진, 잠시 후 다시): ' + last);
+}
+
 export type InstagramConfig = {
   igUserId?: string; // 인스타 비즈니스/크리에이터 계정 ID(숫자)
   accessToken?: string; // 긴 수명 액세스 토큰(instagram_content_publish 권한)
@@ -124,24 +148,26 @@ export async function publishVideo(
   const creationId = cd.id;
 
   // 2) 영상 처리 대기(릴스는 인코딩 시간 필요). status_code=FINISHED까지 폴링(최대 5분).
+  //   ★일시적 네트워크/JSON 에러엔 안 죽고 계속 폴링(간헐 실패 방지).
   log?.('[인스타] 영상 처리 대기 중… (릴스 인코딩)');
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 5000));
-    const sr = await fetch(`${base}/${API}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
-    const sd: any = await sr.json();
-    if (sd.status_code === 'FINISHED') break;
-    if (sd.status_code === 'ERROR') throw new Error('인스타 영상 처리 실패: ' + (sd.status || ''));
-    if (i % 4 === 0) log?.(`[인스타] 처리 중… (${sd.status_code || '대기'})`);
+    try {
+      const sr = await fetch(`${base}/${API}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+      const sd: any = await sr.json();
+      if (sd.status_code === 'FINISHED') break;
+      if (sd.status_code === 'ERROR') throw new Error('인스타 영상 처리 실패: ' + (sd.status || ''));
+      if (i % 4 === 0) log?.(`[인스타] 처리 중… (${sd.status_code || '대기'})`);
+    } catch (e: any) {
+      if (/처리 실패/.test(e?.message || '')) throw e; // 진짜 ERROR는 중단
+      if (i % 4 === 0) log?.('[인스타] 상태 확인 일시 오류 — 재시도');
+    }
     if (i === 59) throw new Error('인스타 영상 처리가 너무 오래 걸립니다. 잠시 후 다시 시도하세요.');
   }
 
-  // 3) 게시.
+  // 3) 게시 — ★FINISHED 직후에도 간헐적으로 "아직 준비 안됨"(code 9007 등)이 뜸 → 재시도+백오프.
   log?.('[인스타] 게시 중…');
-  const pub = await fetch(`${base}/${API}/${c.igUserId}/media_publish`, {
-    method: 'POST', body: new URLSearchParams({creation_id: creationId, access_token: token}),
-  });
-  const pd: any = await pub.json();
-  if (!pub.ok || !pd.id) throw new Error('게시 실패: ' + (pd?.error?.message || JSON.stringify(pd).slice(0, 200)));
+  const pd: any = await publishWithRetry(base, c.igUserId, creationId, token, log);
 
   // 4) 퍼머링크 조회(실패해도 게시는 성공).
   let permalink = '';
@@ -187,22 +213,20 @@ export async function publishCarousel(
   const pd: any = await pr.json();
   if (!pr.ok || !pd.id) throw new Error('캐러셀 묶기 실패: ' + (pd?.error?.message || JSON.stringify(pd).slice(0, 160)));
 
-  // 2.5) 부모 컨테이너 처리 대기(FINISHED).
+  // 2.5) 부모 컨테이너 처리 대기(FINISHED). 일시 오류엔 안 죽고 계속.
   for (let i = 0; i < 24; i++) {
     await new Promise((r) => setTimeout(r, 3000));
-    const sr = await fetch(`${base}/${API}/${pd.id}?fields=status_code&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
-    const sd: any = await sr.json();
-    if (sd.status_code === 'FINISHED') break;
-    if (sd.status_code === 'ERROR') throw new Error('캐러셀 처리 실패(인스타).');
+    try {
+      const sr = await fetch(`${base}/${API}/${pd.id}?fields=status_code&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+      const sd: any = await sr.json();
+      if (sd.status_code === 'FINISHED') break;
+      if (sd.status_code === 'ERROR') throw new Error('캐러셀 처리 실패(인스타).');
+    } catch (e: any) { if (/처리 실패/.test(e?.message || '')) throw e; }
   }
 
-  // 3) 게시.
+  // 3) 게시 — 간헐 "준비 안됨" 재시도+백오프.
   log?.('[인스타] 게시 중…');
-  const pub = await fetch(`${base}/${API}/${c.igUserId}/media_publish`, {
-    method: 'POST', body: new URLSearchParams({creation_id: pd.id, access_token: token}),
-  });
-  const pubd: any = await pub.json();
-  if (!pub.ok || !pubd.id) throw new Error('게시 실패: ' + (pubd?.error?.message || JSON.stringify(pubd).slice(0, 160)));
+  const pubd: any = await publishWithRetry(base, c.igUserId, pd.id, token, log);
 
   let permalink = '';
   try {

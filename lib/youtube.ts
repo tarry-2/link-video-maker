@@ -350,32 +350,40 @@ export async function uploadVideo(filePath: string, meta: UploadMeta, thumbPath?
     snippet: {title: meta.title, description: meta.description, tags: meta.tags, categoryId: '22'},
     status: {privacyStatus: meta.privacy, selfDeclaredMadeForKids: false},
   };
-  // 1단계: resumable 업로드 세션 시작
-  const init = await fetch(
-    'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + token,
-        'Content-Type': 'application/json; charset=UTF-8',
-        'X-Upload-Content-Type': 'video/mp4',
-        'X-Upload-Content-Length': String(stat.size),
-      },
-      body: JSON.stringify(snippet),
-    },
-  );
-  if (!init.ok) throw new Error('업로드 세션 시작 실패: ' + (await init.text()).slice(0, 300));
-  const uploadUrl = init.headers.get('location');
-  if (!uploadUrl) throw new Error('업로드 URL을 받지 못했습니다.');
-  // 2단계: 파일 본문 업로드(한 번에 — 쇼츠/짧은 영상이라 크기 작음)
   const buf = fs.readFileSync(filePath);
-  const up = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: {'Content-Type': 'video/mp4', 'Content-Length': String(stat.size)},
-    body: buf,
-  });
-  const d: any = await up.json();
-  if (!up.ok || !d.id) throw new Error('업로드 실패: ' + (d.error?.message || JSON.stringify(d)).slice(0, 300));
+  // ★유튜브도 간헐적으로 업로드가 실패(일시 5xx·네트워크·백엔드 지연) — 테리: 재시도하면 됨.
+  //   init+PUT을 최대 3회 재시도(2.5·5초 백오프). 영구 에러(권한·쿼터)는 즉시 중단.
+  let d: any = null, last = '';
+  for (let a = 0; a < 3; a++) {
+    if (a > 0) await new Promise((r) => setTimeout(r, 2500 * a));
+    try {
+      const init = await fetch(
+        'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
+        {method: 'POST', headers: {
+          Authorization: 'Bearer ' + token, 'Content-Type': 'application/json; charset=UTF-8',
+          'X-Upload-Content-Type': 'video/mp4', 'X-Upload-Content-Length': String(stat.size),
+        }, body: JSON.stringify(snippet)},
+      );
+      if (!init.ok) {
+        last = '세션 시작 실패: ' + (await init.text()).slice(0, 300);
+        if (init.status < 500 && init.status !== 429) throw new Error(last); // 4xx(권한·쿼터)는 재시도 무의미
+        continue;
+      }
+      const uploadUrl = init.headers.get('location');
+      if (!uploadUrl) { last = '업로드 URL을 받지 못했습니다.'; continue; }
+      const up = await fetch(uploadUrl, {
+        method: 'PUT', headers: {'Content-Type': 'video/mp4', 'Content-Length': String(stat.size)}, body: buf,
+      });
+      const r: any = await up.json();
+      if (up.ok && r.id) { d = r; break; }
+      last = r.error?.message || JSON.stringify(r).slice(0, 300);
+      if (up.status && up.status < 500 && up.status !== 429) throw new Error('업로드 실패: ' + last);
+    } catch (e: any) {
+      last = e?.message || String(e);
+      if (/세션 시작 실패|업로드 실패/.test(last) && !/5\d\d|429|network|fetch failed|ECONN|timeout/i.test(last)) throw e;
+    }
+  }
+  if (!d || !d.id) throw new Error('업로드 실패(재시도 소진, 잠시 후 다시): ' + last);
   // 3단계: 커스텀 썸네일 지정(있으면). 실패해도 업로드 자체는 성공으로 둔다.
   if (thumbPath) {
     try {
