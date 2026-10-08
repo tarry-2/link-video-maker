@@ -613,23 +613,27 @@
   // ── 📼 아카이브 — 방송사 공식 공개 아카이브(옛날티비/KBS)에서 주제로 영상을 가져온다. ──
   //   검색 결과를 기존 하이라이트 카드 형식으로 매핑 → 미리보기·선택·제작(기존 엔진)을 그대로 재사용.
   let archiveSrc = 'kbs';
-  const ARC_CATS = [
-    {ko:'옛날 예능', q:'예능'},
-    {ko:'드라마', q:'드라마'},
-    {ko:'7080 추억', q:'7080'},
-    {ko:'만화·둘리', q:'만화'},
-    {ko:'가요·음악', q:'가요무대'},
-    {ko:'다큐', q:'다큐멘터리'},
-    {ko:'코미디', q:'코미디'},
-    {ko:'뉴스·시사', q:'뉴스'},
+  // 장르 / 주제 2그룹으로 분류(찾기 쉽게). 각 칩의 q는 KBS 아카이브 채널 검색어.
+  const ARC_GENRES = [
+    {ko:'드라마', q:'드라마'}, {ko:'예능', q:'예능'}, {ko:'코미디', q:'코미디'},
+    {ko:'영화', q:'영화'}, {ko:'만화·애니', q:'만화영화'}, {ko:'가요·음악', q:'가요무대'},
+    {ko:'토크쇼', q:'토크쇼'}, {ko:'드라마게임', q:'드라마게임'}, {ko:'시트콤', q:'시트콤'},
   ];
-  function renderArcCats() {
-    const box = $('hl-arc-cats'); if (!box) return;
-    box.innerHTML = ARC_CATS.map((c) => `<button type="button" class="hl-cat hl-arc-cat" data-q="${esc(c.q)}" data-ko="${esc(c.ko)}">${c.ko}</button>`).join('');
-    box.querySelectorAll('.hl-arc-cat').forEach((b) => b.addEventListener('click', () => {
-      box.querySelectorAll('.hl-arc-cat').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+  const ARC_TOPICS = [
+    {ko:'7080 추억', q:'7080'}, {ko:'다큐멘터리', q:'다큐멘터리'}, {ko:'역사', q:'역사'},
+    {ko:'시사·뉴스', q:'뉴스'}, {ko:'스포츠', q:'스포츠'}, {ko:'동물·자연', q:'동물의 왕국'},
+    {ko:'요리·음식', q:'요리'}, {ko:'여행', q:'여행'}, {ko:'교양·지식', q:'교양'},
+    {ko:'어린이', q:'어린이'}, {ko:'연예·스타', q:'스타'}, {ko:'명장면', q:'명장면'},
+  ];
+  let arcQuery = '', arcOffset = 0, arcAll = [], arcSort = 'view', arcHasMore = false, arcLoading = false;
+  function renderArcChips() {
+    const mk = (c) => `<button type="button" class="hl-cat hl-arc-cat" data-q="${esc(c.q)}" data-ko="${esc(c.ko)}">${c.ko}</button>`;
+    if ($('hl-arc-genres')) $('hl-arc-genres').innerHTML = ARC_GENRES.map(mk).join('');
+    if ($('hl-arc-topics')) $('hl-arc-topics').innerHTML = ARC_TOPICS.map(mk).join('');
+    document.querySelectorAll('.hl-arc-cat').forEach((b) => b.addEventListener('click', () => {
+      document.querySelectorAll('.hl-arc-cat').forEach((x) => x.classList.remove('active')); b.classList.add('active');
       cat = b.dataset.ko; if ($('hl-arc-query')) $('hl-arc-query').value = '';
-      addLog(`📼 아카이브 주제: ${cat} (옛날티비)`);
+      addLog(`📼 아카이브: ${cat} (옛날티비)`);
       archiveSearch(b.dataset.q);
     }));
   }
@@ -637,34 +641,70 @@
   function arcToCard(v) {
     return {videoId: v.id, title: v.title, channel: '옛날티비', durationSec: v.duration || 0, thumb: v.thumbnail, views: v.viewCount || 0, isCc: false, risk: 'archive'};
   }
-  async function archiveSearch(forcedQuery) {
+  function sortArc(list) {
+    const a = list.slice();
+    if (arcSort === 'long') a.sort((x, y) => (y.durationSec || 0) - (x.durationSec || 0));
+    else if (arcSort === 'short') a.sort((x, y) => (x.durationSec || 0) - (y.durationSec || 0));
+    else a.sort((x, y) => (y.views || 0) - (x.views || 0)); // 기본=조회수순
+    return a;
+  }
+  function renderArcMore() {
+    $('hl-arc-more')?.remove();
+    if (!arcHasMore) return;
+    const more = document.createElement('button');
+    more.id = 'hl-arc-more'; more.type = 'button'; more.className = 'ghost-btn'; more.style.cssText = 'width:100%;margin-top:10px';
+    more.textContent = `▼ 더 보기 (지금 ${arcAll.length}개)`;
+    more.onclick = () => { more.disabled = true; more.textContent = '불러오는 중…'; archiveSearch(arcQuery, true); };
+    $('hl-results').parentNode.insertBefore(more, $('hl-results').nextSibling);
+  }
+  function renderArc() {
+    const box = $('hl-results'); if (!box) return;
+    box.innerHTML = sortArc(arcAll).map(cardHtml).join('');
+    wireCards(box);
+    if (picked) document.querySelectorAll('.hl-card').forEach((b) => b.classList.toggle('active', b.dataset.id === picked.videoId));
+    renderArcMore();
+  }
+  async function archiveSearch(forcedQuery, append) {
     const box = $('hl-results'), st = $('hl-search-state');
-    const q = (forcedQuery != null ? forcedQuery : ($('hl-arc-query')?.value || '')).trim();
-    if (!q) { alert('주제를 고르거나 검색어를 입력하세요.'); return; }
-    query = q; pageToken = ''; loadedCount = 0;
-    box.innerHTML = ''; picked = null; $('hl-picked').textContent = ''; renderCountSeg();
-    $('hl-sort-row')?.classList.add('hidden'); // 아카이브는 조회수/최신 정렬 없음
-    st.textContent = '옛날티비(KBS) 아카이브에서 찾는 중…';
+    if (arcLoading) return;
+    if (!append) {
+      const q = (forcedQuery != null ? forcedQuery : ($('hl-arc-query')?.value || '')).trim();
+      if (!q) { alert('장르·주제를 고르거나 검색어를 입력하세요.'); return; }
+      arcQuery = q; arcOffset = 0; arcAll = []; picked = null; $('hl-picked').textContent = '';
+      box.innerHTML = ''; $('hl-arc-more')?.remove(); renderCountSeg();
+      $('hl-sort-row')?.classList.add('hidden');
+      st.textContent = '옛날티비(KBS) 아카이브에서 찾는 중…';
+    } else { st.textContent = '더 불러오는 중…'; $('hl-arc-more')?.remove(); }
+    arcLoading = true; query = arcQuery; // 제작 로그/상태용
     try {
-      const d = await (await fetch(`/api/archive-search?src=${encodeURIComponent(archiveSrc)}&q=${encodeURIComponent(q)}`)).json();
+      const d = await (await fetch(`/api/archive-search?src=${encodeURIComponent(archiveSrc)}&q=${encodeURIComponent(arcQuery)}&offset=${arcOffset}`)).json();
       if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
       const vids = (d.videos || []).map(arcToCard);
-      loadedCount = vids.length;
-      if (!vids.length) { st.textContent = '결과가 없어요. 다른 주제나 검색어로 시도해보세요.'; return; }
-      box.insertAdjacentHTML('beforeend', vids.map(cardHtml).join(''));
-      wireCards(box);
-      st.textContent = `${loadedCount}개 표시 중 · 하나 고르세요`;
-      addLog(`📼 아카이브 "${q}" 검색 완료 — ${loadedCount}개`);
+      const seen = new Set(arcAll.map((x) => x.videoId));
+      const fresh = vids.filter((v) => !seen.has(v.videoId)); // 중복 제거(더 보기 시)
+      arcAll = arcAll.concat(fresh);
+      arcOffset = d.nextOffset || (arcOffset + vids.length);
+      arcHasMore = !!d.hasMore && fresh.length > 0;
+      if (!arcAll.length) { st.textContent = '결과가 없어요. 다른 장르·검색어로 시도해보세요.'; return; }
+      $('hl-arc-sort-row')?.classList.remove('hidden');
+      renderArc();
+      st.textContent = `${arcAll.length}개 표시 중${arcHasMore ? ' — 더 있어요' : ' (끝)'} · 하나 고르세요`;
+      addLog(append ? `➕ 아카이브 ${fresh.length}개 더 불러옴 (총 ${arcAll.length}개)` : `📼 아카이브 "${arcQuery}" — ${arcAll.length}개`);
       saveState();
     } catch { st.textContent = '아카이브를 불러오지 못했어요. 잠시 후 다시 시도하세요.'; }
+    finally { arcLoading = false; }
   }
-  renderArcCats();
+  renderArcChips();
   document.querySelectorAll('.hl-arc-src').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-arc-src').forEach((x) => x.classList.remove('active')); b.classList.add('active');
     archiveSrc = b.dataset.src || 'kbs';
   }));
   $('hl-arc-search')?.addEventListener('click', () => { document.querySelector('.hl-arc-cat.active')?.classList.remove('active'); archiveSearch(); });
   $('hl-arc-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.querySelector('.hl-arc-cat.active')?.classList.remove('active'); archiveSearch(); } });
+  document.querySelectorAll('.hl-arc-sort').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-arc-sort').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+    arcSort = b.dataset.sort || 'view'; if (arcAll.length) renderArc();
+  }));
 
   // ── 내 영상 올리기 — 업로드 → picked(uploadId) 설정 → 바로 '만들기' 가능(저작권 자유) ──
   $('hl-file-pick')?.addEventListener('click', () => $('hl-file')?.click());
@@ -950,18 +990,26 @@
     showStopped();
   });
 
-  // 진행 중이던 하이라이트 작업만 자동 복구(이미 끝났거나 영상 만들기 작업이면 복구 안 함 → 화면 안 막힘).
-  (async () => {
-    let id = null; try { id = localStorage.getItem('onvideo-hljob'); } catch {}
-    if (!id) return;
+  // ── 실시간 기기간 연동 ──
+  // 어느 기기(PC·모바일·태블릿)에서 하이라이트 제작을 시작하든, 다른 기기도 지금 진행 중인 그 작업에
+  // 자동으로 붙어 로그·완성본이 실시간으로 보인다. (예전엔 'localStorage에 내 id 있을 때 1회만' 확인해서
+  // 다른 기기엔 연동이 안 됐다 — 그 조건을 없애고, 진행 중이면 누구든 attach + 유휴 중 주기 폴링.)
+  async function syncCurrentJob() {
+    if (curJobId) return; // 이미 어떤 작업에 붙어 진행 보고 있으면 건드리지 않음
     try {
-      const d = await (await fetch('/api/jobs/current')).json();
-      if (d.id === id) {
-        // 경과·예상시간 복원(새로고침해도 안 사라지게).
+      const d = await (await fetch('/api/jobs/current', {cache: 'no-store'})).json();
+      if (d && d.id && (!d.kind || d.kind === 'highlight')) {
+        // 다른 기기(또는 새로고침)에서 돌고 있는 하이라이트 작업 — 바로 붙어 실시간 표시.
         try { const mt = JSON.parse(localStorage.getItem('onvideo-hljob-meta') || 'null');
           if (mt) { if (mt.startTs) startTs = mt.startTs; estTotalText = mt.estTotalText || ''; } } catch {}
-        attachProgress(id); // 지금도 진행 중인 그 작업일 때만
-      } else { try { localStorage.removeItem('onvideo-hljob'); localStorage.removeItem('onvideo-hljob-meta'); } catch {} } // 끝난 작업이면 흔적 지움
+        addLog('🔗 진행 중인 제작에 연결했어요(다른 기기에서 시작한 작업도 여기서 실시간으로 보여요).', 'done');
+        attachProgress(d.id);
+      } else if (d && d.done && d.done.kind === 'highlight' && !curJobId && !resultClips.length) {
+        // 방금(30분 내) 다른 기기에서 끝난 하이라이트 완성본을 이 기기에서도 바로 보이게 + 내역 갱신.
+        loadHistory();
+      }
     } catch {}
-  })();
+  }
+  syncCurrentJob();                          // 진입 즉시 1회
+  setInterval(syncCurrentJob, 4000);         // 유휴 중 4초마다 — 다른 기기서 시작한 작업을 실시간 포착
 })();

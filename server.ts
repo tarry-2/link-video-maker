@@ -934,12 +934,16 @@ const server = http.createServer(async (req, res) => {
     };
     const src = u.searchParams.get('src') || 'kbs';
     const q = (u.searchParams.get('q') || '').trim();
+    const offset = Math.max(0, Math.min(5000, Number(u.searchParams.get('offset')) || 0)); // 더 보기 페이지네이션
+    const batch = 60; // 한 번에 60개(flat 긁기는 빨라서 체감 즉시)
     const srcInfo = ARCHIVE_CHANNELS[src];
     if (!srcInfo) return json(res, 400, {error: '알 수 없는 아카이브 소스입니다.'});
     if (!q) return json(res, 400, {error: '주제를 입력하세요.'});
     try {
-      const videos = await searchArchiveChannel(srcInfo.channel, q, 30, () => {});
-      return json(res, 200, {videos, source: srcInfo.label});
+      const videos = await searchArchiveChannel(srcInfo.channel, q, batch, () => {}, offset);
+      // 받은 개수가 요청(batch)만큼이면 더 있을 가능성 → hasMore + nextOffset.
+      const hasMore = videos.length >= batch;
+      return json(res, 200, {videos, source: srcInfo.label, offset, nextOffset: offset + videos.length, hasMore});
     } catch (e: any) {
       return json(res, 502, {error: e?.message || '아카이브 긁기 실패'});
     }
@@ -1554,7 +1558,8 @@ JSON만: {"hookTop":"...","hookAccent":"..."}`;
   if (p === '/api/jobs/current' && req.method === 'GET') {
     const j = currentGenJob ? jobs.get(currentGenJob) : undefined;
     if (!j) return json(res, 200, {id: null});
-    if (!j.done) return json(res, 200, {id: currentGenJob});
+    // ★진행 중이면 어느 기기든 그 작업에 붙을 수 있게 kind도 함께 넘긴다(실시간 기기간 연동의 핵심).
+    if (!j.done) return json(res, 200, {id: currentGenJob, kind: j.kind});
     // ★완료됐으면 최근(30분 내) 결과를 다른 기기도 바로 볼 수 있게 함께 넘긴다(PC↔모바일 완성본 연동).
     const fresh = j.doneAt && Date.now() - j.doneAt < 30 * 60 * 1000;
     return json(res, 200, {
