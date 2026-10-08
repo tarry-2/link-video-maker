@@ -9,6 +9,9 @@ import {getHlTemplate} from './highlight-templates';
 
 const blackFont = 'Black Han Sans';
 loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')});
+// 이모지 폰트(컬러) — 한글 폰트엔 이모지 글리프가 없어 □□로 깨지므로 폴백으로 같이 로드.
+loadFont({family: 'Noto Color Emoji', url: staticFile('fonts/NotoColorEmoji.ttf')});
+const EMOJI = ', "Noto Color Emoji"'; // 모든 후킹 글자 fontFamily 끝에 붙여 이모지 폴백
 loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'});
 loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')});
 loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'});
@@ -55,10 +58,10 @@ export const HookStill: React.FC<HookStillData> = ({hookTop, hookAccent, templat
     <AbsoluteFill style={{backgroundColor: 'transparent'}}>
       <div style={{position: 'absolute', top: L.top, left: 0, right: 0, padding: L.pad, display: 'flex', justifyContent: 'center'}}>
         <div style={container}>
-          {hookTop && <div style={{fontFamily: T.headFont, fontSize: L.fsTop, color: T.textColor,
+          {hookTop && <div style={{fontFamily: T.headFont + EMOJI, fontSize: L.fsTop, color: T.textColor,
             lineHeight: 1.08, textShadow: ol ? outline(ol) : 'none', letterSpacing: -1,
             wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookTop}</div>}
-          {hookAccent && <div style={{fontFamily: T.headFont, fontSize: L.fsAcc, color: T.accentColor,
+          {hookAccent && <div style={{fontFamily: T.headFont + EMOJI, fontSize: L.fsAcc, color: T.accentColor,
             lineHeight: 1.12, marginTop: 4,
             textShadow: lightBg ? 'none' : `0 3px 14px ${T.accentColor}66, ${outline(ol)}`,
             letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookAccent}</div>}

@@ -24,10 +24,21 @@ const DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data')
 const FPS = 30;
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 
+// 자막 폰트(Black Han Sans 등)가 못 그리는 이모지·기호(🧙⭐▶￭ 등)를 제거한다 → 안 지우면 후킹에 □□(두부)로 깨진다.
+//   한글·영문·숫자·공백·흔한 문장부호만 남긴다. (KBS 원제목에 이모지가 박혀 있는 경우가 많음 — 테리 실측)
+export function stripUnrenderable(s: string): string {
+  return (s || '')
+    // 이모지/기호/장식 유니코드 블록 제거(그려지지 않는 것들).
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{2000}-\u{206F}\u{25A0}-\u{25FF}\u{2300}-\u{23FF}]/gu, '')
+    .replace(/[�‍]/g, '') // 치환문자·ZWJ
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 // 제목을 '단어/구분자 경계'에서 깔끔하게 자른다(글자 수로 뚝 자르면 "...1화 둘"처럼 단어 중간이 끊긴다).
 //   구분자(|·-·[]()·화/회/편) 앞에서 끊고, 없으면 공백 단위로. 그래도 길면 글자 수 폴백.
 function cleanTitle(raw: string, max = 20): string {
-  const t = (raw || '').trim();
+  const t = stripUnrenderable(raw || '').trim();
   if (t.length <= max) return t;
   // 1) 구분자(| - – — [ ( · :) 기준으로 앞 조각이 적당하면 그걸 쓴다.
   const bySep = t.split(/\s*[|\-–—\[\]()·:]\s*/).map((s) => s.trim()).filter(Boolean);

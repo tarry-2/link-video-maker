@@ -276,17 +276,30 @@ async function hooksFromTitle(geminiKeys: string[], title: string, n: number, lo
 - '제목 요약'이 아니라 '궁금증 폭탄'으로. 공식: 정보격차("아무도 모르는 ○○")·충격반전("설마 했는데")·숫자·경고("절대")·질문("왜 ○○?").
 - ${n}개를 서로 '다른 각도'로(같은 영상의 다른 장면이라고 가정). 밋밋한 제목 반복 금지.
 - hookTop=한국어 12~16자(자극적, 열린 고리), hookAccent=가장 센 단어 1~2개(6자내), score=이 후킹이 터질 확률 55~90 정수(세면 높게).
+- emoji=그 후킹 내용에 '딱 맞는' 이모지 1개(충격→😱, 불·대결→🔥, 경고·금지→⚠️, 돈→💰, 반전·미스터리→🤯, 슬픔→😭, 웃김→😂, 사랑→❤️, 승리→🏆, 공포→👻). 억지로 넣지 말고 안 어울리면 ""로.
 
-JSON만: {"hooks":[{"hookTop":"...","hookAccent":"...","score":72}]}`;
+JSON만: {"hooks":[{"hookTop":"...","hookAccent":"...","emoji":"😱","score":72}]}`;
   try {
     const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 900, temperature: 0.95, log});
     const j = JSON.parse(raw.replace(/```json|```/g, '').trim());
-    return (j.hooks || []).slice(0, n).map((h: any) => ({
-      hookTop: String(h.hookTop || '').slice(0, 24),
-      hookAccent: String(h.hookAccent || '').slice(0, 12),
-      score: Math.max(0, Math.min(100, Math.round(Number(h.score) || 65))),
-    })).filter((h: any) => h.hookTop);
+    return (j.hooks || []).slice(0, n).map((h: any) => {
+      const emoji = pickEmoji(h.emoji);
+      return {
+        hookTop: (emoji ? emoji + ' ' : '') + String(h.hookTop || '').slice(0, 24),
+        hookAccent: String(h.hookAccent || '').slice(0, 12),
+        score: Math.max(0, Math.min(100, Math.round(Number(h.score) || 65))),
+      };
+    }).filter((h: any) => h.hookTop);
   } catch { return []; }
+}
+
+// AI가 준 이모지가 '진짜 이모지 1개'일 때만 통과(엉뚱한 텍스트·여러 개 방지). 아니면 '' .
+function pickEmoji(raw: any): string {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  // 이모지 유니코드 블록에 속하는 문자만 추출, 첫 1개.
+  const m = s.match(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}\u{FE0F}\u{2764}]/u);
+  return m ? m[0] : '';
 }
 
 async function pickHighlights(geminiKeys: string[], subText: string, durationSec: number, count: number, clipSec: number, log: (m: string) => void, title = ''): Promise<Highlight[]> {
@@ -328,25 +341,29 @@ async function pickHighlights(geminiKeys: string[], subText: string, durationSec
 - start/end: 초(정수), end-start ≈ ${clipSec}초(±10초).
 - hookTop: 상단 후킹(한국어 12~16자, 위 공식으로 자극적으로. 궁금증을 남겨라).
 - hookAccent: 가장 강한 단어 1~2개(한국어 6자 내, 색으로 강조됨 — 제일 충격적인 단어).
+- emoji: 그 구간 내용에 '딱 맞는' 이모지 1개(충격→😱, 불·대결→🔥, 경고·금지→⚠️, 돈→💰, 반전→🤯, 슬픔→😭, 웃김→😂, 사랑→❤️, 승리→🏆, 공포→👻). 안 어울리면 "".
 - reason: 왜 좋은지 15자 내.
 - score: 이 구간이 쇼츠로 "터질" 확률 0~100 정수(후킹 세기·감정·반전·정보가치로 냉정하게 차등. 80+는 진짜 강한 것만, 평범하면 50~65).
 
 자막:
 ${subText}
 
-JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hookAccent":"...","reason":"...","score":78}]}`;
+JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hookAccent":"...","emoji":"😱","reason":"...","score":78}]}`;
   let hs: Highlight[] = [];
   try {
     const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 2048, temperature: 0.7, log});
     const j = JSON.parse(raw.replace(/```json|```/g, '').trim());
-    hs = (j.highlights || []).slice(0, n).map((h: any) => ({
-      start: Math.max(0, Math.floor(h.start || 0)),
-      end: Math.min(durationSec, Math.floor(h.end || (h.start + clipSec))),
-      hookTop: String(h.hookTop || '').slice(0, 24),
-      hookAccent: String(h.hookAccent || '').slice(0, 12),
-      reason: String(h.reason || '').slice(0, 24),
-      score: Math.max(0, Math.min(100, Math.round(Number(h.score) || 65))),
-    })).filter((h: Highlight) => h.end > h.start + 2);
+    hs = (j.highlights || []).slice(0, n).map((h: any) => {
+      const emoji = pickEmoji(h.emoji); // 어울리는 이모지를 후킹 앞에(컬러 렌더됨)
+      return {
+        start: Math.max(0, Math.floor(h.start || 0)),
+        end: Math.min(durationSec, Math.floor(h.end || (h.start + clipSec))),
+        hookTop: (emoji ? emoji + ' ' : '') + String(h.hookTop || '').slice(0, 24),
+        hookAccent: String(h.hookAccent || '').slice(0, 12),
+        reason: String(h.reason || '').slice(0, 24),
+        score: Math.max(0, Math.min(100, Math.round(Number(h.score) || 65))),
+      };
+    }).filter((h: Highlight) => h.end > h.start + 2);
   } catch (e: any) {
     log('[하이라이트] 자막 분석 실패 → 순서대로 나눕니다: ' + (e?.message || '').slice(0, 80));
   }

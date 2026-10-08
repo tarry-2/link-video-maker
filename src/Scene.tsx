@@ -20,6 +20,7 @@ const blackFont = 'Black Han Sans';
 const notoFont = 'Noto Sans KR';
 loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')});
 loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'});
+loadFont({family: 'Noto Color Emoji', url: staticFile('fonts/NotoColorEmoji.ttf')}); // 후킹 이모지 컬러 렌더
 // 하이라이트 템플릿용 나머지 폰트(Card.tsx와 동일 9종). 템플릿이 고른 것만 실제 쓰임.
 loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'});
 loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')});
@@ -162,10 +163,10 @@ export const Scene: React.FC<SceneData> = ({
             opacity: hookIn,
           }}>
             <div style={hookContainerStyle}>
-              {hookTop && <div style={{fontFamily: T.headFont, fontSize: L.fsHookTop, color: T.textColor,
+              {hookTop && <div style={{fontFamily: T.headFont + ', "Noto Color Emoji"', fontSize: L.fsHookTop, color: T.textColor,
                 lineHeight: 1.08, textShadow: olTop ? outline(olTop) : 'none', letterSpacing: -1,
                 wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookTop}</div>}
-              {hookAccent && <div style={{fontFamily: T.headFont, fontSize: L.fsHookAccent, color: T.accentColor,
+              {hookAccent && <div style={{fontFamily: T.headFont + ', "Noto Color Emoji"', fontSize: L.fsHookAccent, color: T.accentColor,
                 lineHeight: 1.12, marginTop: 4,
                 textShadow: lightBg ? 'none' : `0 3px 14px ${T.accentColor}66, ${outline(olTop)}`,
                 letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookAccent}</div>}
