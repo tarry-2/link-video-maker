@@ -367,9 +367,74 @@ async function cutSectionLocal(src: string, dir: string, idx: number, start: num
 }
 
 // 전체: videoId(또는 로컬 업로드 파일) → N개 하이라이트 클립 생성. dir는 작업 폴더.
+// ── 무음·필러 자동 제거(silence removal) ──
+// 조용한(침묵) 구간을 잘라내 템포를 올린다(시청 유지율↑, OpusClip/Submagic의 핵심 기능).
+// 원본 오디오에서 silencedetect로 무음 구간을 찾고, 소리 있는 구간만 trim→concat(A/V 동기 유지).
+// 실패/과도제거/무음없음이면 원본을 그대로 돌려줘 무회귀(절대 깨지지 않게).
+async function tightenSilence(
+  input: string, dir: string, idx: number, log: (m: string) => void, cancelled?: () => boolean,
+): Promise<string> {
+  const dur = await durationOf(input);
+  if (!dur || dur < 6) return input; // 너무 짧으면 손대지 않음
+  // 1) 무음 구간 감지 — silencedetect는 stderr로 출력되므로 onLine으로 수집.
+  const sil: {start: number; end: number}[] = [];
+  let curStart: number | null = null;
+  const onLine = (l: string) => {
+    let m = /silence_start:\s*(-?[\d.]+)/.exec(l);
+    if (m) { curStart = Math.max(0, parseFloat(m[1])); return; }
+    m = /silence_end:\s*([\d.]+)/.exec(l);
+    if (m && curStart != null) { sil.push({start: curStart, end: parseFloat(m[1])}); curStart = null; }
+  };
+  try {
+    // noise=-30dB 이하가 0.6초 이상 지속되면 무음으로 본다.
+    await run(FFMPEG, ['-i', input, '-af', 'silencedetect=noise=-30dB:d=0.6', '-f', 'null', '-'], () => {}, 120000, onLine, cancelled);
+  } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; return input; }
+  if (!sil.length) { log('[무음제거] 자를 무음 구간이 없어요 — 원본 유지.'); return input; }
+  // 2) 유지할(소리 있는) 구간 = 전체 - 무음. 말이 잘리지 않게 양쪽에 0.12초 패딩.
+  const pad = 0.12;
+  const keep: {start: number; end: number}[] = [];
+  let cursor = 0;
+  for (const s of sil) {
+    const segEnd = Math.min(s.start + pad, dur);
+    if (segEnd - cursor > 0.1) keep.push({start: cursor, end: segEnd});
+    cursor = Math.max(cursor, s.end - pad);
+  }
+  if (dur - cursor > 0.1) keep.push({start: cursor, end: dur});
+  // 겹침 병합
+  const merged: {start: number; end: number}[] = [];
+  for (const k of keep.sort((a, b) => a.start - b.start)) {
+    const last = merged[merged.length - 1];
+    if (last && k.start <= last.end + 0.02) last.end = Math.max(last.end, k.end);
+    else merged.push({...k});
+  }
+  const keptDur = merged.reduce((a, k) => a + (k.end - k.start), 0);
+  // 3) 안전장치: 과도제거(70%↑=음악/배경음 오탐)·3초 미만·변화없음이면 원본 유지.
+  if (keptDur < 3 || keptDur < dur * 0.3) { log(`[무음제거] 제거량이 과해(${dur.toFixed(0)}s→${keptDur.toFixed(0)}s) 원본 유지.`); return input; }
+  if (merged.length === 1 && merged[0].start <= 0.05 && merged[0].end >= dur - 0.05) return input;
+  if (dur - keptDur < 0.5) return input; // 0.5초도 못 줄이면 의미 없음
+  // 4) filter_complex로 유지 구간만 trim→concat (A/V 동기).
+  const parts: string[] = [], labels: string[] = [];
+  merged.forEach((k, i) => {
+    parts.push(`[0:v]trim=start=${k.start.toFixed(3)}:end=${k.end.toFixed(3)},setpts=PTS-STARTPTS[v${i}]`);
+    parts.push(`[0:a]atrim=start=${k.start.toFixed(3)}:end=${k.end.toFixed(3)},asetpts=PTS-STARTPTS[a${i}]`);
+    labels.push(`[v${i}][a${i}]`);
+  });
+  const fc = parts.join(';') + ';' + labels.join('') + `concat=n=${merged.length}:v=1:a=1[v][a]`;
+  const out = path.join(dir, `tight-${idx}.mp4`);
+  try {
+    await run(FFMPEG, ['-y', '-i', input, '-filter_complex', fc, '-map', '[v]', '-map', '[a]',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out],
+      () => {}, 300000, undefined, cancelled);
+  } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; log('[무음제거] 처리 실패 — 원본 유지: ' + (e?.message || '').slice(0, 80)); return input; }
+  if (!fs.existsSync(out)) return input;
+  log(`[무음제거] 무음 ${sil.length}곳 제거 — ${dur.toFixed(0)}초 → ${keptDur.toFixed(0)}초 (${(dur - keptDur).toFixed(0)}초 단축, 템포 UP).`);
+  try { fs.rmSync(input, {force: true}); } catch {}
+  return out;
+}
+
 export async function extractHighlights(
   videoId: string, dir: string, geminiKeys: string[],
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; reframe?: 'track' | 'letterbox'; localFile?: string} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; reframe?: 'track' | 'letterbox'; localFile?: string; removeSilence?: boolean} = {},
 ): Promise<ClipResult[]> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -408,10 +473,12 @@ export async function extractHighlights(
     try {
       // 2) 구간 추출(본인 영상=로컬 컷 / 유튜브=프록시로 그 구간만 다운) → 3) 9:16/16:9 크롭.
       log(`[하이라이트] ${i + 1}/${highlights.length} 구간 ${isLocal ? '자르는' : '받는'} 중 (${h.start}s~${h.end}s)…`);
-      const raw = isLocal
+      let raw = isLocal
         ? await cutSectionLocal(opts.localFile!, dir, i, h.start, h.end, cancelled)
         : await downloadSection(videoId, dir, i, h.start, h.end, log, common, cancelled);
       stop();
+      // 무음 제거(선택) — 리프레임/크롭 전에 조용한 구간을 잘라 템포를 올린다. 클립이 짧아지므로 end를 실제 길이로 갱신.
+      if (opts.removeSilence) { log(`[하이라이트] ${i + 1}/${highlights.length} 무음 구간 정리…`); raw = await tightenSilence(raw, dir, i, log, cancelled); stop(); }
       const secDur = (await durationOf(raw)) || (h.end - h.start);
       // 세로+인물추적 모드면 리프레임(인물 꽉채움) 시도 → 실패 시 블러레터박스로 폴백(무회귀).
       let done = false;
@@ -424,7 +491,9 @@ export async function extractHighlights(
         await cutClip(raw, file, orientation, log, secDur, cancelled);
       }
       try { fs.rmSync(raw, {force: true}); } catch {} // 섹션 원본은 크롭 후 삭제(용량 절약)
-      results.push({file, start: h.start, end: h.end, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end), score: h.score, reason: h.reason});
+      // ★end는 '실제 클립 길이' 기준(무음 제거로 짧아졌을 수 있음) — makeHighlights가 durSec=end-start로 프레임을 잡으므로 일치시켜야 영상이 안 뜬다.
+      const effEnd = h.start + Math.max(1, Math.round(secDur));
+      results.push({file, start: h.start, end: effEnd, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end), score: h.score, reason: h.reason});
     } catch (e: any) {
       if (/사용자가 중단/.test(e?.message || '')) throw new Error('사용자가 중단했습니다.'); // 중단이면 다음 컷 말고 즉시 종료
       log(`[하이라이트] ${i + 1}번 구간 실패(건너뜀): ` + (e?.message || '').slice(0, 120));

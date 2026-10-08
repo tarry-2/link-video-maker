@@ -1421,6 +1421,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const reframe = b.reframe === 'letterbox' ? 'letterbox' : 'track'; // 세로 변환 방식(기본=인물 추적)
     const muteOriginal = !!b.muteOriginal; // 원본 소리 완전 제거(저작권 소리지문 회피)
     const template = typeof b.template === 'string' ? b.template : 'auto'; // 디자인 템플릿(auto=편마다 자동)
+    const removeSilence = !!b.removeSilence; // 무음 구간 자동 제거(템포 UP)
     const isCc = b.isCc !== false; // 기본 CC(안전). URL 모드에서 비-CC 영상이면 false로 와서 출처에 CC BY를 거짓표기하지 않는다.
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
@@ -1430,7 +1431,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       try {
         job.kind = 'highlight';
         job.clips = []; // 완성되는 편마다 누적(먼저 끝난 편을 SSE로 바로 흘림)
-        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, muteOriginal, localFile, template, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
+        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, muteOriginal, localFile, template, removeSilence, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
           onClip: (c) => { if (!job.clips!.some((x) => x.projectId === c.projectId)) job.clips!.push(c); }});
         if (localFile) { try { fs.rmSync(localFile, {force: true}); } catch {} } // 업로드 원본은 작업 끝나면 정리
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }
