@@ -529,24 +529,40 @@
   function setRfBadges(recommend) {
     document.querySelectorAll('.rf-badge').forEach((s) => { s.textContent = s.dataset.for === recommend ? ' ✨추천' : ''; });
   }
+  let rfAdviceSeq = 0; // 영상 빠르게 바꿀 때 이전 분석 결과가 늦게 와서 덮어쓰는 것 방지
   async function fetchReframeAdvice() {
     setRfBadges(null); // 초기화(이전 영상 뱃지 제거)
     if (!picked || orient !== 'portrait') return;
-    const note = $('hl-rf-advice'); const base = '영상을 분석해 어울리는 쪽을 추천하는 중…';
-    if (note) note.textContent = base;
+    const note = $('hl-rf-advice'); const seq = ++rfAdviceSeq;
+    const picId = picked.mine ? picked.uploadId : picked.videoId;
+    // 진행 표시 — 유튜브/아카이브 영상은 분석용으로 영상을 잠깐 받아서 ~30초 걸릴 수 있다. 멈춘 것처럼 안 보이게 경과초 표시.
+    const t0 = Date.now();
+    if (note) note.innerHTML = '🔎 <b>영상을 분석해 어울리는 세로변환 방식을 찾는 중…</b> <span class="hint">(영상을 잠깐 받아 얼굴을 분석해요 · 최대 40초)</span>';
+    const tick = setInterval(() => {
+      if (seq !== rfAdviceSeq) { clearInterval(tick); return; }
+      const s = Math.round((Date.now() - t0) / 1000);
+      if (note) note.innerHTML = `🔎 <b>영상 분석 중…</b> <span class="hint">(얼굴 감지 ${s}초 경과 · 최대 40초, 끝나면 추천이 떠요)</span>`;
+    }, 1000);
+    // fetch 타임아웃 넉넉히(50초) — 분석이 오래 걸려도 끊기지 않게.
+    const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 50000);
     try {
-      const q = picked.mine ? ('uploadId=' + encodeURIComponent(picked.uploadId)) : ('videoId=' + encodeURIComponent(picked.videoId || ''));
-      const d = await (await fetch('/api/highlight/reframe-advice?' + q)).json();
+      const q = picked.mine ? ('uploadId=' + encodeURIComponent(picked.uploadId || '')) : ('videoId=' + encodeURIComponent(picked.videoId || ''));
+      const d = await (await fetch('/api/highlight/reframe-advice?' + q, {signal: ctrl.signal})).json();
+      clearInterval(tick); clearTimeout(to);
+      if (seq !== rfAdviceSeq || picId !== (picked && (picked.mine ? picked.uploadId : picked.videoId))) return; // 그새 다른 영상 고름 → 무시
       const a = d.advice;
-      if (!a) { if (note) note.innerHTML = '<b>인물 꽉채움</b> = 1인·인터뷰에 좋아요. <b>전체 보존</b> = 여러 명·자막 많은 영상에 좋아요. (이 영상은 자동 분석을 못 해 기본값이에요)'; return; }
+      if (!a) { if (note) note.innerHTML = '<b>인물 꽉채움</b> = 1인·인터뷰에 좋아요. <b>전체 보존</b> = 여러 명·자막 많은 영상에 좋아요. <span class="hint">(이 영상은 자동 분석을 못 해 기본값 — 직접 골라도 돼요)</span>'; return; }
       setRfBadges(a.recommend);
-      // 추천 쪽을 기본 선택으로 바꿔줌(사용자가 다시 누르면 변경 가능).
-      reframeMode = a.recommend;
+      reframeMode = a.recommend; // 추천 쪽을 기본 선택으로(사용자가 다시 누르면 변경)
       document.querySelectorAll('.hl-rf').forEach((b) => b.classList.toggle('active', b.dataset.rf === reframeMode));
-      if (note) note.innerHTML = `✨ <b>${a.recommend === 'track' ? '인물 꽉채움' : '전체 보존'}</b> 추천 — ${esc(a.reason)}`;
+      if (note) note.innerHTML = `✨ <b>${a.recommend === 'track' ? '인물 꽉채움' : '전체 보존'}</b> 추천 — ${esc(a.reason)} <span class="hint">(원하면 다른 쪽을 눌러 바꿀 수 있어요)</span>`;
       saveState();
       addLog(`✨ 세로변환 추천: ${a.recommend === 'track' ? '인물 꽉채움' : '전체 보존'} (${a.reason})`);
-    } catch { if (note) note.textContent = '세로변환 추천을 못 받았어요(기본값으로 진행).'; }
+    } catch (e) {
+      clearInterval(tick); clearTimeout(to);
+      if (seq !== rfAdviceSeq) return;
+      if (note) note.innerHTML = '세로변환 자동 추천을 못 받았어요(시간 초과 등) — <b>직접 골라주세요</b>. <span class="hint">1인·인터뷰=꽉채움 / 여러 명·자막많음=전체 보존</span>';
+    }
   }
   // 크게보기 — 온비디오 안에서 유튜브 영상을 바로 재생해 내용을 미리 본다(제작 전).
   function openPreview(v) {
