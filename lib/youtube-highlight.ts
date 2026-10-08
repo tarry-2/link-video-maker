@@ -70,7 +70,7 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -141,6 +141,7 @@ export async function makeHighlights(
       accentColor: '#FFE24B',
       words, // 해설 있으면 카라오케 자막, 없으면 []
       duckAudio: !!voiceRel, // 해설 깔면 원본 소리를 줄인다
+      muteOriginal: !!opts.muteOriginal, // 원본 소리 완전 제거(저작권 소리지문 회피)
       // ★해설 있으면 "나레이션 끝나는 지점 + 1.3초 여운"까지만(뒤 허전함 제거). 나레이션이 더 길면 그만큼.
       //   해설 없으면 클립 전체.
       durationInFrames: words.length ? narrFrames + Math.round(FPS * 1.3) : clipFrames,

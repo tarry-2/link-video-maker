@@ -27,6 +27,7 @@ export const sceneSchema = z.object({
   video: z.string().optional(), // 배경 영상 클립(있으면 이미지 대신 사용)
   fullBleed: z.boolean().optional(), // ★유튜브 하이라이트: 이미 9:16인 클립을 레터박스 없이 꽉 채우고 원본 소리 재생
   duckAudio: z.boolean().optional(), // 해설 나레이션을 깔 때 원본(클립) 소리를 줄인다
+  muteOriginal: z.boolean().optional(), // 원본 소리 완전 제거(저작권 소리지문 회피) — 나레이션만 들림
   hookTop: z.string(),
   hookAccent: z.string(),
   accentColor: z.string(),
@@ -52,6 +53,7 @@ export const Scene: React.FC<SceneData> = ({
   video,
   fullBleed,
   duckAudio,
+  muteOriginal,
   hookTop,
   hookAccent,
   accentColor,
@@ -121,8 +123,8 @@ export const Scene: React.FC<SceneData> = ({
   if (fullBleed && video) {
     return (
       <AbsoluteFill style={{backgroundColor: '#000'}}>
-        {/* 해설 나레이션을 깔면 원본 클립 소리를 줄여(더킹) 내 목소리가 들리게 한다. */}
-        <OffthreadVideo src={staticFile(video)} volume={duckAudio ? 0.2 : 1} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        {/* 원본 소리: muteOriginal=완전 제거(저작권 소리지문 회피) / duckAudio=해설 때 줄임(0.2) / 기본=원음. */}
+        <OffthreadVideo src={staticFile(video)} muted={muteOriginal} volume={muteOriginal ? 0 : (duckAudio ? 0.2 : 1)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
         {/* 상단 후킹 — 반투명 배경 박스(가독성·임팩트) + accent 테두리 + 등장 스케일 팝 */}
         {(hookTop || hookAccent) && (
           <div style={{

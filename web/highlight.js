@@ -257,7 +257,7 @@
 
   // ── 검색/선택/설정 ──
   let picked = null, region = 'kr', order = 'viewCount', cat = '';
-  let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait', reframeMode = 'track';
+  let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait', reframeMode = 'track', muteOriginal = 0;
   // 세로일 때만 "세로 변환 방식" 노출(가로는 무의미).
   function applyReframeRow() { const r = $('hl-reframe-row'); if (r) r.style.display = orient === 'portrait' ? '' : 'none'; }
   let commentary = 0, voice = ''; // 해설 넣기(0/1) · 해설 목소리
@@ -269,7 +269,7 @@
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, reframeMode, commentary, voice, query, pageToken, loadedCount, picked, license, mode,
+        region, order, cat, count, sec, orient, reframeMode, muteOriginal, commentary, voice, query, pageToken, loadedCount, picked, license, mode,
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -287,6 +287,8 @@
     applyLicenseNote(); applyMode();
     document.querySelectorAll('.hl-orient').forEach((b) => b.classList.toggle('active', b.dataset.o === orient));
     document.querySelectorAll('.hl-rf').forEach((b) => b.classList.toggle('active', b.dataset.rf === reframeMode));
+    muteOriginal = s.muteOriginal ? 1 : 0;
+    document.querySelectorAll('.hl-mute').forEach((b) => b.classList.toggle('active', Number(b.dataset.m) === muteOriginal));
     applyReframeRow();
     count = s.count || 3; sec = s.sec || 30; query = s.query || ''; pageToken = s.pageToken || ''; loadedCount = s.loadedCount || 0;
     commentary = s.commentary || 0; voice = s.voice || '';
@@ -571,6 +573,9 @@
   document.querySelectorAll('.hl-rf').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-rf').forEach((x) => x.classList.remove('active')); b.classList.add('active'); reframeMode = b.dataset.rf; saveState();
   }));
+  document.querySelectorAll('.hl-mute').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-mute').forEach((x) => x.classList.remove('active')); b.classList.add('active'); muteOriginal = Number(b.dataset.m); saveState();
+  }));
   applyReframeRow();
   // ── 유튜브 쿠키 등록(봇차단 뚫기) ──
   async function refreshCookieStatus() {
@@ -636,17 +641,41 @@
   $('hl-generate')?.addEventListener('click', () => {
     if (!picked) { alert('먼저 영상을 고르세요.'); return; }
     if (curJobId) { alert('이미 제작이 진행 중이에요. 끝나거나 중단한 뒤에 다시 시작하세요.'); return; } // 중복 생성 방지
-    // ★저작권 '주의'(드라마·예능·영화·음방·방송사) 영상은 유튜브·인스타 둘 다 올리자마자 차단될 수 있음(Content ID).
-    //   렌더 시간 쓰기 전에 분명히 경고. CC(안전)·무난은 그냥 진행.
+    // ★저작권 '주의'(드라마·예능·영화·음방·방송사) 영상 처리. 핵심: 세로(쇼츠=3분미만)는 Content ID 클레임만
+    //   걸려도 "무조건 차단"(유튜브 정책) → 세로+비CC는 거의 다 막힘. 가로 3분+는 차단이 아니라 "클레임"(채널
+    //   안 죽고 영상 살아있음, 수익만 원저작자). → 비CC면 가로 3분+로 유도.
     if (picked.risk === 'caution') {
-      const ok = confirm(
-        '⚠️ 저작권 주의 영상이에요\n\n' +
-        '드라마·예능·영화·음악·방송사 콘텐츠는 유튜브와 인스타가 올리자마자 자동 차단(Content ID)할 가능성이 높아요. ' +
-        '해설·자막을 넣어도 화면이 원본과 똑같으면 막힙니다.\n\n' +
-        '✅ 안전하게 수익화하려면: "재사용 허가(CC)" 영상으로 만드세요.\n\n' +
-        '그래도 이 영상으로 만들까요? (연습·개인 소장용으로만)'
-      );
-      if (!ok) return;
+      if (orient === 'portrait') {
+        // 세로 = 쇼츠 = 차단. 가로로 바꾸라고 강하게 유도.
+        const go = confirm(
+          '⚠️ 이 영상(드라마·예능 등)은 세로(쇼츠)로 만들면 거의 차단돼요\n\n' +
+          '유튜브는 3분 미만 쇼츠에 저작권이 걸리면 "무조건 차단"합니다(정책). ' +
+          '같은 영상도 가로 3분 이상이면 차단이 아니라 "클레임"으로 끝나요(채널 안 죽고 영상은 살아있음, 조회수·구독 쌓임. 광고수익만 원저작자).\n\n' +
+          '👉 [확인] 가로 3분+로 바꾸기(권장)   /   [취소] 그래도 세로로(연습·소장용)'
+        );
+        if (go) {
+          // 가로 + 길이 3분(180초)로 자동 전환.
+          orient = 'landscape'; sec = 180;
+          document.querySelectorAll('.hl-orient').forEach((x) => x.classList.toggle('active', x.dataset.o === 'landscape'));
+          document.querySelectorAll('.hl-sec').forEach((x) => x.classList.toggle('active', Number(x.dataset.s) === 180));
+          applyReframeRow(); saveState();
+          addLog('↪ 저작권 때문에 가로 3분으로 바꿨어요(차단 대신 클레임 — 채널 안전).', 'done');
+        }
+        // 취소면 세로 유지(사용자 선택). 어느 쪽이든 아래로 진행.
+      } else if (picked.durationSec && sec < 180) {
+        // 가로지만 3분 미만이면 여전히 쇼츠 취급될 수 있음 → 3분+ 권장.
+        const bump = confirm(
+          '⚠️ 저작권 주의 영상이에요\n\n' +
+          '가로는 세로보다 안전하지만, 3분 미만이면 유튜브가 쇼츠로 보고 차단할 수 있어요. ' +
+          '3분 이상이면 "클레임"(채널 안전)으로 끝납니다.\n\n' +
+          '👉 [확인] 한 편 길이 3분으로   /   [취소] 지금 길이 유지'
+        );
+        if (bump) {
+          sec = 180;
+          document.querySelectorAll('.hl-sec').forEach((x) => x.classList.toggle('active', Number(x.dataset.s) === 180));
+          saveState();
+        }
+      }
     }
     addLog('──────── 하이라이트 제작 시작 ────────', 'done');
     addLog(`• 소재: ${mode === 'url' ? 'URL 직접 입력' : (region === 'global' ? '해외' : '한국') + ' · ' + (cat || '직접 검색')}`);
@@ -656,6 +685,8 @@
     addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}${orient === 'portrait' ? ' · ' + (reframeMode === 'letterbox' ? '전체 보존(블러)' : '인물 꽉채움') : ''}`);
     addLog(`• 만들 편수: ${count}편`);
     addLog(`• 해설: ${commentary ? 'AI 해설 입힘 (' + ($('hl-voice')?.selectedOptions[0]?.textContent || voice) + ')' : '원본 그대로'}`);
+    addLog(`• 원본 소리: ${muteOriginal ? '제거(저작권 회피)' : '살리기'}`);
+    if (muteOriginal && !commentary) addLog('⚠️ 소리를 뺐는데 해설이 꺼져 있어요 — 영상이 무음이 됩니다. 해설을 켜는 걸 권장!', 'fail');
     // 예상 소요 — 편수·한 편 길이 기준 러프 추정(렌더가 대부분이라 길이·편수에 비례). 서버 상황 따라 달라짐.
     const estBase = 2 + count * (sec * 3.5 / 60 + 0.5) + (commentary ? count * 0.4 : 0);
     const estLo = Math.max(2, Math.round(estBase * 0.8)), estHi = Math.round(estBase * 1.2);
@@ -663,7 +694,7 @@
     addLog(`• 예상 소요: ${estTotalText} (서버 상황 따라 달라져요 · 길이·편수 줄이면 빨라짐)`);
     addLog('────────────────────────────');
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
-    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, commentary: !!commentary, voice, isCc: picked.isCc !== false};
+    lastBody = {videoId: picked.videoId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, commentary: !!commentary, voice, isCc: picked.isCc !== false};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });
