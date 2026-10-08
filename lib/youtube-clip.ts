@@ -14,13 +14,13 @@ const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 export type Highlight = {start: number; end: number; hookTop: string; hookAccent: string; reason: string};
 export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string; transcript?: string};
 
-function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 300000): Promise<string> {
+function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 300000, onLine?: (line: string) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const ps = spawn(cmd, args, {stdio: ['ignore', 'pipe', 'pipe']});
     let out = '', err = '';
     const t = setTimeout(() => { ps.kill('SIGKILL'); reject(new Error(`${cmd} 시간 초과`)); }, timeoutMs);
     ps.stdout.on('data', (d) => { out += d; });
-    ps.stderr.on('data', (d) => { err += d; });
+    ps.stderr.on('data', (d) => { err += d; if (onLine) String(d).split(/[\r\n]+/).forEach((l) => l && onLine(l)); });
     ps.on('error', (e) => { clearTimeout(t); reject(e); });
     ps.on('close', (code) => { clearTimeout(t); code === 0 ? resolve(out) : reject(new Error((err || out).slice(-400))); });
   });
@@ -219,18 +219,34 @@ async function cutClip(videoPath: string, h: Highlight, outPath: string, orienta
     args = ['-vf', vf];
   } else {
     // 세로: 워터마크 크롭 후 원본 안 자르고 세로 중앙에 통째로 + 위아래 블러배경(자막 안 잘림).
+    // ★블러 배경은 저해상도(270x480)에서 만들고 1080x1920으로 키운다. 어차피 흐린 배경이라 체감 화질은
+    //   동일한데, 풀해상도(1080x1920)에 boxblur=28을 거는 것보다 픽셀이 ~16배 적어 크롭이 3~5배 빠르고
+    //   메모리도 훨씬 덜 쓴다(2분짜리 클립에서 수십 분 걸리던 병목의 주원인이었음).
     const vf = [
       `[0:v]${dewm},split=2[a][b]`,
-      '[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=28:2,eq=brightness=-0.12[bg]',
+      '[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=8:1,eq=brightness=-0.12,scale=1080:1920[bg]',
       '[b]scale=1080:1920:force_original_aspect_ratio=decrease[fg]',
       '[bg][fg]overlay=(W-w)/2:(H-h)/2',
     ].join(';');
     args = ['-filter_complex', vf];
   }
-  // crf 20 = 선명(23보다 화질↑). preset medium = 화질/속도 균형.
+  // 진행률 하트비트 — ffmpeg stderr의 time= 을 읽어 "자르는 중 N%"를 주기적으로 찍는다.
+  //   (클립당 로그가 1줄뿐이라 몇 분간 멈춘 것처럼 보이던 문제 해결.)
+  const total = Math.max(1, h.end - h.start);
+  let lastPct = -1, lastAt = 0;
+  const onLine = (line: string) => {
+    const m = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line);
+    if (!m) return;
+    const t = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+    const pct = Math.min(99, Math.max(0, Math.round((t / total) * 100)));
+    const now = Date.now();
+    if (pct >= lastPct + 5 && now - lastAt > 2500) { lastPct = pct; lastAt = now; log(`[하이라이트]   자르는 중… ${pct}%`); }
+  };
+  // crf 20 = 선명. preset veryfast = 같은 화질(crf 고정)로 인코딩만 대폭 빠르게(파일이 조금 커질 뿐).
+  //   2분짜리 클립을 medium으로 뽑으면 클립당 수 분씩 걸려 전체가 40분+ 가 되던 걸 줄인다.
   await run(FFMPEG, ['-y', '-ss', String(h.start), '-to', String(h.end), '-i', videoPath,
-    ...args, '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
-    '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], log, 300000);
+    ...args, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+    '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], log, 420000, onLine);
 }
 
 // 전체: videoId → N개 세로 하이라이트 클립 생성. dir는 작업 폴더.
