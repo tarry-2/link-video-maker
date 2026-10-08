@@ -16,6 +16,7 @@ import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
 import {geminiGenerate} from './gemini';
 import {ttsElevenJoined, alignToWords, pickVoice, VOICES, type Word} from './tts';
 import type {SceneData} from '../src/Scene';
+import {pickHlTemplate, getHlTemplate} from '../src/highlight-templates';
 
 const DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data');
 const FPS = 30;
@@ -70,7 +71,7 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -137,13 +138,18 @@ export async function makeHighlights(
       }
     }
 
+    // 디자인 템플릿 — 사용자가 고르면 그걸로, '자동'이면 후킹/제목으로 어울리는 걸 편마다 매칭.
+    const tpl = (opts.template && opts.template !== 'auto')
+      ? getHlTemplate(opts.template)
+      : pickHlTemplate(`${c.hookTop || ''} ${c.hookAccent || ''} ${meta.title}`);
     const scene: SceneData = {
       image: `${jobRel}/${clipName}`, // 폴백용(사용 안 함 — fullBleed가 video 사용)
       video: `${jobRel}/${clipName}`,
       fullBleed: true, // 이미 비율 맞춤 → 꽉 채우고 상단 후킹 + (해설 시)카라오케 자막
+      template: tpl.id,
       hookTop: c.hookTop || meta.title.slice(0, 20),
       hookAccent: c.hookAccent || '',
-      accentColor: '#FFE24B',
+      accentColor: tpl.accentColor,
       words, // 해설 있으면 카라오케 자막, 없으면 []
       duckAudio: !!voiceRel, // 해설 깔면 원본 소리를 줄인다
       muteOriginal: !!opts.muteOriginal, // 원본 소리 완전 제거(저작권 소리지문 회피)
@@ -180,7 +186,7 @@ export async function makeHighlights(
               big: (c.hookTop || meta.title).slice(0, 18),
               small: '',
               badge: (c.hookAccent || '').slice(0, 8),
-              accentColor: '#FFE24B'},
+              accentColor: tpl.accentColor},
             thumbAbs, log, publicDir, orientation,
           );
           thumbOk = fs.existsSync(thumbAbs);

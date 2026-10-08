@@ -13,12 +13,20 @@ import {
   spring,
 } from 'remotion';
 import {loadFont} from '@remotion/fonts';
+import {getHlTemplate} from './highlight-templates';
 
 // ★렌더 속도: 로컬 폰트 파일 직접 로드(네트워크 요청 0번). google-fonts는 한글 subset이 수백 chunk라 느림.
 const blackFont = 'Black Han Sans';
 const notoFont = 'Noto Sans KR';
 loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')});
 loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'});
+// 하이라이트 템플릿용 나머지 폰트(Card.tsx와 동일 9종). 템플릿이 고른 것만 실제 쓰임.
+loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'});
+loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')});
+loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'});
+loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')});
+loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')});
+loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'});
 
 export const sceneSchema = z.object({
   image: z.string(),
@@ -28,6 +36,7 @@ export const sceneSchema = z.object({
   fullBleed: z.boolean().optional(), // ★유튜브 하이라이트: 이미 9:16인 클립을 레터박스 없이 꽉 채우고 원본 소리 재생
   duckAudio: z.boolean().optional(), // 해설 나레이션을 깔 때 원본(클립) 소리를 줄인다
   muteOriginal: z.boolean().optional(), // 원본 소리 완전 제거(저작권 소리지문 회피) — 나레이션만 들림
+  template: z.string().optional(), // 하이라이트 디자인 템플릿 id(highlight-templates). 없으면 기본(예능).
   hookTop: z.string(),
   hookAccent: z.string(),
   accentColor: z.string(),
@@ -54,6 +63,7 @@ export const Scene: React.FC<SceneData> = ({
   fullBleed,
   duckAudio,
   muteOriginal,
+  template,
   hookTop,
   hookAccent,
   accentColor,
@@ -121,11 +131,29 @@ export const Scene: React.FC<SceneData> = ({
 
   // ★유튜브 하이라이트(fullBleed): 이미 9:16로 크롭된 클립을 화면 꽉 채우고 원본 소리 재생 + 상단 후킹띠만.
   if (fullBleed && video) {
+    const T = getHlTemplate(template); // 디자인 템플릿(폰트·후킹스타일·자막·색). 없으면 기본(예능).
+    // 후킹 컨테이너 스타일 — hookStyle별로 다르게. 'none'=글자만(시네마), 'bar'=꽉찬 띠, 그 외=박스/버블/그라데이션.
+    const hookGlow = T.glow ? `, 0 0 40px ${T.accentColor}66` : '';
+    const boxCommon: React.CSSProperties = {
+      display: 'inline-block', textAlign: 'center', maxWidth: '94%',
+      borderRadius: T.hookRadius, padding: L.hookBoxPad,
+      boxShadow: `0 12px 44px rgba(0,0,0,0.55)${hookGlow}`,
+    };
+    const hookContainerStyle: React.CSSProperties =
+      T.hookStyle === 'none'
+        ? {display: 'inline-block', textAlign: 'center', maxWidth: '94%'}
+        : T.hookStyle === 'bar'
+          ? {...boxCommon, background: T.hookBg, padding: '14px 40px', borderRadius: T.hookRadius, maxWidth: '100%', width: '100%'}
+          : {...boxCommon, background: T.hookBg, backdropFilter: 'blur(6px)',
+             border: T.hookBorder === 'none' ? undefined : `3px solid ${T.hookBorder}`};
+    // 글자 외곽선 — 밝은 배경(버블)이면 가늘게(검은 테두리 과하지 않게).
+    const lightBg = T.hookStyle === 'bubble';
+    const olTop = lightBg ? 0 : 3;
     return (
       <AbsoluteFill style={{backgroundColor: '#000'}}>
         {/* 원본 소리: muteOriginal=완전 제거(저작권 소리지문 회피) / duckAudio=해설 때 줄임(0.2) / 기본=원음. */}
         <OffthreadVideo src={staticFile(video)} muted={muteOriginal} volume={muteOriginal ? 0 : (duckAudio ? 0.2 : 1)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
-        {/* 상단 후킹 — 반투명 배경 박스(가독성·임팩트) + accent 테두리 + 등장 스케일 팝 */}
+        {/* 상단 후킹 — 템플릿별 컨테이너 + 등장 스케일 팝 */}
         {(hookTop || hookAccent) && (
           <div style={{
             position: 'absolute', top: L.hookTop, left: 0, right: 0, padding: L.hookPad,
@@ -133,46 +161,43 @@ export const Scene: React.FC<SceneData> = ({
             transform: `translateY(${hookY}px) scale(${interpolate(hookIn, [0, 1], [0.9, 1])})`,
             opacity: hookIn,
           }}>
-            <div style={{
-              display: 'inline-block', textAlign: 'center', maxWidth: '94%',
-              background: 'rgba(12,12,16,0.6)', backdropFilter: 'blur(6px)',
-              border: `3px solid ${accentColor}`, borderRadius: 22, padding: L.hookBoxPad,
-              boxShadow: `0 12px 44px rgba(0,0,0,0.55), 0 0 32px ${accentColor}44`,
-            }}>
-              {hookTop && <div style={{fontFamily: blackFont, fontSize: L.fsHookTop, color: '#fff',
-                lineHeight: 1.08, textShadow: outline(3), letterSpacing: -1,
+            <div style={hookContainerStyle}>
+              {hookTop && <div style={{fontFamily: T.headFont, fontSize: L.fsHookTop, color: T.textColor,
+                lineHeight: 1.08, textShadow: olTop ? outline(olTop) : 'none', letterSpacing: -1,
                 wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookTop}</div>}
-              {hookAccent && <div style={{fontFamily: blackFont, fontSize: L.fsHookAccent, color: accentColor,
-                lineHeight: 1.12, marginTop: 4, textShadow: `0 3px 14px ${accentColor}66, ${outline(3)}`,
+              {hookAccent && <div style={{fontFamily: T.headFont, fontSize: L.fsHookAccent, color: T.accentColor,
+                lineHeight: 1.12, marginTop: 4,
+                textShadow: lightBg ? 'none' : `0 3px 14px ${T.accentColor}66, ${outline(olTop)}`,
                 letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookAccent}</div>}
             </div>
           </div>
         )}
-        {/* 해설 카라오케 자막 — 원본 영상에 박힌 하단 자막 '위치'로 올리고 불투명 그라데이션 띠로 원본을 덮는다.
-            (그냥 글자만 깔면 원본 자막과 겹쳐 지저분 → 띠로 확실히 가림.) 윈도우(≈6단어)만 표시. */}
+        {/* 해설 카라오케 자막 — 템플릿 subStyle별(bar=그라데이션 띠/box=각 단어 박스/plain=글자만). 윈도우(≈6단어)만. */}
         {words.length > 0 && (() => {
           const WIN = 6;
-          // 현재 프레임에 해당하는 단어 index(없으면 직전까지 말한 단어). 그걸 중심으로 윈도우.
           let cur = words.findIndex((w) => frame >= w.s && frame < w.e);
           if (cur < 0) { for (let i = 0; i < words.length; i++) { if (words[i].s <= frame) cur = i; } }
           if (cur < 0) cur = 0;
           const start = Math.max(0, Math.min(cur - 1, words.length - WIN));
           const win = words.slice(start, start + WIN);
+          const barBg = T.subStyle === 'bar'
+            ? 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 20%, rgba(0,0,0,0.9) 80%, rgba(0,0,0,0) 100%)'
+            : 'transparent';
           return (
             <div style={{
               position: 'absolute', left: 0, right: 0, top: L.hlSubTop, height: L.hlSubH,
               display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center',
-              gap: L.subGap, padding: L.subPad, boxSizing: 'border-box',
-              // 위아래로 페이드되는 불투명 띠 — 중앙(원본 자막 위치)은 완전 불투명으로 가리고 가장자리는 자연스럽게 섞임.
-              background: 'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.9) 20%, rgba(0,0,0,0.9) 80%, rgba(0,0,0,0) 100%)',
+              gap: L.subGap, padding: L.subPad, boxSizing: 'border-box', background: barBg,
             }}>
               {win.map((w, i) => {
                 const active = frame >= w.s && frame < w.e;
+                const boxed = T.subStyle === 'box';
                 return (
                   <span key={start + i} style={{
-                    fontFamily: notoFont, fontWeight: 800, fontSize: L.fsSub,
-                    color: active ? accentColor : '#fff', textShadow: outline(active ? 5 : 4),
+                    fontFamily: T.subFont, fontWeight: 800, fontSize: L.fsSub,
+                    color: active ? T.subActive : '#fff', textShadow: outline(active ? 5 : 4),
                     transform: active ? 'scale(1.14)' : 'scale(1)', display: 'inline-block',
+                    ...(boxed ? {background: active ? 'rgba(0,0,0,0.85)' : 'rgba(0,0,0,0.6)', padding: '4px 14px', borderRadius: 10} : {}),
                   }}>{w.t}</span>
                 );
               })}

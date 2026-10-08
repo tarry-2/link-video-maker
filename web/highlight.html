@@ -168,6 +168,18 @@
             <button type="button" class="seg-btn hl-mute" data-m="1">원본 소리 제거(저작권 회피)</button>
           </div>
           <p class="hint" style="margin-top:4px">원본 소리를 완전히 빼면 유튜브·인스타의 <b>'소리 저작권(Content ID)'</b> 매칭을 피해 통과율이 올라가요(100%는 아님). ※소리를 빼면 <b>AI 해설을 같이 켜는 게</b> 좋아요(안 그러면 영상이 무음).</p>
+
+          <!-- 디자인 템플릿 — 후킹 글자·배경·자막 스타일 묶음. '자동'은 편마다 주제에 맞게 매칭 -->
+          <label class="field-label" style="margin-top:14px">🎨 디자인 템플릿 <span class="hint">— 후킹·자막 글꼴과 스타일</span></label>
+          <div id="hl-tpl-seg" class="seg" style="margin-top:6px;flex-wrap:wrap">
+            <button type="button" class="seg-btn hl-tpl active" data-t="auto">✨ 자동(주제별)</button>
+            <button type="button" class="seg-btn hl-tpl" data-t="variety">예능 자막</button>
+            <button type="button" class="seg-btn hl-tpl" data-t="impact">임팩트 레드</button>
+            <button type="button" class="seg-btn hl-tpl" data-t="cinema">감성 시네마</button>
+            <button type="button" class="seg-btn hl-tpl" data-t="neon">네온 힙</button>
+            <button type="button" class="seg-btn hl-tpl" data-t="magazine">매거진 다큐</button>
+            <button type="button" class="seg-btn hl-tpl" data-t="pop">버블 팝</button>
+          </div>
           <p class="mini-state" id="hl-picked"></p>
           <button id="hl-generate" class="primary-btn" type="button" style="margin-top:12px">🎬 하이라이트 숏폼 만들기</button>
           <p class="mini-state">AI가 영상에서 터질 만한 순간을 골라 세로 숏폼으로 자릅니다. 상단 후킹 자막이 자동으로 얹혀요. 완성되면 유튜브·인스타로 바로 올릴 수 있어요. <b>원작자 출처는 자동 표기됩니다(CC BY).</b></p>

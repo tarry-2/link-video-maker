@@ -257,7 +257,7 @@
 
   // ── 검색/선택/설정 ──
   let picked = null, region = 'kr', order = 'viewCount', cat = '';
-  let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait', reframeMode = 'track', muteOriginal = 0;
+  let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait', reframeMode = 'track', muteOriginal = 0, tplMode = 'auto';
   // 세로일 때만 "세로 변환 방식" 노출(가로는 무의미).
   function applyReframeRow() { const r = $('hl-reframe-row'); if (r) r.style.display = orient === 'portrait' ? '' : 'none'; }
   let commentary = 0, voice = ''; // 해설 넣기(0/1) · 해설 목소리
@@ -269,7 +269,7 @@
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, reframeMode, muteOriginal, commentary, voice, query, pageToken, loadedCount, picked, license, mode,
+        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, commentary, voice, query, pageToken, loadedCount, picked, license, mode,
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -289,6 +289,8 @@
     document.querySelectorAll('.hl-rf').forEach((b) => b.classList.toggle('active', b.dataset.rf === reframeMode));
     muteOriginal = s.muteOriginal ? 1 : 0;
     document.querySelectorAll('.hl-mute').forEach((b) => b.classList.toggle('active', Number(b.dataset.m) === muteOriginal));
+    tplMode = s.tplMode || 'auto';
+    document.querySelectorAll('.hl-tpl').forEach((b) => b.classList.toggle('active', b.dataset.t === tplMode));
     applyReframeRow();
     count = s.count || 3; sec = s.sec || 30; query = s.query || ''; pageToken = s.pageToken || ''; loadedCount = s.loadedCount || 0;
     commentary = s.commentary || 0; voice = s.voice || '';
@@ -610,6 +612,9 @@
   document.querySelectorAll('.hl-mute').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-mute').forEach((x) => x.classList.remove('active')); b.classList.add('active'); muteOriginal = Number(b.dataset.m); saveState();
   }));
+  document.querySelectorAll('.hl-tpl').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-tpl').forEach((x) => x.classList.remove('active')); b.classList.add('active'); tplMode = b.dataset.t; saveState();
+  }));
   applyReframeRow();
   // ── 유튜브 쿠키 등록(봇차단 뚫기) ──
   async function refreshCookieStatus() {
@@ -720,6 +725,7 @@
     addLog(`• 만들 편수: ${count}편`);
     addLog(`• 해설: ${commentary ? 'AI 해설 입힘 (' + ($('hl-voice')?.selectedOptions[0]?.textContent || voice) + ')' : '원본 그대로'}`);
     addLog(`• 원본 소리: ${muteOriginal ? '제거(저작권 회피)' : '살리기'}`);
+    addLog(`• 디자인: ${document.querySelector('.hl-tpl.active')?.textContent?.trim() || tplMode}`);
     if (muteOriginal && !commentary) addLog('⚠️ 소리를 뺐는데 해설이 꺼져 있어요 — 영상이 무음이 됩니다. 해설을 켜는 걸 권장!', 'fail');
     // 예상 소요 — 편수·한 편 길이 기준 러프 추정(렌더가 대부분이라 길이·편수에 비례). 서버 상황 따라 달라짐.
     const estBase = 2 + count * (sec * 3.5 / 60 + 0.5) + (commentary ? count * 0.4 : 0);
@@ -730,7 +736,7 @@
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
     // 새로고침해도 경과·예상시간이 안 사라지게 저장(복원 시 읽음).
     try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
-    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, commentary: !!commentary, voice, isCc: picked.isCc !== false};
+    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, commentary: !!commentary, voice, isCc: picked.isCc !== false};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });
