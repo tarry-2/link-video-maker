@@ -66,6 +66,13 @@ body {
 .hl-cats { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
 .hl-cat { border: 1px solid var(--line); background: var(--card2); color: var(--text); border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .hl-cat.active { background: var(--grad); color: #fff; border-color: transparent; box-shadow: 0 4px 12px rgba(18,169,152,0.3); }
+/* 아카이브 가로 페이지네이션 — 밑으로 안 길어지게 한 줄로. 가운데 정렬, 작은 사각 버튼. */
+.arc-pager { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; margin-top: 12px; }
+.arc-pg { min-width: 36px; height: 36px; padding: 0 10px; border: 1px solid var(--line); background: var(--card2); color: var(--text); border-radius: 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.arc-pg.active { background: var(--grad); color: #fff; border-color: transparent; }
+.arc-pg.nav { font-size: 12px; }
+.arc-pg:disabled { opacity: 0.4; cursor: default; }
+.arc-pg.dots { border: none; background: none; cursor: default; min-width: 18px; }
 /* 검색 결과: 모바일=1열, 태블릿/PC=2열 */
 .hl-results { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; max-height: 480px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .hl-card { position: relative; display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2); cursor: pointer; }
@@ -79,8 +86,8 @@ body {
 [data-theme="dark"] .hl-card .hl-risk.ok { background: #332a10; color: #e7b64a; }
 [data-theme="dark"] .hl-card .hl-risk.caution { background: #3a1416; color: #f07077; }
 [data-theme="dark"] .hl-card .hl-risk.archive { background: #16213a; color: #76a3f5; }
-#hl-lic-note.warn { background: #fde8e0; border: 1px solid #f6c3b0; color: #9a3b1e; border-radius: 10px; padding: 9px 11px; line-height: 1.55; }
-[data-theme="dark"] #hl-lic-note.warn { background: #3a1e14; border-color: #6b3a28; color: #f0b59c; }
+#hl-lic-note.warn, .hint.warn { background: #fde8e0; border: 1px solid #f6c3b0; color: #9a3b1e; border-radius: 10px; padding: 9px 11px; line-height: 1.55; }
+[data-theme="dark"] #hl-lic-note.warn, [data-theme="dark"] .hint.warn { background: #3a1e14; border-color: #6b3a28; color: #f0b59c; }
 .hl-card.active { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(18,169,152,0.3); }
 .hl-card img { width: 128px; height: 72px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: #000; }
 .hl-card .hl-meta { min-width: 0; }

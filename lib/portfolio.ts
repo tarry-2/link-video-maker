@@ -21,6 +21,7 @@ export type PortfolioItem = {
   kind?: 'video' | 'card' | 'card-post' | 'highlight';
   images?: string[]; // card-post: data/studio/{projectId}/{name} PNG 파일명들(캐러셀 순서).
   score?: number; // 하이라이트: AI 바이럴 점수(0~100). 카드 뱃지·정렬에 사용.
+  source?: 'search' | 'url' | 'upload' | 'archive'; // 하이라이트 소재 출처(작업내역 탭별 이원화). 없으면 search 폴백.
 };
 
 // 특정 항목에 유튜브 링크 기록(업로드 완료 후).

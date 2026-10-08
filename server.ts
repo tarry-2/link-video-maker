@@ -529,6 +529,7 @@ const server = http.createServer(async (req, res) => {
         images: isPost ? (it.images || []).map((_, i) => `/portfolio-card/${it.projectId}/${i + 1}.png`) : undefined,
         thumb: readProjectThumb(it.projectId).thumb ? `/portfolio-thumb/${it.projectId}.png` : '',
         score: typeof it.score === 'number' ? it.score : undefined, // 하이라이트 바이럴 점수
+        source: it.source, // 하이라이트 소재 출처(작업내역 탭별 이원화): search/url/upload/archive
       };
     });
     const sampleYt = loadSampleYouTube();
@@ -1429,6 +1430,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const broll = !!b.broll; // AI b-roll 팝업(이미지 생성 비용 발생)
     const captionEn = !!b.captionEn; // 영어 번역 자막(한국어 아래 함께) — 해설 켤 때만 의미
     const isCc = b.isCc !== false; // 기본 CC(안전). URL 모드에서 비-CC 영상이면 false로 와서 출처에 CC BY를 거짓표기하지 않는다.
+    const source = ['search', 'url', 'upload', 'archive'].includes(b.source) ? b.source : undefined; // 작업내역 탭별 이원화용 소재 출처
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
@@ -1437,7 +1439,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       try {
         job.kind = 'highlight';
         job.clips = []; // 완성되는 편마다 누적(먼저 끝난 편을 SSE로 바로 흘림)
-        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, muteOriginal, localFile, template, removeSilence, broll, captionEn, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
+        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, muteOriginal, localFile, template, removeSilence, broll, captionEn, source, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
           onClip: (c) => { if (!job.clips!.some((x) => x.projectId === c.projectId)) job.clips!.push(c); }});
         if (localFile) { try { fs.rmSync(localFile, {force: true}); } catch {} } // 업로드 원본은 작업 끝나면 정리
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }

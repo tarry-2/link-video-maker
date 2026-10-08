@@ -116,18 +116,31 @@
           <div class="seg" style="margin-top:6px">
             <button type="button" class="seg-btn hl-arc-src active" data-src="kbs">📺 옛날티비 (KBS 아카이브)</button>
           </div>
-          <p class="hint" style="margin-top:4px">✅ KBS가 "가져다 써도 좋다"고 <b>공식 개방</b>한 소재예요(둘리·7080 추억·옛 예능 등). 조회수 잘 나오는 레트로 콘텐츠로 숏폼/롱폼을 만드세요. 출처는 자동으로 붙어요.</p>
+          <p class="hint warn" style="margin-top:4px">⚠️ <b>저작권 주의</b> — KBS 아카이브에는 KBS 자체 제작물도 있지만 <b>둘리(김수정·둘리나라)·영화·가요·외주 애니처럼 원저작권자가 따로인 콘텐츠</b>도 섞여 있어요. 이런 건 유튜브 Content ID에 걸릴 수 있어요.<br>• <b>실측상 1분(59초) 미만이면 유튜브 "쇼츠 전세계 차단"을 피해요</b>(1~3분이 가장 위험). 아래 길이를 <b>59초 이하</b>로 하세요.<br>• <b>📷 인스타(릴스)는 유튜브보다 저작권 스캔이 느슨해 보통 안 걸려요</b> — 저작권 애매한 소재는 <b>인스타 위주</b>로 올리는 걸 추천해요.<br>• 그래도 걸리면 원본 소리를 제거하세요. 출처는 자동으로 붙어요.</p>
 
-          <label class="field-label" style="margin-top:14px">주제 <span class="hint">— 고르면 그 분야 영상이 쫙 떠요 (직접 검색도 가능)</span></label>
-          <div id="hl-arc-cats" class="hl-cats"></div>
-          <div class="voice-row" style="margin-top:8px">
-            <input id="hl-arc-query" class="input" placeholder="또는 직접 검색 (예: 둘리, 7080, 예능, 드라마…)" />
+          <label class="field-label" style="margin-top:14px">🎭 장르 <span class="hint">— 누르면 그 분야 영상이 쫙 떠요</span></label>
+          <div id="hl-arc-genres" class="hl-cats"></div>
+          <label class="field-label" style="margin-top:12px">🏷 주제</label>
+          <div id="hl-arc-topics" class="hl-cats"></div>
+          <div class="voice-row" style="margin-top:10px">
+            <input id="hl-arc-query" class="input" placeholder="또는 직접 검색 (예: 둘리, 7080, 손석희, 전원일기…)" />
             <button id="hl-arc-search" class="ghost-btn" type="button">🔎 검색</button>
+          </div>
+          <!-- 정렬 — 아카이브 결과를 조회수/길이로 다시 정렬(검색 후 표시) -->
+          <div id="hl-arc-sort-row" class="hidden" style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="hint">정렬:</span>
+            <div class="seg" style="flex:1;min-width:220px">
+              <button type="button" class="seg-btn hl-arc-sort active" data-sort="view">🔥 조회수순</button>
+              <button type="button" class="seg-btn hl-arc-sort" data-sort="long">⏱ 긴 영상순</button>
+              <button type="button" class="seg-btn hl-arc-sort" data-sort="short">⚡ 짧은 영상순</button>
+            </div>
           </div>
         </div>
 
         <p id="hl-search-state" class="mini-state"></p>
         <div id="hl-results" class="hl-results"></div>
+        <!-- 아카이브 가로 페이지네이션 (밑으로 안 길어지게 한 페이지씩) -->
+        <div id="hl-arc-pager" class="arc-pager hidden"></div>
 
         <div id="hl-options" style="margin-top:14px">
           <label class="field-label">③ 화면 방향 <span class="hint">— 쇼츠/릴스는 세로, 유튜브 일반은 가로</span></label>

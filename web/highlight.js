@@ -296,29 +296,63 @@
   }
 
   // ── 작업 내역(하이라이트만) ──
+  // 작업내역 소스별 분류(탭 이원화) — 주제검색 / 영상URL / 내 영상 / 아카이브.
+  const SRC_META = {
+    search: {label: '🔎 주제로 찾기', order: 0},
+    archive: {label: '📼 아카이브', order: 1},
+    url: {label: '🔗 영상 URL', order: 2},
+    upload: {label: '📁 내 영상', order: 3},
+  };
+  let histFilter = 'all'; // all 또는 search/archive/url/upload
+  function histItemHtml(it) {
+    const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
+    const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
+    const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
+    const srcLabel = (SRC_META[it.source] || {}).label || '🎬 하이라이트';
+    return `<div class="history-item"><span><strong>${scoreBadge(it.score)} ${esc(it.title)}</strong><small>${esc(when)} · ${srcLabel}${yt}${ig}</small></span>
+      <span class="hi-actions">
+        <button type="button" class="ghost-btn small hh-edit" data-id="${esc(it.id)}">✏️</button>
+        <a class="ghost-btn small" href="${esc(it.video)}" download="${esc(it.title)}.mp4">⬇</a>
+        <button type="button" class="ghost-btn small hh-yt" data-id="${esc(it.id)}">📺</button>
+        <button type="button" class="ghost-btn small hh-ig" data-id="${esc(it.id)}" data-land="${it.orientation === 'landscape' ? '1' : ''}">📷</button>
+        <button type="button" class="ghost-btn small hh-del" data-id="${esc(it.id)}">🗑</button>
+      </span></div>`;
+  }
+  let histItems = [];
+  function renderHistory() {
+    const box = $('hl-history'); if (!box) return;
+    if (!histItems.length) { box.innerHTML = '<p class="mini-state">아직 만든 하이라이트가 없어요. 위에서 재사용 영상을 골라 만들어보세요.</p>'; return; }
+    // 소스별로 그룹핑(각 그룹 안에서 점수순). 레거시(source 없음)는 '주제로 찾기'로.
+    const groups = {};
+    for (const it of histItems) { const s = SRC_META[it.source] ? it.source : 'search'; (groups[s] ||= []).push(it); }
+    const order = Object.keys(groups).sort((a, b) => (SRC_META[a].order) - (SRC_META[b].order));
+    // 소스 필터 탭(2개 이상 소스가 있을 때만 노출).
+    let tabs = '';
+    if (order.length > 1) {
+      tabs = `<div class="seg" style="margin:4px 0 12px;flex-wrap:wrap">
+        <button type="button" class="seg-btn hh-tab ${histFilter==='all'?'active':''}" data-f="all">전체 (${histItems.length})</button>
+        ${order.map((s) => `<button type="button" class="seg-btn hh-tab ${histFilter===s?'active':''}" data-f="${s}">${SRC_META[s].label} (${groups[s].length})</button>`).join('')}
+      </div>`;
+    }
+    const shown = order.filter((s) => histFilter === 'all' || histFilter === s);
+    const body = shown.map((s) => {
+      const list = groups[s].slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+      const head = order.length > 1 ? `<div class="field-label" style="margin:10px 0 4px">${SRC_META[s].label} <span class="hint">${list.length}편</span></div>` : '';
+      return head + list.map(histItemHtml).join('');
+    }).join('');
+    box.innerHTML = tabs + body;
+    box.querySelectorAll('.hh-tab').forEach((b) => b.onclick = () => { histFilter = b.dataset.f; renderHistory(); });
+    box.querySelectorAll('.hh-edit').forEach((b) => b.onclick = () => openEditModal(b.dataset.id));
+    box.querySelectorAll('.hh-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
+    box.querySelectorAll('.hh-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, !!b.dataset.land));
+    box.querySelectorAll('.hh-del').forEach((b) => b.onclick = () => del(b.dataset.id));
+  }
   async function loadHistory() {
     const box = $('hl-history'); if (!box) return;
     try {
       const d = await (await fetch('/api/portfolio', {cache: 'no-store'})).json();
-      const items = (Array.isArray(d.items) ? d.items : []).filter((it) => it.kind === 'mine' && it.media === 'highlight')
-        .sort((a, b) => (b.score || 0) - (a.score || 0)); // 점수순(터질 것부터)
-      box.innerHTML = items.length ? items.map((it) => {
-        const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
-        const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
-        const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
-        return `<div class="history-item"><span><strong>${scoreBadge(it.score)} ${esc(it.title)}</strong><small>${esc(when)} · 🎬 하이라이트${yt}${ig}</small></span>
-          <span class="hi-actions">
-            <button type="button" class="ghost-btn small hh-edit" data-id="${esc(it.id)}">✏️</button>
-            <a class="ghost-btn small" href="${esc(it.video)}" download="${esc(it.title)}.mp4">⬇</a>
-            <button type="button" class="ghost-btn small hh-yt" data-id="${esc(it.id)}">📺</button>
-            <button type="button" class="ghost-btn small hh-ig" data-id="${esc(it.id)}" data-land="${it.orientation === 'landscape' ? '1' : ''}">📷</button>
-            <button type="button" class="ghost-btn small hh-del" data-id="${esc(it.id)}">🗑</button>
-          </span></div>`;
-      }).join('') : '<p class="mini-state">아직 만든 하이라이트가 없어요. 위에서 재사용 영상을 골라 만들어보세요.</p>';
-      box.querySelectorAll('.hh-edit').forEach((b) => b.onclick = () => openEditModal(b.dataset.id));
-      box.querySelectorAll('.hh-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
-      box.querySelectorAll('.hh-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, !!b.dataset.land));
-      box.querySelectorAll('.hh-del').forEach((b) => b.onclick = () => del(b.dataset.id));
+      histItems = (Array.isArray(d.items) ? d.items : []).filter((it) => it.kind === 'mine' && it.media === 'highlight');
+      renderHistory();
     } catch { box.innerHTML = '<p class="mini-state">작업 내역을 불러오지 못했어요.</p>'; }
   }
   async function del(id) {
@@ -491,7 +525,7 @@
     const badge = risk === 'cc'
       ? '<span style="color:#2bb673;font-weight:700">✅ 재사용 허가(CC) — 출처만 밝히면 합법 수익화</span>'
       : risk === 'archive'
-      ? '<span style="color:#2f5fd0;font-weight:700">📼 공개 아카이브 — KBS가 공식 개방한 소재예요. 출처만 밝히면 안전하게 재가공·수익화할 수 있어요.</span>'
+      ? '<span style="color:#d9822b;font-weight:700">📼 아카이브 — ⚠️ 둘리·영화·가요 등 원저작권자가 따로인 콘텐츠는 Content ID에 걸릴 수 있어요. <b>59초 이하</b>로 만들면 "쇼츠 전세계 차단"을 피해요(1~3분 위험). 걸리면 원본 소리도 제거하세요.</span>'
       : risk === 'caution'
       ? '<span style="color:#e5484d;font-weight:700">⚠️ 저작권 주의 — 영화·방송·음원·스포츠일 수 있어요. 재가공해도 위험하니 가급적 피하세요.</span>'
       : '<span style="color:#d08700;font-weight:700">🆗 무난 — 일반 롱폼. 해설·자막으로 재가공 + 출처를 남기면 안전 범위예요.</span>';
@@ -625,7 +659,9 @@
     {ko:'요리·음식', q:'요리'}, {ko:'여행', q:'여행'}, {ko:'교양·지식', q:'교양'},
     {ko:'어린이', q:'어린이'}, {ko:'연예·스타', q:'스타'}, {ko:'명장면', q:'명장면'},
   ];
-  let arcQuery = '', arcOffset = 0, arcAll = [], arcSort = 'view', arcHasMore = false, arcLoading = false;
+  // 가로 페이지네이션 — 밑으로 길어지지 않게 한 페이지(12개)씩 보여주고 ◀ 1 2 3 ▶ 로 넘긴다.
+  const ARC_PER_PAGE = 12;
+  let arcQuery = '', arcAll = [], arcSort = 'view', arcServerMore = false, arcLoading = false, arcPage = 0, arcServerOffset = 0;
   function renderArcChips() {
     const mk = (c) => `<button type="button" class="hl-cat hl-arc-cat" data-q="${esc(c.q)}" data-ko="${esc(c.ko)}">${c.ko}</button>`;
     if ($('hl-arc-genres')) $('hl-arc-genres').innerHTML = ARC_GENRES.map(mk).join('');
@@ -648,51 +684,91 @@
     else a.sort((x, y) => (y.views || 0) - (x.views || 0)); // 기본=조회수순
     return a;
   }
-  function renderArcMore() {
-    $('hl-arc-more')?.remove();
-    if (!arcHasMore) return;
-    const more = document.createElement('button');
-    more.id = 'hl-arc-more'; more.type = 'button'; more.className = 'ghost-btn'; more.style.cssText = 'width:100%;margin-top:10px';
-    more.textContent = `▼ 더 보기 (지금 ${arcAll.length}개)`;
-    more.onclick = () => { more.disabled = true; more.textContent = '불러오는 중…'; archiveSearch(arcQuery, true); };
-    $('hl-results').parentNode.insertBefore(more, $('hl-results').nextSibling);
+  function arcTotalPages() {
+    // 서버에 더 있을 수 있으면(arcServerMore) 마지막 페이지 다음에 '다음'을 열어둔다.
+    const base = Math.ceil(arcAll.length / ARC_PER_PAGE) || 1;
+    return arcServerMore ? base + 1 : base;
   }
-  function renderArc() {
+  // 페이지 번호 바(가로). 현재 페이지 주변 + 처음/끝. 밑으로 안 길어지게 결과 '위'에 배치.
+  function renderArcPager() {
+    const wrap = $('hl-arc-pager'); if (!wrap) return;
+    const total = arcTotalPages();
+    if (arcAll.length <= ARC_PER_PAGE && !arcServerMore) { wrap.innerHTML = ''; wrap.classList.add('hidden'); return; }
+    wrap.classList.remove('hidden');
+    const cur = arcPage;
+    const nums = [];
+    const win = 2; // 현재 ±2
+    for (let i = 0; i < total; i++) {
+      if (i === 0 || i === total - 1 || (i >= cur - win && i <= cur + win)) nums.push(i);
+      else if (nums[nums.length - 1] !== '…') nums.push('…');
+    }
+    wrap.innerHTML =
+      `<button type="button" class="arc-pg nav" data-p="${Math.max(0, cur - 1)}" ${cur === 0 ? 'disabled' : ''}>◀</button>` +
+      nums.map((n) => n === '…'
+        ? `<span class="arc-pg dots">…</span>`
+        : `<button type="button" class="arc-pg ${n === cur ? 'active' : ''}" data-p="${n}">${n + 1}</button>`).join('') +
+      `<button type="button" class="arc-pg nav" data-p="${Math.min(total - 1, cur + 1)}" ${cur >= total - 1 ? 'disabled' : ''}>▶</button>`;
+    wrap.querySelectorAll('.arc-pg[data-p]').forEach((b) => b.onclick = () => gotoArcPage(Number(b.dataset.p)));
+  }
+  function renderArcPage() {
     const box = $('hl-results'); if (!box) return;
-    box.innerHTML = sortArc(arcAll).map(cardHtml).join('');
+    const sorted = sortArc(arcAll);
+    const startI = arcPage * ARC_PER_PAGE;
+    const slice = sorted.slice(startI, startI + ARC_PER_PAGE);
+    box.innerHTML = slice.map(cardHtml).join('');
     wireCards(box);
     if (picked) document.querySelectorAll('.hl-card').forEach((b) => b.classList.toggle('active', b.dataset.id === picked.videoId));
-    renderArcMore();
+    renderArcPager();
+    const st = $('hl-search-state');
+    if (st) st.textContent = `${arcPage + 1}페이지 · ${arcAll.length}개${arcServerMore ? '+' : ''} 중 ${slice.length}개 표시 · 하나 고르세요`;
   }
-  async function archiveSearch(forcedQuery, append) {
-    const box = $('hl-results'), st = $('hl-search-state');
-    if (arcLoading) return;
-    if (!append) {
-      const q = (forcedQuery != null ? forcedQuery : ($('hl-arc-query')?.value || '')).trim();
-      if (!q) { alert('장르·주제를 고르거나 검색어를 입력하세요.'); return; }
-      arcQuery = q; arcOffset = 0; arcAll = []; picked = null; $('hl-picked').textContent = '';
-      box.innerHTML = ''; $('hl-arc-more')?.remove(); renderCountSeg();
-      $('hl-sort-row')?.classList.add('hidden');
-      st.textContent = '옛날티비(KBS) 아카이브에서 찾는 중…';
-    } else { st.textContent = '더 불러오는 중…'; $('hl-arc-more')?.remove(); }
-    arcLoading = true; query = arcQuery; // 제작 로그/상태용
+  async function gotoArcPage(p) {
+    if (p < 0 || arcLoading) return;
+    // 그 페이지를 채울 데이터가 아직 없고 서버에 더 있으면 먼저 다음 묶음을 받아온다.
+    while (p * ARC_PER_PAGE >= arcAll.length && arcServerMore && !arcLoading) {
+      const ok = await fetchArcBatch();
+      if (!ok) break;
+    }
+    const maxPage = Math.max(0, Math.ceil(arcAll.length / ARC_PER_PAGE) - 1);
+    arcPage = Math.min(p, maxPage);
+    renderArcPage();
+    $('hl-results')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+    saveState();
+  }
+  // 서버에서 다음 묶음(60개)을 받아 arcAll에 누적. 성공 시 true.
+  async function fetchArcBatch() {
+    if (arcLoading) return false;
+    arcLoading = true;
     try {
-      const d = await (await fetch(`/api/archive-search?src=${encodeURIComponent(archiveSrc)}&q=${encodeURIComponent(arcQuery)}&offset=${arcOffset}`)).json();
-      if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
+      const d = await (await fetch(`/api/archive-search?src=${encodeURIComponent(archiveSrc)}&q=${encodeURIComponent(arcQuery)}&offset=${arcServerOffset}`)).json();
+      if (d.error) { $('hl-search-state').textContent = '⚠️ ' + d.error; arcServerMore = false; return false; }
       const vids = (d.videos || []).map(arcToCard);
       const seen = new Set(arcAll.map((x) => x.videoId));
-      const fresh = vids.filter((v) => !seen.has(v.videoId)); // 중복 제거(더 보기 시)
+      const fresh = vids.filter((v) => !seen.has(v.videoId));
       arcAll = arcAll.concat(fresh);
-      arcOffset = d.nextOffset || (arcOffset + vids.length);
-      arcHasMore = !!d.hasMore && fresh.length > 0;
-      if (!arcAll.length) { st.textContent = '결과가 없어요. 다른 장르·검색어로 시도해보세요.'; return; }
-      $('hl-arc-sort-row')?.classList.remove('hidden');
-      renderArc();
-      st.textContent = `${arcAll.length}개 표시 중${arcHasMore ? ' — 더 있어요' : ' (끝)'} · 하나 고르세요`;
-      addLog(append ? `➕ 아카이브 ${fresh.length}개 더 불러옴 (총 ${arcAll.length}개)` : `📼 아카이브 "${arcQuery}" — ${arcAll.length}개`);
-      saveState();
-    } catch { st.textContent = '아카이브를 불러오지 못했어요. 잠시 후 다시 시도하세요.'; }
+      arcServerOffset = d.nextOffset || (arcServerOffset + vids.length);
+      arcServerMore = !!d.hasMore && fresh.length > 0;
+      return true;
+    } catch { $('hl-search-state').textContent = '아카이브를 불러오지 못했어요. 잠시 후 다시 시도하세요.'; arcServerMore = false; return false; }
     finally { arcLoading = false; }
+  }
+  async function archiveSearch(forcedQuery) {
+    const st = $('hl-search-state');
+    if (arcLoading) return;
+    const q = (forcedQuery != null ? forcedQuery : ($('hl-arc-query')?.value || '')).trim();
+    if (!q) { alert('장르·주제를 고르거나 검색어를 입력하세요.'); return; }
+    arcQuery = q; arcAll = []; arcServerOffset = 0; arcServerMore = false; arcPage = 0;
+    picked = null; $('hl-picked').textContent = ''; $('hl-results').innerHTML = ''; renderCountSeg();
+    $('hl-sort-row')?.classList.add('hidden'); $('hl-arc-pager')?.classList.add('hidden');
+    st.textContent = '옛날티비(KBS) 아카이브에서 찾는 중…';
+    query = arcQuery; // 제작 로그/상태용
+    const ok = await fetchArcBatch();
+    if (!ok) return;
+    if (!arcAll.length) { st.textContent = '결과가 없어요. 다른 장르·검색어로 시도해보세요.'; return; }
+    $('hl-arc-sort-row')?.classList.remove('hidden');
+    renderArcPage();
+    addLog(`📼 아카이브 "${arcQuery}" — ${arcAll.length}개${arcServerMore ? '+' : ''} (페이지로 넘겨보세요)`);
+    saveState();
   }
   renderArcChips();
   document.querySelectorAll('.hl-arc-src').forEach((b) => b.addEventListener('click', () => {
@@ -703,7 +779,7 @@
   $('hl-arc-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.querySelector('.hl-arc-cat.active')?.classList.remove('active'); archiveSearch(); } });
   document.querySelectorAll('.hl-arc-sort').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-arc-sort').forEach((x) => x.classList.remove('active')); b.classList.add('active');
-    arcSort = b.dataset.sort || 'view'; if (arcAll.length) renderArc();
+    arcSort = b.dataset.sort || 'view'; if (arcAll.length) { arcPage = 0; renderArcPage(); }
   }));
 
   // ── 내 영상 올리기 — 업로드 → picked(uploadId) 설정 → 바로 '만들기' 가능(저작권 자유) ──
@@ -907,40 +983,24 @@
   $('hl-generate')?.addEventListener('click', () => {
     if (!picked) { alert('먼저 영상을 고르세요.'); return; }
     if (curJobId) { alert('이미 제작이 진행 중이에요. 끝나거나 중단한 뒤에 다시 시작하세요.'); return; } // 중복 생성 방지
-    // ★저작권 '주의'(드라마·예능·영화·음방·방송사) 영상 처리. 핵심: 세로(쇼츠=3분미만)는 Content ID 클레임만
-    //   걸려도 "무조건 차단"(유튜브 정책) → 세로+비CC는 거의 다 막힘. 가로 3분+는 차단이 아니라 "클레임"(채널
-    //   안 죽고 영상 살아있음, 수익만 원저작자). → 비CC면 가로 3분+로 유도.
-    if (picked.risk === 'caution') {
-      if (orient === 'portrait') {
-        // 세로 = 쇼츠 = 차단. 가로로 바꾸라고 강하게 유도.
-        const go = confirm(
-          '⚠️ 이 영상(드라마·예능 등)은 세로(쇼츠)로 만들면 거의 차단돼요\n\n' +
-          '유튜브는 3분 미만 쇼츠에 저작권이 걸리면 "무조건 차단"합니다(정책). ' +
-          '같은 영상도 가로 3분 이상이면 차단이 아니라 "클레임"으로 끝나요(채널 안 죽고 영상은 살아있음, 조회수·구독 쌓임. 광고수익만 원저작자).\n\n' +
-          '👉 [확인] 가로 3분+로 바꾸기(권장)   /   [취소] 그래도 세로로(연습·소장용)'
-        );
-        if (go) {
-          // 가로 + 길이 3분(180초)로 자동 전환.
-          orient = 'landscape'; sec = 180;
-          document.querySelectorAll('.hl-orient').forEach((x) => x.classList.toggle('active', x.dataset.o === 'landscape'));
-          document.querySelectorAll('.hl-sec').forEach((x) => x.classList.toggle('active', Number(x.dataset.s) === 180));
-          applyReframeRow(); saveState();
-          addLog('↪ 저작권 때문에 가로 3분으로 바꿨어요(차단 대신 클레임 — 채널 안전).', 'done');
-        }
-        // 취소면 세로 유지(사용자 선택). 어느 쪽이든 아래로 진행.
-      } else if (picked.durationSec && sec < 180) {
-        // 가로지만 3분 미만이면 여전히 쇼츠 취급될 수 있음 → 3분+ 권장.
-        const bump = confirm(
-          '⚠️ 저작권 주의 영상이에요\n\n' +
-          '가로는 세로보다 안전하지만, 3분 미만이면 유튜브가 쇼츠로 보고 차단할 수 있어요. ' +
-          '3분 이상이면 "클레임"(채널 안전)으로 끝납니다.\n\n' +
-          '👉 [확인] 한 편 길이 3분으로   /   [취소] 지금 길이 유지'
-        );
-        if (bump) {
-          sec = 180;
-          document.querySelectorAll('.hl-sec').forEach((x) => x.classList.toggle('active', Number(x.dataset.s) === 180));
-          saveState();
-        }
+    // ★저작권 주의·아카이브(둘리·영화·가요 등 원저작권자 따로) 영상 처리. 테리 실측:
+    //   1~3분 쇼츠는 Content ID 걸리면 "전세계 차단". 59초 미만이면 그 차단을 피한다(길이가 핵심).
+    //   → 60초 이상이면 59초로 줄이기를 강하게 권장(기존의 '가로 3분 유도'는 실측과 반대라 폐기).
+    if ((picked.risk === 'caution' || picked.risk === 'archive') && sec >= 60) {
+      const go = confirm(
+        '⚠️ 저작권 주의 영상이에요 (둘리·영화·가요·방송 등 원저작권자가 따로일 수 있어요)\n\n' +
+        '유튜브는 1~3분 쇼츠에 저작권(Content ID)이 걸리면 "전세계 차단"을 합니다. ' +
+        '실측상 한 편을 59초 미만으로 만들면 그 차단을 피해요(1~3분이 가장 위험).\n\n' +
+        '👉 [확인] 한 편 길이를 59초로 줄이기(권장)   /   [취소] 지금 길이 유지(차단 위험 감수)'
+      );
+      if (go) {
+        sec = 59;
+        document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active'));
+        if ($('hl-sec-custom')) $('hl-sec-custom').value = '59';
+        renderCountSeg(); saveState();
+        addLog('↪ 저작권 때문에 59초로 줄였어요(쇼츠 전세계 차단 회피). 그래도 걸리면 원본 소리도 제거하세요.', 'done');
+      } else {
+        addLog('⚠️ 60초 이상으로 진행합니다 — Content ID에 걸리면 전세계 차단될 수 있어요.', 'fail');
       }
     }
     addLog('──────── 하이라이트 제작 시작 ────────', 'done');
@@ -966,7 +1026,9 @@
     startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
     // 새로고침해도 경과·예상시간이 안 사라지게 저장(복원 시 읽음).
     try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
-    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, captionEn: !!captionEn, voice, isCc: picked.isCc !== false};
+    // 소재 출처(작업내역 탭별 이원화) — 내 영상 업로드면 upload, 그 외는 현재 모드(search/url/archive).
+    const src = picked.mine ? 'upload' : (['url', 'archive'].includes(mode) ? mode : 'search');
+    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, captionEn: !!captionEn, source: src, voice, isCc: picked.isCc !== false};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });

@@ -158,7 +158,7 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; onClip?: (c: {projectId: string; file: string; title: string; score: number; reason?: string}) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; source?: 'search' | 'url' | 'upload' | 'archive'; onClip?: (c: {projectId: string; file: string; title: string; score: number; reason?: string}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -200,6 +200,10 @@ export async function makeHighlights(
     // 클립 길이(초)로 프레임 수 산정.
     const durSec = Math.max(1, c.end - c.start);
     const clipFrames = Math.round(durSec * FPS);
+    // ★길이 락(hard cap) — 사용자가 고른 한 편 길이(clipSec)를 '절대' 넘지 않게 한다.
+    //   저작권 때문에 59초로 맞췄는데 해설 나레이션이 길어 60초를 넘기면 "쇼츠 전세계 차단" 위험 → 넘침 금지.
+    //   clipSec이 지정돼 있으면 그 프레임을 상한으로 쓴다(지정 안 하면 clipFrames 그대로).
+    const capFrames = opts.clipSec ? Math.round(opts.clipSec * FPS) : clipFrames;
 
     // ── 해설 나레이션(선택) — 원본에 '내 관점의 해설'을 입혀 수익화(변형 가치) 충족 ──
     //   Gemini로 해설 대본 → ElevenLabs TTS(단어 타이밍) → 원본 소리는 더킹, 카라오케 자막으로 표시.
@@ -208,7 +212,11 @@ export async function makeHighlights(
     let narrFrames = 0;
     let commentaryText = ''; // 실제 해설 대본 — 업로드 상세설명도 이걸 기반으로 쓴다(나레이션↔설명 일치).
     if (opts.commentary) {
-      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', Math.round(durSec), log);
+      // 해설 길이도 '길이 락' 안에 맞춘다 — 영상이 capFrames에서 잘리므로 나레이션이 그보다 길면 뒷말이 뚝 끊긴다.
+      //   캡의 92%를 목표 길이로(여운 1.3초 + 여유). 사용자가 59초로 맞췄으면 해설은 ~54초 분량으로 생성.
+      const capSec = capFrames / FPS;
+      const narrTargetSec = Math.max(5, Math.min(Math.round(durSec), Math.floor(capSec * 0.92)));
+      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log);
       commentaryText = commentary || '';
       if (commentary && k.elevenlabs) {
         log(`[하이라이트] ${i + 1}편 해설 나레이션 생성…`);
@@ -248,8 +256,8 @@ export async function makeHighlights(
       muteOriginal: !!opts.muteOriginal && hasNarration, // 원본 제거는 '해설이 있을 때만' — 없으면 무음 방지로 원본 유지
 
       // ★해설 있으면 "나레이션 끝나는 지점 + 1.3초 여운"까지만(뒤 허전함 제거). 나레이션이 더 길면 그만큼.
-      //   해설 없으면 클립 전체.
-      durationInFrames: words.length ? narrFrames + Math.round(FPS * 1.3) : clipFrames,
+      //   해설 없으면 클립 전체. 단 어느 경우든 capFrames(사용자 지정 길이)를 '절대' 넘지 않는다(길이 락).
+      durationInFrames: Math.min(capFrames, words.length ? narrFrames + Math.round(FPS * 1.3) : clipFrames),
     };
 
     // ★디자인 썸네일용 배경 = 후킹 글자 없는 '깨끗한' 원본 클립 프레임(c.file). 완성 mp4엔 후킹이 박혀
@@ -398,6 +406,7 @@ export async function makeHighlights(
         projectId, title, output,
         voice: '원본 음성(CC)', category: '🎬 유튜브 하이라이트', goal: 'info',
         createdAt, orientation, kind: 'highlight', score: c.score,
+        source: opts.source || (isMine ? 'upload' : 'search'), // 작업내역 탭별 이원화용 소재 출처
       });
     } catch (e: any) { log('[하이라이트] 포트폴리오 등록 건너뜀: ' + (e?.message || '')); }
     // 출처(attribution)를 프로젝트 폴더에도 남긴다(상세설명 폴백 — project.json 읽기 실패 대비).
