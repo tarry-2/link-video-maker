@@ -1,6 +1,6 @@
 // OnVideo 웹 서버 — 브라우저에서 링크→카테고리→영상 생성. 단일 사용자 로컬 앱.
 import http from 'node:http';
-import {handleStudio, todayProducedCount} from './lib/studio-http';
+import {handleStudio, todayProducedCount, studio} from './lib/studio-http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -386,8 +386,38 @@ async function readRaw(req: http.IncomingMessage, maxBytes: number): Promise<Buf
   }
   return Buffer.concat(chunks);
 }
-// 업로드 원본 보관 폴더(본인 영상 하이라이트). 오래된 파일은 부팅 시 정리.
-const HL_UPLOAD_DIR = path.join(STUDIO_DATA_DIR, 'hl-uploads');
+// ★업로드 원본은 영구 볼륨이 아니라 /tmp에 둔다(렌더 출력과 동일 원리).
+//   본인 업로드 영상은 제작에 쓰고 바로 지우는 '일회성'이라 볼륨에 둘 이유가 없고,
+//   볼륨(/app/data)이 꽉 차면 업로드 write가 ENOSPC로 죽는다(테리 실측). /tmp는 볼륨과 별개 공간이라
+//   볼륨이 꽉 차도 업로드가 성공한다. 오래된 잔재는 주기 청소(cleanOldUploads)가 치운다.
+const HL_UPLOAD_DIR = path.join(os.tmpdir(), 'onvideo-hl-uploads');
+
+// 버려진 업로드 원본 정리 — 올리고 제작 안 한 파일이 /tmp에 쌓이지 않게 maxAgeMs(기본 2시간) 넘은 것 삭제.
+function cleanOldUploads(maxAgeMs = 2 * 60 * 60 * 1000): {removed: number; bytes: number} {
+  let removed = 0, bytes = 0;
+  try {
+    const now = Date.now();
+    for (const f of fs.readdirSync(HL_UPLOAD_DIR)) {
+      const fp = path.join(HL_UPLOAD_DIR, f);
+      try {
+        const st = fs.statSync(fp);
+        if (now - st.mtimeMs < maxAgeMs) continue;
+        bytes += st.size; fs.rmSync(fp, {force: true}); removed++;
+      } catch {}
+    }
+  } catch {}
+  return {removed, bytes};
+}
+
+// ★볼륨이 다시는 꽉 차지 않도록 주기적으로 도는 유지보수.
+//   studio.cleanup(오래된 작업·R2 오프로드분 정리) + 버려진 업로드 정리. 부팅 1회 + 30분마다 + 작업 끝날 때마다.
+let maintTs = 0;
+function runMaintenance(reason: string) {
+  maintTs = Date.now();
+  try { studio.cleanup({log: (s) => console.log('[유지보수:' + reason + '] ' + s)}); } catch {}
+  const u = cleanOldUploads();
+  if (u.removed) console.log(`[유지보수:${reason}] 버려진 업로드 ${u.removed}개 삭제`);
+}
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url || '/', `http://localhost:${PORT}`);
@@ -1331,6 +1361,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
   // ── 재사용(CC) 유튜브 영상 → 하이라이트 숏폼 여러 편 ──
   // ── 본인 영상 업로드(하이라이트 소재) — raw 바이너리 PUT. 파일명은 X-Filename 헤더. 반환 {uploadId, duration, title} ──
   if (p === '/api/highlight/upload' && req.method === 'POST') {
+    cleanOldUploads(); // 새 업로드 전에 버려진 옛 업로드부터 치워 /tmp 공간 확보(ENOSPC 예방)
     const rawName = decodeURIComponent(String(req.headers['x-filename'] || 'upload.mp4'));
     const ext = (rawName.match(/\.(mp4|mov|m4v|webm|mkv|avi)$/i) || ['', 'mp4'])[1].toLowerCase();
     fs.mkdirSync(HL_UPLOAD_DIR, {recursive: true});
@@ -1407,6 +1438,9 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       } catch (e: any) {
         job.error = e.message; job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
+      } finally {
+        // ★작업 끝날 때마다 디스크 청소 — 완성분은 R2로 가고 볼륨 잔재를 즉시 비워 ENOSPC 재발 방지.
+        runMaintenance('하이라이트완료');
       }
     })();
     return json(res, 202, {id});
@@ -1606,6 +1640,11 @@ server.listen(PORT, () => {
   const igRefresh = () => maybeRefreshInstagram((m) => console.log(m)).catch(() => {});
   igRefresh();
   setInterval(igRefresh, 24 * 60 * 60 * 1000);
+  // ★디스크 유지보수: 30분마다 오래된 작업·버려진 업로드 정리 → 볼륨이 꽉 차 ENOSPC 나는 걸 원천 차단.
+  // 레거시: 예전엔 업로드를 볼륨(data/hl-uploads)에 뒀다 → 이제 /tmp. 볼륨의 옛 업로드 폴더는 통째로 비운다(볼륨 공간 회수).
+  try { fs.rmSync(path.join(STUDIO_DATA_DIR, 'hl-uploads'), {recursive: true, force: true}); } catch {}
+  runMaintenance('부팅'); // 부팅 즉시 1회(현재 꽉 찬 볼륨도 비움)
+  setInterval(() => runMaintenance('주기'), 30 * 60 * 1000);
   // 구버전 하이라이트(project.json 없음) 복구 → 기존 것도 유튜브·인스타 업로드 가능.
   backfillHighlightProjects((m) => console.log(m)).catch(() => {});
 });
