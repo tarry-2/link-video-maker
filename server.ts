@@ -9,7 +9,7 @@ import {execFileSync as cpExecFileSync} from 'node:child_process';
 import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
-import {makeHighlights, backfillHighlightProjects} from './lib/youtube-highlight';
+import {makeHighlights, backfillHighlightProjects, reRenderHighlight} from './lib/youtube-highlight';
 import {generateCardStoryboard} from './lib/cards';
 import {PRESETS, RECOMMEND_STYLE, getPreset} from './lib/presets';
 import {STYLES, STYLE_IDS} from './lib/styles';
@@ -1398,6 +1398,65 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     job.cancelled = true;
     jlog(job, '[중단] 사용자가 중단을 눌렀습니다. 진행 중인 단계가 끝나는 대로 멈춥니다…');
     return json(res, 200, {ok: true});
+  }
+
+  // ── 하이라이트 한 편 편집 재렌더('✏️ 편집' 저장) — 후킹·디자인 바꿔 그 클립만 다시 렌더(job+SSE) ──
+  if (p === '/api/highlight/re-render' && req.method === 'POST') {
+    const b = await readBody(req);
+    const projectId = String(b.projectId || '').trim();
+    if (!projectId) return json(res, 400, {error: '편집할 영상을 찾을 수 없어요.'});
+    const overrides = {
+      hookTop: typeof b.hookTop === 'string' ? b.hookTop : undefined,
+      hookAccent: typeof b.hookAccent === 'string' ? b.hookAccent : undefined,
+      template: typeof b.template === 'string' ? b.template : undefined,
+    };
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false};
+    jobs.set(id, job);
+    currentGenJob = id;
+    (async () => {
+      try {
+        job.kind = 'highlight';
+        const r = await reRenderHighlight(projectId, overrides, (m) => jlog(job, m));
+        job.clips = [{projectId, file: r.output, title: ''}];
+        job.projectId = projectId; job.file = r.output;
+        job.done = true; job.doneAt = Date.now();
+      } catch (e: any) { job.error = e.message; job.done = true; job.doneAt = Date.now(); jlog(job, '[실패] ' + e.message); }
+    })();
+    return json(res, 202, {id});
+  }
+  // 편집 화면이 쓸 정보(저장된 후킹·템플릿 + 템플릿 목록).
+  if (p.startsWith('/api/highlight/edit-info/') && req.method === 'GET') {
+    const projectId = p.slice('/api/highlight/edit-info/'.length);
+    try {
+      const pj = path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json');
+      if (!fs.existsSync(pj)) return json(res, 404, {error: 'not found'});
+      const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+      const e = proj.hlEdit;
+      if (!e) return json(res, 200, {editable: false});
+      return json(res, 200, {editable: true, hookTop: e.hookTop || '', hookAccent: e.hookAccent || '', template: e.template || 'variety'});
+    } catch { return json(res, 500, {error: 'edit-info 실패'}); }
+  }
+  // AI 후킹 재추천(편집 모달 ✨) — 제목·현재 후킹 기반으로 더 터지는 후킹 제안.
+  if (p.startsWith('/api/highlight/hook-suggest/') && req.method === 'GET') {
+    const projectId = p.slice('/api/highlight/hook-suggest/'.length);
+    try {
+      const pj = path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json');
+      if (!fs.existsSync(pj)) return json(res, 404, {error: 'not found'});
+      const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+      const e = proj.hlEdit || {};
+      const k = pipelineKeys();
+      if (!k.gemini?.length) return json(res, 200, {hookTop: '', hookAccent: ''});
+      const prompt = `쇼츠 상단에 넣을 '후킹 자막'을 다시 뽑아줘. 궁금증·과장으로 스크롤을 멈추게.
+영상 제목: ${e.baseTitle || proj.title || ''}
+지금 후킹: ${e.hookTop || ''} / ${e.hookAccent || ''}
+규칙: hookTop=한국어 12자 내외, hookAccent=강조 단어 6자 내. 지금과 다른 각도로.
+JSON만: {"hookTop":"...","hookAccent":"..."}`;
+      const raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 256, temperature: 1.0});
+      const m = raw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
+      const j = m ? JSON.parse(m[0]) : {};
+      return json(res, 200, {hookTop: String(j.hookTop || '').slice(0, 24), hookAccent: String(j.hookAccent || '').slice(0, 12)});
+    } catch (e: any) { return json(res, 500, {error: 'hook-suggest 실패: ' + (e?.message || e)}); }
   }
 
   // ── 현재 진행 중 작업(모바일↔PC 공유) — 어느 기기든 이걸 받아 같은 SSE에 붙어 실시간으로 같이 본다 ──

@@ -226,7 +226,28 @@ export async function makeHighlights(
       kind: 'highlight',
       score: c.score, // AI 바이럴 점수(0~100)
       attribution, // CC BY 출처 — 상세설명/캡션에 자동 포함
+      // ★편집(재렌더)용 장면 메타 — '✏️ 편집'에서 후킹·템플릿 바꿔 이 클립만 다시 렌더할 때 쓴다.
+      hlEdit: {
+        hookTop: scene.hookTop, hookAccent: scene.hookAccent, template: tpl.id,
+        words, durFrames: scene.durationInFrames, muteOriginal: !!opts.muteOriginal,
+        hasNarration: !!voiceRel, orientation, baseTitle: meta.title,
+      },
     };
+    // ★편집 소스 보존 — 후킹 글자 없는 '깨끗한' 클립(c.file) + 나레이션. R2 우선(볼륨 ENOSPC 회피), 없으면 볼륨.
+    try {
+      const narrAbsSrc = path.join(pubClipDir, 'narration.mp3');
+      if (r2Enabled()) {
+        const sk = videoKey(projectId, 'source.mp4');
+        if (await uploadFile(sk, c.file, 'video/mp4')) proj.sourceR2 = sk;
+        if (voiceRel && fs.existsSync(narrAbsSrc)) {
+          const nk = videoKey(projectId, 'narration.mp3');
+          if (await uploadFile(nk, narrAbsSrc, 'audio/mpeg')) proj.narrationR2 = nk;
+        }
+      } else {
+        fs.copyFileSync(c.file, path.join(studioDir, 'source.mp4')); proj.source = 'source.mp4';
+        if (voiceRel && fs.existsSync(narrAbsSrc)) { fs.copyFileSync(narrAbsSrc, path.join(studioDir, 'narration.mp3')); proj.narration = 'narration.mp3'; }
+      }
+    } catch (e: any) { log('[편집소스] 보존 실패(편집 불가할 수 있음): ' + (e?.message || '')); }
     // ★썸네일(커버) — 위에서 만든 디자인 커버(thumbAbs)를 project.json에 연결 + R2 업로드.
     if (thumbOk && fs.existsSync(thumbAbs)) {
       proj.thumb = thumbName;
@@ -346,4 +367,115 @@ export async function backfillHighlightProjects(log: (m: string) => void = () =>
   }
   if (fixed || thumbed) log(`[복구] 기존 하이라이트: project.json ${fixed}편 + 썸네일 ${thumbed}편 복구 완료.`);
   return fixed + thumbed;
+}
+
+// R2 또는 볼륨에서 파일을 /tmp로 내려받는다(편집 재렌더용 소스 확보).
+async function fetchToTmp(r2Key: string | undefined, volPath: string | undefined, tmpPath: string): Promise<boolean> {
+  if (volPath && fs.existsSync(volPath)) { fs.copyFileSync(volPath, tmpPath); return true; }
+  if (r2Key && r2Enabled()) {
+    try {
+      const got = await getStream(r2Key);
+      if (got) {
+        await new Promise<void>((resolve, reject) => {
+          const w = fs.createWriteStream(tmpPath);
+          got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject);
+        });
+        return fs.existsSync(tmpPath);
+      }
+    } catch {}
+  }
+  return false;
+}
+
+// ★하이라이트 한 편을 '편집'해서 그 클립만 다시 렌더한다('✏️ 편집' 저장). 깨끗한 소스(source.mp4)+나레이션을
+//   보존해뒀다가 후킹 문구·강조·디자인 템플릿만 바꿔 새로 렌더→output·썸네일 교체→project.json 갱신.
+export async function reRenderHighlight(
+  projectId: string,
+  overrides: {hookTop?: string; hookAccent?: string; template?: string},
+  log: (m: string) => void = () => {},
+): Promise<{output: string}> {
+  const studioDir = path.join(DATA_DIR, 'studio', projectId);
+  const pjPath = path.join(studioDir, 'project.json');
+  if (!fs.existsSync(pjPath)) throw new Error('이 하이라이트의 정보를 찾을 수 없어요.');
+  const proj: any = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
+  const e = proj.hlEdit;
+  if (!e) throw new Error('이 하이라이트는 편집 소스가 없어요(옛 버전). 새로 만든 하이라이트부터 편집할 수 있어요.');
+
+  // 1) 깨끗한 소스 클립 + (있으면)나레이션을 /tmp로 확보.
+  const work = path.join(os.tmpdir(), `hl-edit-${projectId}-${Date.now()}`);
+  await fsp.mkdir(work, {recursive: true});
+  const jobRel = `jobs/highlight-edit-${projectId}`;
+  const pubClipDir = path.join(process.cwd(), 'public', jobRel);
+  await fsp.mkdir(pubClipDir, {recursive: true});
+  const clipAbs = path.join(pubClipDir, 'clip.mp4');
+  log('[편집] 원본 소스 불러오는 중…');
+  const gotClip = await fetchToTmp(proj.sourceR2, proj.source && path.join(studioDir, proj.source), clipAbs);
+  if (!gotClip) { await fsp.rm(pubClipDir, {recursive: true, force: true}); throw new Error('편집용 원본 영상을 찾지 못했어요.'); }
+  let voiceRel: string | undefined;
+  if (e.hasNarration) {
+    const narrAbs = path.join(pubClipDir, 'narration.mp3');
+    if (await fetchToTmp(proj.narrationR2, proj.narration && path.join(studioDir, proj.narration), narrAbs)) voiceRel = `${jobRel}/narration.mp3`;
+  }
+
+  // 2) 장면 재구성 — 저장된 메타 + 사용자 오버라이드(후킹·템플릿).
+  const tpl = getHlTemplate(overrides.template && overrides.template !== 'auto' ? overrides.template : e.template);
+  const orientation: 'portrait' | 'landscape' = e.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const hookTop = (overrides.hookTop !== undefined ? overrides.hookTop : e.hookTop || '').slice(0, 40);
+  const hookAccent = (overrides.hookAccent !== undefined ? overrides.hookAccent : e.hookAccent || '').slice(0, 20);
+  const scene: SceneData = {
+    image: `${jobRel}/clip.mp4`, video: `${jobRel}/clip.mp4`, fullBleed: true,
+    template: tpl.id, hookTop, hookAccent, accentColor: tpl.accentColor,
+    words: Array.isArray(e.words) ? e.words : [], duckAudio: !!voiceRel, muteOriginal: !!e.muteOriginal,
+    durationInFrames: e.durFrames || Math.round((Number(proj.input?.duration) || 30) * FPS),
+  };
+
+  // 3) 렌더(새 output) + 썸네일.
+  const bgName = 'bg.png';
+  let bgOk = false;
+  try { bgOk = await extractThumb(clipAbs, path.join(pubClipDir, bgName), 1.0); } catch {}
+  const output = `highlight-edited-${randomUUID().slice(0, 8)}.mp4`;
+  const outAbs = r2Enabled() ? path.join(os.tmpdir(), `onvideo-hl-out-${projectId}-${output}`) : path.join(studioDir, output);
+  const thumbAbs = path.join(studioDir, 'thumb.png');
+  const publicDir = await buildRenderPublic(jobRel);
+  let thumbOk = false;
+  try {
+    log('[편집] 새 디자인으로 다시 렌더…');
+    await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
+    if (bgOk) {
+      try {
+        await renderThumbnail({image: `${jobRel}/${bgName}`, big: (hookTop || e.baseTitle || '').slice(0, 18), small: '', badge: (hookAccent || '').slice(0, 8), accentColor: tpl.accentColor}, thumbAbs, log, publicDir, orientation);
+        thumbOk = fs.existsSync(thumbAbs);
+      } catch {}
+    }
+    if (!thumbOk) { try { thumbOk = await extractThumb(outAbs, thumbAbs, 1.0); } catch {} }
+  } finally {
+    await fsp.rm(publicDir, {recursive: true, force: true});
+    await fsp.rm(pubClipDir, {recursive: true, force: true});
+    await fsp.rm(work, {recursive: true, force: true}).catch(() => {});
+  }
+
+  // 4) output·썸네일 교체 + project.json 갱신(R2 포함). 옛 output은 교체되므로 R2 키만 바꾸면 됨.
+  const oldOutput = proj.output;
+  proj.output = output;
+  proj.title = (hookTop || proj.title || e.baseTitle || '하이라이트').slice(0, 80);
+  proj.hlEdit = {...e, hookTop, hookAccent, template: tpl.id};
+  if (r2Enabled()) {
+    try {
+      const key = videoKey(projectId, output);
+      if (await uploadFile(key, outAbs, 'video/mp4')) { proj.outputR2 = key; fs.rmSync(outAbs, {force: true}); }
+      else { fs.copyFileSync(outAbs, path.join(studioDir, output)); fs.rmSync(outAbs, {force: true}); delete proj.outputR2; }
+      if (thumbOk && fs.existsSync(thumbAbs)) { const tk = videoKey(projectId, 'thumb.png'); if (await uploadFile(tk, thumbAbs, 'image/png')) proj.thumbR2 = tk; }
+    } catch (e2: any) { log('[편집] R2 갱신 실패(로컬 보관): ' + (e2?.message || '')); try { fs.copyFileSync(outAbs, path.join(studioDir, output)); fs.rmSync(outAbs, {force: true}); delete proj.outputR2; } catch {} }
+  }
+  proj.thumb = thumbOk ? 'thumb.png' : proj.thumb;
+  fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
+  fs.renameSync(pjPath + '.tmp', pjPath);
+  // 포트폴리오 제목 동기화.
+  try {
+    const items = listPortfolio();
+    const it = items.find((x) => x.projectId === projectId);
+    if (it) { it.title = proj.title; const fp = path.join(DATA_DIR, 'portfolio.json'); fs.writeFileSync(fp + '.tmp', JSON.stringify(items)); fs.renameSync(fp + '.tmp', fp); }
+  } catch {}
+  log('[편집] ✅ 다시 렌더 완료!');
+  return {output};
 }

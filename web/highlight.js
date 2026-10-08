@@ -111,7 +111,9 @@
         showStopped(); // 성공·실패 공통: '같은 설정으로 다시' + '취소하고 새 영상' 노출
         if (m.kind === 'highlight' && !m.error) {
           (m.clips || []).forEach((c) => { if (!resultClips.some((x) => x.projectId === c.projectId)) resultClips.push(c); });
-          showResults(resultClips, false); loadHistory();
+          mediaBust = String(Date.now()); // 편집 재렌더 후 새 영상·썸네일 보이게 캐시 무효화
+          if (resultClips.length) showResults(resultClips, false);
+          loadHistory();
         }
       }
     };
@@ -131,6 +133,8 @@
 
   // ── 완성 결과(여러 편) — 먼저 끝난 편부터 바로 노출 + 점수순 정렬 ──
   let resultClips = []; // 완성된 편 누적(SSE로 하나씩 들어옴)
+  let mediaBust = ''; // 편집 재렌더 후 영상·썸네일 캐시 무효화용(URL에 ?b= 붙임)
+  const bust = () => mediaBust ? ('?b=' + mediaBust) : '';
   function addResultClip(c) {
     if (!c || !c.projectId) return;
     if (!resultClips.some((x) => x.projectId === c.projectId)) resultClips.push(c);
@@ -149,9 +153,10 @@
       <div class="hl-result-grid">${clips.map((c, i) => `
         <div class="hl-result-item ${orient === 'landscape' ? 'land' : ''}" style="position:relative">
           ${scoreBadge(c.score, true)}
-          <video poster="/portfolio-thumb/${c.projectId}.png" src="/portfolio-item/${c.projectId}.mp4#t=0.5" controls playsinline preload="metadata"></video>
+          <video poster="/portfolio-thumb/${c.projectId}.png${bust()}" src="/portfolio-item/${c.projectId}.mp4${bust()}#t=0.5" controls playsinline preload="metadata"></video>
           <b style="display:block;margin:6px 0">${esc(c.title || ('하이라이트 ' + (i+1)))}</b>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="ghost-btn small hl-edit" data-id="${c.projectId}">✏️ 편집</button>
             <a class="ghost-btn small" href="/portfolio-item/${c.projectId}.mp4" download="${esc(c.title || 'highlight')}.mp4">⬇ 다운로드</a>
             <button class="ghost-btn small hl-yt" data-id="${c.projectId}">📺 유튜브</button>
             <button class="ghost-btn small hl-ig" data-id="${c.projectId}">📷 인스타</button>
@@ -159,7 +164,61 @@
         </div>`).join('')}</div>`;
     box.querySelectorAll('.hl-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
     box.querySelectorAll('.hl-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, orient === 'landscape'));
+    box.querySelectorAll('.hl-edit').forEach((b) => b.onclick = () => openEditModal(b.dataset.id));
     box.scrollIntoView({behavior: 'smooth'});
+  }
+
+  // ── 편집 모달 — 후킹 문구 + 디자인 템플릿 바꿔 그 클립만 다시 렌더(Phase3b) ──
+  const TPLS = [['variety','예능 자막'],['impact','임팩트 레드'],['cinema','감성 시네마'],['neon','네온 힙'],['magazine','매거진 다큐'],['pop','버블 팝']];
+  async function openEditModal(projectId) {
+    let info = {};
+    try { info = await (await fetch('/api/highlight/edit-info/' + encodeURIComponent(projectId))).json(); } catch {}
+    if (info && info.editable === false) { alert('이 하이라이트는 옛 버전이라 편집 소스가 없어요. 새로 만든 하이라이트부터 편집할 수 있어요.'); return; }
+    const curTpl = info.template || 'variety';
+    modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2>✏️ 하이라이트 편집</h2><button class="ghost-btn" data-x="close">✕</button></div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <video src="/portfolio-item/${projectId}.mp4#t=0.5" poster="/portfolio-thumb/${projectId}.png" controls playsinline preload="metadata" style="width:100%;border-radius:12px;background:#000;max-height:380px"></video>
+        </div>
+        <div style="flex:1.2;min-width:240px">
+          <label class="field-label">상단 후킹 문구 <span class="hint">(윗줄)</span></label>
+          <input id="ed-top" class="input" maxlength="40" value="${esc(info.hookTop || '')}">
+          <label class="field-label" style="margin-top:8px">강조 문구 <span class="hint">(아랫줄·색강조)</span></label>
+          <input id="ed-acc" class="input" maxlength="20" value="${esc(info.hookAccent || '')}">
+          <button id="ed-ai" class="ghost-btn small" type="button" style="margin-top:8px">✨ AI로 후킹 다시 추천</button>
+          <label class="field-label" style="margin-top:12px">🎨 디자인 템플릿</label>
+          <div id="ed-tpl" class="seg" style="margin-top:6px;flex-wrap:wrap">
+            ${TPLS.map(([v,l]) => `<button type="button" class="seg-btn ed-tpl-b ${v===curTpl?'active':''}" data-t="${v}">${l}</button>`).join('')}
+          </div>
+          <button id="ed-save" class="primary-btn" style="margin-top:14px">💾 저장하고 다시 만들기</button>
+          <p class="mini-state">저장하면 이 편만 새 디자인으로 다시 렌더해요(1~3분). 완성되면 자동으로 새로고침됩니다.</p>
+          <p id="ed-msg" class="mini-state"></p>
+        </div>
+      </div>`,
+      (box, close) => {
+        let tpl = curTpl;
+        box.querySelectorAll('.ed-tpl-b').forEach((b) => b.onclick = () => { box.querySelectorAll('.ed-tpl-b').forEach((x) => x.classList.remove('active')); b.classList.add('active'); tpl = b.dataset.t; });
+        box.querySelector('#ed-ai').onclick = async (ev) => {
+          const btn = ev.target; btn.disabled = true; const o = btn.textContent; btn.textContent = '✨ 생각 중…';
+          try { const d = await (await fetch('/api/highlight/hook-suggest/' + encodeURIComponent(projectId))).json();
+            if (d.hookTop) box.querySelector('#ed-top').value = d.hookTop;
+            if (d.hookAccent) box.querySelector('#ed-acc').value = d.hookAccent;
+          } catch { box.querySelector('#ed-msg').textContent = 'AI 추천 실패 — 직접 입력하세요.'; }
+          finally { btn.disabled = false; btn.textContent = o; }
+        };
+        box.querySelector('#ed-save').onclick = async (ev) => {
+          const btn = ev.target; btn.disabled = true; btn.textContent = '저장 중…';
+          try {
+            const body = {projectId, hookTop: box.querySelector('#ed-top').value, hookAccent: box.querySelector('#ed-acc').value, template: tpl};
+            const d = await (await fetch('/api/highlight/re-render', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
+            if (d.error) throw new Error(d.error);
+            close();
+            // 진행 로그 창에 붙여 재렌더 진행을 보여주고, 끝나면 결과·내역 새로고침.
+            addLog('✏️ 편집 재렌더 시작…', 'done');
+            if (d.id) attachProgress(d.id);
+          } catch (e) { box.querySelector('#ed-msg').textContent = '실패: ' + e.message; btn.disabled = false; btn.textContent = '💾 저장하고 다시 만들기'; }
+        };
+      });
   }
 
   // ── 업로드 모달(유튜브·인스타) — projectId 기반, 영상과 동일 엔드포인트 ──
@@ -236,12 +295,14 @@
         const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
         return `<div class="history-item"><span><strong>${scoreBadge(it.score)} ${esc(it.title)}</strong><small>${esc(when)} · 🎬 하이라이트${yt}${ig}</small></span>
           <span class="hi-actions">
+            <button type="button" class="ghost-btn small hh-edit" data-id="${esc(it.id)}">✏️</button>
             <a class="ghost-btn small" href="${esc(it.video)}" download="${esc(it.title)}.mp4">⬇</a>
             <button type="button" class="ghost-btn small hh-yt" data-id="${esc(it.id)}">📺</button>
             <button type="button" class="ghost-btn small hh-ig" data-id="${esc(it.id)}" data-land="${it.orientation === 'landscape' ? '1' : ''}">📷</button>
             <button type="button" class="ghost-btn small hh-del" data-id="${esc(it.id)}">🗑</button>
           </span></div>`;
       }).join('') : '<p class="mini-state">아직 만든 하이라이트가 없어요. 위에서 재사용 영상을 골라 만들어보세요.</p>';
+      box.querySelectorAll('.hh-edit').forEach((b) => b.onclick = () => openEditModal(b.dataset.id));
       box.querySelectorAll('.hh-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
       box.querySelectorAll('.hh-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, !!b.dataset.land));
       box.querySelectorAll('.hh-del').forEach((b) => b.onclick = () => del(b.dataset.id));
