@@ -350,7 +350,7 @@ JSON만 출력: {"title":"...","description":"...","tags":["..."]}`;
 }
 
 // 4) 실제 업로드 — resumable 아닌 멀티파트(단순). 완성 mp4 경로와 메타를 받는다.
-export async function uploadVideo(filePath: string, meta: UploadMeta, thumbPath?: string): Promise<{id: string; url: string}> {
+export async function uploadVideo(filePath: string, meta: UploadMeta, thumbPath?: string): Promise<{id: string; url: string; thumbnail?: {set: boolean; status?: number; detail?: string}}> {
   const token = await accessToken();
   const stat = fs.statSync(filePath);
   const snippet = {
@@ -392,15 +392,33 @@ export async function uploadVideo(filePath: string, meta: UploadMeta, thumbPath?
   }
   if (!d || !d.id) throw new Error('업로드 실패(재시도 소진, 잠시 후 다시): ' + last);
   // 3단계: 커스텀 썸네일 지정(있으면). 실패해도 업로드 자체는 성공으로 둔다.
+  //   ★결과를 더 이상 조용히 삼키지 않는다 — 받았는지/거부(403 전화인증 미완)인지 로그+응답에 남겨,
+  //   "유튜브가 우리 썸네일을 썼나 vs 쇼츠가 처리 후 자동 프레임을 썼나"를 테리가 눈으로 가릴 수 있게.
+  let thumbnail: {set: boolean; status?: number; detail?: string} = {set: false};
   if (thumbPath) {
     try {
       const img = fs.readFileSync(thumbPath);
-      await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${d.id}`, {
+      const tr = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${d.id}`, {
         method: 'POST',
         headers: {Authorization: 'Bearer ' + token, 'Content-Type': 'image/png', 'Content-Length': String(img.length)},
         body: img,
       });
-    } catch {}
+      if (tr.ok) {
+        thumbnail = {set: true, status: tr.status};
+        console.log(`[유튜브] ✓ 썸네일 지정 성공 (video ${d.id})`);
+      } else {
+        const body = (await tr.text()).slice(0, 300);
+        // 403 = 커스텀 썸네일 권한 없음(채널 전화인증 필요). 그 외는 원문 사유.
+        const reason = tr.status === 403
+          ? '커스텀 썸네일 권한 없음 — 유튜브 채널 전화인증(youtube.com/verify)이 필요합니다.'
+          : body;
+        thumbnail = {set: false, status: tr.status, detail: reason};
+        console.warn(`[유튜브] ✗ 썸네일 지정 실패 (${tr.status}): ${reason}`);
+      }
+    } catch (e: any) {
+      thumbnail = {set: false, detail: e?.message || String(e)};
+      console.warn('[유튜브] ✗ 썸네일 지정 예외: ' + (e?.message || e));
+    }
   }
-  return {id: d.id, url: 'https://youtu.be/' + d.id};
+  return {id: d.id, url: 'https://youtu.be/' + d.id, thumbnail};
 }

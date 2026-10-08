@@ -1,6 +1,10 @@
 (() => {
   const el = id => document.getElementById(id);
   const escape = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+  // 유튜브 업로드 후 썸네일 지정 결과 안내(쇼츠 첫화면 지연 원인 가리기).
+  const ytThumbNote = t => !t ? '' : t.set
+    ? '<br><span class="hint">🖼 썸네일 지정됨 — 쇼츠는 유튜브 처리가 끝나야 첫화면(미리보기)에 반영돼요(몇 분~수십 분). 처리 전엔 비어 보일 수 있어요.</span>'
+    : `<br><span class="hint" style="color:#d9822b">⚠️ 썸네일 미적용: ${escape(t.detail || ('HTTP ' + (t.status || '?')))} — 유튜브가 자동 프레임을 쓰므로 첫화면이 더 늦게 떠요.</span>`;
   const labels = {draft:'대본', image:'이미지', voice:'음성', music:'배경음악'};
   const productLabels = {name:'상품명', price:'가격', benefit:'혜택', url:'구매 주소'};
   const displayText = text => String(text).replace(/\{\{product\.(name|price|benefit|url)\}\}/g, (_, k) => '[' + productLabels[k] + ']');
@@ -107,7 +111,7 @@
             tags: el('yt-tags').value.split(',').map(s => s.trim()).filter(Boolean),
             privacy: el('yt-privacy').value,
           });
-          el('yt-up-msg').innerHTML = `✅ 업로드 완료! <a href="${r.url}" target="_blank" style="color:var(--teal)">${r.url}</a>`;
+          el('yt-up-msg').innerHTML = `✅ 업로드 완료! <a href="${r.url}" target="_blank" style="color:var(--teal)">${r.url}</a>` + ytThumbNote(r.thumbnail);
           up.textContent = '완료 🎉';
         } catch (err) { el('yt-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '유튜브에 올리기'; }
       }

@@ -3,6 +3,10 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmtDur = (s) => { const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
+  // 유튜브 업로드 후 썸네일 지정 결과 안내(쇼츠 첫화면이 늦게 뜨는 이유를 바로 알 수 있게).
+  const ytThumbNote = (t) => !t ? '' : t.set
+    ? '<br><span class="hint">🖼 썸네일 지정됨 — 쇼츠는 유튜브 처리가 끝나야 첫화면(미리보기)에 반영돼요(몇 분~수십 분). 처리 전엔 비어 보일 수 있어요.</span>'
+    : `<br><span class="hint" style="color:#d9822b">⚠️ 썸네일 미적용: ${esc(t.detail || ('HTTP ' + (t.status || '?')))} — 유튜브가 자동 프레임을 쓰므로 첫화면이 더 늦게 떠요.</span>`;
 
   // ── 버전 배지 ──
   fetch('/api/version').then(r => r.json()).then(d => { if ($('ver')) $('ver').textContent = 'v' + d.version; }).catch(() => {});
@@ -250,7 +254,7 @@
           try {
             const rr = await fetch('/api/youtube/upload/' + encodeURIComponent(id), {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: box.querySelector('#cu-t').value, description: box.querySelector('#cu-d').value, tags: box.querySelector('#cu-tags').value.split(',').map(s=>s.trim()).filter(Boolean), privacy: box.querySelector('#cu-p').value})});
             const d = await rr.json(); if (!rr.ok) throw new Error(d.error || '업로드 실패');
-            box.querySelector('#cu-msg').innerHTML = `✅ 완료! <a href="${d.url}" target="_blank" style="color:var(--teal)">${d.url}</a>`; up.textContent = '완료 🎉'; loadHistory();
+            box.querySelector('#cu-msg').innerHTML = `✅ 완료! <a href="${d.url}" target="_blank" style="color:var(--teal)">${d.url}</a>` + ytThumbNote(d.thumbnail); up.textContent = '완료 🎉'; loadHistory();
           } catch (e) { box.querySelector('#cu-msg').textContent = '실패: ' + e.message; up.disabled = false; up.textContent = '유튜브에 올리기'; }
         }; });
     } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = orig; }
