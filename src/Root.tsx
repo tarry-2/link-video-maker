@@ -2,6 +2,7 @@ import React from 'react';
 import {Composition} from 'remotion';
 import {Video, videoSchema} from './Video';
 import {Thumbnail, thumbnailSchema} from './Thumbnail';
+import {HookStill, hookStillSchema} from './HookStill';
 import {CardVideo, cardVideoSchema} from './CardVideo';
 import {Card, cardSchema} from './Card';
 import type {SceneData} from './Scene';
@@ -151,6 +152,21 @@ export const RemotionRoot: React.FC = () => {
       height={1920}
       schema={thumbnailSchema}
       defaultProps={{image: 'news1.jpg', big: '월 3만원 공짜', small: '정부가 챙겨주는', badge: '실화?', accentColor: '#FFE24B', orientation: 'portrait' as const}}
+      calculateMetadata={({props}) => {
+        const landscape = props.orientation === 'landscape';
+        return {width: landscape ? 1920 : 1080, height: landscape ? 1080 : 1920};
+      }}
+    />
+    {/* 하이라이트 빠른 렌더용 후킹 전용 투명 PNG(ffmpeg 합성에 오버레이). 디자인은 Scene 후킹과 동일. */}
+    <Composition
+      id="HookStill"
+      component={HookStill}
+      durationInFrames={1}
+      fps={30}
+      width={1080}
+      height={1920}
+      schema={hookStillSchema}
+      defaultProps={{hookTop: '손석구의 반전', hookAccent: '소름', template: 'variety', orientation: 'portrait' as const}}
       calculateMetadata={({props}) => {
         const landscape = props.orientation === 'landscape';
         return {width: landscape ? 1920 : 1080, height: landscape ? 1080 : 1920};

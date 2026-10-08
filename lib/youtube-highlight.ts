@@ -11,6 +11,7 @@ import {randomUUID} from 'node:crypto';
 import {pipelineKeys} from './keys';
 import {extractHighlights} from './youtube-clip';
 import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
+import {renderHighlightFast} from './highlight-fast';
 import {addPortfolio, listPortfolio} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
 import {geminiGenerate} from './gemini';
@@ -177,7 +178,14 @@ export async function makeHighlights(
     const publicDir = await buildRenderPublic(jobRel); // bg.png 포함(위에서 pubClipDir에 뽑음)
     try {
       log(`[하이라이트] ${i + 1}/${clips.length} 편 렌더…`);
-      await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
+      // ★빠른 렌더(프레임별 재렌더 없이 ffmpeg 합성) 우선 → 실패 시 기존 Remotion으로 폴백(무회귀).
+      const fast = await renderHighlightFast({
+        clipAbs: c.file, outPath: outAbs, hookTop: scene.hookTop, hookAccent: scene.hookAccent, template: tpl.id,
+        words, narrationAbs: voiceRel ? path.join(pubClipDir, 'narration.mp3') : undefined,
+        muteOriginal: !!opts.muteOriginal, duckAudio: !!voiceRel,
+        durationSec: scene.durationInFrames / FPS, orientation, log, isCancelled: cancelled,
+      });
+      if (!fast) await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
       // 디자인 썸네일(일반영상과 동일 Thumbnail 컴포지션) — 깨끗한 프레임 배경 + 후킹 큰글자 + 강조 뱃지.
       if (bgOk) {
         try {
@@ -440,7 +448,13 @@ export async function reRenderHighlight(
   let thumbOk = false;
   try {
     log('[편집] 새 디자인으로 다시 렌더…');
-    await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
+    const fast = await renderHighlightFast({
+      clipAbs, outPath: outAbs, hookTop, hookAccent, template: tpl.id,
+      words: scene.words, narrationAbs: voiceRel ? path.join(pubClipDir, 'narration.mp3') : undefined,
+      muteOriginal: !!e.muteOriginal, duckAudio: !!voiceRel,
+      durationSec: scene.durationInFrames / FPS, orientation, log,
+    });
+    if (!fast) await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
     if (bgOk) {
       try {
         await renderThumbnail({image: `${jobRel}/${bgName}`, big: (hookTop || e.baseTitle || '').slice(0, 18), small: '', badge: (hookAccent || '').slice(0, 8), accentColor: tpl.accentColor}, thumbAbs, log, publicDir, orientation);

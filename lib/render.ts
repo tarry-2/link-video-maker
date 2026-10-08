@@ -161,6 +161,29 @@ export async function renderCardVideo(
   }
 }
 
+// 하이라이트 빠른 렌더용 — 후킹만 투명 PNG로(ffmpeg 합성에 오버레이). Scene 후킹과 동일 디자인.
+export async function renderHookStill(
+  data: {hookTop: string; hookAccent: string; template?: string; orientation?: 'portrait' | 'landscape'},
+  outPath: string,
+  log?: (m: string) => void,
+  publicDir?: string,
+): Promise<void> {
+  const serveUrl = publicDir
+    ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
+    : await getServeUrl(log);
+  try {
+    const inputProps = {hookTop: data.hookTop, hookAccent: data.hookAccent, template: data.template, orientation: data.orientation || 'portrait'};
+    const composition = await selectComposition({serveUrl, id: 'HookStill', inputProps});
+    await renderStill({
+      composition, serveUrl, output: outPath, inputProps,
+      frame: 0, imageFormat: 'png', // png=투명 배경 보존
+      chromiumOptions: {gl: 'swiftshader', enableMultiProcessOnLinux: true},
+    });
+  } finally {
+    if (publicDir) await rm(serveUrl, {recursive: true, force: true});
+  }
+}
+
 // 카드 캐러셀(게시물) — 카드 N장을 각각 4:5 PNG로. 인스타 피드 넘기는 게시물용.
 export async function renderCardStills(
   cards: CardData[],
