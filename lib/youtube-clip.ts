@@ -38,7 +38,19 @@ async function download(videoId: string, dir: string, log: (m: string) => void):
   const base = path.join(dir, 'src');
   // -4=IPv4 강제(데이터센터 IPv6가 더 자주 차단됨), --sleep-requests=레이트리밋 완화.
   const common = ['--no-playlist', '--no-warnings', '--retries', '5', '--socket-timeout', '30', '--sleep-requests', '1', '-4'];
-  if (process.env.YT_COOKIES_FILE && fs.existsSync(process.env.YT_COOKIES_FILE)) common.push('--cookies', process.env.YT_COOKIES_FILE);
+  // ★쿠키 상태를 로그로 명확히 — "등록됨"으로 보여도 실제로 yt-dlp에 넘어가는지/언제 등록됐는지 한 눈에.
+  //   (쿠키가 있는데도 봇차단이면 "쿠키 만료"가 범인 → 로그만 보고 바로 판단 가능.)
+  const ckFile = process.env.YT_COOKIES_FILE;
+  const cookieUsed = !!(ckFile && fs.existsSync(ckFile));
+  if (cookieUsed) {
+    let age = '';
+    try { const days = (Date.now() - fs.statSync(ckFile!).mtimeMs) / 86400000;
+      age = days < 1 ? `${Math.round(days * 24)}시간 전 등록` : `${Math.floor(days)}일 전 등록`; } catch {}
+    common.push('--cookies', ckFile!);
+    log(`[하이라이트] 🔑 유튜브 쿠키 사용 (${age}). ※쿠키는 하루이틀이면 자주 만료돼요 — 막히면 새로 등록.`);
+  } else {
+    log('[하이라이트] ⚠️ 유튜브 쿠키 없음 — 데이터센터 IP는 봇차단이 잦아요. 설정에서 쿠키를 등록하세요.');
+  }
   if (process.env.YT_PROXY) common.push('--proxy', process.env.YT_PROXY);
   // ★다운로드 뚫기(2026-10 기준): 쿠키 인증 환경에선 tv_downgraded가 "page needs to be reloaded"를 내므로 제외.
   //   web_embedded/default가 쿠키와 가장 잘 맞고, android/ios는 쿠키 없을 때 봇차단 우회용. 순서대로 시도.
@@ -53,13 +65,17 @@ async function download(videoId: string, dir: string, log: (m: string) => void):
         '--merge-output-format', 'mp4', '-o', base + '.%(ext)s', url], log, 420000);
       ok = true; log(`[하이라이트] 다운로드 성공(${client})`); break;
     } catch (e: any) {
-      lastErr = (e?.message || '').slice(0, 160);
-      log(`[하이라이트] ${client} 실패 → 다음 방식 시도`);
+      lastErr = (e?.message || '').slice(0, 200);
+      // ★실제 실패 사유를 로그에 남긴다(봇차단인지·포맷없음인지·n-challenge인지 한 줄로 구분).
+      log(`[하이라이트] ${client} 실패: ${lastErr.replace(/\s+/g, ' ').slice(0, 120)} → 다음 방식 시도`);
     }
   }
   if (!ok) {
-    const botBlocked = /not a bot|Sign in to confirm/i.test(lastErr);
-    if (botBlocked) throw new Error('유튜브가 이 서버를 "봇"으로 보고 다운로드를 막았어요(클라우드 IP 특성). 해결하려면 유튜브 로그인 쿠키가 필요합니다 — 설정에 쿠키를 등록하면 뚫립니다. (쿠키 없이도 되는 영상/시간대가 있어 다른 영상으로 재시도해볼 수도 있어요.)');
+    const botBlocked = /not a bot|Sign in to confirm|cookies|consent/i.test(lastErr);
+    if (botBlocked && cookieUsed)
+      throw new Error('쿠키를 등록했는데도 유튜브가 막았어요 — 쿠키가 만료됐을 가능성이 커요(데이터센터 IP는 쿠키가 하루이틀이면 풀립니다). 크롬에서 유튜브 로그인 상태로 쿠키를 "새로" 내보내 다시 등록해 주세요. (마지막 사유: ' + lastErr.slice(0, 100) + ')');
+    if (botBlocked)
+      throw new Error('유튜브가 이 서버를 "봇"으로 보고 다운로드를 막았어요(클라우드 IP 특성). 유튜브 로그인 쿠키를 설정에 등록하면 뚫립니다. (쿠키 없이도 되는 영상/시간대가 있어 다른 영상으로 재시도해볼 수도 있어요.)');
     throw new Error('영상 다운로드 실패. ' + lastErr);
   }
   // 2) 자막(자동 생성 포함) — vtt. 영어 우선. 실패해도 영상은 받았으니 균등분할로 진행(여러 클라이언트 시도).
