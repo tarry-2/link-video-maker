@@ -118,24 +118,35 @@ async function downloadSection(
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const outBase = path.join(dir, `sec-${idx}`);
   const section = `*${Math.max(0, Math.floor(start))}-${Math.ceil(end)}`;
-  let ok = false, lastErr = '';
+  const findFile = () => fs.readdirSync(dir).map(x => path.join(dir, x)).find(x => new RegExp(`sec-${idx}\\.(mp4|mkv|webm)$`).test(x));
+  let lastErr = '';
   for (const client of CLIENTS) {
     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
+    // 이전 클라 시도가 남긴 (깨졌을 수 있는) 파일 제거 — 다음 시도 결과와 섞여 오인되지 않게.
+    const prev = findFile(); if (prev) { try { fs.rmSync(prev, {force: true}); } catch {} }
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
       await run(YTDLP, [...common, ...ca, '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
         '--download-sections', section, '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], log, 300000, undefined, cancelled);
-      ok = true; break;
     } catch (e: any) {
       lastErr = (e?.message || '').slice(0, 200);
       if (/사용자가 중단/.test(lastErr)) throw new Error('사용자가 중단했습니다.');
       log(`[하이라이트] ${client} 구간 실패 → 다음 방식 시도`);
+      continue;
     }
+    // ★다운로드 성공(exit 0)이어도 '영상 트랙이 실제로 있는지' 검증 — 없으면(오디오만/깨짐) 크롭·렌더까지
+    //   끌고 가면 "No video stream"으로 터지므로, 여기서 걸러 다음 클라로 재시도한다.
+    const f = findFile();
+    if (!f) { lastErr = '다운로드 파일을 찾지 못함'; log(`[하이라이트] ${client} 구간: 파일 없음 → 다음 방식 시도`); continue; }
+    if (!(await hasVideoStream(f))) {
+      lastErr = '받은 파일에 영상 트랙이 없음(오디오만/깨짐)';
+      log(`[하이라이트] ${client} 구간: 받은 파일에 영상이 없어요(깨짐) → 다음 방식 시도`);
+      try { fs.rmSync(f, {force: true}); } catch {}
+      continue;
+    }
+    return f; // 영상 트랙이 확인된 유효 파일
   }
-  if (!ok) throw new Error('구간 다운로드 실패: ' + lastErr);
-  const f = fs.readdirSync(dir).map(x => path.join(dir, x)).find(x => new RegExp(`sec-${idx}\\.(mp4|mkv|webm)$`).test(x));
-  if (!f) throw new Error('구간 파일을 찾지 못했습니다.');
-  return f;
+  throw new Error('구간 다운로드 실패(유효한 영상을 못 받음): ' + lastErr);
 }
 
 // VTT 자막 → "[초] 텍스트" 줄들로. (하이라이트 선정용 — 어디서 무슨 말 하는지)
@@ -174,6 +185,16 @@ async function durationOf(file: string): Promise<number> {
     const out = await run(probe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file], () => {}, 20000);
     return Math.floor(Number(out.trim()) || 0);
   } catch { return 0; }
+}
+
+// 파일에 실제 비디오(영상) 트랙이 있는지 — ffprobe. 다운로드가 오디오만/깨진 조각을 받으면 false.
+//   (yt-dlp exit 0이어도 클라이언트에 따라 영상 없는 파일을 뱉는 경우가 있어, 크롭·렌더 전에 거른다.)
+async function hasVideoStream(file: string): Promise<boolean> {
+  const probe = (process.env.FFPROBE_PATH || FFMPEG.replace(/ffmpeg$/, 'ffprobe'));
+  try {
+    const out = await run(probe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_type', '-of', 'default=nw=1:nk=1', file], () => {}, 20000);
+    return /video/.test(out);
+  } catch { return false; }
 }
 
 // 영상을 앞에서부터 N개 구간으로 나눈다(순차 분할). 하이라이트 모음 영상처럼 "이미 전체가 하이라이트"면

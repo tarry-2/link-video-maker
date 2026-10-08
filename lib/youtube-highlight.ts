@@ -40,8 +40,9 @@ function extractThumb(videoPath: string, outPng: string, atSec: number): Promise
 //   원본 대사(transcript)를 근거로 맥락·논평을 더한다(단순 중계/낭독 금지).
 async function writeCommentary(
   geminiKeys: string[], title: string, transcript: string, hook: string, clipSec: number,
+  log?: (m: string) => void,
 ): Promise<string> {
-  if (!geminiKeys.length) return '';
+  if (!geminiKeys.length) { log?.('[하이라이트] 해설 생략: Gemini 키가 없습니다.'); return ''; }
   // ★분량을 클립 길이에 맞게 꽉 채운다 — 한국어 나레이션 ~4.4자/초(TTS 기준). 너무 적으면 뒤가 허전해짐.
   const targetChars = Math.max(60, Math.round(clipSec * 4.4));
   const prompt = `너는 유튜브 '리뷰·해설' 채널 운영자다. 아래는 남의 영상(재사용)에서 가져온 한 장면이다.
@@ -59,11 +60,20 @@ async function writeCommentary(
 - ★마지막 문장은 깔끔한 마무리(핵심 정리나 여운 있는 한마디)로 끝내라 — 말이 뚝 끊기지 않게.
 - 해시태그·이모지·따옴표 없이 '읽을 문장'만.
 JSON만 출력: {"commentary":"..."}`;
-  try {
-    const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 1024, temperature: 0.8});
-    const m = raw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
-    return m ? String(JSON.parse(m[0]).commentary || '').trim() : '';
-  } catch { return ''; }
+  // 레이트리밋·일시 오류·빈 응답이면 짧게 쉬고 1회 재시도(편마다 연속 호출이라 2편째부터 레이트에 걸리기 쉬움).
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 1024, temperature: 0.8});
+      const m = raw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
+      const text = m ? String(JSON.parse(m[0]).commentary || '').trim() : '';
+      if (text) return text;
+      log?.(`[하이라이트] 해설 대본이 비어서 재시도(${attempt}/2)…`);
+    } catch (e: any) {
+      log?.(`[하이라이트] 해설 생성 오류(${attempt}/2): ${(e?.message || '알 수 없음').slice(0, 100)}`);
+    }
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 2500));
+  }
+  return '';
 }
 
 export type HighlightJobResult = {projectId: string; file: string; title: string; hookTop: string; score: number}[];
@@ -122,7 +132,7 @@ export async function makeHighlights(
     let narrFrames = 0;
     let commentaryText = ''; // 실제 해설 대본 — 업로드 상세설명도 이걸 기반으로 쓴다(나레이션↔설명 일치).
     if (opts.commentary) {
-      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', Math.round(durSec));
+      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', Math.round(durSec), log);
       commentaryText = commentary || '';
       if (commentary && k.elevenlabs) {
         log(`[하이라이트] ${i + 1}편 해설 나레이션 생성…`);
@@ -135,9 +145,15 @@ export async function makeHighlights(
           voiceRel = `${jobRel}/narration.mp3`;
         } catch (e: any) { log('[하이라이트] 해설 음성 실패(원본 소리로 진행): ' + (e?.message || '')); }
       } else if (opts.commentary) {
-        log('[하이라이트] 해설 대본/음성 키가 없어 원본 소리로 진행합니다.');
+        // 왜 해설이 안 들어갔는지 정확히 — 대본 실패인지, 음성 키 문제인지 구분(진단).
+        if (!commentary) log(`[하이라이트] ${i + 1}편 해설 대본 생성 실패 — 이 편은 해설 없이 진행합니다.`);
+        else log(`[하이라이트] ${i + 1}편 해설 음성 키(ElevenLabs)가 없어 해설 없이 진행합니다.`);
       }
     }
+    // 해설이 결국 안 들어갔는데 '원본 소리 제거'까지 켜져 있으면 그 편은 완전 무음이 된다 → 무음 방지로 원본 소리를 살린다.
+    const hasNarration = !!voiceRel;
+    if (opts.muteOriginal && !hasNarration && opts.commentary)
+      log(`[하이라이트] ${i + 1}편: 해설이 없어 무음이 되지 않게 원본 소리를 살립니다('원본 소리 제거' 설정 무시).`);
 
     // 디자인 템플릿 — 사용자가 고르면 그걸로, '자동'이면 후킹/제목으로 어울리는 걸 편마다 매칭.
     const tpl = (opts.template && opts.template !== 'auto')
@@ -152,8 +168,9 @@ export async function makeHighlights(
       hookAccent: c.hookAccent || '',
       accentColor: tpl.accentColor,
       words, // 해설 있으면 카라오케 자막, 없으면 []
-      duckAudio: !!voiceRel, // 해설 깔면 원본 소리를 줄인다
-      muteOriginal: !!opts.muteOriginal, // 원본 소리 완전 제거(저작권 소리지문 회피)
+      duckAudio: hasNarration, // 해설 깔면 원본 소리를 줄인다
+      muteOriginal: !!opts.muteOriginal && hasNarration, // 원본 제거는 '해설이 있을 때만' — 없으면 무음 방지로 원본 유지
+
       // ★해설 있으면 "나레이션 끝나는 지점 + 1.3초 여운"까지만(뒤 허전함 제거). 나레이션이 더 길면 그만큼.
       //   해설 없으면 클립 전체.
       durationInFrames: words.length ? narrFrames + Math.round(FPS * 1.3) : clipFrames,
