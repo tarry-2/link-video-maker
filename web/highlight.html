@@ -194,6 +194,14 @@
           </div>
           <p class="hint" style="margin-top:4px">말 사이의 긴 침묵·공백을 자동으로 잘라 영상이 늘어지지 않게 해요(시청 유지율↑). 원본 소리 기준으로 조용한 구간만 제거하고, 음악·배경음이 깔린 영상은 안전하게 원본을 유지해요.</p>
 
+          <!-- AI B-roll 팝업 — 관련 이미지를 화면 중앙에 잠깐 띄웠다 사라지게(지루함 제거). ★이미지 생성 비용 발생 -->
+          <label class="field-label" style="margin-top:14px">🖼 AI B-roll 팝업 <span class="hint">— 관련 이미지가 잠깐 '팝' (편당 비용 발생)</span></label>
+          <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+            <button type="button" class="seg-btn hl-broll active" data-broll="0">끄기</button>
+            <button type="button" class="seg-btn hl-broll" data-broll="1">🖼 넣기 (이미지 생성)</button>
+          </div>
+          <p class="hint" style="margin-top:4px">핵심 순간에 주제와 어울리는 AI 이미지를 화면 중앙에 잠깐 띄웠다 사라지게 해 영상이 지루하지 않게 해요(OpusClip식 b-roll). <b>⚠️ 편당 이미지 1~2장을 생성하므로 비용이 들어요</b>(짧은 클립 1장·긴 클립 2장). 원본 영상은 계속 재생돼요.</p>
+
           <!-- 디자인 템플릿 — 후킹 글자·배경·자막 스타일 묶음. '자동'은 편마다 주제에 맞게 매칭 -->
           <label class="field-label" style="margin-top:14px">🎨 디자인 템플릿 <span class="hint">— 미리보기를 보고 골라요 (🔍 누르면 크게)</span></label>
           <div id="hl-tpl-seg" class="tpl-grid">

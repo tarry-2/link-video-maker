@@ -15,6 +15,7 @@ import {renderHighlightFast} from './highlight-fast';
 import {addPortfolio, listPortfolio} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
 import {geminiGenerate} from './gemini';
+import {generateImageFlux} from './image';
 import {ttsElevenJoined, alignToWords, pickVoice, VOICES, type Word} from './tts';
 import type {SceneData} from '../src/Scene';
 import {pickHlTemplate, getHlTemplate} from '../src/highlight-templates';
@@ -76,13 +77,51 @@ JSON만 출력: {"commentary":"..."}`;
   return '';
 }
 
+// ── AI B-roll 팝업 생성 ──
+// 클립의 내용(제목·후킹·대사)에 어울리는 '시각 소재' 이미지를 1~2장 flux로 만들어, 렌더 때 화면 중앙에
+// 잠깐 떴다 사라지는 팝업으로 얹는다(지루함 제거 — OpusClip b-roll의 저비용 버전). 비용=이미지 1~2장뿐.
+async function genBroll(
+  geminiKeys: string[], replicateKey: string, title: string, transcript: string, hook: string,
+  durSec: number, pubClipDir: string, jobRel: string, log: (m: string) => void,
+): Promise<{path: string; start: number; end: number}[]> {
+  const n = durSec >= 25 ? 2 : 1; // 긴 클립은 2장, 짧으면 1장(비용 최소)
+  // 1) Gemini로 이 장면에 어울리는 '영어 이미지 묘사' n개(flux는 영어가 안정적).
+  let prompts: string[] = [];
+  try {
+    const raw = await geminiGenerate(geminiKeys,
+      `A short highlight clip. Title: "${title}". On-screen hook: "${hook || ''}". Transcript: "${(transcript || '').slice(0, 400)}".
+Give ${n} vivid ENGLISH image prompt(s) for B-roll illustrations that visually match this scene's topic (concrete nouns/scenes, no text, no watermark, cinematic). JSON only: {"prompts":["...","..."]}`,
+      {json: true, maxTokens: 400, temperature: 0.7});
+    const m = raw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
+    if (m) prompts = (JSON.parse(m[0]).prompts || []).map((s: any) => String(s).trim()).filter(Boolean).slice(0, n);
+  } catch {}
+  if (!prompts.length) prompts = [hook || title].filter(Boolean); // 폴백: 후킹/제목으로라도
+  if (!prompts.length) return [];
+  // 2) 이미지 생성(세로는 정사각 느낌의 소재면 충분 — 카드로 올라감). 실패분은 건너뜀.
+  const out: {path: string; start: number; end: number}[] = [];
+  const slot = durSec / (prompts.length + 1); // 균등 배치
+  for (let i = 0; i < prompts.length; i++) {
+    const rel = `${jobRel}/broll-${i}.jpg`;
+    const abs = path.join(pubClipDir, `broll-${i}.jpg`);
+    try {
+      log(`[B-roll] ${i + 1}/${prompts.length} 이미지 생성…`);
+      await generateImageFlux(replicateKey, prompts[i] + ', no text, no watermark, high detail', abs, log, 'fast', 'real', true);
+      if (fs.existsSync(abs)) {
+        const start = Math.max(0.5, Math.min(durSec - 3, slot * (i + 1) - 1.3));
+        out.push({path: abs, start, end: Math.min(durSec - 0.3, start + 2.8)});
+      }
+    } catch (e: any) { log(`[B-roll] ${i + 1}번 생성 실패(건너뜀): ${(e?.message || '').slice(0, 60)}`); }
+  }
+  return out;
+}
+
 export type HighlightJobResult = {projectId: string; file: string; title: string; hookTop: string; score: number}[];
 
 // videoId(CC 영상) → N편의 완성 하이라이트 숏폼. 각 편은 독립 projectId(포폴·업로드 재사용).
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; removeSilence?: boolean; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; removeSilence?: boolean; broll?: boolean; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -192,7 +231,15 @@ export async function makeHighlights(
       ? path.join(os.tmpdir(), `onvideo-hl-out-${projectId}-${output}`)
       : path.join(studioDir, output);
     let thumbOk = false;
-    const publicDir = await buildRenderPublic(jobRel); // bg.png 포함(위에서 pubClipDir에 뽑음)
+    // ── AI B-roll 팝업(선택) — 관련 이미지를 화면 중앙에 잠깐 띄웠다 사라지게. replicate 키 있을 때만(비용 발생). ──
+    let brollCuts: {path: string; start: number; end: number}[] = [];
+    if (opts.broll && k.replicate) {
+      try { brollCuts = await genBroll(k.gemini, k.replicate, meta.title, c.transcript || '', c.hookTop || '', durSec, pubClipDir, jobRel, log); } catch (e: any) { log('[B-roll] 생성 건너뜀: ' + (e?.message || '').slice(0, 60)); }
+    } else if (opts.broll && !k.replicate) {
+      log('[B-roll] 이미지 생성 키(Replicate)가 없어 b-roll 없이 진행합니다.');
+    }
+
+    const publicDir = await buildRenderPublic(jobRel); // bg.png + broll 이미지 포함(위에서 pubClipDir에 생성)
     try {
       log(`[하이라이트] ${i + 1}/${clips.length} 편 렌더…`);
       // ★빠른 렌더(프레임별 재렌더 없이 ffmpeg 합성) 우선 → 실패 시 기존 Remotion으로 폴백(무회귀).
@@ -200,7 +247,7 @@ export async function makeHighlights(
         clipAbs: c.file, outPath: outAbs, hookTop: scene.hookTop, hookAccent: scene.hookAccent, template: tpl.id,
         words, narrationAbs: voiceRel ? path.join(pubClipDir, 'narration.mp3') : undefined,
         muteOriginal: !!opts.muteOriginal, duckAudio: !!voiceRel,
-        durationSec: scene.durationInFrames / FPS, orientation, log, isCancelled: cancelled,
+        durationSec: scene.durationInFrames / FPS, orientation, broll: brollCuts, log, isCancelled: cancelled,
       });
       if (!fast) await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
       // 디자인 썸네일(일반영상과 동일 Thumbnail 컴포지션) — 깨끗한 프레임 배경 + 후킹 큰글자 + 강조 뱃지.

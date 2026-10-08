@@ -106,6 +106,7 @@ export async function renderHighlightFast(opts: {
   muteOriginal?: boolean; duckAudio?: boolean;
   durationSec: number;
   orientation: 'portrait' | 'landscape';
+  broll?: {path: string; start: number; end: number}[]; // AI b-roll 팝업(관련 이미지가 화면 중앙에 잠깐 떴다 사라짐)
   log: (m: string) => void;
   isCancelled?: () => boolean;
 }): Promise<boolean> {
@@ -133,6 +134,10 @@ export async function renderHighlightFast(opts: {
     let idx = 1; let hookIdx = -1, narrIdx = -1;
     const hasHook = fs.existsSync(hookPng);
     if (hasHook) { inputs.push('-loop', '1', '-i', hookPng); hookIdx = idx++; }
+    // b-roll 팝업 이미지들(존재하는 것만) — 각각 -loop 1로 넣고 enable 구간에만 보이게.
+    const broll = (opts.broll || []).filter((b) => fs.existsSync(b.path));
+    const brollIdx: number[] = [];
+    for (const b of broll) { inputs.push('-loop', '1', '-i', b.path); brollIdx.push(idx++); }
     if (narrationAbs && fs.existsSync(narrationAbs)) { inputs.push('-i', narrationAbs); narrIdx = idx++; }
 
     // 비디오 필터: 클립을 정확히 9:16/16:9로(이미 맞지만 안전) → 후킹 오버레이(페이드인) → 자막.
@@ -143,6 +148,19 @@ export async function renderHighlightFast(opts: {
     if (hasHook) {
       vParts.push(`[${hookIdx}:v]format=rgba,fade=in:st=0:d=0.35:alpha=1[hk]`);
       vParts.push(`${vlab}[hk]overlay=0:0[vo]`); vlab = '[vo]';
+    }
+    // b-roll 팝업 — 관련 이미지를 화면 중앙(후킹 아래·자막 위)에 카드로 잠깐 띄웠다 사라지게(페이드).
+    //   원본 영상은 계속 틀면서 핵심 순간에만 '팝'. 흰 테두리 카드 + enable 구간 동안만 표시.
+    if (brollIdx.length) {
+      const cw = land ? 560 : 680;          // 카드 너비(px)
+      const cy = land ? 140 : 520;          // 세로 위치(후킹 아래, 자막 위)
+      brollIdx.forEach((bi, k) => {
+        const b = broll[k];
+        const outStart = Math.max(b.start + 0.1, b.end - 0.3);
+        // 스케일 → 흰 테두리(pad) → rgba → 페이드 인/아웃(알파)
+        vParts.push(`[${bi}:v]scale=${cw}:-1,pad=iw+16:ih+16:8:8:white,format=rgba,fade=in:st=${b.start.toFixed(2)}:d=0.3:alpha=1,fade=out:st=${outStart.toFixed(2)}:d=0.3:alpha=1[br${k}]`);
+        vParts.push(`${vlab}[br${k}]overlay=(W-w)/2:${cy}:enable='between(t,${b.start.toFixed(2)},${b.end.toFixed(2)})'[vbr${k}]`); vlab = `[vbr${k}]`;
+      });
     }
     if (assPath) { vParts.push(`${vlab}subtitles='${esc(assPath)}':fontsdir='${esc(FONTS_DIR)}'[vout]`); vlab = '[vout]'; }
     else { vParts.push(`${vlab}null[vout]`); vlab = '[vout]'; }
