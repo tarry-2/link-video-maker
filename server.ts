@@ -10,7 +10,8 @@ import {makeVideo} from './lib/pipeline';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
 import {makeHighlights, backfillHighlightProjects, reRenderHighlight} from './lib/youtube-highlight';
-import {searchArchiveChannel} from './lib/youtube-clip';
+import {searchArchiveChannel, sampleForAnalysis} from './lib/youtube-clip';
+import {analyzeReframe} from './lib/reframe';
 import {getTrends} from './lib/trends';
 import {generateCardStoryboard} from './lib/cards';
 import {PRESETS, RECOMMEND_STYLE, getPreset} from './lib/presets';
@@ -961,6 +962,45 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, m);
     } catch (e: any) {
       return json(res, 502, {error: e?.message || '조회 실패'});
+    }
+  }
+  // ── 세로변환 방식 추천 — 영상을 파악해 '꽉채움(track) vs 전체보존(letterbox)' 중 어울리는 쪽 추천 ──
+  //   업로드 영상은 로컬 파일로, 유튜브/아카이브는 가벼운 360p 샘플을 받아 얼굴 분석. 실패 시 추천 생략(null).
+  if (p === '/api/highlight/reframe-advice' && req.method === 'GET') {
+    const videoId = (u.searchParams.get('videoId') || '').trim();
+    const uploadId = (u.searchParams.get('uploadId') || '').trim();
+    const tmpDir = path.join(os.tmpdir(), 'rfa-' + randomUUID().slice(0, 8));
+    try {
+      fs.mkdirSync(tmpDir, {recursive: true});
+      let file: string | null = null, cleanup = false;
+      if (uploadId && /^[\w-]{12}$/.test(uploadId)) {
+        const found = fs.existsSync(HL_UPLOAD_DIR) ? fs.readdirSync(HL_UPLOAD_DIR).find((f) => f.startsWith(uploadId + '.')) : undefined;
+        if (found) {
+          // ★전체(수십 분)를 분석하면 느리다 → 중간 15초만 360p로 떠서 분석(대표성 충분·빠름).
+          const src = path.join(HL_UPLOAD_DIR, found);
+          const sample = path.join(tmpDir, 'sample.mp4');
+          const ffmpeg = process.env.FFMPEG_PATH || 'ffmpeg';
+          const ffprobe = process.env.FFPROBE_PATH || ffmpeg.replace(/ffmpeg$/, 'ffprobe');
+          // 영상 길이 파악 → 중앙부(여러 장면이 섞인 대표 구간)에서 25초를 샘플. 짧으면 처음부터.
+          let dur = 0;
+          try { dur = Math.floor(Number(cpExecFileSync(ffprobe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', src], {timeout: 15000}).toString().trim()) || 0); } catch {}
+          const ss = dur > 60 ? Math.floor(dur * 0.4) : 5;
+          try {
+            cpExecFileSync(ffmpeg, ['-y', '-ss', String(ss), '-t', '25', '-i', src, '-vf', 'scale=640:-2', '-an',
+              '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', sample], {timeout: 60000});
+            file = fs.existsSync(sample) ? sample : src; cleanup = true;
+          } catch { file = src; } // 샘플 실패 시 원본(느려도 동작)
+        }
+      } else if (/^[\w-]{11}$/.test(videoId)) {
+        file = await sampleForAnalysis(videoId, tmpDir, () => {}); cleanup = true;
+      }
+      if (!file) return json(res, 200, {advice: null}); // 샘플 못 받으면 추천 생략(기본값 그대로)
+      const advice = await analyzeReframe(file);
+      if (cleanup) { try { fs.rmSync(tmpDir, {recursive: true, force: true}); } catch {} }
+      return json(res, 200, {advice});
+    } catch (e: any) {
+      try { fs.rmSync(tmpDir, {recursive: true, force: true}); } catch {}
+      return json(res, 200, {advice: null, error: (e?.message || '').slice(0, 80)});
     }
   }
   // ── 실시간 급상승 트렌드(지금 뜨는 주제) — Google Trends 공개 RSS. 조회수 '골든 윈도우'. ──

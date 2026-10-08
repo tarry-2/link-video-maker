@@ -521,7 +521,32 @@
     $('hl-picked').textContent = `선택: ${picked.title}`;
     renderCountSeg(); saveState();
     addLog(`🎥 영상 선택: ${picked.title} (${fmtDur(picked.durationSec)} · ${picked.channel})`);
+    fetchReframeAdvice(); // 영상 파악해서 '꽉채움/전체보존' 추천
     $('hl-options')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+  // ── 세로변환 방식 추천 — 선택한 영상을 분석해 어울리는 쪽(track/letterbox)에 ✨추천 뱃지를 붙인다. ──
+  //   강제 아님(사용자가 최종 선택). 분석 실패/세로영상이면 뱃지 없이 기존 안내 유지.
+  function setRfBadges(recommend) {
+    document.querySelectorAll('.rf-badge').forEach((s) => { s.textContent = s.dataset.for === recommend ? ' ✨추천' : ''; });
+  }
+  async function fetchReframeAdvice() {
+    setRfBadges(null); // 초기화(이전 영상 뱃지 제거)
+    if (!picked || orient !== 'portrait') return;
+    const note = $('hl-rf-advice'); const base = '영상을 분석해 어울리는 쪽을 추천하는 중…';
+    if (note) note.textContent = base;
+    try {
+      const q = picked.mine ? ('uploadId=' + encodeURIComponent(picked.uploadId)) : ('videoId=' + encodeURIComponent(picked.videoId || ''));
+      const d = await (await fetch('/api/highlight/reframe-advice?' + q)).json();
+      const a = d.advice;
+      if (!a) { if (note) note.innerHTML = '<b>인물 꽉채움</b> = 1인·인터뷰에 좋아요. <b>전체 보존</b> = 여러 명·자막 많은 영상에 좋아요. (이 영상은 자동 분석을 못 해 기본값이에요)'; return; }
+      setRfBadges(a.recommend);
+      // 추천 쪽을 기본 선택으로 바꿔줌(사용자가 다시 누르면 변경 가능).
+      reframeMode = a.recommend;
+      document.querySelectorAll('.hl-rf').forEach((b) => b.classList.toggle('active', b.dataset.rf === reframeMode));
+      if (note) note.innerHTML = `✨ <b>${a.recommend === 'track' ? '인물 꽉채움' : '전체 보존'}</b> 추천 — ${esc(a.reason)}`;
+      saveState();
+      addLog(`✨ 세로변환 추천: ${a.recommend === 'track' ? '인물 꽉채움' : '전체 보존'} (${a.reason})`);
+    } catch { if (note) note.textContent = '세로변환 추천을 못 받았어요(기본값으로 진행).'; }
   }
   // 크게보기 — 온비디오 안에서 유튜브 영상을 바로 재생해 내용을 미리 본다(제작 전).
   function openPreview(v) {

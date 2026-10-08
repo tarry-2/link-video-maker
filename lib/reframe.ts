@@ -62,33 +62,87 @@ haar = None
 if det is None:
     try: haar = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     except Exception: haar = None
-keys=[]; nseen=0; nface=0; i=0
+keys=[]; nseen=0; nface=0; i=0; spans=[]; ns=[]
 while True:
     if not cap.grab(): break
     if i % step == 0:
         ok, frame = cap.retrieve()
         if not ok: break
-        nseen += 1; cx=None; best=0
+        nseen += 1
+        boxes=[]  # (left,right) of every detected face this frame
         try:
             if det is not None:
                 det.setInputSize((frame.shape[1], frame.shape[0]))
                 _, faces = det.detect(frame)
                 if faces is not None:
                     for f in faces:
-                        w=float(f[2]); h=float(f[3])
-                        if w*h>best: best=w*h; cx=float(f[0])+w/2
+                        x=float(f[0]); w=float(f[2])
+                        boxes.append((x, x+w))
             elif haar is not None:
                 g=cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 for (x,y,w,h) in haar.detectMultiScale(g,1.2,5,minSize=(60,60)):
-                    if w*h>best: best=w*h; cx=float(x)+w/2.0
+                    boxes.append((float(x), float(x)+w))
         except Exception: pass
-        if cx is not None: nface+=1; keys.append([round(i/fps,2), round(cx,1)])
+        if boxes:
+            left=min(a for a,b in boxes); right=max(b for a,b in boxes)
+            cx=(left+right)/2.0              # ★그룹 중심(1명만 아니라 '모든 얼굴'의 중심)
+            nface+=1; keys.append([round(i/fps,2), round(cx,1)])
+            spans.append(right-left); ns.append(len(boxes))
     i += 1
 cap.release()
-json.dump({"w":W,"h":H,"fps":fps,"coverage":(nface/nseen if nseen else 0),"keys":keys}, open(outp,"w"))
+spans.sort()
+span_p90 = spans[int(len(spans)*0.9)] if spans else 0  # 얼굴들이 가로로 퍼진 폭(p90)
+avg_n = (sum(ns)/len(ns)) if ns else 0
+max_n = max(ns) if ns else 0
+json.dump({"w":W,"h":H,"fps":fps,"coverage":(nface/nseen if nseen else 0),
+           "keys":keys,"spanP90":span_p90,"avgFaces":avg_n,"maxFaces":max_n}, open(outp,"w"))
 `;
 
-type DetectResult = {w: number; h: number; fps: number; coverage: number; keys: [number, number][]; err?: string};
+type DetectResult = {w: number; h: number; fps: number; coverage: number; keys: [number, number][];
+  spanP90?: number; avgFaces?: number; maxFaces?: number; err?: string};
+
+// 얼굴 감지 1회 실행(python+opencv) → DetectResult. reframeClip과 analyzeReframe이 공유.
+async function detectFaces(inPath: string, cancelled?: () => boolean, timeoutMs = 180000): Promise<DetectResult | null> {
+  const work = path.join(os.tmpdir(), `reframe-${randomUUID().slice(0, 8)}`);
+  await fsp.mkdir(work, {recursive: true});
+  const pyFile = path.join(work, 'detect.py');
+  const jsonFile = path.join(work, 'faces.json');
+  await fsp.writeFile(pyFile, PY_DETECT);
+  let det: DetectResult | null = null;
+  try {
+    await run(PYTHON, [pyFile, inPath, jsonFile], timeoutMs, undefined, cancelled);
+    det = JSON.parse(await fsp.readFile(jsonFile, 'utf8'));
+  } catch (e: any) {
+    await fsp.rm(work, {recursive: true, force: true}).catch(() => {});
+    if (/사용자가 중단/.test(e?.message || '')) throw e;
+    return null;
+  }
+  await fsp.rm(work, {recursive: true, force: true}).catch(() => {});
+  return det;
+}
+
+// ★영상을 파악해 '꽉채움(track) vs 전체보존(letterbox)' 중 어울리는 쪽을 추천(강제 아님, 사용자가 선택).
+//   핵심 원리: 9:16 세로크롭은 가로(16:9)의 약 31%만 담는다(cropW_max = H*9/16). 얼굴들이 그보다 넓게
+//   퍼져 있으면 꽉채움으로는 사람이 짤린다 → 전체보존 추천. 1명/모여있으면 꽉채움 추천.
+export type ReframeAdvice = {recommend: 'track' | 'letterbox'; reason: string; faces: number; spreadPct: number; coverage: number};
+export async function analyzeReframe(inPath: string, cancelled?: () => boolean): Promise<ReframeAdvice | null> {
+  const det = await detectFaces(inPath, cancelled, 120000);
+  if (!det || det.err || det.w <= 0) return null;
+  const {w: W, h: H} = det;
+  if (W <= H) return {recommend: 'track', reason: '이미 세로 영상이에요.', faces: 0, spreadPct: 0, coverage: det.coverage || 0};
+  const cropWmax = (H * 9) / 16;             // 9:16 세로크롭이 담을 수 있는 최대 가로폭
+  const spanP90 = det.spanP90 || 0;          // 얼굴들이 가로로 퍼진 폭(p90)
+  const spreadPct = Math.round((spanP90 / W) * 100);
+  const cov = det.coverage || 0;
+  const faces = Math.round((det.avgFaces || 0) * 10) / 10;
+  // 얼굴이 거의 안 잡히면(풍경·자막 위주) 꽉채움이 의미 없음 → 전체보존.
+  if (cov < 0.35) return {recommend: 'letterbox', reason: '인물이 또렷이 안 잡혀요(풍경·자막 위주) — 전체를 보존하는 게 안전해요.', faces, spreadPct, coverage: cov};
+  // 얼굴들이 9:16 크롭 폭 안에 들어오면(여유 5%) 꽉채움 추천, 넘으면 짤리므로 전체보존 추천.
+  if (spanP90 <= cropWmax * 0.95) {
+    return {recommend: 'track', reason: faces >= 1.6 ? '인물들이 가까이 모여 있어요 — 꽉채움이 잘 어울려요.' : '한 사람 위주 영상이에요 — 꽉채움이 잘 어울려요.', faces, spreadPct, coverage: cov};
+  }
+  return {recommend: 'letterbox', reason: `인물이 여럿이고 좌우로 넓게(${spreadPct}%) 퍼져 있어요 — 꽉채움은 사람이 짤려요. 전체 보존을 추천해요.`, faces, spreadPct, coverage: cov};
+}
 
 // 감지된 얼굴 중심 x들을 스무딩 → 시간별 크롭 x(픽셀) 경로. 튐·급가속 제거.
 function smoothPath(keys: [number, number][], W: number, cropW: number, durSec: number): {t: number; x: number}[] {
@@ -135,23 +189,19 @@ export async function reframeClip(
     const {w: W, h: H} = dims;
     if (W <= H) return false; // 이미 세로/정사각 → 리프레임 불필요(레터박스 로직이 처리)
 
-    // 1) 얼굴 감지(python+opencv). 실패/부족하면 false.
-    const work = path.join(os.tmpdir(), `reframe-${randomUUID().slice(0, 8)}`);
-    await fsp.mkdir(work, {recursive: true});
-    const pyFile = path.join(work, 'detect.py');
-    const jsonFile = path.join(work, 'faces.json');
-    await fsp.writeFile(pyFile, PY_DETECT);
+    // 1) 얼굴 감지(python+opencv, 공유 함수). 실패/부족하면 false → 블러 폴백(무회귀).
     let det: DetectResult | null = null;
-    try {
-      await run(PYTHON, [pyFile, inPath, jsonFile], 180000, undefined, cancelled);
-      det = JSON.parse(await fsp.readFile(jsonFile, 'utf8'));
-    } catch (e: any) {
-      if (/사용자가 중단/.test(e?.message || '')) { await fsp.rm(work, {recursive: true, force: true}); throw e; }
-      log('[리프레임] 얼굴 감지 불가(블러로 진행): ' + (e?.message || '').slice(0, 80));
-    }
-    await fsp.rm(work, {recursive: true, force: true}).catch(() => {});
+    try { det = await detectFaces(inPath, cancelled); }
+    catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; }
     if (!det || det.err || !det.keys || det.coverage < 0.3) {
       log(`[리프레임] 인물이 충분히 안 잡힘(coverage ${det ? Math.round((det.coverage || 0) * 100) : 0}%) → 블러레터박스로`);
+      return false;
+    }
+    // ★여러 명이 9:16 크롭 폭보다 넓게 퍼져 있으면 꽉채움으로는 사람이 짤린다 → 블러 레터박스로 자동 폴백.
+    //   (사용자가 꽉채움을 골랐어도 '물리적으로 못 담는' 경우는 짤리는 것보다 전체보존이 낫다.)
+    const cropWmax = (H * 9) / 16;
+    if ((det.spanP90 || 0) > cropWmax * 1.02) {
+      log(`[리프레임] 인물이 여럿·좌우로 넓게 퍼져(${Math.round((det.spanP90 || 0) / W * 100)}%) 꽉채움 시 짤림 → 전체보존(블러)로 전환`);
       return false;
     }
 

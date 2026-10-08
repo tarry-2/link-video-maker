@@ -149,14 +149,14 @@
             <button type="button" class="seg-btn hl-orient" data-o="landscape">🖥 가로 (유튜브 일반)</button>
           </div>
 
-          <!-- 세로 변환 방식 — 세로일 때만. 인물 추적(꽉채움) vs 전체 보존(블러) -->
+          <!-- 세로 변환 방식 — 세로일 때만. 영상을 파악해 어울리는 쪽에 ✨추천 뱃지를 동적으로 붙인다. -->
           <div id="hl-reframe-row" style="margin-top:12px">
-            <label class="field-label">세로 변환 방식 <span class="hint">— 가로를 세로로 바꿀 때</span></label>
+            <label class="field-label">세로 변환 방식 <span class="hint">— 가로를 세로로 바꿀 때 (영상을 보고 추천해드려요)</span></label>
             <div class="seg" style="margin-top:6px">
-              <button type="button" class="seg-btn hl-rf active" data-rf="track">🔎 인물 꽉채움 (추천)</button>
-              <button type="button" class="seg-btn hl-rf" data-rf="letterbox">🖼 전체 보존 (블러 여백)</button>
+              <button type="button" class="seg-btn hl-rf active" data-rf="track">🔎 인물 꽉채움<span class="rf-badge" data-for="track"></span></button>
+              <button type="button" class="seg-btn hl-rf" data-rf="letterbox">🖼 전체 보존<span class="rf-badge" data-for="letterbox"></span></button>
             </div>
-            <p class="hint" style="margin-top:4px"><b>인물 꽉채움</b> = 말하는 사람을 따라다니며 화면을 꽉 채워요(진짜 쇼츠 느낌). <b>전체 보존</b> = 원본 전체를 담고 위아래 블러 여백(자막 많은 영상에 좋아요).</p>
+            <p id="hl-rf-advice" class="hint" style="margin-top:4px"><b>인물 꽉채움</b> = 말하는 사람을 따라다니며 화면을 꽉 채워요(1인·인터뷰에 좋아요). <b>전체 보존</b> = 원본 전체를 담고 위아래 블러 여백(여러 명·자막 많은 영상에 좋아요). 영상을 고르면 어울리는 쪽을 추천해드려요.</p>
           </div>
 
           <label class="field-label" style="margin-top:12px">④ 이 영상으로 몇 편 만들까요 <span id="hl-maxnote" class="hint"></span></label>

@@ -497,6 +497,9 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .seg { display: flex; gap: 8px; background: var(--card2); border-radius: 12px; padding: 5px; }
 .seg-btn { flex: 1; border: none; background: transparent; color: var(--muted); font-weight: 700; font-size: 13.5px; padding: 11px 8px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
 .seg-btn.active { background: var(--grad); color: #fff; box-shadow: 0 4px 12px rgba(18,169,152,0.3); }
+/* 세로변환 ✨추천 뱃지(버튼 안, 영상 분석 결과) */
+.rf-badge { font-size: 11px; font-weight: 800; color: #e2543d; }
+.seg-btn.active .rf-badge { color: #fff; }
 /* 디자인 템플릿 미리보기 그리드 — 샘플 썸네일(9:16) + 이름, 선택 강조, 🔍 크게보기 */
 .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-top: 8px; }
 .tpl-card { position: relative; border: 2px solid var(--line); background: var(--card2); border-radius: 12px; padding: 8px 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; transition: border-color .15s, transform .1s, box-shadow .15s; }

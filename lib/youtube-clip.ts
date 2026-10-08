@@ -142,6 +142,27 @@ async function fetchMetaAndSubs(
 
 // ★한 구간만 다운로드(--download-sections) — 그 구간 바이트만 받아 프록시 데이터·시간 대폭 절약.
 //   반환=섹션 파일 경로(섹션은 0초부터 시작하므로 이후 크롭은 파일 전체 대상).
+// 세로변환 추천용 '가벼운 샘플' 다운로드 — 유튜브/아카이브 영상의 중간 15초를 저해상도(360p)로만 받는다.
+//   얼굴 분석(몇 명·얼마나 퍼졌나)만 할 거라 화질 불필요 → 빠르고 저렴. 실패(봇차단 등)면 null(추천 생략).
+export async function sampleForAnalysis(videoId: string, dir: string, log: (m: string) => void): Promise<string | null> {
+  try {
+    const {common} = await buildCommon(() => {});
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    const outBase = path.join(dir, 'sample');
+    const find = () => { try { return fs.readdirSync(dir).map((x) => path.join(dir, x)).find((x) => /sample\.(mp4|mkv|webm)$/.test(x)); } catch { return undefined; } };
+    for (const client of CLIENTS) {
+      const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
+      try {
+        await run(YTDLP, [...common, ...ca, '-f', 'bv*[height<=360]+ba/b[height<=360]/worst',
+          '--download-sections', '*30-45', '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], () => {}, 90000);
+      } catch { continue; }
+      const f = find();
+      if (f && (await hasVideoStream(f))) return f;
+    }
+  } catch (e: any) { log('[분석] 샘플 받기 실패: ' + (e?.message || '').slice(0, 60)); }
+  return null;
+}
+
 async function downloadSection(
   videoId: string, dir: string, idx: number, start: number, end: number,
   log: (m: string) => void, common: string[], cancelled?: () => boolean,
