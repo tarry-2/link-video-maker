@@ -37,15 +37,13 @@ export async function ytdlpAvailable(): Promise<boolean> {
   try { await run(YTDLP, ['--version'], () => {}, 10000); return true; } catch { return false; }
 }
 
-// 영상 + 자막 다운로드. 반환: {videoPath, subText(초단위 타임스탬프 포함)}.
-// ★Railway 같은 데이터센터 IP는 유튜브 봇차단이 잦다 → 쿠키(YT_COOKIES_FILE) 있으면 사용, 속도 제한도 건다.
-async function download(videoId: string, dir: string, log: (m: string) => void, cancelled?: () => boolean): Promise<{videoPath: string; subText: string}> {
-  const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const base = path.join(dir, 'src');
+// 유튜브 다운로드 시도 클라이언트 순서(쿠키/프록시 환경에 맞는 순).
+const CLIENTS = ['web_embedded', 'default', 'android', 'ios', 'web_safari'];
+
+// 공통 yt-dlp 인자 + 쿠키/프록시/PO토큰 상태 로그(작업당 1회). 반환 {common, cookieUsed}.
+async function buildCommon(log: (m: string) => void): Promise<{common: string[]; cookieUsed: boolean}> {
   // -4=IPv4 강제(데이터센터 IPv6가 더 자주 차단됨), --sleep-requests=레이트리밋 완화.
   const common = ['--no-playlist', '--no-warnings', '--retries', '5', '--socket-timeout', '30', '--sleep-requests', '1', '-4'];
-  // ★쿠키 상태를 로그로 명확히 — "등록됨"으로 보여도 실제로 yt-dlp에 넘어가는지/언제 등록됐는지 한 눈에.
-  //   (쿠키가 있는데도 봇차단이면 "쿠키 만료"가 범인 → 로그만 보고 바로 판단 가능.)
   const ckFile = process.env.YT_COOKIES_FILE;
   const cookieUsed = !!(ckFile && fs.existsSync(ckFile));
   if (cookieUsed) {
@@ -53,70 +51,90 @@ async function download(videoId: string, dir: string, log: (m: string) => void, 
     try { const days = (Date.now() - fs.statSync(ckFile!).mtimeMs) / 86400000;
       age = days < 1 ? `${Math.round(days * 24)}시간 전 등록` : `${Math.floor(days)}일 전 등록`; } catch {}
     common.push('--cookies', ckFile!);
-    log(`[하이라이트] 🔑 유튜브 쿠키 사용 (${age}). ※쿠키는 하루이틀이면 자주 만료돼요 — 막히면 새로 등록.`);
+    log(`[하이라이트] 🔑 유튜브 쿠키 사용 (${age}).`);
   } else {
-    log('[하이라이트] ⚠️ 유튜브 쿠키 없음 — 데이터센터 IP는 봇차단이 잦아요. 설정에서 쿠키를 등록하세요.');
+    log('[하이라이트] ⚠️ 유튜브 쿠키 없음 — 설정에서 쿠키를 등록하세요.');
   }
   if (process.env.YT_PROXY) {
     common.push('--proxy', process.env.YT_PROXY);
-    // 사용자에겐 "쓰는지 여부"만 알려주면 됨(주소·비번 노출 불필요).
     const kr = /__cr\.kr|[_.]kr[;:]|country[-_]?kr/i.test(process.env.YT_PROXY) ? '한국 ' : '';
     log(`[하이라이트] 🌐 프록시 사용 중 (${kr}주거용 IP로 우회 — 봇차단 회피).`);
   } else {
     log('[하이라이트] 🌐 프록시 미사용 (데이터센터 IP 직접 — 봇차단 가능).');
   }
-  // PO토큰 제공자(bgutil, 127.0.0.1:4416) 생존 확인 — 데이터센터 IP 봇차단 우회의 핵심이라 죽어있으면 바로 보이게.
   try {
     await fetch('http://127.0.0.1:4416/ping', {signal: AbortSignal.timeout(3000)});
-    log('[하이라이트] 🛡 PO토큰 서버 작동중 — 데이터센터 IP 봇차단 우회(쿠키+PO토큰).');
-  } catch { log('[하이라이트] ⚠️ PO토큰 서버 응답없음 — PO토큰 없이 시도(데이터센터 IP면 봇차단 가능).'); }
-  // ★다운로드 뚫기(2026-10 기준): 쿠키 인증 환경에선 tv_downgraded가 "page needs to be reloaded"를 내므로 제외.
-  //   web_embedded/default가 쿠키와 가장 잘 맞고, android/ios는 쿠키 없을 때 봇차단 우회용. 순서대로 시도.
-  const CLIENTS = ['web_embedded', 'default', 'android', 'ios', 'web_safari'];
-  // 1) 영상 먼저 — 720p 이하. https(dash) 우선, 코덱 안 가리고 관대하게. 최종 ffmpeg mp4 머지.
-  log('[하이라이트] 영상 다운로드…(용량에 따라 수 분)');
-  let ok = false, lastErr = '';
+    log('[하이라이트] 🛡 PO토큰 서버 작동중.');
+  } catch { log('[하이라이트] ⚠️ PO토큰 서버 응답없음.'); }
+  return {common, cookieUsed};
+}
+
+// ★메타(영상 길이)+자막만 가볍게 받는다. 통짜 영상은 안 받음 — 프록시(주거용 IP)로 39분 1GB는 느려서 타임아웃.
+//   하이라이트 구간을 정한 뒤 그 구간만 받는다(downloadSection) → 데이터·시간 ~10배↓.
+async function fetchMetaAndSubs(
+  videoId: string, dir: string, log: (m: string) => void, common: string[], cookieUsed: boolean, cancelled?: () => boolean,
+): Promise<{subText: string; duration: number}> {
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const base = path.join(dir, 'src');
+  log('[하이라이트] 자막·정보 가져오는 중…(가볍게, 영상은 구간만 나중에)');
+  let ok = false, lastErr = '', duration = 0;
   for (const client of CLIENTS) {
     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
-      await run(YTDLP, [...common, ...ca, '-f', 'bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b',
-        '--merge-output-format', 'mp4', '-o', base + '.%(ext)s', url], log, 420000, undefined, cancelled);
-      ok = true; log(`[하이라이트] 다운로드 성공(${client})`); break;
+      const out = await run(YTDLP, [...common, ...ca, '--skip-download', '--write-subs', '--write-auto-subs',
+        '--sub-langs', 'en,ko', '--sub-format', 'vtt', '--print', '%(duration)s', '-o', base + '.%(ext)s', url], log, 120000, undefined, cancelled);
+      const d = parseInt(String(out).trim().split(/\s+/).pop() || '', 10);
+      if (Number.isFinite(d) && d > 0) duration = d;
+      ok = true; break;
     } catch (e: any) {
       lastErr = (e?.message || '').slice(0, 200);
-      if (/사용자가 중단/.test(lastErr)) throw new Error('사용자가 중단했습니다.'); // 중단이면 다음 클라이언트 시도 말고 즉시 종료
-      // ★실제 실패 사유를 로그에 남긴다(봇차단인지·포맷없음인지·n-challenge인지 한 줄로 구분).
+      if (/사용자가 중단/.test(lastErr)) throw new Error('사용자가 중단했습니다.');
       log(`[하이라이트] ${client} 실패: ${lastErr.replace(/\s+/g, ' ').slice(0, 120)} → 다음 방식 시도`);
     }
   }
   if (!ok) {
     const botBlocked = /not a bot|Sign in to confirm|cookies|consent/i.test(lastErr);
     if (botBlocked && cookieUsed)
-      throw new Error('쿠키를 등록했는데도 유튜브가 막았어요 — 쿠키가 만료됐을 가능성이 커요(데이터센터 IP는 쿠키가 하루이틀이면 풀립니다). 크롬에서 유튜브 로그인 상태로 쿠키를 "새로" 내보내 다시 등록해 주세요. (마지막 사유: ' + lastErr.slice(0, 100) + ')');
+      throw new Error('쿠키를 등록했는데도 유튜브가 막았어요 — 쿠키가 만료됐을 가능성이 커요. 크롬에서 유튜브 로그인 상태로 쿠키를 "새로" 내보내 다시 등록해 주세요. (마지막 사유: ' + lastErr.slice(0, 100) + ')');
     if (botBlocked)
-      throw new Error('유튜브가 이 서버를 "봇"으로 보고 다운로드를 막았어요(클라우드 IP 특성). 유튜브 로그인 쿠키를 설정에 등록하면 뚫립니다. (쿠키 없이도 되는 영상/시간대가 있어 다른 영상으로 재시도해볼 수도 있어요.)');
-    throw new Error('영상 다운로드 실패. ' + lastErr);
+      throw new Error('유튜브가 이 서버를 "봇"으로 보고 막았어요. 쿠키/프록시 설정이 필요합니다. (' + lastErr.slice(0, 100) + ')');
+    throw new Error('영상 정보 가져오기 실패. ' + lastErr);
   }
-  // 2) 자막(자동 생성 포함) — vtt. 영어 우선. 실패해도 영상은 받았으니 균등분할로 진행(여러 클라이언트 시도).
-  log('[하이라이트] 자막 다운로드…');
+  let subText = '';
+  const vtt = fs.readdirSync(dir).map(f => path.join(dir, f)).find(f => /\.vtt$/.test(f));
+  if (vtt) subText = vttToTimedText(fs.readFileSync(vtt, 'utf8'));
+  else log('[하이라이트] 자막 없음(균등 분할로 진행)');
+  return {subText, duration};
+}
+
+// ★한 구간만 다운로드(--download-sections) — 그 구간 바이트만 받아 프록시 데이터·시간 대폭 절약.
+//   반환=섹션 파일 경로(섹션은 0초부터 시작하므로 이후 크롭은 파일 전체 대상).
+async function downloadSection(
+  videoId: string, dir: string, idx: number, start: number, end: number,
+  log: (m: string) => void, common: string[], cancelled?: () => boolean,
+): Promise<string> {
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const outBase = path.join(dir, `sec-${idx}`);
+  const section = `*${Math.max(0, Math.floor(start))}-${Math.ceil(end)}`;
+  let ok = false, lastErr = '';
   for (const client of CLIENTS) {
     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
-      await run(YTDLP, [...common, ...ca, '--skip-download', '--write-subs', '--write-auto-subs',
-        '--sub-langs', 'en,ko', '--sub-format', 'vtt', '-o', base + '.%(ext)s', url], log, 120000, undefined, cancelled);
-      if (fs.readdirSync(dir).some(f => /\.vtt$/.test(f))) break;
-    } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw new Error('사용자가 중단했습니다.'); /* 아니면 다음 클라이언트 */ }
+      await run(YTDLP, [...common, ...ca, '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
+        '--download-sections', section, '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], log, 300000, undefined, cancelled);
+      ok = true; break;
+    } catch (e: any) {
+      lastErr = (e?.message || '').slice(0, 200);
+      if (/사용자가 중단/.test(lastErr)) throw new Error('사용자가 중단했습니다.');
+      log(`[하이라이트] ${client} 구간 실패 → 다음 방식 시도`);
+    }
   }
-  if (!fs.readdirSync(dir).some(f => /\.vtt$/.test(f))) log('[하이라이트] 자막 없음(균등 분할로 진행)');
-  const videoPath = fs.readdirSync(dir).map(f => path.join(dir, f)).find(f => /src\.(mp4|mkv|webm)$/.test(f));
-  if (!videoPath) throw new Error('영상 파일을 찾지 못했습니다(다운로드 실패).');
-  // 자막 vtt → 초단위 텍스트로 합치기(있으면).
-  let subText = '';
-  const vtt = fs.readdirSync(dir).map(f => path.join(dir, f)).find(f => /\.vtt$/.test(f));
-  if (vtt) subText = vttToTimedText(fs.readFileSync(vtt, 'utf8'));
-  return {videoPath, subText};
+  if (!ok) throw new Error('구간 다운로드 실패: ' + lastErr);
+  const f = fs.readdirSync(dir).map(x => path.join(dir, x)).find(x => new RegExp(`sec-${idx}\\.(mp4|mkv|webm)$`).test(x));
+  if (!f) throw new Error('구간 파일을 찾지 못했습니다.');
+  return f;
 }
 
 // VTT 자막 → "[초] 텍스트" 줄들로. (하이라이트 선정용 — 어디서 무슨 말 하는지)
@@ -244,8 +262,9 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
   return hs;
 }
 
-// 한 구간을 잘라낸다. orientation='portrait'=세로9:16(블러레터박스) / 'landscape'=가로16:9(원본 그대로).
-async function cutClip(videoPath: string, h: Highlight, outPath: string, orientation: 'portrait' | 'landscape', log: (m: string) => void, cancelled?: () => boolean): Promise<void> {
+// 구간 파일(sec-*.mp4, 이미 그 구간만 담겨 0초 시작)을 9:16/16:9로 크롭. totalSec=진행률 계산용 길이.
+// orientation='portrait'=세로9:16(블러레터박스) / 'landscape'=가로16:9(원본 그대로).
+async function cutClip(videoPath: string, outPath: string, orientation: 'portrait' | 'landscape', log: (m: string) => void, totalSec: number, cancelled?: () => boolean): Promise<void> {
   // ★남 채널 워터마크(보통 모서리) 지우기: 입력을 6% 확대 크롭해 가장자리를 화면 밖으로 밀어낸다.
   //   화질 손상 거의 없음(1080p 기준 ~6%). 중앙 큰 워터마크는 못 지움(드묾).
   const dewm = 'crop=iw/1.12:ih/1.12'; // 12% 확대 크롭 — 모서리 워터마크 대부분 제거(상하좌우 ~6%씩 잘림)
@@ -269,7 +288,7 @@ async function cutClip(videoPath: string, h: Highlight, outPath: string, orienta
   }
   // 진행률 하트비트 — ffmpeg stderr의 time= 을 읽어 "자르는 중 N%"를 주기적으로 찍는다.
   //   (클립당 로그가 1줄뿐이라 몇 분간 멈춘 것처럼 보이던 문제 해결.)
-  const total = Math.max(1, h.end - h.start);
+  const total = Math.max(1, totalSec);
   let lastPct = -1, lastAt = 0;
   const onLine = (line: string) => {
     const m = /time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line);
@@ -281,7 +300,7 @@ async function cutClip(videoPath: string, h: Highlight, outPath: string, orienta
   };
   // crf 20 = 선명. preset veryfast = 같은 화질(crf 고정)로 인코딩만 대폭 빠르게(파일이 조금 커질 뿐).
   //   2분짜리 클립을 medium으로 뽑으면 클립당 수 분씩 걸려 전체가 40분+ 가 되던 걸 줄인다.
-  await run(FFMPEG, ['-y', '-ss', String(h.start), '-to', String(h.end), '-i', videoPath,
+  await run(FFMPEG, ['-y', '-i', videoPath,
     ...args, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
     '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], log, 420000, onLine, cancelled);
 }
@@ -300,12 +319,13 @@ export async function extractHighlights(
   await fsp.mkdir(dir, {recursive: true});
   if (!(await ytdlpAvailable())) throw new Error('서버에 yt-dlp가 없습니다(배포 환경 확인 필요).');
   stop();
-  const {videoPath, subText} = await download(videoId, dir, log, cancelled);
+  // 1) 쿠키/프록시/PO 준비 + 자막·길이만 가볍게(통짜 다운로드 안 함 — 프록시로 1GB는 타임아웃).
+  const {common, cookieUsed} = await buildCommon(log);
   stop();
-  // 자막 상태 로그(왜 구간을 못 찾았는지 바로 보이게).
+  const {subText, duration: dur} = await fetchMetaAndSubs(videoId, dir, log, common, cookieUsed, cancelled);
+  stop();
   if (subText) log(`[하이라이트] 자막 확보: ${subText.length}자 — 내용 기반으로 터질 구간을 고릅니다.`);
   else log('[하이라이트] ⚠️ 자막이 없습니다. 자막(대사)이 있는 영상이라야 하이라이트를 고를 수 있어요.');
-  const dur = await durationOf(videoPath);
   if (!dur) throw new Error('영상 길이를 읽지 못했습니다.');
   const highlights = await pickHighlights(geminiKeys, subText, dur, count, clipSec, log);
   if (!highlights.length) throw new Error('하이라이트 구간을 찾지 못했습니다.');
@@ -314,17 +334,21 @@ export async function extractHighlights(
     stop();
     const h = highlights[i];
     const file = path.join(dir, `clip-${i}.mp4`);
-    log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${h.start}s~${h.end}s · ${orientation === 'landscape' ? '가로' : '세로'})…`);
     try {
-      await cutClip(videoPath, h, file, orientation, log, cancelled);
+      // 2) 이 구간만 다운로드(프록시 데이터 절약) → 3) 9:16/16:9 크롭.
+      log(`[하이라이트] ${i + 1}/${highlights.length} 구간 받는 중 (${h.start}s~${h.end}s)…`);
+      const raw = await downloadSection(videoId, dir, i, h.start, h.end, log, common, cancelled);
+      stop();
+      const secDur = (await durationOf(raw)) || (h.end - h.start);
+      log(`[하이라이트] ${i + 1}/${highlights.length} 자르는 중 (${orientation === 'landscape' ? '가로' : '세로'})…`);
+      await cutClip(raw, file, orientation, log, secDur, cancelled);
+      try { fs.rmSync(raw, {force: true}); } catch {} // 섹션 원본은 크롭 후 삭제(용량 절약)
       results.push({file, start: h.start, end: h.end, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end)});
     } catch (e: any) {
       if (/사용자가 중단/.test(e?.message || '')) throw new Error('사용자가 중단했습니다.'); // 중단이면 다음 컷 말고 즉시 종료
-      log(`[하이라이트] ${i + 1}번 컷 실패(건너뜀): ` + (e?.message || '').slice(0, 120));
+      log(`[하이라이트] ${i + 1}번 구간 실패(건너뜀): ` + (e?.message || '').slice(0, 120));
     }
   }
   if (!results.length) throw new Error('클립을 하나도 만들지 못했습니다.');
-  // 원본 영상 삭제(용량 절약) — 클립만 남긴다.
-  try { fs.rmSync(videoPath, {force: true}); } catch {}
   return results;
 }

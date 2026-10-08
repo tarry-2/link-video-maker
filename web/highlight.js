@@ -66,9 +66,9 @@
   function elapsedText() { if (!startTs) return ''; const s = Math.floor((Date.now() - startTs) / 1000); const base = `⏱ ${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; return estTotalText ? `${base} · 예상 ${estTotalText}` : base; }
   function tick() { clearTimeout(tickTimer); const n = $('hl-elapsed'); if (!n) return; n.textContent = elapsedText(); tickTimer = setTimeout(tick, 1000); }
   function energyFromLog(line) {
-    if (/소재를 뽑습니다|자막/.test(line)) setEnergy(Math.max(energyPct, 15), '소재 분석 중…');
-    else if (/영상 다운로드/.test(line)) setEnergy(Math.max(energyPct, 25), '원본 다운로드 중…');
-    else if (/구간 확보|구간 선정/.test(line)) setEnergy(Math.max(energyPct, 45), '하이라이트 고르는 중…');
+    if (/소재를 뽑습니다|자막·정보|자막 확보|자막/.test(line)) setEnergy(Math.max(energyPct, 15), '자막·정보 가져오는 중…');
+    else if (/구간 .*확정|구간 .*개/.test(line)) setEnergy(Math.max(energyPct, 35), '하이라이트 고르는 중…');
+    else if (/구간 받는 중/.test(line)) setEnergy(Math.max(energyPct, 45), '필요한 구간만 받는 중…');
     else if (/자르는 중/.test(line)) setEnergy(Math.max(energyPct, 60), '세로로 자르는 중…');
     else if (/편 렌더/.test(line)) setEnergy(Math.max(energyPct, 75), '자막 얹어 렌더 중…');
     else if (/편 완성/.test(line)) setEnergy(Math.min(98, energyPct + 5), '편집 마무리 중…');
