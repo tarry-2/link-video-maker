@@ -24,6 +24,25 @@ const DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data')
 const FPS = 30;
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 
+// 제목을 '단어/구분자 경계'에서 깔끔하게 자른다(글자 수로 뚝 자르면 "...1화 둘"처럼 단어 중간이 끊긴다).
+//   구분자(|·-·[]()·화/회/편) 앞에서 끊고, 없으면 공백 단위로. 그래도 길면 글자 수 폴백.
+function cleanTitle(raw: string, max = 20): string {
+  const t = (raw || '').trim();
+  if (t.length <= max) return t;
+  // 1) 구분자(| - – — [ ( · :) 기준으로 앞 조각이 적당하면 그걸 쓴다.
+  const bySep = t.split(/\s*[|\-–—\[\]()·:]\s*/).map((s) => s.trim()).filter(Boolean);
+  if (bySep[0] && bySep[0].length >= 4 && bySep[0].length <= max) return bySep[0];
+  // 2) 'N화/N회/N편'까지 포함해 끊으면 자연스러운 경우.
+  const epMatch = t.match(/^(.{4,}?\d+\s*[화회편])/);
+  if (epMatch && epMatch[1].length <= max) return epMatch[1].trim();
+  // 3) 공백 단위로 max 안까지 담되 단어 중간은 안 자른다.
+  const words = t.split(/\s+/); let out = '';
+  for (const w of words) { if ((out + ' ' + w).trim().length > max) break; out = (out + ' ' + w).trim(); }
+  if (out.length >= 4) return out;
+  // 4) 폴백: 글자 수(그래도 맨 끝 공백은 정리).
+  return t.slice(0, max).trim();
+}
+
 // 완성 영상(후킹 자막이 이미 입혀진 mp4)에서 프레임 1장을 뽑아 썸네일 PNG로 저장.
 //   커버가 없으면 인스타/유튜브가 영상 첫 프레임(어두운 화면)을 집어가 미리보기가 빈다.
 //   후킹이 자리잡은 지점(atSec)에서 뽑아 글자가 보이는 썸네일을 만든다.
@@ -248,7 +267,7 @@ export async function makeHighlights(
       video: `${jobRel}/${clipName}`,
       fullBleed: true, // 이미 비율 맞춤 → 꽉 채우고 상단 후킹 + (해설 시)카라오케 자막
       template: tpl.id,
-      hookTop: c.hookTop || meta.title.slice(0, 20),
+      hookTop: c.hookTop || cleanTitle(meta.title, 20),
       hookAccent: c.hookAccent || '',
       accentColor: tpl.accentColor,
       words, // 해설 있으면 카라오케 자막, 없으면 []
@@ -308,7 +327,7 @@ export async function makeHighlights(
         try {
           await renderThumbnail(
             {image: `${jobRel}/${bgName}`,
-              big: (c.hookTop || meta.title).slice(0, 18),
+              big: c.hookTop ? c.hookTop.slice(0, 18) : cleanTitle(meta.title, 18),
               small: '',
               badge: (c.hookAccent || '').slice(0, 8),
               accentColor: tpl.accentColor},
@@ -326,7 +345,7 @@ export async function makeHighlights(
       await fsp.rm(pubClipDir, {recursive: true, force: true}); // 렌더 끝났으니 public 클립 정리
     }
 
-    const title = (c.hookTop || meta.title).slice(0, 80);
+    const title = c.hookTop ? c.hookTop.slice(0, 80) : cleanTitle(meta.title, 80);
     const createdAt = new Date().toISOString();
 
     // ★서버의 업로드·상세설명·서빙 스택(resolveVideo·ensureInstaVideoR2·readProject*·/portfolio-item)은
