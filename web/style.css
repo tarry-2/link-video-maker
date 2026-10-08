@@ -336,6 +336,13 @@ select.input { appearance: none; cursor: pointer; }
 .topic-item:hover { border-color: var(--teal); }
 .topic-item.active { background: var(--grad); border-color: transparent; color: #fff; }
 .topic-why { font-size: 11px; font-weight: 700; opacity: 0.7; white-space: nowrap; }
+/* 🔥 실시간 트렌드 아이템 — 키워드 + 트래픽 뱃지 + 뉴스 맥락. 줄바꿈 허용(뉴스가 길 수 있음). */
+.trend-item { flex-wrap: wrap; }
+.trend-fire { font-weight: 800; }
+.trend-traffic { font-size: 11px; font-weight: 800; color: #e2543d; background: #fde3dd; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.trend-item.active .trend-traffic { background: rgba(255,255,255,0.25); color: #fff; }
+.trend-item .topic-why { flex-basis: 100%; white-space: normal; opacity: 0.8; margin-top: 2px; }
+[data-theme="dark"] .trend-traffic { background: #3a1a14; color: #f0836c; }
 
 /* 목소리 포트폴리오 */
 .portfolio { margin: 8px 0 20px; }

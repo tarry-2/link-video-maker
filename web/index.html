@@ -72,7 +72,17 @@
 
         <!-- 주제 추천 모드: 링크·이미지 없이 -->
         <div id="pane-topic" class="hidden">
-          <label class="field-label">1. 주제 추천 <span class="hint">— 아래 카테고리를 먼저 고르면 그 분야 인기 주제를 추천해요</span></label>
+          <!-- 🔥 실시간 급상승 트렌드 — "지금 뜨는 주제"로 만들면 조회수 골든윈도우(Google Trends 실데이터) -->
+          <label class="field-label">🔥 지금 뜨는 실시간 트렌드 <span class="hint">— 지금 검색 폭발하는 주제예요. 누르면 그 주제로 바로 만들어요</span></label>
+          <div class="seg" style="margin-top:6px">
+            <button type="button" class="seg-btn trend-geo active" data-geo="KR">🇰🇷 한국</button>
+            <button type="button" class="seg-btn trend-geo" data-geo="US">🌍 해외</button>
+            <button id="trend-refresh" type="button" class="ghost-btn small" style="margin-left:auto">↻ 새로고침</button>
+          </div>
+          <p id="trend-state" class="mini-state"></p>
+          <div id="trend-list" class="topic-list"></div>
+
+          <label class="field-label" style="margin-top:14px">💡 카테고리 주제 추천 <span class="hint">— 분야를 고르면 그 안에서 인기 주제를 AI가 추천해요</span></label>
           <button id="topic-fetch" class="ghost-btn" type="button">✨ 요즘 잘 되는 주제 추천받기</button>
           <p id="topic-state" class="mini-state"></p>
           <div id="topic-list" class="topic-list"></div>

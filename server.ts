@@ -11,6 +11,7 @@ import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
 import {makeHighlights, backfillHighlightProjects, reRenderHighlight} from './lib/youtube-highlight';
 import {searchArchiveChannel} from './lib/youtube-clip';
+import {getTrends} from './lib/trends';
 import {generateCardStoryboard} from './lib/cards';
 import {PRESETS, RECOMMEND_STYLE, getPreset} from './lib/presets';
 import {STYLES, STYLE_IDS} from './lib/styles';
@@ -960,6 +961,16 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, m);
     } catch (e: any) {
       return json(res, 502, {error: e?.message || '조회 실패'});
+    }
+  }
+  // ── 실시간 급상승 트렌드(지금 뜨는 주제) — Google Trends 공개 RSS. 조회수 '골든 윈도우'. ──
+  if (p === '/api/trends' && req.method === 'GET') {
+    const geo = (u.searchParams.get('geo') || 'KR').toUpperCase();
+    try {
+      const items = await getTrends(geo);
+      return json(res, 200, {trends: items.slice(0, 20), geo});
+    } catch (e: any) {
+      return json(res, 502, {error: '트렌드를 불러오지 못했어요: ' + (e?.message || e)});
     }
   }
   if (p === '/api/topics' && req.method === 'GET') {

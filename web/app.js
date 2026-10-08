@@ -84,6 +84,48 @@ $('topic-fetch')?.addEventListener('click', async () => {
   } catch (e) { st.textContent = e.message; }
 });
 
+// ── 🔥 실시간 급상승 트렌드(Google Trends) — 지금 뜨는 주제로 바로 만들기 ──
+let trendGeo = 'KR';
+function renderTrends(trends) {
+  const list = $('trend-list'); if (!list) return;
+  list.innerHTML = (trends || []).map((t) => {
+    const kw = (t.keyword || '').replace(/"/g, '&quot;');
+    const news = t.news ? `<span class="topic-why">📰 ${(t.news || '').replace(/</g, '&lt;').slice(0, 44)}</span>` : '';
+    return `<button class="topic-item trend-item" type="button" data-title="${kw}"><span class="trend-fire">🔥 ${kw}</span> <span class="trend-traffic">${t.traffic || ''}</span>${news}</button>`;
+  }).join('');
+  list.querySelectorAll('.trend-item').forEach((b) => b.addEventListener('click', () => {
+    list.querySelectorAll('.trend-item').forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+    // 트렌드 키워드를 주제 입력으로 — 바로 "영상 만들기" 가능.
+    if ($('topic-input')) $('topic-input').value = b.dataset.title;
+    saveFormState();
+  }));
+}
+async function fetchTrends() {
+  const st = $('trend-state'), list = $('trend-list');
+  if (!st || !list) return;
+  st.textContent = (trendGeo === 'KR' ? '한국' : '해외') + ' 실시간 급상승을 불러오는 중…';
+  list.innerHTML = '';
+  try {
+    const r = await fetch('/api/trends?geo=' + trendGeo);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    if (!d.trends || !d.trends.length) { st.textContent = '지금은 트렌드를 못 가져왔어요. 잠시 후 새로고침하세요.'; return; }
+    st.textContent = '지금 검색이 폭발하는 주제예요 — 누르면 아래 "주제"로 들어가요 (바로 영상 만들기 가능).';
+    renderTrends(d.trends);
+  } catch (e) { st.textContent = '트렌드 로딩 실패: ' + e.message; }
+}
+document.querySelectorAll('.trend-geo').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.trend-geo').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+  trendGeo = b.dataset.geo || 'KR'; fetchTrends();
+}));
+$('trend-refresh')?.addEventListener('click', fetchTrends);
+// 주제 탭이 처음 열릴 때 트렌드 자동 로드(한 번).
+let trendsLoaded = false;
+function maybeLoadTrends() { if (!trendsLoaded && !$('pane-topic')?.classList.contains('hidden')) { trendsLoaded = true; fetchTrends(); } }
+$('tab-topic')?.addEventListener('click', () => setTimeout(maybeLoadTrends, 50));
+maybeLoadTrends();
+
 // ── 카드뉴스: 주제 추천(기존 /api/topics 재사용) ──
 $('card-topic-fetch')?.addEventListener('click', async () => {
   const st = $('card-topic-state'), list = $('card-topic-list');
