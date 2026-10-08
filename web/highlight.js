@@ -127,12 +127,20 @@
     };
   }
 
-  // 바이럴 점수 뱃지 — 80+ 핫(빨강), 65~79 좋음(주황), 그 아래 보통(회색). score 없으면 빈 문자열.
+  // 바이럴 점수 → 등급(A+/A/B/C/D) + 판정. OpusClip식 "올려 말아" 한눈에.
+  function gradeOf(score) {
+    const s = Math.round(score);
+    if (s >= 85) return {g: 'A+', cls: 'hot', verdict: '🔥 터질 각! 바로 올려', short: '강추'};
+    if (s >= 75) return {g: 'A', cls: 'hot', verdict: '👍 좋아요 — 올리는 거 추천', short: '추천'};
+    if (s >= 65) return {g: 'B', cls: 'good', verdict: '🆗 괜찮아요 — 올릴 만해요', short: '무난'};
+    if (s >= 50) return {g: 'C', cls: 'mild', verdict: '😐 보통 — 후킹을 더 세게 바꿔보세요', short: '보통'};
+    return {g: 'D', cls: 'mild', verdict: '🥱 약해요 — 다른 구간을 추천해요', short: '약함'};
+  }
+  // 등급 뱃지 — 영상 위 오버레이(등급+점수). score 없으면 빈 문자열.
   function scoreBadge(score, overlay) {
     if (typeof score !== 'number' || !isFinite(score)) return '';
-    const s = Math.round(score);
-    const cls = s >= 80 ? 'hot' : s >= 65 ? 'good' : 'mild';
-    return `<span class="score-badge ${cls}${overlay ? ' ov' : ''}" title="AI 예상 바이럴 점수">🔥 ${s}</span>`;
+    const s = Math.round(score); const gr = gradeOf(s);
+    return `<span class="score-badge ${gr.cls}${overlay ? ' ov' : ''}" title="AI 예상 바이럴 점수 ${s}/100">${gr.g} · ${s}</span>`;
   }
 
   // ── 완성 결과(여러 편) — 먼저 끝난 편부터 바로 노출 + 점수순 정렬 ──
@@ -153,12 +161,13 @@
       ? `✅ ${clips.length}편 완성 · 나머지 제작 중…`
       : `🎬 하이라이트 ${clips.length}편 완성!`;
     box.innerHTML = `<h2 style="margin:0 0 4px">${head}</h2>
-      <p class="mini-state" style="margin-bottom:12px">🔥 점수 = AI가 예측한 "터질 확률"(높은 순). ${inProgress ? '<b>먼저 끝난 편은 지금 바로</b> 다운로드·업로드할 수 있어요(나머지는 계속 제작 중).' : '유튜브·인스타로 바로 올릴 수 있고, 작업 내역에도 저장됐어요.'}</p>
+      <p class="mini-state" style="margin-bottom:12px">🏅 등급 = AI가 예측한 "터질 확률"(<b>A+ 강추 → D 약함</b>, 높은 순 정렬). 등급 아래 '올려 말아' 판정을 보고 고르세요. ${inProgress ? '<b>먼저 끝난 편은 지금 바로</b> 다운로드·업로드할 수 있어요(나머지는 계속 제작 중).' : '유튜브·인스타로 바로 올릴 수 있고, 작업 내역에도 저장됐어요.'}</p>
       <div class="hl-result-grid">${clips.map((c, i) => `
         <div class="hl-result-item ${orient === 'landscape' ? 'land' : ''}" style="position:relative">
           ${scoreBadge(c.score, true)}
           <video poster="/portfolio-thumb/${c.projectId}.png${bust()}" src="/portfolio-item/${c.projectId}.mp4${bust()}#t=0.5" controls playsinline preload="metadata"></video>
           <b style="display:block;margin:6px 0">${esc(c.title || ('하이라이트 ' + (i+1)))}</b>
+          ${typeof c.score === 'number' ? `<div class="hl-verdict ${gradeOf(c.score).cls}">${gradeOf(c.score).verdict}${c.reason ? ` · <span style="opacity:.8">${esc(c.reason)}</span>` : ''}</div>` : ''}
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="ghost-btn small hl-edit" data-id="${c.projectId}">✏️ 편집</button>
             <a class="ghost-btn small" href="/portfolio-item/${c.projectId}.mp4" download="${esc(c.title || 'highlight')}.mp4">⬇ 다운로드</a>

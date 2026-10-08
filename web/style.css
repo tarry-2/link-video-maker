@@ -249,6 +249,14 @@ select.input { appearance: none; cursor: pointer; }
 .score-badge.good { background: #f5921b; }
 .score-badge.mild { background: #8a8a92; }
 .score-badge.ov { position: absolute; top: 10px; left: 10px; z-index: 2; font-size: 14px; padding: 5px 11px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
+/* 바이럴 등급 판정 — '올려 말아' 한 줄. 등급색에 맞춰 옅은 배경. */
+.hl-verdict { font-size: 12.5px; font-weight: 700; border-radius: 8px; padding: 6px 9px; margin: 2px 0 8px; line-height: 1.45; }
+.hl-verdict.hot { background: #fde3e3; color: #c42a2a; }
+.hl-verdict.good { background: #fdeccf; color: #a5640a; }
+.hl-verdict.mild { background: #ececed; color: #5a5a62; }
+[data-theme="dark"] .hl-verdict.hot { background: #3a1616; color: #f58080; }
+[data-theme="dark"] .hl-verdict.good { background: #342710; color: #e7b14a; }
+[data-theme="dark"] .hl-verdict.mild { background: #26262b; color: #a9a9b2; }
 .ghost-btn {
   background: transparent; border: 1px solid rgba(18, 169, 152, 0.4); color: var(--text);
   border-radius: 10px; padding: 9px 14px; font-size: 14px; cursor: pointer;
