@@ -36,6 +36,7 @@ export type ManualOpts = {
   presetId?: string;
   voice?: string;
   log?: (m: string) => void;
+  isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인(영상·카드 파이프라인과 동일).
 };
 
 export type ManualScene = {
@@ -146,12 +147,14 @@ JSON만 출력:
 
 export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Promise<{out: string; title: string; imageDir: string}> {
   const log = opts.log || (() => {});
+  const ck = () => { if (opts.isCancelled?.()) throw new Error('사용자가 중단했습니다.'); };
   const id = randomUUID().slice(0, 8);
   const pubRel = `jobs/${id}`;
   const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
   await mkdir(abs(pubRel), {recursive: true});
   const preset = opts.presetId ? getPreset(opts.presetId) : undefined;
   const {plan, sources} = await generateManualDraft(keys, opts);
+  ck();
   const totalChars = plan.scenes.reduce((n, s) => n + s.narration.length, 0);
   if (process.env.DRY_SCRIPT) return {out: '', title: plan.title, imageDir: abs(pubRel)};
 
@@ -172,6 +175,7 @@ export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Pro
   log(`[음성] 통짜 오디오 ${audioSec.toFixed(1)}초 · 실측 ${totalChars}자 → 초당 ${(totalChars / (audioSec || 1)).toFixed(1)}자(${voiceKey})`);
 
   for (let i = 0; i < plan.scenes.length; i++) {
+    ck(); // 장면마다(이미지 준비가 길어 중단 요청이 여기서 바로 반영됨)
     const s = plan.scenes[i];
     const srcIdx = Math.min(Math.max(0, s.imageIndex ?? i), sources.length - 1);
     const src = sources[srcIdx];
@@ -217,6 +221,7 @@ export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Pro
   await generateBgm(keys.elevenlabs, plan.musicPrompt || preset?.musicMood || '', (totalFrames / FPS) * 1000, abs(bgmRel), log);
   const bgmSrc: string = bgmRel;
 
+  ck(); // 렌더 직전 — 여기까지 안 멈췄으면 렌더는 끝까지 간다(통짜 단계).
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `${id}.mp4`);
   await mkdir(path.join(process.cwd(), 'out'), {recursive: true});

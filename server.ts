@@ -1099,7 +1099,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다(둘 다 끄면 키 없이 가능).'});
 
     const id = randomUUID().slice(0, 8);
-    const job: Job = {id, logs: [], done: false};
+    const job: Job = {id, logs: [], done: false, kind: 'video'};
     jobs.set(id, job);
     currentGenJob = id;
 
@@ -1119,6 +1119,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           narration: b.narration !== false, // 나레이션 토글(기본 ON)
           bgm: b.bgm !== false,              // 배경음악 토글(기본 ON)
           log: (m) => jlog(job, m),
+          isCancelled: () => !!job.cancelled, // ★중단 — 파이프라인이 단계마다 확인
         });
         // 바탕화면 폴더에도 저장
         const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
@@ -1191,6 +1192,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           presetId: b.presetId || undefined,
           voice: b.voice || undefined,
           log: (m) => jlog(job, m),
+          isCancelled: () => !!job.cancelled, // ★중단 — 파이프라인이 단계마다 확인
         });
         const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
         const today = new Date().toLocaleDateString('sv-SE');
@@ -1280,6 +1282,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           // 대본편집: 사용자가 고친 대본이 오면 그대로 제작(검증 후).
           storyboard: sanitizeCardStoryboard(b.storyboard),
           log: (m) => jlog(job, m),
+          isCancelled: () => !!job.cancelled, // ★중단 — 파이프라인이 단계마다 확인
         });
         // 바탕화면 저장은 선택(로컬에서만, 실패해도 무시 — Railway엔 Desktop 없음).
         try {
@@ -1398,6 +1401,17 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
 
   // 하이라이트 작업 중단(잘못 골랐을 때) — cancelled 플래그만 세우면 makeHighlights가 다음 단계에서 멈춘다.
   if (p === '/api/generate-highlights/cancel' && req.method === 'POST') {
+    const b = await readBody(req);
+    const job = jobs.get(String(b.id || ''));
+    if (!job) return json(res, 404, {error: '작업을 찾을 수 없습니다(이미 끝났을 수 있어요).'});
+    job.cancelled = true;
+    jlog(job, '[중단] 사용자가 중단을 눌렀습니다. 진행 중인 단계가 끝나는 대로 멈춥니다…');
+    return json(res, 200, {ok: true});
+  }
+
+  // 영상·카드 등 제작 작업 중단(범용) — cancelled 플래그만 세우면 파이프라인이 다음 단계 경계에서 멈춘다.
+  //   (하이라이트와 동일한 방식. 렌더처럼 통짜 단계는 끝난 뒤 경계에서 멈춤.)
+  if (p === '/api/generate/cancel' && req.method === 'POST') {
     const b = await readBody(req);
     const job = jobs.get(String(b.id || ''));
     if (!job) return json(res, 404, {error: '작업을 찾을 수 없습니다(이미 끝났을 수 있어요).'});

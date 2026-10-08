@@ -38,6 +38,7 @@ export type CardOpts = {
   skin?: string;           // 디자인 시스템 id(skins.ts). 미지정=주제로 자동 선택.
   storyboard?: CardStoryboard; // ★대본편집: 사용자가 고친 카드 대본(있으면 AI 재생성 안 하고 이걸로 제작).
   log?: (m: string) => void;
+  isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인(영상 파이프라인과 동일).
 };
 
 // 카드 → 나레이션용 텍스트(타입별로 자연스럽게 읽히게 조합).
@@ -69,6 +70,7 @@ function cardLen(c: CardPlan): number {
 
 export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{out: string; title: string; dir: string; kind: CardOutput; images?: string[]; projectId?: string}> {
   const log = opts.log || (() => {});
+  const ck = () => { if (opts.isCancelled?.()) throw new Error('사용자가 중단했습니다.'); };
   const id = randomUUID().slice(0, 8);
   const pubRel = `jobs/card-${id}`;
   const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
@@ -83,6 +85,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
     ? (log('[대본] 편집한 대본으로 제작'), opts.storyboard)
     : await generateCardStoryboard({gemini: keys.gemini, openai: keys.openai}, opts.topic, count, preset, opts.imageStyle);
   log(`[대본] "${sb.title}" · 카드 ${sb.cards.length}장 (${sb.cards.map(c => c.type).join('/')})`);
+  ck();
 
   // ★스킨 자동 선택 — 주제/카테고리로 어울리는 디자인 시스템을 고른다(덱마다 폰트·배경·색·장식·모션이
   //   통째로 달라져 100개면 100개가 다른 룩). 제목 기준이라 "제목 자동인식→모션그래픽"(테리).
@@ -92,6 +95,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   // 배경 준비 — ai=카드별 flux, upload=사용자 이미지, solid=없음.
   const bgRel: (string | undefined)[] = [];
   for (let i = 0; i < sb.cards.length; i++) {
+    ck(); // 배경 이미지 생성이 길어 중단 요청이 여기서 바로 반영됨
     if (bgMode === 'ai') {
       if (!keys.replicate) throw new Error('AI 배경을 쓰려면 Replicate 키가 필요합니다.');
       const rel = `${pubRel}/bg-${i}.jpg`;
@@ -126,6 +130,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
     ranges = sceneRanges;
     alignData = align;
   }
+  ck();
 
   // 카드 데이터 조립 + 길이.
   const palette = preset?.accentColors?.length ? preset.accentColors : ['#FFD84D', '#4FE0D0', '#FF8ABf'];
@@ -170,6 +175,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   const regNarrations = sb.cards.map(cardSpeech);
   const regDurSec = cards.reduce((a, c) => a + c.durationInFrames, 0) / FPS;
 
+  ck(); // 렌더 직전 — 여기까지 안 멈췄으면 렌더(게시물 PNG/영상)는 끝까지 간다(통짜 단계).
   // ── 게시물(캐러셀) 모드: 카드 N장을 4:5 PNG로 뽑고 ZIP으로 묶는다(오디오 없음). ──
   if (output === 'post') {
     const pngAbs = cards.map((_, i) => abs(`${pubRel}/card-${i + 1}.png`));

@@ -410,9 +410,11 @@ $('generate').onclick = async () => {
       voice: $('voice').value,
     };
   }
+  lastGen = {endpoint, body}; saveLastGen(); // ★같은 설정으로 다시/재시작용
   $('generate').disabled = true;
   $('progress-block').classList.remove('hidden');
   $('result-block').classList.add('hidden');
+  hideGenControls();
   $('log').textContent = '';
 
   let id;
@@ -428,6 +430,7 @@ $('generate').onclick = async () => {
   } catch (e) {
     addLog('[실패] ' + e.message, 'fail');
     $('generate').disabled = false;
+    showGenStopped();
     return;
   }
 
@@ -523,11 +526,12 @@ function saveLastCardBody(body) { try { localStorage.setItem('onvideo-lastcard',
 function loadLastCardBody() { try { return JSON.parse(localStorage.getItem('onvideo-lastcard') || 'null'); } catch { return null; } }
 async function runCardGen(body) {
   saveLastCardBody(body);
+  lastGen = {endpoint: '/api/generate-cards', body}; saveLastGen(); // ★공통 '다시/재시작'용
   $('card-editor')?.classList.add('hidden'); // 제작 시작하면 편집창 닫기
   $('progress-block').classList.remove('hidden');
   $('result-block').classList.add('hidden');
   $('post-result').classList.add('hidden');
-  if ($('card-resume')) $('card-resume').classList.add('hidden');
+  hideGenControls();
   if ($('log')) $('log').textContent = '';
   const en = $('card-energy'); if (en) en.classList.add('anim');
   cardPct = 0; cardStartTs = Date.now(); cardJobStart = null;
@@ -536,15 +540,63 @@ async function runCardGen(body) {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || '실패');
     attachProgress(d.id, true);
-  } catch (e) { addLog('[실패] ' + e.message, 'fail'); showCardResume(); }
+  } catch (e) { addLog('[실패] ' + e.message, 'fail'); showGenStopped(); }
 }
-// 실패/중단 시 '이어서 다시 만들기' 버튼 노출.
-function showCardResume() {
-  const b = $('card-resume'); if (!b) return;
-  if (!loadLastCardBody()) return;
-  b.classList.remove('hidden');
+
+// ── 제작 제어(영상·카드 공통): 중단 / 같은 설정으로 다시 / 취소하고 처음부터 (하이라이트와 동일 UX) ──
+let lastGen = null;
+function saveLastGen() { try { localStorage.setItem('onvideo-lastgen', JSON.stringify(lastGen)); } catch {} }
+function loadLastGen() { if (lastGen) return lastGen; try { lastGen = JSON.parse(localStorage.getItem('onvideo-lastgen') || 'null'); } catch {} return lastGen; }
+function hideGenControls() { ['gen-stop', 'gen-resume', 'gen-reset'].forEach((x) => $(x)?.classList.add('hidden')); }
+// 끝/중단/실패 공통: 중단 숨기고 '다시'(설정 있을 때)+'취소'를 보여준다.
+function showGenStopped() {
+  $('gen-stop')?.classList.add('hidden');
+  if (loadLastGen()) $('gen-resume')?.classList.remove('hidden');
+  $('gen-reset')?.classList.remove('hidden');
 }
-$('card-resume')?.addEventListener('click', () => { const b = loadLastCardBody(); if (b) runCardGen(b); });
+// 진행 연결만 즉시 끊어 UI를 풀어준다(서버 작업은 중단요청으로 알아서 멈춤).
+function detachGenJob() {
+  if (curES) { try { curES.close(); } catch {} curES = null; }
+  curJobId = null; try { localStorage.removeItem('onvideo-genjob'); } catch {}
+  clearTimeout(cardTimer);
+  $('generate').disabled = false;
+  $('gen-stop')?.classList.add('hidden');
+}
+// 같은 설정으로 다시(처음부터 재생성) — 영상·카드·수동 공통.
+async function rerunLastGen() {
+  const g = loadLastGen(); if (!g) return;
+  $('progress-block').classList.remove('hidden');
+  $('result-block').classList.add('hidden');
+  $('post-result')?.classList.add('hidden');
+  hideGenControls();
+  if ($('log')) $('log').textContent = '';
+  const en = $('card-energy'); if (en) en.classList.add('anim');
+  try {
+    const r = await fetch(g.endpoint, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(g.body)});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    attachProgress(d.id, true);
+  } catch (e) { addLog('[실패] ' + e.message, 'fail'); showGenStopped(); }
+}
+$('gen-resume')?.addEventListener('click', rerunLastGen);
+$('gen-stop')?.addEventListener('click', async () => {
+  const jid = curJobId; if (!jid) return;
+  if (!confirm('지금 만들던 걸 중단할까요? (바로 멈춥니다)')) return;
+  try { await fetch('/api/generate/cancel', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: jid})}); } catch {}
+  detachGenJob();
+  addLog('⏹ 중단했습니다. 같은 설정으로 다시 하거나, 취소하고 처음부터 할 수 있어요.', 'fail');
+  setCardEnergy(cardPct, '중단됨'); const f = $('card-energy'); if (f) f.classList.remove('anim');
+  showGenStopped();
+});
+$('gen-reset')?.addEventListener('click', () => {
+  if (curJobId) { try { fetch('/api/generate/cancel', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: curJobId})}); } catch {} }
+  detachGenJob();
+  hideGenControls();
+  $('progress-block').classList.add('hidden');
+  $('result-block').classList.add('hidden');
+  $('post-result')?.classList.add('hidden');
+  if ($('log')) $('log').textContent = '';
+});
 // 게시물 결과 렌더(이미지 그리드 + ZIP).
 window.showPostResult = function (title, images, zip, projectId) {
   $('post-result').classList.remove('hidden');
@@ -602,6 +654,10 @@ function attachProgress(id, freshLog) {
   if (cardJobStart !== id) { cardJobStart = id; cardStartTs = Date.now(); cardPct = 0; setCardEnergy(6, '시작하는 중…'); }
   $('progress-block').classList.remove('hidden');
   $('generate').disabled = true;
+  // 진행 중 — '지금 중단'만 노출(다시/취소는 끝난 뒤).
+  $('gen-stop')?.classList.remove('hidden');
+  $('gen-resume')?.classList.add('hidden');
+  $('gen-reset')?.classList.add('hidden');
   cardTick();
   let recv = 0; // 이번 연결에서 받은 로그 줄 수 — logCount 이하(이미 표시됨)는 건너뛴다.
   const es = new EventSource('/api/progress?id=' + id);
@@ -626,11 +682,13 @@ function attachProgress(id, freshLog) {
       refreshRunpod(); // 작업 끝났으니 GPU가 꺼졌는지(자동종료) 배지로 바로 확인시켜준다.
       try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
-      if (m.error) { setCardEnergy(cardPct, '실패'); showCardResume(); }
+      $('gen-stop')?.classList.add('hidden');
+      if (m.error) { setCardEnergy(cardPct, m.error.includes('중단') ? '중단됨' : '실패'); }
       else {
         cardPct = 100; setCardEnergy(100, '완성! 🎉'); const f = $('card-energy'); if (f) f.classList.remove('anim');
         cardCelebrate();
       }
+      showGenStopped(); // 성공·실패·중단 공통: 같은 설정으로 다시 / 취소하고 처음부터 노출
       if (m.kind === 'post') { if (window.showPostResult) window.showPostResult(m.title, m.images, m.zip, m.projectId); }
       else if (m.file) showResult(m.file, m.title, m.projectId);
       if (!m.error) {
@@ -648,12 +706,12 @@ function attachProgress(id, freshLog) {
     } else if (curJobId === id) {
       // 재연결을 여러 번 실패 — 서버에 작업이 없음(배포로 인한 재시작 등)일 수 있다.
       // ★조용히 멈추지 않는다: 로그는 그대로 두고(절대 안 지움) 상황을 명확히 알린다.
-      const wasCard = (typeof mode !== 'undefined' && mode === 'card');
       curJobId = null; try { localStorage.removeItem('onvideo-genjob'); } catch {}
       $('generate').disabled = false;
+      $('gen-stop')?.classList.add('hidden');
       clearTimeout(cardTimer);
       addLog('[연결 끊김] 진행 연결이 끊겼습니다(서버 업데이트·네트워크 등). 제작이 서버에서 완료됐을 수도 있으니 작업 내역을 확인하거나 다시 시작해 주세요. (로그는 유지됩니다)', 'fail');
-      if (wasCard) showCardResume();
+      showGenStopped();
     }
   };
 }

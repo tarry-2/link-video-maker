@@ -61,6 +61,7 @@ export type PipelineOpts = {
   bgm?: boolean; // 배경음악 넣기. 기본 true. false면 음악 없음.
   transitionFrames?: number;
   log?: (m: string) => void;
+  isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인해서 멈춘다(하이라이트와 동일).
 };
 
 export async function makeVideo(
@@ -69,6 +70,8 @@ export async function makeVideo(
   opts: PipelineOpts,
 ): Promise<{out: string; title: string; imageDir: string}> {
   const log = opts.log || (() => {});
+  // ★중단 체크 — 각 단계 경계에서 호출. 사용자가 중단을 누르면 여기서 멈춘다(렌더 같은 통짜 단계는 끝난 뒤 경계에서).
+  const ck = () => { if (opts.isCancelled?.()) throw new Error('사용자가 중단했습니다.'); };
   // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16. UI "롱폼" optgroup(90/120/180)과 일치.
   const landscape = opts.duration >= 90;
   const orientation: 'portrait' | 'landscape' = landscape ? 'landscape' : 'portrait';
@@ -78,6 +81,7 @@ export async function makeVideo(
   await mkdir(abs(pubRel), {recursive: true});
 
   const source = await fetchSource(urls, log);
+  ck();
 
   // ★카테고리 프리셋: 있으면 톤·이미지·목소리·BGM을 그 바닥 최적값으로 자동 세팅.
   const preset = opts.presetId ? getPreset(opts.presetId) : undefined;
@@ -94,6 +98,7 @@ export async function makeVideo(
     log,
   });
   log(`[대본] "${sb.title}" · ${sb.scenes.length}장면`);
+  ck();
 
   // 목소리: 사용자 지정 > (애니 스타일이면 애니 목소리) > 프리셋 추천 > adam
   const voiceKey = pickVoice(opts.voice, preset?.voice, opts.imageStyle);
@@ -115,6 +120,7 @@ export async function makeVideo(
   } else {
     log('[음성] 나레이션 끔 — 음성 없이 영상만 만듭니다.');
   }
+  ck();
 
   // ★움직이는 AI 영상(Wan2.2) — 앞에서부터 aiClips개 장면을 RunPod에서 영상 클립으로 만든다.
   //   이미지는 항상 먼저 만들어 폴백/썸네일로 두고, 클립 성공 시 scene.video로 교체(Scene.tsx가 video 우선 렌더).
@@ -130,6 +136,7 @@ export async function makeVideo(
   }
 
   for (let i = 0; i < sb.scenes.length; i++) {
+    ck(); // 장면마다(이미지·영상 생성이 길어 중단 요청이 여기서 바로 반영됨)
     const s = sb.scenes[i];
     const imgRel = `${pubRel}/img-${i}.jpg`;
 
@@ -217,6 +224,7 @@ export async function makeVideo(
     log('[BGM] 배경음악 끔.');
   }
 
+  ck(); // 렌더 직전 — 여기까지 안 멈췄으면 렌더는 끝까지 간다(통짜 단계).
   log('[렌더] 최종 합성…');
   const out = path.join(process.cwd(), 'out', `${id}.mp4`);
   await mkdir(path.join(process.cwd(), 'out'), {recursive: true});
