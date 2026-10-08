@@ -1306,9 +1306,10 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     currentGenJob = id;
     (async () => {
       try {
-        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled});
         job.kind = 'highlight';
-        job.clips = clips.map((c) => ({projectId: c.projectId, file: c.file, title: c.title, score: c.score}));
+        job.clips = []; // 완성되는 편마다 누적(먼저 끝난 편을 SSE로 바로 흘림)
+        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
+          onClip: (c) => { if (!job.clips!.some((x) => x.projectId === c.projectId)) job.clips!.push(c); }});
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }
         job.done = true; job.doneAt = Date.now();
       } catch (e: any) {
@@ -1373,12 +1374,19 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       Connection: 'keep-alive',
     });
     let sent = 0;
+    let sentClips = 0;
     let lastWrite = Date.now();
     const timer = setInterval(() => {
       let wrote = false;
       while (sent < job.logs.length) {
         res.write(`data: ${JSON.stringify({log: job.logs[sent]})}\n\n`);
         sent++;
+        wrote = true;
+      }
+      // ★먼저 완성된 편을 즉시 흘린다(하이라이트) — 3편 다 안 끝나도 끝난 편부터 바로 쓸 수 있게.
+      while (job.clips && sentClips < job.clips.length) {
+        res.write(`data: ${JSON.stringify({clip: job.clips[sentClips]})}\n\n`);
+        sentClips++;
         wrote = true;
       }
       // ★heartbeat — 움직이는 AI 영상(RunPod 팟 부팅) 등으로 새 로그 없이 몇 분씩 조용할 때

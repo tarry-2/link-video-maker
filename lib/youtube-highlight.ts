@@ -68,7 +68,7 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; onClip?: (c: {projectId: string; file: string; title: string; score: number}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -245,6 +245,8 @@ export async function makeHighlights(
     try { fs.writeFileSync(path.join(studioDir, 'attribution.txt'), attribution); } catch {}
 
     results.push({projectId, file: output, title, hookTop: c.hookTop || '', score: c.score});
+    // ★먼저 끝난 편은 바로 쓸 수 있게 — 완성 즉시 콜백(server가 SSE로 흘려 프론트 카드 노출).
+    try { opts.onClip?.({projectId, file: output, title, score: c.score}); } catch {}
     log(`[하이라이트] ${i + 1}편 완성: ${title}`);
   }
 

@@ -99,6 +99,7 @@
       reconnTries = 0;
       const m = JSON.parse(ev.data);
       if (m.log) { recv++; if (recv > logCount) { addLog(m.log, m.log.includes('[완료]') ? 'done' : m.log.includes('[실패]') ? 'fail' : ''); energyFromLog(m.log); logCount = recv; } }
+      if (m.clip) { addResultClip(m.clip); loadHistory(); } // 먼저 끝난 편 바로 노출(+작업내역 갱신)
       if (m.done) {
         es.close(); curES = null; curJobId = null;
         clearTimeout(tickTimer);
@@ -108,7 +109,10 @@
         if (m.error) { setEnergy(energyPct, m.error.includes('중단') ? '중단됨' : '실패'); }
         else { setEnergy(100, '완성! 🎉'); const f = $('hl-energy'); if (f) f.classList.remove('anim'); celebrate(); }
         showStopped(); // 성공·실패 공통: '같은 설정으로 다시' + '취소하고 새 영상' 노출
-        if (m.kind === 'highlight' && !m.error) { showResults(m.clips || []); loadHistory(); }
+        if (m.kind === 'highlight' && !m.error) {
+          (m.clips || []).forEach((c) => { if (!resultClips.some((x) => x.projectId === c.projectId)) resultClips.push(c); });
+          showResults(resultClips, false); loadHistory();
+        }
       }
     };
     es.onerror = () => {
@@ -125,14 +129,23 @@
     return `<span class="score-badge ${cls}${overlay ? ' ov' : ''}" title="AI 예상 바이럴 점수">🔥 ${s}</span>`;
   }
 
-  // ── 완성 결과(여러 편) — 점수순 정렬(터질 것부터 위로) ──
-  function showResults(clips) {
+  // ── 완성 결과(여러 편) — 먼저 끝난 편부터 바로 노출 + 점수순 정렬 ──
+  let resultClips = []; // 완성된 편 누적(SSE로 하나씩 들어옴)
+  function addResultClip(c) {
+    if (!c || !c.projectId) return;
+    if (!resultClips.some((x) => x.projectId === c.projectId)) resultClips.push(c);
+    showResults(resultClips, !!curJobId); // 아직 작업 중이면 "나머지 제작 중" 표시
+  }
+  function showResults(clips, inProgress) {
     const box = $('hl-result-block'); if (!box) return;
     box.classList.remove('hidden');
     if (!clips.length) { box.innerHTML = '<p class="mini-state">완성된 클립이 없어요.</p>'; return; }
     clips = clips.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
-    box.innerHTML = `<h2 style="margin:0 0 4px">🎬 하이라이트 ${clips.length}편 완성!</h2>
-      <p class="mini-state" style="margin-bottom:12px">🔥 점수 = AI가 예측한 "터질 확률". 높은 순으로 정렬했어요. 유튜브·인스타로 바로 올릴 수 있고, 작업 내역에도 저장됐어요.</p>
+    const head = inProgress
+      ? `✅ ${clips.length}편 완성 · 나머지 제작 중…`
+      : `🎬 하이라이트 ${clips.length}편 완성!`;
+    box.innerHTML = `<h2 style="margin:0 0 4px">${head}</h2>
+      <p class="mini-state" style="margin-bottom:12px">🔥 점수 = AI가 예측한 "터질 확률"(높은 순). ${inProgress ? '<b>먼저 끝난 편은 지금 바로</b> 다운로드·업로드할 수 있어요(나머지는 계속 제작 중).' : '유튜브·인스타로 바로 올릴 수 있고, 작업 내역에도 저장됐어요.'}</p>
       <div class="hl-result-grid">${clips.map((c, i) => `
         <div class="hl-result-item ${orient === 'landscape' ? 'land' : ''}" style="position:relative">
           ${scoreBadge(c.score, true)}
@@ -602,7 +615,7 @@
   }
   // 전체 초기화 — 로그·진행·결과·에너지바까지 싹 비우고 처음 상태로.
   function resetAll() {
-    detachJob(); lastBody = null; startTs = 0; estTotalText = '';
+    detachJob(); lastBody = null; startTs = 0; estTotalText = ''; resultClips = [];
     if ($('log')) $('log').textContent = ''; logJobId = null; logCount = 0;
     setEnergy(0, ''); const f = $('hl-energy'); if (f) f.classList.add('anim');
     $('progress-block')?.classList.add('hidden');
@@ -611,6 +624,7 @@
   }
   async function generate(body) {
     const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
+    resultClips = []; $('hl-result-block')?.classList.add('hidden'); // 새 제작 → 이전 결과 비움
     ['hl-resume','hl-reset'].forEach((id) => $(id)?.classList.add('hidden'));
     try {
       const d = await (await fetch('/api/generate-highlights', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
