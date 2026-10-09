@@ -428,6 +428,33 @@
     .bchip svg{width:24px;height:24px}
   }
 
+  /* ── 임팩트 밴드: 실제 쇼츠가 가로로 흐르는 마퀴 ── */
+  .marquee-band{padding:70px 0 80px;overflow:hidden}
+  .marquee-band .sec-head{margin-bottom:38px}
+  .mq-grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .mq-row{position:relative;width:100%;
+    -webkit-mask:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);
+    mask:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
+  .mq-track{display:flex;gap:18px;width:max-content;animation:marq 34s linear infinite}
+  .mq-track:hover{animation-play-state:paused}
+  @keyframes marq{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .mq-card{position:relative;flex:0 0 auto;width:148px;height:263px;border-radius:18px;overflow:hidden;
+    border:1px solid var(--line2);box-shadow:0 18px 40px rgba(0,0,0,.28);background:#0a0912;
+    transition:transform .3s var(--ease)}
+  .mq-card:hover{transform:translateY(-6px) scale(1.03)}
+  .mq-card img{width:100%;height:100%;object-fit:cover}
+  .mq-card .mq-ov{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.62),transparent 55%)}
+  .mq-card .mq-hook{position:absolute;left:12px;right:12px;bottom:12px;z-index:2;color:#fff;
+    font-family:'Black Han Sans',sans-serif;font-size:16px;line-height:1.16;text-shadow:1.5px 1.5px 0 #000,-1px 1px 0 #000;word-break:keep-all}
+  @media(max-width:620px){
+    .marquee-band{padding:50px 0 56px}
+    .marquee-band .sec-head{margin-bottom:26px}
+    .mq-card{width:118px;height:210px;border-radius:15px}
+    .mq-card .mq-hook{font-size:13.5px}
+    .mq-track{gap:13px;animation-duration:26s}
+  }
+  @media(prefers-reduced-motion:reduce){.mq-track{animation:none}}
+
   /* 로그인 모달 — 비번 없이 기능 진입 금지 */
   .login-modal{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;
     background:rgba(5,4,10,.72);backdrop-filter:blur(8px)}
@@ -654,6 +681,35 @@
         <h3>전문가급 퀄리티</h3>
         <p>줌 펀치·켄번스 움직임·효과음·배경음악 더킹까지. AI 티 안 나는 완성형 편집을 자동으로.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- 임팩트 밴드: 실제 쇼츠들이 가로로 흐르는 모션그래픽(박스만 반복되는 단조로움 환기) -->
+<section class="marquee-band">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-tag">Made with OnVideo</div>
+      <h2 class="sec-title">지금도 쇼츠가 <span class="mq-grad">쏟아지고</span> 있어요</h2>
+      <p class="sec-desc">링크 하나로 만들어진 쇼츠들이 매일 유튜브·인스타로 올라가고 있어요.</p>
+    </div>
+  </div>
+  <!-- 가로 무한 흐름(두 줄, 반대 방향) -->
+  <div class="mq-row">
+    <div class="mq-track mq-left">
+      <div class="mq-card"><img src="/landing-img/news1.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">퇴근길 감성</span></div>
+      <div class="mq-card"><img src="/landing-img/news3.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">가을 여행지</span></div>
+      <div class="mq-card"><img src="/landing-img/bg1.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">조회수 터지는 법</span></div>
+      <div class="mq-card"><img src="/landing-img/news2.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">3초 후킹</span></div>
+      <div class="mq-card"><img src="/landing-img/news4.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">하이라이트 컷</span></div>
+      <div class="mq-card"><img src="/landing-img/bg2.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">SNS 자동 업로드</span></div>
+      <!-- 복제(끊김 없는 루프) -->
+      <div class="mq-card" aria-hidden="true"><img src="/landing-img/news1.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">퇴근길 감성</span></div>
+      <div class="mq-card" aria-hidden="true"><img src="/landing-img/news3.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">가을 여행지</span></div>
+      <div class="mq-card" aria-hidden="true"><img src="/landing-img/bg1.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">조회수 터지는 법</span></div>
+      <div class="mq-card" aria-hidden="true"><img src="/landing-img/news2.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">3초 후킹</span></div>
+      <div class="mq-card" aria-hidden="true"><img src="/landing-img/news4.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">하이라이트 컷</span></div>
+      <div class="mq-card" aria-hidden="true"><img src="/landing-img/bg2.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">SNS 자동 업로드</span></div>
     </div>
   </div>
 </section>
