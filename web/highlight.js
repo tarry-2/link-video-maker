@@ -511,7 +511,9 @@
     }));
     // 작업 내역에서 쓰는 버튼 바인딩용(복원 시 wireCards 호출 전에 CATS 정의돼 있어야 함)
   }
-  function maxClips(durationSec, clipSec) { return Math.max(1, Math.min(10, Math.floor((durationSec * 0.4) / Math.max(clipSec, 20)))); }
+  // 영상 길이에서 최대 몇 편 뽑을 수 있나. 예전엔 40%(0.4)만 써서 4~5분 영상도 60초 클립이면 1편으로 고정됐다
+  //   → 영상의 90%까지 활용해 겹치지 않는 선에서 최대한 여러 편 뽑게 완화(테리: 60초 이상도 1편 고정되는 거 풀어라).
+  function maxClips(durationSec, clipSec) { return Math.max(1, Math.min(10, Math.floor((durationSec * 0.9) / Math.max(clipSec, 15)))); }
   function renderCountSeg() {
     const seg = $('hl-count-seg'); if (!seg) return;
     // 영상 선택 전엔 기본(1~10편) 다 보이고, 선택하면 그 영상 길이에 맞게 최대편수까지만.
