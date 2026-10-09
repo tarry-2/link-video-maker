@@ -243,25 +243,24 @@
     background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
   .stat .l{color:var(--muted);font-size:13.5px;margin-top:10px;font-weight:600}
 
-  /* 기능 그리드 */
-  .features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  /* 기능 그리드 — 4열 2행(8개 균일, 공간 안 잡아먹게 컴팩트) */
+  .features{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
   .feat{position:relative;background:linear-gradient(165deg,var(--panel),rgba(16,13,24,.6));
-    border:1px solid var(--line);border-radius:var(--radius);padding:30px 26px;overflow:hidden;
+    border:1px solid var(--line);border-radius:18px;padding:22px 20px;overflow:hidden;
     transition:transform .35s var(--ease),border-color .35s,box-shadow .35s}
   .feat::before{content:'';position:absolute;inset:0;background:var(--grad-soft);opacity:0;transition:opacity .35s}
   .feat:hover{transform:translateY(-6px);border-color:var(--line2);box-shadow:0 30px 60px rgba(0,0,0,.4)}
   .feat:hover::before{opacity:1}
   .feat>*{position:relative;z-index:1}
-  .feat .ic{width:52px;height:52px;border-radius:15px;display:grid;place-items:center;font-size:25px;margin-bottom:18px;
+  .feat .ic{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;font-size:22px;margin-bottom:14px;
     background:rgba(255,255,255,.05);border:1px solid var(--line2)}
-  .feat h3{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-bottom:10px;display:flex;align-items:center;gap:8px}
-  .feat p{color:var(--muted);font-size:14.5px;font-weight:500}
-  .feat .new{font-size:11px;font-weight:800;color:#0b0a12;background:var(--grad);padding:3px 9px;border-radius:999px;letter-spacing:.02em}
-  .feat.wide{grid-column:span 2}
+  .feat h3{font-size:16.5px;font-weight:800;letter-spacing:-.02em;margin-bottom:8px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .feat p{color:var(--muted);font-size:13px;font-weight:500;line-height:1.5}
+  .feat .new{font-size:10px;font-weight:800;color:#0b0a12;background:var(--grad);padding:2px 8px;border-radius:999px;letter-spacing:.02em}
 
   /* 폰트 칩 데모(기능카드 내부) */
   .fontdemo{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px}
-  .fontdemo b{font-weight:400;font-size:17px;padding:7px 13px;border-radius:10px;border:1px solid var(--line2);
+  .fontdemo b{font-weight:400;font-size:15px;padding:6px 11px;border-radius:9px;border:1px solid var(--line2);
     background:rgba(255,255,255,.04);color:var(--text)}
   .fd-black{font-family:'Black Han Sans'}.fd-jua{font-family:'Jua'}
 
@@ -316,9 +315,11 @@
     .hero-grid{grid-template-columns:1fr;gap:10px}
     .stage{height:480px;margin-top:10px}
     .cases{grid-template-columns:1fr}
-    .features{grid-template-columns:repeat(2,1fr)} /* 기능 카드 2열(세로로 쭉 늘어지지 않게) */
+    /* 기능 카드 2열 균일 — 넓은 카드도 1칸으로(span 해제, 빈칸 방지) */
+    .features{grid-template-columns:repeat(2,1fr);align-items:stretch}
     .stats{grid-template-columns:repeat(2,1fr)}
-    .feat.wide{grid-column:span 2} /* 넓은 카드는 한 줄 전체 */
+    .feat.wide{grid-column:auto}
+    .fontdemo b{font-size:15px;padding:6px 11px}
     .step .arrow{display:none}
     .nav-links{display:none}
   }
@@ -326,10 +327,12 @@
     .hero{padding:48px 0 20px}
     section{padding:62px 0}
     .features{grid-template-columns:repeat(2,1fr)} /* 작은 폰에서도 2열 유지 */
-    .feat{padding:20px 16px} /* 2열이라 패딩 줄여 내용 여유 */
-    .feat .ic{width:44px;height:44px;font-size:21px;margin-bottom:12px}
-    .feat h3{font-size:16.5px}
-    .feat p{font-size:13px}
+    .feat{padding:18px 14px} /* 2열이라 패딩 줄여 내용 여유 */
+    .feat .ic{width:42px;height:42px;font-size:20px;margin-bottom:11px}
+    .feat h3{font-size:15.5px;flex-wrap:wrap}
+    .feat h3 .new{font-size:10px;padding:2px 7px}
+    .feat p{font-size:12.5px}
+    .fontdemo b{font-size:14px;padding:5px 9px}
     .stats{grid-template-columns:1fr}
     .nav-cta .btn-ghost{display:none}
   }
@@ -396,11 +399,19 @@
   .bchip svg{width:30px;height:30px}
   .bchip.active{opacity:1;border-color:var(--teal);box-shadow:0 0 0 3px rgba(66,227,207,.15);transform:scale(1.1)}
   .bchip.done{opacity:1;border-color:var(--teal)}
-  /* 섹션 전체를 위로(단계 칩이 화면에 보이게) — 상단 여백·제목 간격 축소 */
-  #how{padding-top:54px}
-  #how .sec-head{margin-bottom:32px}
+  /* 히어로→모션그래픽 자연 연결 브릿지 문구 */
+  .bridge-line{display:inline-block;font-size:14px;font-weight:700;color:var(--muted);
+    background:var(--panel);border:1px solid var(--line2);border-radius:999px;padding:9px 18px;margin-bottom:20px;
+    box-shadow:0 6px 20px rgba(0,0,0,.08)}
+  /* 히어로 바로 다음 = 핵심 모션그래픽. 히어로와 숨 쉬게 여백 주고 도입으로 자연 연결 */
+  #how{padding-top:76px}
+  #how .sec-head{margin-bottom:34px}
+  /* 중간 폭(태블릿~작은 데스크탑)에서 기능 4열이 좁으면 2열로 */
+  @media(max-width:1080px) and (min-width:921px){.features{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:620px){
-    #how{padding-top:42px}
+    .pc-br{display:none}
+    .bridge-line{font-size:12.5px;padding:8px 14px}
+    #how{padding-top:44px}
     #how .sec-head{margin-bottom:22px}
     .builder{flex-direction:column;flex-wrap:nowrap;align-items:center;justify-content:flex-start;gap:20px}
     .bld-phone{width:188px;height:334px;transform:none}
@@ -532,6 +543,53 @@
   </div>
 </section>
 
+<!-- 만드는 법 — 3D 폰 안에서 쇼츠 템플릿이 단계별로 완성되는 가로 시스템 (핵심: 히어로 바로 다음) -->
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <p class="bridge-line">위에서 본 쇼츠들, 전부 이렇게 만들어졌어요 👇</p>
+      <div class="sec-tag">How it works</div>
+      <h2 class="sec-title">입력 한 번, 쇼츠가 완성되는 과정</h2>
+      <p class="sec-desc">링크 하나만 넣으면 대본·이미지·음성·자막부터 업로드까지,<br class="pc-br" />아래 8단계가 전부 자동으로 채워져요. 손댈 필요 없어요.</p>
+    </div>
+
+    <div class="builder reveal" id="builder">
+      <!-- 3D 폰: 템플릿이 단계별로 완성됨 -->
+      <div class="bld-phonewrap">
+        <div class="bld-phone">
+          <div class="bld-screen" id="bld-screen">
+            <img class="bl bl-img" src="/landing-img/news1.jpg" alt="" />
+            <div class="bl bl-url"><span class="bl-urlchip">🔗 youtube.com/watch?v=…</span></div>
+            <div class="bl bl-script"><span></span><span></span><span></span><span></span><span></span></div>
+            <div class="bl bl-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="bl bl-hook"><span class="bl-h1">조회수 터지는</span><span class="bl-h2">숏폼의 비밀</span></div>
+            <div class="bl bl-subs"><span>링크만</span><span>넣으면</span><span>자막까지</span><span>완성</span></div>
+            <div class="bl bl-upload"><span class="bl-up-ic">⬇️</span><span class="bl-up-tx">다운로드 중…</span><span class="bl-up-ck">✓</span></div>
+          </div>
+        </div>
+        <div class="bld-glow"></div>
+      </div>
+
+      <!-- 설명 캡션 + 가로 스텝 진행 -->
+      <div class="bld-info">
+        <div class="bld-cap">
+          <span class="bld-cap-ic" id="bld-ic">🔗</span>
+          <div class="bld-cap-tx">
+            <b id="bld-title">링크 입력</b>
+            <p id="bld-desc">기사·영상 주소만 붙여넣으면 시작돼요</p>
+          </div>
+          <span class="bld-cap-n"><i id="bld-n">1</i>/8</span>
+        </div>
+        <div class="bld-bar"><span class="bld-barfill" id="bld-bar"></span></div>
+        <div class="bld-chips" id="bld-chips">
+          <span class="bchip">🔗</span><span class="bchip">✍️</span><span class="bchip">🎨</span><span class="bchip">🎙</span>
+          <span class="bchip">💬</span><span class="bchip">⬇️</span><span class="bchip">▶️</span><span class="bchip">📷</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- 지표 -->
 <section style="padding-top:20px">
   <div class="wrap">
@@ -568,7 +626,7 @@
         <h3>카드뉴스</h3>
         <p>표지·숫자·리스트·비교 등 다양한 카드로 구성되는 정보형 콘텐츠. 영상 릴스와 캐러셀 이미지 둘 다 만들어요.</p>
       </div>
-      <div class="feat wide reveal">
+      <div class="feat reveal">
         <div class="ic">🔤</div>
         <h3>제목 폰트 선택 <span class="new">NEW</span></h3>
         <p>영상 위 큰 제목·후킹 글씨체를 취향대로. 임팩트부터 손글씨·명조까지, 미리보기 그대로 영상에 적용됩니다.</p>
@@ -586,7 +644,7 @@
         <h3>실시간 트렌드 주제</h3>
         <p>지금 검색이 폭발하는 급상승 키워드를 바로 보여줘요. 조회수 골든 윈도우를 놓치지 않게.</p>
       </div>
-      <div class="feat wide reveal">
+      <div class="feat reveal">
         <div class="ic">📤</div>
         <h3>SNS 자동 업로드</h3>
         <p>완성한 영상을 유튜브·인스타그램에 제목·설명·해시태그까지 맞춰 바로 올려요. 예약 업로드도 지원합니다.</p>
@@ -595,52 +653,6 @@
         <div class="ic">🎞</div>
         <h3>전문가급 퀄리티</h3>
         <p>줌 펀치·켄번스 움직임·효과음·배경음악 더킹까지. AI 티 안 나는 완성형 편집을 자동으로.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- 만드는 법 — 3D 폰 안에서 쇼츠 템플릿이 단계별로 완성되는 가로 시스템 -->
-<section id="how">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <div class="sec-tag">How it works</div>
-      <h2 class="sec-title">입력 한 번, 쇼츠가 완성되는 과정</h2>
-      <p class="sec-desc">링크만 넣으면 아래처럼 템플릿이 자동으로 채워지고, 업로드까지 끝나요.</p>
-    </div>
-
-    <div class="builder reveal" id="builder">
-      <!-- 3D 폰: 템플릿이 단계별로 완성됨 -->
-      <div class="bld-phonewrap">
-        <div class="bld-phone">
-          <div class="bld-screen" id="bld-screen">
-            <img class="bl bl-img" src="/landing-img/news1.jpg" alt="" />
-            <div class="bl bl-url"><span class="bl-urlchip">🔗 youtube.com/watch?v=…</span></div>
-            <div class="bl bl-script"><span></span><span></span><span></span><span></span><span></span></div>
-            <div class="bl bl-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-            <div class="bl bl-hook"><span class="bl-h1">조회수 터지는</span><span class="bl-h2">숏폼의 비밀</span></div>
-            <div class="bl bl-subs"><span>링크만</span><span>넣으면</span><span>자막까지</span><span>완성</span></div>
-            <div class="bl bl-upload"><span class="bl-up-ic">⬇️</span><span class="bl-up-tx">다운로드 중…</span><span class="bl-up-ck">✓</span></div>
-          </div>
-        </div>
-        <div class="bld-glow"></div>
-      </div>
-
-      <!-- 설명 캡션 + 가로 스텝 진행 -->
-      <div class="bld-info">
-        <div class="bld-cap">
-          <span class="bld-cap-ic" id="bld-ic">🔗</span>
-          <div class="bld-cap-tx">
-            <b id="bld-title">링크 입력</b>
-            <p id="bld-desc">기사·영상 주소만 붙여넣으면 시작돼요</p>
-          </div>
-          <span class="bld-cap-n"><i id="bld-n">1</i>/8</span>
-        </div>
-        <div class="bld-bar"><span class="bld-barfill" id="bld-bar"></span></div>
-        <div class="bld-chips" id="bld-chips">
-          <span class="bchip">🔗</span><span class="bchip">✍️</span><span class="bchip">🎨</span><span class="bchip">🎙</span>
-          <span class="bchip">💬</span><span class="bchip">⬇️</span><span class="bchip">▶️</span><span class="bchip">📷</span>
-        </div>
       </div>
     </div>
   </div>
