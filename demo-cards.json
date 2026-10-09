@@ -1,0 +1,14 @@
+{
+  "transitionFrames": 14,
+  "orientation": "portrait",
+  "cards": [
+    {"type": "cover", "accent": "#FFD84D", "bg": "news1.jpg", "badge": "꿀팁", "small": "매일 아침 붓는 당신께", "big": "아침 부기 3분 컷", "body": "딱 3가지만 바꾸면 끝", "durationInFrames": 78, "index": 0, "total": 8},
+    {"type": "number", "accent": "#12A998", "theme": "light", "kicker": "건강 꿀팁", "title": "아침 부기, 사실은", "number": "87", "unit": "%", "body": "잘못된 수면 자세와 야식 때문이에요.", "durationInFrames": 78, "index": 1, "total": 8},
+    {"type": "list", "accent": "#E8609A", "theme": "light", "kicker": "핵심 루틴", "title": "부기 빼는 *3단계*", "items": ["일어나자마자 미지근한 물 한 컵", "귀 뒤에서 쇄골로 쓸어내리기 10번", "찬물 세수 30초로 혈관 수축"], "durationInFrames": 92, "index": 2, "total": 8},
+    {"type": "stat", "accent": "#F39C12", "theme": "light", "kicker": "데이터", "title": "부기 유발 *원인* TOP3", "items": ["야식·음주|45", "수면 부족|30", "짠 음식|25"], "durationInFrames": 90, "index": 3, "total": 8},
+    {"type": "compare", "accent": "#2BB673", "theme": "light", "title": "자기 전 이것만 바꿔도", "before": "라면·짠 음식 야식 → 다음날 얼굴 땡땡", "after": "물 한 컵 + 종아리 스트레칭 → 아침 개운", "durationInFrames": 92, "index": 4, "total": 8},
+    {"type": "quote", "accent": "#6C5CE7", "theme": "light", "title": "부기는 습관이\n만든다", "body": "피부과 전문의", "durationInFrames": 78, "index": 5, "total": 8},
+    {"type": "qa", "accent": "#12A998", "theme": "light", "kicker": "자주 묻는 질문", "title": "얼마나 걸리나요?", "body": "하루 딱 3분, 2주면 몸이 기억해요.", "durationInFrames": 82, "index": 6, "total": 8},
+    {"type": "closing", "accent": "#FFD84D", "bg": "news4.jpg", "title": "오늘부터 시작해요", "body": "내일 아침이 달라집니다", "durationInFrames": 86, "index": 7, "total": 8}
+  ]
+}

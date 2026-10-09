@@ -1077,31 +1077,72 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/portfolio-recover' && req.method === 'GET') {
     try {
       const dry = u.searchParams.get('dry') === '1';
+      // ?only=8자리 로 특정 영상 하나만(재복구)도 가능.
+      const only = (u.searchParams.get('only') || '').trim().toLowerCase();
       const all = await listKeys('studio/'); // R2 전체 키 + 크기
       // id별 파일 모으기
       const byId: Record<string, {key: string; size: number; name: string}[]> = {};
       for (const o of all) { const m = o.key.match(/^studio\/([0-9a-f-]{36})\/(.+)$/); if (m) (byId[m[1]] ||= []).push({key: o.key, size: o.size, name: m[2]}); }
-      const liveIds = new Set(listPortfolio().map((x) => x.projectId));
-      let recovered = 0; const details: string[] = [];
+      const livePf = listPortfolio();
+      const liveIds = new Set(livePf.map((x) => x.projectId));
+      // 과거 '쓰레기 복구본'(제목·설명 없이 등록된 것)은 다시 Vision으로 제목을 복원한다.
+      const garbageRecoveredIds = new Set(livePf.filter((x) => x.category === '🛟 복구된 영상' || /^\(복구된 영상\)/.test(x.title || '')).map((x) => x.projectId));
+      const k = pipelineKeys();
+      // R2 키 → base64(썸네일 읽기용). 작은 이미지만.
+      const r2Bytes = async (key: string): Promise<{mimeType: string; dataB64: string} | null> => {
+        try {
+          const got = await getStream(key); if (!got) return null;
+          const chunks: Buffer[] = [];
+          await new Promise<void>((resolve, reject) => { got.stream.on('data', (c) => chunks.push(c as Buffer)); got.stream.on('end', () => resolve()); got.stream.on('error', reject); });
+          const buf = Buffer.concat(chunks);
+          return {mimeType: /\.jpg$|\.jpeg$/i.test(key) ? 'image/jpeg' : 'image/png', dataB64: buf.toString('base64')};
+        } catch { return null; }
+      };
+      let recovered = 0; const details: string[] = []; const titles: string[] = [];
       for (const [id, files] of Object.entries(byId)) {
-        if (liveIds.has(id)) continue; // 이미 목록에 있으면 스킵
+        if (only) { if (!id.startsWith(only)) continue; } // 특정 1개 재복구 모드
+        else if (liveIds.has(id) && !garbageRecoveredIds.has(id)) continue; // 정상 항목만 스킵(쓰레기 복구본은 재처리)
         // 완성 영상 파일 찾기(highlight-*.mp4 or video*.mp4). 없으면 복구 불가(소재만 남음).
         const vid = files.find((f) => /\.mp4$/.test(f.name) && !/source/.test(f.name));
         if (!vid) continue;
         const thumb = files.find((f) => /thumb.*\.png$/.test(f.name) || /cover\.jpg$/.test(f.name));
+        const kind: 'highlight' | 'video' = /highlight/.test(vid.name) ? 'highlight' : 'video';
         if (dry) { recovered++; details.push(id.slice(0, 8) + ' ← ' + vid.name); continue; }
-        // project.json 재생성(서빙·업로드가 읽는 최소 필드) + 포트폴리오 등록.
+        // ★썸네일에 박힌 제목 글자를 Gemini Vision으로 읽어 '진짜 제목 + 한 줄 설명'을 복원한다.
+        //   이게 있어야 업로드 때 AI가 제목·설명을 제대로 생성한다(복구본이 쓰레기가 안 됨).
+        let title = ''; let desc = ''; let category = kind === 'highlight' ? '🎬 하이라이트' : '🎬 영상';
+        if (thumb && k.gemini.length) {
+          const img = await r2Bytes(thumb.key);
+          if (img) {
+            try {
+              const raw = await geminiGenerate(k.gemini,
+                `이 영상 썸네일/표지 이미지다. 화면에 박힌 한국어 제목 글자를 '그대로' 읽어라(상단·중앙의 큰 글자). ` +
+                `"N화"처럼 편수가 보이면 제목에 포함해라. 그리고 이 영상이 뭘 담았는지 자연스러운 한 줄 설명을 만들어라. ` +
+                `글자가 안 보이면 이미지 내용으로 추측한 제목을 써라. JSON만: {"title":"...","desc":"...","category":"뉴스|드라마|예능|만화|다큐|스포츠|음악|기타 중 하나"}`,
+                {images: [img], json: true, maxTokens: 400, temperature: 0.4});
+              const m = raw.match(/\{[\s\S]*\}/); const d = m ? JSON.parse(m[0]) : {};
+              if (d.title) title = String(d.title).slice(0, 90).trim();
+              if (d.desc) desc = String(d.desc).slice(0, 300).trim();
+              if (d.category) category = (kind === 'highlight' ? '🎬 ' : '🎬 ') + String(d.category).trim();
+            } catch {}
+          }
+        }
+        if (!title) title = (kind === 'highlight' ? '하이라이트 영상 ' : '영상 ') + id.slice(0, 8);
+        // project.json 재생성 — scenes에 복원 설명을 넣어 업로드 메타 생성이 재료를 갖게 한다.
         const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
         try { fs.mkdirSync(dir, {recursive: true}); } catch {}
         const proj: any = {
-          id, title: '(복구된 영상) ' + id.slice(0, 8), output: vid.name, outputR2: vid.key,
+          id, title, output: vid.name, outputR2: vid.key,
           thumb: thumb ? thumb.name : undefined, thumbR2: thumb ? thumb.key : undefined,
-          scenes: [], sources: [], status: 'completed', orientation: 'portrait', recovered: true,
+          scenes: desc ? [{narration: desc}] : [], sources: [], status: 'completed', orientation: 'portrait', recovered: true, kind,
         };
         try { fs.writeFileSync(path.join(dir, 'project.json'), JSON.stringify(proj)); } catch {}
-        try { addPortfolio({projectId: id, title: proj.title, output: vid.name, voice: '복구됨', category: '🛟 복구된 영상', goal: 'info', createdAt: new Date().toISOString(), orientation: 'portrait', kind: 'highlight'}); recovered++; } catch {}
+        // 이미 목록에 있으면(재복구·쓰레기복구본) 먼저 치운 뒤 다시 등록(제목 갱신).
+        if (liveIds.has(id)) { try { removePortfolio(id); } catch {} }
+        const createdAt = livePf.find((x) => x.projectId === id)?.createdAt || new Date().toISOString();
+        try { addPortfolio({projectId: id, title, output: vid.name, voice: '복구됨', category, goal: 'info', createdAt, orientation: 'portrait', kind}); recovered++; titles.push(title); } catch {}
       }
-      return json(res, 200, {dry, foldersInR2: Object.keys(byId).length, recoverable: dry ? recovered : undefined, recovered: dry ? 0 : recovered, sample: details.slice(0, 15)});
+      return json(res, 200, {dry, foldersInR2: Object.keys(byId).length, recoverable: dry ? recovered : undefined, recovered: dry ? 0 : recovered, sample: dry ? details.slice(0, 15) : titles.slice(0, 30)});
     } catch (e: any) { return json(res, 500, {error: '복구 실패: ' + (e?.message || e)}); }
   }
   // ── 죽은(재생 불가) 영상 정리 — R2에서 파일이 사라진 포트폴리오 항목을 '목록에서만' 제거한다. ──
