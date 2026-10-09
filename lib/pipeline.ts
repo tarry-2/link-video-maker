@@ -178,10 +178,21 @@ export async function makeVideo(
     const [startSec, endSec] = sceneRanges[i] || [0, 0];
     // 나레이션 ON이면 음성 타이밍으로 단어자막·구간, OFF면 자막 없이 글자 수로 읽을 시간 산정.
     const words = wantNarration ? alignToWords(align, FPS, startSec, [startSec, endSec]) : [];
-    const durSec = endSec > startSec ? endSec - startSec : Math.min(6, Math.max(2.2, s.narration.length / 7));
-    // 마지막 장면만 꼬리 여유, 중간은 딱 붙여 통짜 오디오와 싱크
-    const tail = i === sb.scenes.length - 1 ? 0.5 : 0.15;
-    const durationInFrames = Math.max(FPS, Math.round((durSec + tail) * FPS));
+    const isLastScene = i === sb.scenes.length - 1;
+    let durationInFrames: number;
+    if (wantNarration && endSec > startSec) {
+      // ★통짜 나레이션과 '절대 프레임 좌표'로 싱크: 장면 길이 = 이 장면 오디오 구간(endFrame-startFrame).
+      //   중간 장면에 꼬리(tail)를 더하면 그 시간이 '누적'돼 뒤 장면일수록 오디오보다 점점 늦어지고,
+      //   끝에서 나레이션만 먼저 끝나고 자막이 계속 흘러가는 싱크 버그가 난다(테리 실측 2026-10-09). → 중간 tail 0.
+      //   마지막 장면만 0.5초 여운(오디오가 이미 끝난 뒤라 드리프트 없음). 장면들이 오디오 경계에 정확히 붙는다(telescoping).
+      const startFrame = Math.round(startSec * FPS);
+      const endFrame = Math.round(endSec * FPS) + (isLastScene ? Math.round(0.5 * FPS) : 0);
+      durationInFrames = Math.max(FPS, endFrame - startFrame);
+    } else {
+      // 나레이션 OFF(자막 없음): 글자 수로 읽을 시간 + 약간의 여유(싱크 대상 오디오 없음).
+      const durSec = Math.min(6, Math.max(2.2, s.narration.length / 7));
+      durationInFrames = Math.max(FPS, Math.round((durSec + (isLastScene ? 0.5 : 0.15)) * FPS));
+    }
 
     scenes.push({
       image: imgRel,

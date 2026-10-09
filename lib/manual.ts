@@ -193,9 +193,17 @@ export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Pro
 
     const [startSec, endSec] = sceneRanges[i] || [0, 0];
     const words = alignToWords(align, FPS, startSec, [startSec, endSec]);
-    const durSec = endSec > startSec ? endSec - startSec : s.narration.length / 3.9;
-    const tail = i === plan.scenes.length - 1 ? 0.5 : 0.15;
-    const durationInFrames = Math.max(FPS, Math.round((durSec + tail) * FPS));
+    const isLastScene = i === plan.scenes.length - 1;
+    let durationInFrames: number;
+    if (endSec > startSec) {
+      // ★통짜 나레이션과 '절대 프레임 좌표'로 싱크(중간 tail 누적 드리프트 방지 — 끝에서 자막만 흘러가는 버그).
+      const startFrame = Math.round(startSec * FPS);
+      const endFrame = Math.round(endSec * FPS) + (isLastScene ? Math.round(0.5 * FPS) : 0);
+      durationInFrames = Math.max(FPS, endFrame - startFrame);
+    } else {
+      const durSec = s.narration.length / 3.9;
+      durationInFrames = Math.max(FPS, Math.round((durSec + (isLastScene ? 0.5 : 0.15)) * FPS));
+    }
 
     scenes.push({
       image: imgRel,
