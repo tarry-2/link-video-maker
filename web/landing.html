@@ -327,43 +327,68 @@
     .stats{grid-template-columns:1fr}
     .nav-cta .btn-ghost{display:none}
   }
-  /* ── 순서대로 완료되는 파이프라인 모션그래픽(카드) ── */
-  .pipe{position:relative;max-width:580px;margin:0 auto;padding-left:6px}
-  .pipe-rail{position:absolute;left:23px;top:28px;bottom:28px;width:3px;border-radius:3px;background:var(--line2);overflow:hidden}
-  .pipe-fill{position:absolute;left:0;top:0;width:100%;height:0;border-radius:3px;background:var(--grad);
-    box-shadow:0 0 14px rgba(66,227,207,.5);transition:height .9s var(--ease)}
-  .pipe-steps{display:flex;flex-direction:column;gap:14px}
-  .pstep{display:flex;align-items:center;gap:16px}
-  .pnode{position:relative;z-index:2;width:38px;height:38px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;
-    background:var(--panel);border:2px solid var(--line2);transition:border-color .4s,background .4s,box-shadow .4s}
-  .pnode .pdot{width:9px;height:9px;border-radius:50%;background:var(--muted2);transition:opacity .3s}
-  .pnode .pcheck{position:absolute;color:#fff;font-size:18px;font-weight:900;line-height:1;opacity:0;transform:scale(.3);transition:opacity .3s var(--ease),transform .3s var(--ease)}
-  .pcard{flex:1;min-width:0;display:flex;align-items:center;gap:13px;background:var(--panel);border:1px solid var(--line);
-    border-radius:16px;padding:14px 16px;opacity:.5;transition:opacity .4s,border-color .4s,box-shadow .4s,transform .4s,background .4s}
-  .pcard .pic{width:44px;height:44px;flex-shrink:0;border-radius:12px;display:grid;place-items:center;font-size:21px;
-    background:var(--panel2);border:1px solid var(--line2);transition:background .4s,border-color .4s,transform .4s}
-  .pcard .ptxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left}
-  .pcard .ptxt b{font-size:15.5px;font-weight:800;letter-spacing:-.02em}
-  .pcard .ptxt i{font-style:normal;font-size:12.5px;color:var(--muted)}
-  .pcard .pstat{flex-shrink:0;width:48px;display:grid;place-items:center}
-  .pspin{display:none;width:18px;height:18px;border-radius:50%;border:2.5px solid var(--line2);border-top-color:var(--teal);animation:pspin .7s linear infinite}
-  @keyframes pspin{to{transform:rotate(360deg)}}
-  .pdone{display:none;font-size:12px;font-weight:800;color:var(--teal);white-space:nowrap}
-  /* 진행 중 */
-  .pstep.active .pcard{opacity:1;border-color:var(--teal);box-shadow:0 12px 34px rgba(66,227,207,.16);transform:translateX(3px)}
-  .pstep.active .pic{background:var(--grad);border-color:transparent;transform:scale(1.06)}
-  .pstep.active .pnode{border-color:var(--teal);box-shadow:0 0 0 5px rgba(66,227,207,.14)}
-  .pstep.active .pspin{display:block}
-  /* 완료 */
-  .pstep.done .pcard{opacity:1;border-color:transparent;background:linear-gradient(120deg,rgba(66,227,207,.1),rgba(155,132,255,.08))}
-  .pstep.done .pic{background:var(--grad);border-color:transparent}
-  .pstep.done .pnode{background:var(--grad);border-color:transparent}
-  .pstep.done .pnode .pdot{opacity:0}
-  .pstep.done .pnode .pcheck{opacity:1;transform:scale(1)}
-  .pstep.done .pdone{display:inline}
-  /* 마지막 완성 — 한 번 더 강조 */
-  .pstep.is-final.done .pcard{box-shadow:0 0 0 1.5px var(--teal),0 16px 40px rgba(66,227,207,.26);animation:finalpop .6s var(--ease)}
-  @keyframes finalpop{0%{transform:scale(1)}40%{transform:scale(1.035)}100%{transform:scale(1)}}
+  /* ── 3D 폰 안 쇼츠 템플릿이 단계별로 완성되는 가로 시스템 ── */
+  .builder{display:flex;gap:50px;align-items:center;justify-content:center;max-width:860px;margin:0 auto;flex-wrap:wrap}
+  .bld-phonewrap{position:relative;flex-shrink:0;perspective:1500px}
+  .bld-glow{position:absolute;inset:-30px;z-index:-1;border-radius:50%;background:var(--grad-soft);filter:blur(45px);opacity:.8}
+  .bld-phone{position:relative;width:234px;height:416px;border-radius:32px;padding:8px;
+    background:linear-gradient(155deg,#2a2540,#120f1e);
+    box-shadow:0 50px 90px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.08),inset 0 0 0 1px rgba(255,255,255,.04);
+    transform:rotateY(-15deg) rotateX(6deg);transform-style:preserve-3d;transition:transform .7s var(--ease)}
+  .builder.finale .bld-phone{transform:rotateY(0deg) rotateX(0deg) scale(1.02)}
+  .bld-screen{position:relative;width:100%;height:100%;border-radius:25px;overflow:hidden;background:#0a0912}
+  .bl{position:absolute;inset:0;opacity:0;transition:opacity .5s var(--ease);pointer-events:none}
+  .bl.on{opacity:1}
+  /* 레이어들 */
+  .bl-img{width:100%;height:100%;object-fit:cover;transform:scale(1.06);animation:kb 9s var(--ease) infinite alternate}
+  .bl-url{display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#1a1730,#0e0b1a)}
+  .bl-urlchip{background:rgba(20,18,30,.92);border:1px solid var(--line2);border-radius:999px;padding:9px 14px;font-size:10.5px;color:var(--muted);white-space:nowrap}
+  .bl-script{display:flex;flex-direction:column;gap:11px;justify-content:center;padding:34px 24px;background:linear-gradient(160deg,#17142a,#0d0b18)}
+  .bl-script span{height:9px;border-radius:5px;background:linear-gradient(90deg,var(--teal),rgba(155,132,255,.5));opacity:.8}
+  .bl-script span:nth-child(1){width:88%}.bl-script span:nth-child(2){width:72%}.bl-script span:nth-child(3){width:94%}
+  .bl-script span:nth-child(4){width:60%}.bl-script span:nth-child(5){width:80%}
+  .bl.on.bl-script span{animation:typein .5s var(--ease) backwards}
+  .bl-script span:nth-child(2){animation-delay:.1s}.bl-script span:nth-child(3){animation-delay:.2s}
+  .bl-script span:nth-child(4){animation-delay:.3s}.bl-script span:nth-child(5){animation-delay:.4s}
+  @keyframes typein{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+  .bl-wave{display:flex;align-items:center;justify-content:center;gap:4px}
+  .bl-wave i{width:4px;height:20px;border-radius:2px;background:var(--teal);box-shadow:0 0 8px rgba(66,227,207,.6);animation:wave 1s ease-in-out infinite}
+  .bl-wave i:nth-child(odd){background:var(--purple)}
+  .bl-wave i:nth-child(2n){animation-delay:.1s}.bl-wave i:nth-child(3n){animation-delay:.2s}.bl-wave i:nth-child(5n){animation-delay:.35s}
+  @keyframes wave{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1.7)}}
+  .bl-hook{display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:flex-start;padding-top:26px;font-family:'Black Han Sans',sans-serif;line-height:1.14}
+  .bl-hook .bl-h1{font-size:18px;color:#fff;text-shadow:2px 2px 0 #000,-1px 1px 0 #000}
+  .bl-hook .bl-h2{font-size:22px;color:var(--gold);text-shadow:2px 2px 0 #000,-1px 1px 0 #000}
+  .bl-subs{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:center;gap:4px 6px;padding-bottom:52px}
+  .bl-subs span{font-weight:800;font-size:14px;color:#fff;text-shadow:1.5px 1.5px 0 #000,-1px 1px 0 #000}
+  .bl-subs span:nth-child(3){color:var(--gold)}
+  /* 업로드/다운로드 오버레이 — 실제 브랜드 로고 */
+  .bl-upload{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(7,6,12,.68);backdrop-filter:blur(4px)}
+  .bl-up-ic{width:76px;height:76px;display:grid;place-items:center;animation:uppop .5s var(--ease)}
+  .bl-up-ic svg{width:76px;height:76px;filter:drop-shadow(0 8px 20px rgba(0,0,0,.4))}
+  @keyframes uppop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+  .bl-up-tx{font-size:13.5px;font-weight:800;color:#fff}
+  .bl-up-ck{width:30px;height:30px;border-radius:50%;background:var(--grad);color:#fff;font-size:16px;font-weight:900;display:grid;place-items:center;box-shadow:0 6px 18px rgba(66,227,207,.4);animation:uppop .4s var(--ease) .2s backwards}
+
+  /* 설명 캡션 + 가로 스텝 */
+  .bld-info{flex:1;min-width:270px;max-width:360px}
+  .bld-cap{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line2);border-radius:18px;padding:17px 18px;min-height:86px;box-shadow:0 10px 30px rgba(0,0,0,.14)}
+  .bld-cap-ic{width:50px;height:50px;flex-shrink:0;border-radius:14px;background:var(--grad);display:grid;place-items:center;font-size:25px;transition:background .3s}
+  .bld-cap-ic svg{width:30px;height:30px}
+  .bld-cap-ic.brand{background:var(--panel2);border:1px solid var(--line2)}
+  .bld-cap-tx{flex:1;min-width:0;text-align:left}
+  .bld-cap-tx b{font-size:17px;font-weight:800;letter-spacing:-.02em;display:block}
+  .bld-cap-tx p{font-size:13px;color:var(--muted);margin-top:3px}
+  .bld-cap-n{flex-shrink:0;font-size:13px;color:var(--muted2);font-weight:700;align-self:flex-start}
+  .bld-cap-n i{font-style:normal;color:var(--teal);font-size:19px}
+  .bld-bar{height:6px;border-radius:6px;background:var(--line2);margin:18px 0 16px;overflow:hidden}
+  .bld-barfill{display:block;height:100%;width:0;border-radius:6px;background:var(--grad);transition:width .6s var(--ease);box-shadow:0 0 12px rgba(66,227,207,.5)}
+  .bld-chips{display:flex;gap:9px;flex-wrap:wrap}
+  .bchip{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:var(--panel2);border:1px solid var(--line);opacity:.45;transition:opacity .3s,border-color .3s,box-shadow .3s,transform .3s}
+  .bchip svg{width:23px;height:23px}
+  .bchip.active{opacity:1;border-color:var(--teal);box-shadow:0 0 0 3px rgba(66,227,207,.15);transform:scale(1.1)}
+  .bchip.done{opacity:1;border-color:var(--teal)}
+  @media(max-width:620px){.builder{gap:30px}.bld-phone{transform:none}.builder.finale .bld-phone{transform:scale(1.02)}}
 
   /* 로그인 모달 — 비번 없이 기능 진입 금지 */
   .login-modal{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;
@@ -548,43 +573,48 @@
   </div>
 </section>
 
-<!-- 만드는 법 — 순서대로 완료되는 파이프라인 모션그래픽(카드) -->
+<!-- 만드는 법 — 3D 폰 안에서 쇼츠 템플릿이 단계별로 완성되는 가로 시스템 -->
 <section id="how">
   <div class="wrap">
-    <!-- 상단 모션그래픽: 각 단계가 순서대로 하나씩 완료됨 -->
-    <div class="pipe reveal" id="pipe">
-      <div class="pipe-rail"><span class="pipe-fill" id="pipe-fill"></span></div>
-      <div class="pipe-steps">
-        <div class="pstep">
-          <span class="pnode"><span class="pdot"></span><span class="pcheck">✓</span></span>
-          <div class="pcard"><span class="pic">🔗</span><span class="ptxt"><b>링크 입력</b><i>기사·영상 주소만 붙여넣기</i></span><span class="pstat"><span class="pspin"></span><span class="pdone">완료</span></span></div>
+    <div class="sec-head reveal">
+      <div class="sec-tag">How it works</div>
+      <h2 class="sec-title">입력 한 번, 쇼츠가 완성되는 과정</h2>
+      <p class="sec-desc">링크만 넣으면 아래처럼 템플릿이 자동으로 채워지고, 업로드까지 끝나요.</p>
+    </div>
+
+    <div class="builder reveal" id="builder">
+      <!-- 3D 폰: 템플릿이 단계별로 완성됨 -->
+      <div class="bld-phonewrap">
+        <div class="bld-phone">
+          <div class="bld-screen" id="bld-screen">
+            <img class="bl bl-img" src="/landing-img/news1.jpg" alt="" />
+            <div class="bl bl-url"><span class="bl-urlchip">🔗 youtube.com/watch?v=…</span></div>
+            <div class="bl bl-script"><span></span><span></span><span></span><span></span><span></span></div>
+            <div class="bl bl-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="bl bl-hook"><span class="bl-h1">조회수 터지는</span><span class="bl-h2">숏폼의 비밀</span></div>
+            <div class="bl bl-subs"><span>링크만</span><span>넣으면</span><span>자막까지</span><span>완성</span></div>
+            <div class="bl bl-upload"><span class="bl-up-ic">⬇️</span><span class="bl-up-tx">다운로드 중…</span><span class="bl-up-ck">✓</span></div>
+          </div>
         </div>
-        <div class="pstep">
-          <span class="pnode"><span class="pdot"></span><span class="pcheck">✓</span></span>
-          <div class="pcard"><span class="pic">✍️</span><span class="ptxt"><b>대본 작성</b><i>AI가 한국어 대본을 써요</i></span><span class="pstat"><span class="pspin"></span><span class="pdone">완료</span></span></div>
+        <div class="bld-glow"></div>
+      </div>
+
+      <!-- 설명 캡션 + 가로 스텝 진행 -->
+      <div class="bld-info">
+        <div class="bld-cap">
+          <span class="bld-cap-ic" id="bld-ic">🔗</span>
+          <div class="bld-cap-tx">
+            <b id="bld-title">링크 입력</b>
+            <p id="bld-desc">기사·영상 주소만 붙여넣으면 시작돼요</p>
+          </div>
+          <span class="bld-cap-n"><i id="bld-n">1</i>/8</span>
         </div>
-        <div class="pstep">
-          <span class="pnode"><span class="pdot"></span><span class="pcheck">✓</span></span>
-          <div class="pcard"><span class="pic">🎨</span><span class="ptxt"><b>이미지 생성</b><i>장면마다 어울리는 비주얼</i></span><span class="pstat"><span class="pspin"></span><span class="pdone">완료</span></span></div>
-        </div>
-        <div class="pstep">
-          <span class="pnode"><span class="pdot"></span><span class="pcheck">✓</span></span>
-          <div class="pcard"><span class="pic">🎙</span><span class="ptxt"><b>AI 음성</b><i>자연스러운 나레이션 녹음</i></span><span class="pstat"><span class="pspin"></span><span class="pdone">완료</span></span></div>
-        </div>
-        <div class="pstep">
-          <span class="pnode"><span class="pdot"></span><span class="pcheck">✓</span></span>
-          <div class="pcard"><span class="pic">💬</span><span class="ptxt"><b>자막·후킹</b><i>단어별 자막과 후킹 자동</i></span><span class="pstat"><span class="pspin"></span><span class="pdone">완료</span></span></div>
-        </div>
-        <div class="pstep is-final">
-          <span class="pnode"><span class="pdot"></span><span class="pcheck">✓</span></span>
-          <div class="pcard"><span class="pic">🎬</span><span class="ptxt"><b>완성!</b><i>바로 다운로드·SNS 업로드</i></span><span class="pstat"><span class="pspin"></span><span class="pdone">완료</span></span></div>
+        <div class="bld-bar"><span class="bld-barfill" id="bld-bar"></span></div>
+        <div class="bld-chips" id="bld-chips">
+          <span class="bchip">🔗</span><span class="bchip">✍️</span><span class="bchip">🎨</span><span class="bchip">🎙</span>
+          <span class="bchip">💬</span><span class="bchip">⬇️</span><span class="bchip">▶️</span><span class="bchip">📷</span>
         </div>
       </div>
-    </div>
-    <div class="sec-head reveal" style="margin-top:48px;margin-bottom:0">
-      <div class="sec-tag">How it works</div>
-      <h2 class="sec-title">입력 한 번, 나머지는 AI가 순서대로</h2>
-      <p class="sec-desc">링크나 주제만 넣으면 위 과정이 자동으로 하나씩 완성돼요. 중간에 손댈 필요 없어요.</p>
     </div>
   </div>
 </section>
@@ -759,28 +789,65 @@
   }
   if (track){ setupCarousel(); loadPortfolioShorts(); }
 
-  // ── 순차 완료 파이프라인 모션그래픽 ──
-  const pipe = document.getElementById('pipe');
-  if (pipe){
-    const steps = [...pipe.querySelectorAll('.pstep')];
-    const fill = document.getElementById('pipe-fill');
-    let cur = -1, started = false;
-    function setFill(){
-      const done = steps.filter(s => s.classList.contains('done')).length;
-      const active = steps.some(s => s.classList.contains('active')) ? 0.5 : 0;
-      fill.style.height = Math.min(100, ((done + active) / steps.length) * 100) + '%';
+  // ── 3D 폰 안 쇼츠 템플릿이 단계별로 완성되는 가로 시스템(실제 브랜드 로고 포함) ──
+  const builder = document.getElementById('builder');
+  if (builder){
+    const LOGO = {
+      download: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#12a998"/><path d="M12 5.5v8.3m0 0l-3.3-3.3M12 13.8l3.3-3.3M6.5 18h11" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      youtube: '<svg viewBox="0 0 24 24"><path fill="#FF0000" d="M23.5 6.2a3 3 0 0 0-2.11-2.12C19.52 3.55 12 3.55 12 3.55s-7.52 0-9.39.53A3 3 0 0 0 .5 6.2 31.3 31.3 0 0 0 0 12a31.3 31.3 0 0 0 .5 5.8 3 3 0 0 0 2.11 2.12c1.87.53 9.39.53 9.39.53s7.52 0 9.39-.53A3 3 0 0 0 23.5 17.8 31.3 31.3 0 0 0 24 12a31.3 31.3 0 0 0-.5-5.8z"/><path fill="#fff" d="M9.6 15.6V8.4l6.25 3.6z"/></svg>',
+      instagram: '<svg viewBox="0 0 24 24"><defs><linearGradient id="igg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#feda75"/><stop offset=".4" stop-color="#d62976"/><stop offset=".8" stop-color="#962fbf"/><stop offset="1" stop-color="#4f5bd5"/></linearGradient></defs><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#igg)"/><rect x="6.5" y="6.5" width="11" height="11" rx="5.5" fill="none" stroke="#fff" stroke-width="1.7"/><circle cx="17.6" cy="6.4" r="1.3" fill="#fff"/></svg>'
+    };
+    const STEPS = [
+      {ic:'🔗', t:'링크 입력', d:'기사·영상 주소만 붙여넣으면 시작돼요'},
+      {ic:'✍️', t:'대본 작성', d:'AI가 한국어 대본을 자동으로 써요'},
+      {ic:'🎨', t:'이미지 생성', d:'장면마다 어울리는 비주얼을 만들어요'},
+      {ic:'🎙', t:'AI 음성', d:'자연스러운 나레이션을 입혀요'},
+      {ic:'💬', t:'자막·후킹', d:'단어별 자막과 후킹까지 얹으면 완성'},
+      {up:'download',  t:'다운로드',     d:'완성본을 바로 내려받아요', uptx:'다운로드 완료'},
+      {up:'youtube',   t:'유튜브 업로드', d:'제목·설명까지 맞춰 자동 업로드', uptx:'유튜브 업로드 완료'},
+      {up:'instagram', t:'인스타 업로드', d:'릴스로 올리면 모든 과정 끝!', uptx:'인스타 업로드 완료'},
+    ];
+    const $b = (id) => document.getElementById(id);
+    const screen = $b('bld-screen');
+    const chips = [...$b('bld-chips').children];
+    chips.forEach((c, k) => { if (STEPS[k].up) c.innerHTML = LOGO[STEPS[k].up]; });
+    const layer = (cls, on) => screen.querySelector('.' + cls)?.classList.toggle('on', on);
+    function apply(i){
+      const s = STEPS[i];
+      const ic = $b('bld-ic');
+      if (s.up){ ic.classList.add('brand'); ic.innerHTML = LOGO[s.up]; }
+      else { ic.classList.remove('brand'); ic.textContent = s.ic; }
+      $b('bld-title').textContent = s.t; $b('bld-desc').textContent = s.d; $b('bld-n').textContent = i + 1;
+      $b('bld-bar').style.width = ((i + 1) / STEPS.length * 100) + '%';
+      chips.forEach((c, k) => { c.classList.toggle('done', k < i); c.classList.toggle('active', k === i); });
+      layer('bl-url', i === 0);
+      layer('bl-script', i === 1);
+      layer('bl-img', i >= 2);
+      layer('bl-wave', i === 3);
+      layer('bl-hook', i >= 4);
+      layer('bl-subs', i >= 4);
+      const up = i >= 5;
+      layer('bl-upload', up);
+      if (up){
+        const icEl = screen.querySelector('.bl-up-ic');
+        icEl.innerHTML = LOGO[s.up];
+        screen.querySelector('.bl-up-tx').textContent = s.uptx;
+        // 로고 등장 pop 재생(단계마다)
+        icEl.style.animation = 'none'; void icEl.offsetWidth; icEl.style.animation = '';
+      }
+      builder.classList.toggle('finale', i === STEPS.length - 1);
     }
+    let cur = 0, started = false;
     function tick(){
-      if (cur >= 0){ steps[cur].classList.remove('active'); steps[cur].classList.add('done'); }
+      apply(cur);
       cur++;
-      if (cur < steps.length){ steps[cur].classList.add('active'); setFill(); setTimeout(tick, 1150); }
-      else { setFill(); setTimeout(reset, 2000); }
+      if (cur < STEPS.length) setTimeout(tick, STEPS[cur - 1].up ? 1500 : 1200);
+      else setTimeout(() => { cur = 0; builder.classList.remove('finale'); tick(); }, 2800);
     }
-    function reset(){ steps.forEach(s => s.classList.remove('active','done')); fill.style.height = '0%'; cur = -1; setTimeout(tick, 650); }
-    const pio = new IntersectionObserver((es) => {
+    const bio = new IntersectionObserver((es) => {
       es.forEach(e => { if (e.isIntersecting && !started){ started = true; tick(); } });
-    }, {threshold:.35});
-    pio.observe(pipe);
+    }, {threshold:.3});
+    bio.observe(builder);
   }
 
   // ── 로그인 게이트: 비번 없이 대시보드·기능 페이지 진입 금지 ──
