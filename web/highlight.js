@@ -407,7 +407,7 @@
   let count = 3, sec = 30, query = '', pageToken = '', loadedCount = 0, orient = 'portrait', reframeMode = 'track', muteOriginal = 0, tplMode = 'auto', removeSilence = 0, broll = 0;
   // 세로일 때만 "세로 변환 방식" 노출(가로는 무의미).
   function applyReframeRow() { const r = $('hl-reframe-row'); if (r) r.style.display = orient === 'portrait' ? '' : 'none'; }
-  let commentary = 0, voice = ''; // 해설 넣기(0/1) · 해설 목소리
+  let commentary = 1, voice = ''; // 해설 넣기(0/1) · 해설 목소리 — 기본 ON(재업로드 강등 탈출·수익화 유리)
   let captionEn = 0; // 영어 번역 자막 함께(0/1, 해설 켤 때만)
   let license = 'cc'; // 영상 범위: cc(안전·재사용 허가만) / all(전체)
   let mode = 'search'; // 소재 가져오는 방법: search(주제로 찾기) / url(영상 URL 붙여넣기)
@@ -417,7 +417,7 @@
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, captionEn, voice, query, pageToken, loadedCount, picked, license, mode,
+        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, captionEn, voice, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -445,7 +445,9 @@
     document.querySelectorAll('.hl-tpl').forEach((b) => b.classList.toggle('active', b.dataset.t === tplMode));
     applyReframeRow();
     count = s.count || 3; sec = s.sec || 30; query = s.query || ''; pageToken = s.pageToken || ''; loadedCount = s.loadedCount || 0;
-    commentary = s.commentary || 0; voice = s.voice || '';
+    // 해설(commentary) 기본값을 ON으로 바꿈(재업로드 강등 탈출). 기존 사용자(cmV2 없음)는 1회 ON으로 이행,
+    //   이후엔 사용자가 끈 선택을 존중(cmV2 플래그가 저장됨).
+    commentary = s.cmV2 ? (s.commentary ? 1 : 0) : 1; voice = s.voice || '';
     captionEn = s.captionEn ? 1 : 0;
     picked = s.picked || null;
     document.querySelectorAll('.hl-cm').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === commentary));

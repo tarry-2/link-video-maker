@@ -10,7 +10,7 @@ import {openaiJson} from './openai';
 import {ttsElevenJoined, alignToWords, VOICES, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
-import {normalizeEnding, stripEmoji} from './script';
+import {normalizeEnding, stripEmoji, dedupAccent} from './script';
 import {renderVideo, buildRenderPublic} from './render';
 import type {PipelineKeys} from './pipeline';
 import type {SceneData} from '../src/Scene';
@@ -102,7 +102,9 @@ ${opts.facts ? `[영상에 담을 내용/팩트]\n${opts.facts.slice(0, 4000)}` 
 - 장면 정확히 ${n}개. 각 장면은 첨부 이미지 중 하나를 사용(imageIndex로 지정, 0부터). ★흐릿하거나 밋밋하거나(빈 상자·포장재만 있는 것 등) 주제와 안 맞는 이미지는 절대 쓰지 마라. 가장 먹음직스럽고 매력적인 이미지 위주로.
 - ★같거나 비슷한 구도의 이미지가 여러 장이면 그중 가장 좋은 1장만 써라(중복 금지).
 - 1번 장면 = 스크롤 멈추는 강렬한 후킹. ${preset?.hookStyle || (isSell ? '혜택·이득으로 욕구 자극' : '호기심·의외의 사실 예고')} 첫 이미지도 가장 먹음직스럽고 시선을 끄는 것으로.
+  ★★★첫 1초가 생사다: 1번 장면 narration 첫 문장은 인사·"오늘은~"류 뜸들이기 절대 금지. 0.5초 안에 가장 센 결론·충격·질문부터 때려라(쇼츠는 첫 1초 스와이프로 확산이 갈린다). 1번 장면은 다른 장면보다 짧고 빠르게.
   ★★후킹 만드는 법(조회수 90%가 첫 3초 결정): 서로 다른 후킹 후보 3개를 머릿속에 떠올려라 — (A)궁금증 갭 (B)손해 회피 (C)숫자·반전 충격. 그중 가장 강력한 하나만 골라 써라. 밋밋하면 실패.
+  ★hookAccent는 hookTop에 쓴 단어를 반복하지 마라(같은 말이 두 줄에 뜨면 촌스럽다) — 윗줄=상황, 아랫줄=다른 단어로 결과·반전.
 - ★★제목·키워드의 약속을 지켜라: 제목/키워드에 "N가지·N개"처럼 개수가 있으면 본문에서 그 개수를 전부 다뤄라(2~3개만 주고 끝내지 마라). 장면이 모자라면 한 장면에 묶어서라도 다 담아라.
 - ★★★마지막 장면 = 영상에서 가장 중요하다. ${isSell ? '가장 먹음직스러운 완성품 또는 제품(선물세트·상품샷) 이미지를 쓰고, 구매·소장 욕구를 부르는 강한 한마디로 맺어라. 빈 상자·포장재·공정사진으로 끝내지 마라.' : (preset?.endingStyle || '시청자에게 건네는 여운 한마디로 맺음')} 반드시 앞에서 다룬 내용과 자연스럽게 이어지게 매듭지어라. 앞에 없던 뜬금없는 새 소재·엉뚱한 말로 끝내면 절대 안 된다.
 - 정치·종교·갈등·자극적 주제 금지.
@@ -140,7 +142,7 @@ JSON만 출력:
   }
   if (!plan) throw new Error('수동 대본 생성 실패(재시도 후): ' + lastErr);
   // ★나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
-  for (const s of plan.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = normalizeEnding(stripEmoji(s.narration)); }
+  for (const s of plan.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = dedupAccent(s.hookTop, stripEmoji(s.hookAccent || '')); s.narration = normalizeEnding(stripEmoji(s.narration)); }
   const totalChars = plan.scenes.reduce((a, s) => a + (s.narration || '').length, 0);
   log(`[수동] "${plan.title}" · ${plan.scenes.length}장면 구성 · 목표 ${perScene}자/장면 · 실제 총 ${totalChars}자(평균 ${Math.round(totalChars / plan.scenes.length)}자/장면)`);
   return {plan, sources};
