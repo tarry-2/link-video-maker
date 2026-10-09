@@ -25,6 +25,28 @@
     --maxw:1180px;
     --ease:cubic-bezier(.16,1,.3,1);
   }
+  /* ── 라이트 테마(토글) — 대시보드와 같은 lvm-theme 키 공유 ── */
+  [data-theme="light"]{
+    --bg:#f5f4fb; --bg2:#ecebf7; --panel:#ffffff; --panel2:#f5f3fd;
+    --line:rgba(24,18,48,.09); --line2:rgba(24,18,48,.16);
+    --text:#1a1626; --muted:#5a5375; --muted2:#8a82a6;
+    --teal:#0e9f8d; --purple:#6b4cf0; --pink:#e24b8c; --gold:#c98a00;
+    --grad-soft:linear-gradient(135deg,rgba(66,227,207,.14),rgba(155,132,255,.1) 50%,rgba(255,107,169,.12));
+  }
+  /* 다크 전제로 하드코딩된 배경들을 라이트에서 보정(깨짐 방지) */
+  [data-theme="light"] header.nav{background:rgba(245,244,251,.72)}
+  [data-theme="light"] header.nav.scrolled{background:rgba(245,244,251,.9)}
+  [data-theme="light"] .aurora span{opacity:.28}
+  [data-theme="light"] .grain{opacity:.025}
+  [data-theme="light"] .stat,
+  [data-theme="light"] .feat,
+  [data-theme="light"] .step,
+  [data-theme="light"] .case{background:var(--panel);box-shadow:0 10px 30px rgba(24,18,48,.06)}
+  [data-theme="light"] .feat:hover{box-shadow:0 24px 50px rgba(24,18,48,.12)}
+  [data-theme="light"] .btn-ghost{color:var(--text);border-color:var(--line2);background:rgba(24,18,48,.03)}
+  [data-theme="light"] .btn-ghost:hover{background:rgba(24,18,48,.06)}
+  [data-theme="light"] .fontdemo b{background:rgba(24,18,48,.03)}
+  /* 폰 목업·미니카드·URL칩은 실제 영상 미리보기 성격이라 라이트에서도 다크 유지(의도) */
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
   body{
@@ -70,6 +92,13 @@
   .btn-grad{background:var(--grad);color:#0b0a12;box-shadow:0 8px 24px rgba(155,132,255,.35)}
   .btn-grad:hover{box-shadow:0 12px 34px rgba(155,132,255,.5);transform:translateY(-1px)}
   .btn-lg{padding:16px 30px;font-size:16px}
+  /* 테마 토글 — 정사각 고정(이모지 안 깨짐), 모바일에서도 항상 보임 */
+  .theme-toggle{width:40px;height:40px;flex-shrink:0;display:grid;place-items:center;font-size:17px;line-height:1;
+    border-radius:999px;cursor:pointer;border:1px solid var(--line2);background:rgba(255,255,255,.04);color:var(--text);
+    transition:transform .15s var(--ease),background .2s,border-color .2s}
+  .theme-toggle:hover{border-color:var(--teal);background:rgba(255,255,255,.08)}
+  .theme-toggle:active{transform:scale(.9)}
+  [data-theme="light"] .theme-toggle{background:rgba(24,18,48,.04)}
 
   /* ── 공통 애니메이션: 스크롤 등장 ── */
   .reveal{opacity:0;transform:translateY(26px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
@@ -133,34 +162,50 @@
     animation:floaty2 7s var(--ease) infinite}
   @keyframes floaty2{50%{transform:translateY(-14px)}}
   .screen{position:relative;width:100%;height:100%;border-radius:26px;overflow:hidden;background:#07060c}
-  .screen .bgimg{position:absolute;inset:0;
-    background:
-      radial-gradient(90% 70% at 30% 20%,rgba(255,210,75,.5),transparent 55%),
-      radial-gradient(90% 90% at 80% 90%,rgba(255,107,169,.45),transparent 55%),
-      linear-gradient(160deg,#3a2e5e,#1a2742 60%,#0e1a2e);
-    animation:kb 7s var(--ease) infinite}
-  @keyframes kb{0%{transform:scale(1.05)}50%{transform:scale(1.18) translate(-2%,1%)}100%{transform:scale(1.05)}}
-  .screen .scan{position:absolute;left:0;right:0;height:120px;z-index:2;
-    background:linear-gradient(to bottom,transparent,rgba(66,227,207,.22),transparent);
-    animation:scan 7s var(--ease) infinite}
-  @keyframes scan{0%,100%{top:-120px;opacity:0}20%{opacity:1}45%{top:100%;opacity:1}46%{opacity:0}}
-  .screen .hook{position:absolute;top:26px;left:16px;right:16px;z-index:3;text-align:center;
-    font-family:'Black Han Sans',sans-serif;line-height:1.14;
-    opacity:0;transform:translateY(10px) scale(.9);animation:hookin 7s var(--ease) infinite}
-  .screen .hook .l1{font-size:19px;color:#fff;text-shadow:2px 2px 0 #000,-1px 1px 0 #000}
-  .screen .hook .l2{font-size:23px;color:var(--gold);text-shadow:2px 2px 0 #000,-1px 1px 0 #000}
-  @keyframes hookin{0%,8%{opacity:0;transform:translateY(10px) scale(.9)}16%,88%{opacity:1;transform:none}96%,100%{opacity:0;transform:translateY(-6px) scale(.96)}}
-  .screen .subs{position:absolute;bottom:64px;left:12px;right:12px;z-index:3;text-align:center;
+  /* 캐러셀 트랙 — 슬라이드를 좌우로 밀어 전환 */
+  .track{display:flex;width:100%;height:100%;transition:transform .55s var(--ease)}
+  .slide{position:relative;flex:0 0 100%;width:100%;height:100%;overflow:hidden}
+  .slide img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;animation:kb 8s var(--ease) infinite alternate}
+  @keyframes kb{from{transform:scale(1.04)}to{transform:scale(1.16) translate(-1.5%,1%)}}
+  .slide .ov{position:absolute;inset:0;z-index:1;
+    background:linear-gradient(to bottom,rgba(0,0,0,.42) 0%,rgba(0,0,0,.08) 34%,rgba(0,0,0,.2) 62%,rgba(0,0,0,.62) 100%)}
+  .slide .hook{position:absolute;top:26px;left:14px;right:14px;z-index:3;text-align:center;
+    font-family:'Black Han Sans',sans-serif;line-height:1.16;display:flex;flex-direction:column;gap:3px}
+  .slide .hook .l1{font-size:19px;color:#fff;text-shadow:2px 2px 0 #000,-1px 1px 0 #000,2px -1px 0 #000}
+  .slide .hook .l2{font-size:24px;text-shadow:2px 2px 0 #000,-1px 1px 0 #000,2px -1px 0 #000}
+  .slide .subs{position:absolute;bottom:56px;left:12px;right:12px;z-index:3;text-align:center;
     display:flex;flex-wrap:wrap;gap:4px 7px;justify-content:center}
-  .screen .subs span{font-weight:800;font-size:15px;color:#fff;text-shadow:1.5px 1.5px 0 #000,-1px 1px 0 #000;opacity:.82}
-  .screen .subs span.on{color:var(--gold);transform:scale(1.12);opacity:1}
-  .w1{animation:won 7s steps(1) infinite}.w2{animation:won 7s steps(1) infinite .3s}
-  .w3{animation:won 7s steps(1) infinite .6s}.w4{animation:won 7s steps(1) infinite .9s}
-  @keyframes won{0%,40%,55%,100%{color:#fff;transform:scale(1);opacity:.82}42%,53%{color:var(--gold);transform:scale(1.14);opacity:1}}
-  .screen .caption-badge{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);z-index:3;
-    font-size:10px;font-weight:700;color:var(--teal);background:rgba(7,6,12,.7);border:1px solid rgba(66,227,207,.3);
-    padding:4px 10px;border-radius:999px;display:flex;align-items:center;gap:5px}
+  .slide .subs span{font-weight:800;font-size:15px;color:#fff;text-shadow:1.5px 1.5px 0 #000,-1px 1px 0 #000;opacity:.85}
+  /* 현재 보이는 슬라이드만 단어 자막이 순차로 노랗게(실제 카라오케 자막처럼) */
+  .slide.active .subs span{animation:won 2.4s steps(1) infinite}
+  .slide.active .subs span:nth-child(1){animation-delay:0s}
+  .slide.active .subs span:nth-child(2){animation-delay:.3s}
+  .slide.active .subs span:nth-child(3){animation-delay:.6s}
+  .slide.active .subs span:nth-child(4){animation-delay:.9s}
+  @keyframes won{0%,46%,58%,100%{color:#fff;transform:scale(1);opacity:.85}48%,56%{color:var(--gold);transform:scale(1.16);opacity:1}}
+  .screen .caption-badge{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:4;
+    font-size:10px;font-weight:700;color:#fff;background:rgba(7,6,12,.62);border:1px solid rgba(66,227,207,.4);
+    padding:5px 12px;border-radius:999px;display:flex;align-items:center;gap:5px;backdrop-filter:blur(4px);
+    opacity:0;animation:editping 2.4s var(--ease) infinite}
+  @keyframes editping{0%,70%{opacity:0}20%,55%{opacity:1}}
   .screen .caption-badge b{width:5px;height:5px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px var(--teal)}
+
+  /* 좌우 화살표(폰 가장자리에 겹침 — 모바일에서도 안 깨지게) */
+  .ph-arrow{position:absolute;top:calc(50% - 20px);z-index:20;width:46px;height:46px;border-radius:50%;
+    background:rgba(16,14,26,.72);border:1px solid var(--line2);color:#fff;font-size:26px;line-height:1;
+    display:grid;place-items:center;cursor:pointer;backdrop-filter:blur(8px);
+    box-shadow:0 10px 26px rgba(0,0,0,.4);transition:transform .15s var(--ease),background .2s,border-color .2s}
+  .ph-arrow:hover{background:rgba(16,14,26,.92);border-color:var(--teal);color:var(--teal)}
+  .ph-arrow:active{transform:scale(.9)}
+  .ph-arrow.prev{left:-10px}
+  .ph-arrow.next{right:-10px}
+  [data-theme="light"] .ph-arrow{background:rgba(255,255,255,.9);color:#1a1626;border-color:var(--line2)}
+
+  /* 탭(슬라이드) 인디케이터 점 — 폰 화면 안 하단(자막 아래) */
+  .dots{position:absolute;bottom:18px;left:0;right:0;z-index:6;display:flex;gap:7px;justify-content:center}
+  .dots b{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.26);cursor:pointer;transition:width .3s var(--ease),background .3s}
+  .dots b.on{width:24px;border-radius:4px;background:var(--grad)}
+  /* 점은 폰 화면 안(항상 어두운 사진 위)이라 라이트 테마에서도 흰 점 유지 */
 
   /* SNS 팬아웃 */
   .fanout{position:absolute;bottom:-6px;z-index:6;display:flex;gap:14px}
@@ -290,6 +335,7 @@
       <a href="/monetize">수익화 가이드</a>
     </nav>
     <div class="nav-cta">
+      <button id="theme-toggle" class="theme-toggle" type="button" title="밝게/어둡게" aria-label="테마 전환">🌙</button>
       <a href="/app" class="btn btn-ghost">로그인</a>
       <a href="/app" class="btn btn-grad">무료로 시작 →</a>
     </div>
@@ -315,28 +361,55 @@
       </div>
     </div>
 
-    <!-- 소개 모션그래픽: 링크 → AI 편집 → 쇼츠 → SNS -->
-    <div class="stage reveal" aria-hidden="true">
-      <div class="mini l"><i></i><b></b><b></b><u></u></div>
-      <div class="mini r"><i></i><b></b><b></b><u></u></div>
-
-      <div class="url-chip"><span class="lk">🔗</span>youtube.com/watch?v=<span class="cursor"></span></div>
-      <div class="beam"></div>
+    <!-- 소개 모션그래픽: 폰 안에서 실제 쇼츠들이 좌우로 넘어가는 캐러셀 -->
+    <div class="stage reveal">
+      <button class="ph-arrow prev" id="ph-prev" type="button" aria-label="이전 쇼츠">‹</button>
+      <button class="ph-arrow next" id="ph-next" type="button" aria-label="다음 쇼츠">›</button>
 
       <div class="phone">
         <div class="screen">
-          <div class="bgimg"></div>
-          <div class="scan"></div>
-          <div class="hook"><div class="l1">조회수 터지는</div><div class="l2">숏폼의 비밀</div></div>
-          <div class="subs">
-            <span class="w1">링크만</span><span class="w2">넣으면</span><span class="w3">자막까지</span><span class="w4">완성</span>
+          <div class="track" id="shorts-track">
+            <!-- 각 슬라이드 = 실제 사진 + 후킹 + 단어 자막 (실제 쇼츠처럼) -->
+            <div class="slide">
+              <img src="/landing-img/news1.jpg" alt="" loading="eager" />
+              <div class="ov"></div>
+              <div class="hook"><span class="l1">퇴근길에 보면</span><span class="l2" style="color:var(--gold)">하루가 리셋됨</span></div>
+              <div class="subs"><span>링크만</span><span>넣으면</span><span>영상</span><span>완성</span></div>
+            </div>
+            <div class="slide">
+              <img src="/landing-img/news3.jpg" alt="" loading="lazy" />
+              <div class="ov"></div>
+              <div class="hook"><span class="l1">요즘 뜨는</span><span class="l2" style="color:var(--teal)">감성 여행지 TOP5</span></div>
+              <div class="subs"><span>주제만</span><span>적으면</span><span>자막까지</span><span>자동</span></div>
+            </div>
+            <div class="slide">
+              <img src="/landing-img/bg1.jpg" alt="" loading="lazy" />
+              <div class="ov"></div>
+              <div class="hook"><span class="l1">이것만 알면</span><span class="l2" style="color:var(--pink)">조회수 터집니다</span></div>
+              <div class="subs"><span>후킹</span><span>제목</span><span>폰트</span><span>자동</span></div>
+            </div>
+            <div class="slide">
+              <img src="/landing-img/news2.jpg" alt="" loading="lazy" />
+              <div class="ov"></div>
+              <div class="hook"><span class="l1">첫 3초 안에</span><span class="l2" style="color:var(--gold)">시선 잡는 법</span></div>
+              <div class="subs"><span>AI</span><span>목소리</span><span>15종</span><span>지원</span></div>
+            </div>
+            <div class="slide">
+              <img src="/landing-img/news4.jpg" alt="" loading="lazy" />
+              <div class="ov"></div>
+              <div class="hook"><span class="l1">긴 영상도</span><span class="l2" style="color:var(--teal)">쇼츠 여러 편으로</span></div>
+              <div class="subs"><span>하이라이트</span><span>자동</span><span>편집</span><span>완료</span></div>
+            </div>
+            <div class="slide">
+              <img src="/landing-img/bg2.jpg" alt="" loading="lazy" />
+              <div class="ov"></div>
+              <div class="hook"><span class="l1">클릭 한 번으로</span><span class="l2" style="color:var(--pink)">SNS 바로 업로드</span></div>
+              <div class="subs"><span>유튜브</span><span>인스타</span><span>한</span><span>번에</span></div>
+            </div>
           </div>
           <div class="caption-badge"><b></b>AI 자동 편집 중</div>
+          <div class="dots" id="shorts-dots"></div>
         </div>
-      </div>
-
-      <div class="fanout">
-        <div class="p yt">▶️</div><div class="p ig">📷</div><div class="p tt">🎵</div>
       </div>
     </div>
   </div>
@@ -512,6 +585,46 @@
     el.style.transitionDelay = (i * 90) + 'ms';
     requestAnimationFrame(() => el.classList.add('in'));
   });
+
+  // ── 라이트/다크 토글 (대시보드와 lvm-theme 키 공유. 랜딩 기본은 다크) ──
+  const THEME_KEY = 'lvm-theme';
+  const themeBtn = document.getElementById('theme-toggle');
+  function applyTheme(t){
+    const dark = t !== 'light';
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    if (themeBtn) themeBtn.textContent = dark ? '☀️' : '🌙';
+  }
+  applyTheme(localStorage.getItem(THEME_KEY) || 'dark');
+  themeBtn?.addEventListener('click', () => {
+    const next = (localStorage.getItem(THEME_KEY) || 'dark') === 'light' ? 'dark' : 'light';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  });
+
+  // ── 폰 안 쇼츠 캐러셀 (좌우 버튼 + 점 탭, 자동 전환) ──
+  const track = document.getElementById('shorts-track');
+  if (track) {
+    const slides = [...track.children];
+    const dotsWrap = document.getElementById('shorts-dots');
+    let idx = 0, timer;
+    slides.forEach((_, i) => {
+      const d = document.createElement('b');
+      d.addEventListener('click', () => go(i, true));
+      dotsWrap.appendChild(d);
+    });
+    const dots = [...dotsWrap.children];
+    function go(i, user){
+      idx = (i + slides.length) % slides.length;
+      track.style.transform = 'translateX(-' + (idx * 100) + '%)';
+      slides.forEach((s, k) => s.classList.toggle('active', k === idx));
+      dots.forEach((d, k) => d.classList.toggle('on', k === idx));
+      if (user) restart();
+    }
+    function restart(){ clearInterval(timer); timer = setInterval(() => go(idx + 1), 3800); }
+    document.getElementById('ph-prev').addEventListener('click', () => go(idx - 1, true));
+    document.getElementById('ph-next').addEventListener('click', () => go(idx + 1, true));
+    go(0); restart();
+  }
 </script>
 </body>
 </html>

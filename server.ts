@@ -575,6 +575,14 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'web', 'icon-512.png'), 'image/png');
   if (p === '/favicon.svg')
     return serveFile(res, path.join(ROOT, 'web', 'favicon.svg'), 'image/svg+xml; charset=utf-8');
+  // 랜딩 폰 목업 데모 이미지(공개) — public 루트의 샘플 사진. 화이트리스트만(경로우회 방지).
+  if (p.startsWith('/landing-img/')) {
+    const name = path.basename(p);
+    const allow = new Set(['news1.jpg', 'news2.jpg', 'news3.jpg', 'news4.jpg', 'bg1.jpg', 'bg2.jpg']);
+    if (!allow.has(name)) { res.writeHead(404); return res.end('not found'); }
+    return serveFile(res, path.join(ROOT, 'public', name), 'image/jpeg');
+  }
+
   // 폰트 파일(공개) — public/fonts/{file}. 랜딩·폰트 미리보기 @font-face용. 파일명만 허용(경로우회 방지).
   if (p.startsWith('/fonts/')) {
     const name = path.basename(p);
