@@ -14,21 +14,21 @@
   --log-bg: #f0ebe0;
   --log-text: #4a4437;
 }
-/* 다크 = 웜 에스프레소(새까맣지 않은 톤) */
+/* 다크 = 미드나잇 퍼플 잉크(새까맣지 않은 깊은 남보라 — 틸·퍼플 강조색이 살아나는 프리미엄 톤) */
 [data-theme="dark"] {
-  --bg: #231e18;
-  --card: #2e2820;
-  --card2: #38312a;
-  --line: #453d31;
-  --text: #efe9e0;
-  --muted: #a99f90;
-  --teal: #4fe0d0;
-  --purple: #7c5cff;
-  --accent: #ff8a5c;
-  --grad: linear-gradient(135deg, #4fe0d0, #7c5cff);
-  --topbar-bg: rgba(35,30,24,0.9);
-  --log-bg: #1c1811;
-  --log-text: #c9c0b2;
+  --bg: #14121c;
+  --card: #1e1b29;
+  --card2: #282437;
+  --line: #3a3550;
+  --text: #efecf7;
+  --muted: #a39bbd;
+  --teal: #42e3cf;
+  --purple: #9b84ff;
+  --accent: #ff7a6b;
+  --grad: linear-gradient(135deg, #42e3cf, #9b84ff);
+  --topbar-bg: rgba(20,18,28,0.92);
+  --log-bg: #100e18;
+  --log-text: #c7c0dc;
 }
 body { transition: background 0.25s, color 0.25s; }
 * { box-sizing: border-box; margin: 0; padding: 0; }

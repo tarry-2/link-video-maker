@@ -12,12 +12,17 @@
   fetch('/api/version').then(r => r.json()).then(d => { if ($('ver')) $('ver').textContent = 'v' + d.version; }).catch(() => {});
 
   // ── 테마 ──
-  const theme = localStorage.getItem('onvideo-theme') || 'light';
-  document.documentElement.setAttribute('data-theme', theme);
+  // ★모든 페이지와 localStorage 키 통일('lvm-theme'). 전엔 하이라이트만 'onvideo-theme'라
+  //   탭 전환 시 라이트↔다크가 따로 놀아 테마가 튀었다(테리 실측 2026-10-09).
+  const theme = localStorage.getItem('lvm-theme') || 'light';
+  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
   if ($('theme-btn')) $('theme-btn').textContent = theme === 'dark' ? '☀️' : '🌙';
   $('theme-btn')?.addEventListener('click', () => {
     const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', cur); localStorage.setItem('onvideo-theme', cur);
+    if (cur === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('lvm-theme', cur);
     $('theme-btn').textContent = cur === 'dark' ? '☀️' : '🌙';
   });
 
@@ -851,12 +856,13 @@
   document.querySelectorAll('.hl-arc-src').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-arc-src').forEach((x) => x.classList.remove('active')); b.classList.add('active');
     archiveSrc = b.dataset.src || 'kbs';
-    const canSearch = b.dataset.search !== '0';
-    // 검색 지원 소스(장르·검색 보임) / 미지원 소스(M코리아 — 전체목록만 바로 로드).
-    document.querySelectorAll('#hl-arc-genres, #hl-arc-topics, #hl-arc-query, #hl-arc-search').forEach((el) => el?.classList.toggle('hidden', !canSearch));
+    // ★옛날티비(kbs)만 온갖 장르가 섞여 있어 장르·주제 칩이 필요하다. 나머지(드라마·뉴스·다큐·예능)는
+    //   채널 자체가 이미 한 장르라 장르·주제 필터가 무의미·복잡 → 숨기고 탭 누르면 바로 전체목록 로드(테리 지시).
+    const isMixed = archiveSrc === 'kbs';
+    ['#hl-arc-genres', '#hl-arc-topics', '#hl-arc-genre-label', '#hl-arc-topic-label'].forEach((sel) => document.querySelector(sel)?.classList.toggle('hidden', !isMixed));
     document.querySelectorAll('.hl-arc-cat.active').forEach((x) => x.classList.remove('active'));
     $('hl-results').innerHTML = ''; $('hl-arc-pager')?.classList.add('hidden');
-    if (!canSearch) { addLog(`📼 ${b.textContent.trim()} — 최신 영상 불러오는 중…`); archiveSearch(''); } // 전체목록
+    if (!isMixed) { addLog(`📼 ${b.textContent.trim()} — 최신 영상 불러오는 중…`); archiveSearch(''); } // 단일 채널=바로 전체목록
     else if ($('hl-search-state')) $('hl-search-state').textContent = '장르를 고르거나 검색하세요.';
   }));
   $('hl-arc-search')?.addEventListener('click', () => { document.querySelector('.hl-arc-cat.active')?.classList.remove('active'); archiveSearch(); });

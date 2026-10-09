@@ -312,27 +312,34 @@ async function ensureThumbJpegUrl(id: string): Promise<string> {
   if (!r2Enabled() || !/^[0-9a-f-]{36}$/.test(id)) return '';
   const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
   const pjPath = path.join(dir, 'project.json');
-  let proj: any;
-  try { proj = JSON.parse(fs.readFileSync(pjPath, 'utf8')); } catch { return ''; }
-  if (!proj.thumb && !proj.thumbR2) return '';
-  if (!proj.thumbJpgR2) {
-    const tmpPng = path.join(os.tmpdir(), `cover-${id}.png`);
-    const localPng = proj.thumb ? path.join(dir, proj.thumb) : '';
-    if (localPng && fs.existsSync(localPng)) fs.copyFileSync(localPng, tmpPng);
-    else if (proj.thumbR2) {
-      const got = await getStream(proj.thumbR2);
-      if (!got) return '';
-      await new Promise<void>((resolve, reject) => { const w = fs.createWriteStream(tmpPng); got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject); });
-    } else return '';
-    const tmpJpg = path.join(os.tmpdir(), `cover-${id}.jpg`);
-    await pngToJpeg(tmpPng, tmpJpg);
-    const key = videoKey(id, 'cover.jpg');
-    if (!(await uploadFile(key, tmpJpg, 'image/jpeg'))) { jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg); return ''; }
-    jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg);
-    proj.thumbJpgR2 = key;
-    fs.writeFileSync(pjPath, JSON.stringify(proj));
+  let proj: any = {};
+  try { proj = JSON.parse(fs.readFileSync(pjPath, 'utf8')); } catch {}
+  // ★project.json이 깨졌어도(ENOSPC 등) 결정적 R2 키로 우리 커버를 찾는다.
+  //   이게 없으면 인스타가 영상 중간의 흐릿한 레터박스 프레임을 자동 표지로 잡아 미리보기가 뿌옇게 나온다(테리 실측).
+  // 1) 이미 만든 JPEG 커버(project.json 캐시 or R2 결정적 키) 있으면 바로 presign.
+  const jpgKey = proj.thumbJpgR2 || videoKey(id, 'cover.jpg');
+  if (await r2Head(jpgKey)) return (await presignGet(jpgKey, 3600)) || '';
+  // 2) PNG 썸네일(로컬 or R2 결정적)에서 JPEG 생성.
+  const tmpPng = path.join(os.tmpdir(), `cover-${id}.png`);
+  const localPng = proj.thumb ? path.join(dir, proj.thumb) : '';
+  let pngR2 = proj.thumbR2 || '';
+  if (!pngR2 && !(localPng && fs.existsSync(localPng))) {
+    const cand = videoKey(id, 'thumb.png');
+    if (await r2Head(cand)) pngR2 = cand;
   }
-  return (await presignGet(proj.thumbJpgR2, 3600)) || '';
+  if (localPng && fs.existsSync(localPng)) fs.copyFileSync(localPng, tmpPng);
+  else if (pngR2) {
+    const got = await getStream(pngR2);
+    if (!got) return '';
+    await new Promise<void>((resolve, reject) => { const w = fs.createWriteStream(tmpPng); got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject); });
+  } else return '';
+  const tmpJpg = path.join(os.tmpdir(), `cover-${id}.jpg`);
+  await pngToJpeg(tmpPng, tmpJpg);
+  const key = videoKey(id, 'cover.jpg');
+  if (!(await uploadFile(key, tmpJpg, 'image/jpeg'))) { jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg); return ''; }
+  jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg);
+  try { proj.thumbJpgR2 = key; fs.writeFileSync(pjPath, JSON.stringify(proj)); } catch {} // 캐시(실패해도 R2 키로 다음에 재사용)
+  return (await presignGet(key, 3600)) || '';
 }
 // R2 완성영상 스트리밍(Range 지원). 포트폴리오 전시용.
 async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse, key: string) {
