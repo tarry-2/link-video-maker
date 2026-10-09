@@ -36,6 +36,17 @@ export function stripEmoji(text: string): string {
     .trim();
 }
 
+// 후킹 윗줄(top)과 아랫줄(accent)이 같은 말을 반복하면 촌스럽다 → 겹치면 accent를 비운다.
+export function dedupAccent(top: string, accent: string): string {
+  const norm = (s: string) => (s || '').replace(/[\s.,!?~·…"'()\[\]]/g, '');
+  const t = norm(top), a = norm(accent);
+  if (!a) return '';
+  if (a.length >= 2 && (t.includes(a) || a.includes(t))) return '';
+  const toks = (accent || '').split(/\s+/).filter((w) => w.replace(/[^가-힣A-Za-z0-9]/g, '').length >= 2);
+  if (toks.length && toks.every((w) => t.includes(norm(w)))) return '';
+  return accent;
+}
+
 export type ThumbText = {big: string; small: string; badge: string};
 export type Storyboard = {
   title: string;
@@ -123,7 +134,7 @@ ${catLine}
   ★★내용의 질(매우 중요): 매 문장에 알맹이가 있어야 한다. 뻔한 말·빈말·같은 말 반복·당연한 소리 금지. 구체적인 숫자·방법·근거·실제 예시로 "오 이건 몰랐네" 싶게 만들어라. 두루뭉술("건강에 좋아요")하지 말고 구체적("하루 10분, 2주면 혈압이 눈에 띄게 떨어집니다")으로. 각 장면 끝은 다음이 궁금하게 끊어 완주율을 높여라.
   ★자연스럽게 이어 읽히게 써라(TTS가 로봇처럼 끊지 않도록): 느낌표(!)를 남발하지 마라(장면당 최대 1개). 짧은 단어를 "휘!휘!"처럼 느낌표로 뚝뚝 끊지 말고, "휘휘 돌려주면" 또는 "휘~ 휘~ 돌려주면"처럼 자연스러운 흐름으로. 의성어·의태어는 물결(~)이나 쉼표로 부드럽게 잇고, 딱딱한 감탄사 나열 금지.
 - hookTop: 상단 후킹 첫 줄(흰색, 맥락/셋업). 공백 포함 12자 이내.
-- hookAccent: 상단 후킹 둘째 줄(강조색, 펀치라인). 10자 이내. 임팩트 있게.
+- hookAccent: 상단 후킹 둘째 줄(강조색, 펀치라인). 10자 이내. 임팩트 있게. ★hookTop에 이미 쓴 단어·표현을 '절대 반복하지 마라'(같은 말을 두 줄에 또 쓰면 촌스럽다). 윗줄이 셋업이면 아랫줄은 다른 단어로 결과·반전·감정을 터뜨려라. (나쁜 예 금지: top "부기 빼는 법" / accent "부기" — 반복 / 좋은 예: top "아침마다 붓는 얼굴" / accent "3분이면 끝")
 - accentColor: 이 장면 강조색 hex 하나. 장면마다 다르게 골라라(${preset ? preset.accentColors.join(', ') : PALETTE}) — 내용 분위기에 맞게.
 - visualPrompt: 이미지 생성용 영어 프롬프트. ${landscape ? '16:9 landscape wide shot(가로 와이드 구도: 풍경·전경·넓은 현장을 담되 핵심 피사체는 중앙~좌우 3분할점에)' : '9:16 세로'}. 나레이션의 핵심 사물·장소·상황·행동을 구체적으로 묘사하라(피사체·구도·배경·조명 분위기). ★★화풍·매체 단어 절대 금지 — 'photo, photograph, realistic, illustration, anime, 3D, render, painting, cartoon, style' 같은 단어를 쓰지 마라. 비주얼 스타일은 렌더 단계에서 사용자가 고른 스타일("${style.name}")이 자동 적용된다. visualPrompt엔 "무엇이 어떻게 보이는지"(내용)만 담아라.
   ★★핵심 소재 일관성(매우 중요): 모든 장면의 visualPrompt는 반드시 위 [핵심 소재 subject]와 같은 대상을 보여줘야 한다. 예를 들어 주제가 '간장계란볶음밥'이면 모든 장면이 볶음밥이어야 하고, 절대 파스타·면·다른 음식으로 바뀌면 안 된다. 각 visualPrompt 안에 subject를 영어로 명시적으로 포함시켜라.
@@ -175,6 +186,8 @@ ${source.slice(0, 12000)}`;
   if (!sb) throw new Error('대본 생성 실패(재시도 후): ' + lastErr);
   // 자막·후킹·나레이션 이모지 제거(폰트에 없어 깨짐). title은 유튜브용이라 유지.
   for (const s of sb.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = stripEmoji(s.narration || ''); }
+  // ★후킹 중복 가드 — 아랫줄(accent)이 윗줄(top)과 같은 말이면 비운다("했던 말을 또 하는" 꼴 방지, 테리 지적).
+  for (const s of sb.scenes) s.hookAccent = dedupAccent(s.hookTop, s.hookAccent);
   // ★모든 장면 나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
   for (const s of sb.scenes) s.narration = normalizeEnding(s.narration);
   // 썸네일 전용 문구 이모지 제거(폰트 깨짐 방지).

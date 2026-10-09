@@ -43,7 +43,15 @@ async function koreanHook(geminiKeys: string[], title: string, transcript: strin
   const prompt = `아래 영상의 '한국어' 쇼츠 후킹을 만들어라. 제목/자막이 영어여도 반드시 자연스러운 한국어로 창작·번역한다.
 제목: ${title}
 내용(일부): ${(transcript || '').slice(0, 700)}
-요구: hookTop=스크롤을 멈추게 하는 한국어 12~16자(궁금증 폭탄·열린 고리. 제목 그대로 복붙 금지, 영어 금지), hookAccent=가장 센 한국어 단어 1~2개(6자 내).
+
+후킹은 두 줄로 화면 위에 동시에 뜬다. 윗줄(hookTop)=상황/셋업, 아랫줄(hookAccent)=그걸 터뜨리는 '반전 펀치'다.
+★가장 중요: hookAccent는 hookTop에 '이미 쓴 단어·표현을 절대 반복하지 마라'. 같은 말을 두 번 쓰면 촌스럽고 식상하다. 윗줄에서 궁금하게 만들고, 아랫줄은 완전히 다른 단어로 충격·결과·감정을 꽂아라.
+좋은 예: hookTop="참교육 당한 무개념" / hookAccent="결말이 통쾌함" (단어 겹침 0)
+나쁜 예(금지): hookTop="무개념 참교육" / hookAccent="참교육" (같은 말 반복)
+
+요구:
+- hookTop: 스크롤을 멈추게 하는 한국어 10~16자. 궁금증·긴장을 만드는 셋업. 제목 그대로 복붙 금지, 영어 금지, 뻔한 표현(대박·레전드·충격 남발) 금지.
+- hookAccent: hookTop과 단어가 겹치지 않는 강펀치 한국어 6~12자. 결과·반전·감정을 터뜨린다(예: "결국 무릎 꿇음", "소름 돋는 반전").
 JSON만: {"hookTop":"...","hookAccent":"..."}`;
   try {
     const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 220, temperature: 0.9});
@@ -52,6 +60,18 @@ JSON만: {"hookTop":"...","hookAccent":"..."}`;
     if (!/[가-힣]/.test(ht)) return null; // 한글이 없으면 실패로 간주
     return {hookTop: ht, hookAccent: String(d.hookAccent || '').slice(0, 12).trim()};
   } catch (e: any) { log('[후킹] 한국어 후킹 생성 실패: ' + (e?.message || '').slice(0, 60)); return null; }
+}
+// 후킹 윗줄(top)과 아랫줄(accent)이 같은 말을 반복하면 촌스럽다 → 겹치면 accent를 비운다.
+//   공백·구두점·이모지 제거 후, 한쪽이 다른 쪽에 포함(substring)되거나 토큰이 과반 겹치면 중복으로 판정.
+function dedupAccent(top: string, accent: string): string {
+  const norm = (s: string) => (s || '').replace(/[\s.,!?~·…"'()\[\]]/g, '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '');
+  const t = norm(top), a = norm(accent);
+  if (!a) return '';
+  if (a.length >= 2 && (t.includes(a) || a.includes(t))) return '';
+  // 2글자 이상 연속 어절이 top에 그대로 있으면(핵심 단어 반복) 비운다.
+  const toks = (accent || '').split(/\s+/).filter((w) => w.replace(/[^가-힣A-Za-z0-9]/g, '').length >= 2);
+  if (toks.length && toks.every((w) => t.includes(norm(w)))) return '';
+  return accent;
 }
 function cleanTitle(raw: string, max = 20): string {
   const t = stripUnrenderable(raw || '').trim();
@@ -308,7 +328,10 @@ export async function makeHighlights(
       if (kh) { hookTopFinal = kh.hookTop; if (!hasKorean(hookAccentFinal)) hookAccentFinal = kh.hookAccent; }
     }
     if (!hasVisibleHook(hookTopFinal)) hookTopFinal = cleanTitle(meta.title, 20) || (meta.title || '').slice(0, 20) || '하이라이트';
-    log(`[하이라이트] ${i + 1}편 후킹: "${hookTopFinal}"${hasKorean(hookTopFinal) ? '' : ' (한글 변환 실패—원문 유지)'}`);
+    // ★중복 가드 — hookAccent가 hookTop에 이미 들어간 말이면 "했던 말을 또 하는" 꼴이라 지운다(테리 지적).
+    //   (공백·구두점 제거해 비교. 서로 substring이면 중복으로 본다.)
+    hookAccentFinal = dedupAccent(hookTopFinal, hookAccentFinal);
+    log(`[하이라이트] ${i + 1}편 후킹: "${hookTopFinal}"${hookAccentFinal ? ` / "${hookAccentFinal}"` : ''}${hasKorean(hookTopFinal) ? '' : ' (한글 변환 실패—원문 유지)'}`);
     const scene: SceneData = {
       image: `${jobRel}/${clipName}`, // 폴백용(사용 안 함 — fullBleed가 video 사용)
       video: `${jobRel}/${clipName}`,

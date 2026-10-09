@@ -1,8 +1,11 @@
 const $ = (id) => document.getElementById(id);
 
-// 이미지·영상 롱프레스/우클릭 메뉴(공유·저장) 차단
+// 롱프레스/우클릭 메뉴(공유·저장·복사) 차단 — 이미지·영상·글자 전부. 입력칸(타이핑 필요)만 예외.
 document.addEventListener('contextmenu', (e) => {
-  if (e.target && /^(IMG|VIDEO)$/.test(e.target.tagName)) e.preventDefault();
+  const t = e.target;
+  if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName)) return;
+  if (t && t.isContentEditable) return;
+  e.preventDefault();
 });
 
 // ★한 번에 영상 하나만 재생 — 카드 결과와 studio 편집기 영상이 동시에 돌아 BGM이 섞이는 문제 방지.
@@ -46,6 +49,7 @@ function applyMode(m) {
   // 영상 종류(움직임)·오디오 토글은 카드 모드에선 숨김(자체 설정).
   $('advanced-row')?.classList.toggle('hidden', m === 'card');
   $('audio-row')?.classList.toggle('hidden', m === 'card');
+  $('font-row')?.classList.toggle('hidden', m === 'card'); // 제목 폰트도 카드 모드엔 숨김(세부설정 밖으로 뺐으므로 여기서 토글)
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
 }
 function setMode(m) { applyMode(m); saveFormState(); }

@@ -236,21 +236,6 @@
           </div>
         </div>
 
-        <label class="field-label">🔤 제목 폰트 <span class="hint">— 영상 위 큰 제목·후킹 글씨체를 골라요 (미리보기대로 나와요)</span></label>
-        <div id="font-picker" class="font-picker">
-          <button type="button" class="font-chip active" data-font="Black Han Sans" style="font-family:'Black Han Sans'">임팩트</button>
-          <button type="button" class="font-chip" data-font="Do Hyeon" style="font-family:'Do Hyeon'">도현</button>
-          <button type="button" class="font-chip" data-font="Jua" style="font-family:'Jua'">주아</button>
-          <button type="button" class="font-chip" data-font="Gothic A1" style="font-family:'Gothic A1'">고딕</button>
-          <button type="button" class="font-chip" data-font="Noto Sans KR" style="font-family:'Noto Sans KR'">본고딕</button>
-          <button type="button" class="font-chip" data-font="Gaegu" style="font-family:'Gaegu'">손글씨</button>
-          <button type="button" class="font-chip" data-font="Noto Serif KR" style="font-family:'Noto Serif KR'">명조</button>
-          <button type="button" class="font-chip" data-font="Gowun Batang" style="font-family:'Gowun Batang'">고운바탕</button>
-          <button type="button" class="font-chip" data-font="Song Myung" style="font-family:'Song Myung'">송명</button>
-        </div>
-        <input type="hidden" id="font" value="Black Han Sans" />
-        <p class="mini-state">자막은 가독성을 위해 깔끔한 고딕으로 고정돼요. 제목·후킹에 고른 폰트가 적용됩니다.</p>
-
         <div class="row">
           <div class="col">
             <label class="field-label">이미지 화질 <span class="hint">— 자동 모드만</span></label>
@@ -299,6 +284,24 @@
             </div>
             <label id="auto-shutdown-row" class="field-label" style="margin-top:10px;display:block"><input type="checkbox" id="auto-shutdown" checked /> 만들고 나면 자동으로 비용 끄기 <span class="hint">(권장 — 켜두면 추가 요금이 계속 나가요)</span></label>
           </div>
+        </div>
+
+        <!-- ★제목 폰트 — 중요 선택이라 세부 설정 밖, 항상 보이게(모바일에서도 바로 눈에 띔) -->
+        <div id="font-row" style="margin-top:14px">
+          <label class="field-label">🔤 제목 폰트 <span class="hint">— 영상 위 큰 제목·후킹 글씨체를 골라요 (미리보기대로 나와요)</span></label>
+          <div id="font-picker" class="font-picker">
+            <button type="button" class="font-chip active" data-font="Black Han Sans" style="font-family:'Black Han Sans'">임팩트</button>
+            <button type="button" class="font-chip" data-font="Do Hyeon" style="font-family:'Do Hyeon'">도현</button>
+            <button type="button" class="font-chip" data-font="Jua" style="font-family:'Jua'">주아</button>
+            <button type="button" class="font-chip" data-font="Gothic A1" style="font-family:'Gothic A1'">고딕</button>
+            <button type="button" class="font-chip" data-font="Noto Sans KR" style="font-family:'Noto Sans KR'">본고딕</button>
+            <button type="button" class="font-chip" data-font="Gaegu" style="font-family:'Gaegu'">손글씨</button>
+            <button type="button" class="font-chip" data-font="Noto Serif KR" style="font-family:'Noto Serif KR'">명조</button>
+            <button type="button" class="font-chip" data-font="Gowun Batang" style="font-family:'Gowun Batang'">고운바탕</button>
+            <button type="button" class="font-chip" data-font="Song Myung" style="font-family:'Song Myung'">송명</button>
+          </div>
+          <input type="hidden" id="font" value="Black Han Sans" />
+          <p class="mini-state">자막은 가독성을 위해 깔끔한 고딕으로 고정돼요. 제목·후킹에 고른 폰트가 적용됩니다.</p>
         </div>
 
         <details class="studio-options">
