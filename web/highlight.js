@@ -831,12 +831,14 @@
     const st = $('hl-search-state');
     if (arcLoading) return;
     const q = (forcedQuery != null ? forcedQuery : ($('hl-arc-query')?.value || '')).trim();
-    if (!q) { alert('장르·주제를 고르거나 검색어를 입력하세요.'); return; }
+    // 검색 미지원 소스(M코리아 등)는 빈 쿼리로 전체목록을 받는다. 검색 지원 소스만 주제를 요구.
+    const canSearch = document.querySelector('.hl-arc-src.active')?.dataset.search !== '0';
+    if (!q && canSearch) { alert('장르·주제를 고르거나 검색어를 입력하세요.'); return; }
     arcQuery = q; arcAll = []; arcServerOffset = 0; arcServerMore = false; arcPage = 0;
     picked = null; $('hl-picked').textContent = ''; $('hl-results').innerHTML = ''; renderCountSeg();
     $('hl-sort-row')?.classList.add('hidden'); $('hl-arc-pager')?.classList.add('hidden');
-    st.textContent = '옛날티비(KBS) 아카이브에서 찾는 중…';
-    query = arcQuery; // 제작 로그/상태용
+    st.textContent = '아카이브에서 가져오는 중…';
+    query = arcQuery || (document.querySelector('.hl-arc-src.active')?.textContent.trim() || '아카이브'); // 제작 로그/상태용
     const ok = await fetchArcBatch();
     if (!ok) return;
     if (!arcAll.length) { st.textContent = '결과가 없어요. 다른 장르·검색어로 시도해보세요.'; return; }
@@ -849,6 +851,13 @@
   document.querySelectorAll('.hl-arc-src').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-arc-src').forEach((x) => x.classList.remove('active')); b.classList.add('active');
     archiveSrc = b.dataset.src || 'kbs';
+    const canSearch = b.dataset.search !== '0';
+    // 검색 지원 소스(장르·검색 보임) / 미지원 소스(M코리아 — 전체목록만 바로 로드).
+    document.querySelectorAll('#hl-arc-genres, #hl-arc-topics, #hl-arc-query, #hl-arc-search').forEach((el) => el?.classList.toggle('hidden', !canSearch));
+    document.querySelectorAll('.hl-arc-cat.active').forEach((x) => x.classList.remove('active'));
+    $('hl-results').innerHTML = ''; $('hl-arc-pager')?.classList.add('hidden');
+    if (!canSearch) { addLog(`📼 ${b.textContent.trim()} — 최신 영상 불러오는 중…`); archiveSearch(''); } // 전체목록
+    else if ($('hl-search-state')) $('hl-search-state').textContent = '장르를 고르거나 검색하세요.';
   }));
   $('hl-arc-search')?.addEventListener('click', () => { document.querySelector('.hl-arc-cat.active')?.classList.remove('active'); archiveSearch(); });
   $('hl-arc-query')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { document.querySelector('.hl-arc-cat.active')?.classList.remove('active'); archiveSearch(); } });

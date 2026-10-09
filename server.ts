@@ -989,8 +989,13 @@ const server = http.createServer(async (req, res) => {
   // ── 아카이브 긁기(📼 아카이브 탭) — 특정 방송 아카이브 채널에서 주제로 영상 목록을 가져온다. ──
   //   소스는 화이트리스트로만(임의 채널 긁기 방지). 실제 숏폼/롱폼 제작은 기존 하이라이트 엔진 재사용.
   if (p === '/api/archive-search' && req.method === 'GET') {
-    const ARCHIVE_CHANNELS: Record<string, {channel: string; label: string}> = {
-      kbs: {channel: 'KBSArchive', label: '옛날티비 (KBS 아카이브)'},
+    // 소스 화이트리스트(임의 채널 긁기 방지). label=짧게, search=채널내 검색 지원 여부(안되면 /videos 전체).
+    const ARCHIVE_CHANNELS: Record<string, {channel: string; label: string; search: boolean}> = {
+      kbs: {channel: 'KBSArchive', label: '옛날티비', search: true},
+      kbsdrama: {channel: 'KBSdrama', label: 'KBS 드라마', search: true},
+      kbsnews: {channel: 'newskbs', label: 'KBS 뉴스', search: true},
+      ebs: {channel: 'EBSDocumentary', label: 'EBS 다큐', search: true},
+      mbc: {channel: 'MBCentertainment', label: 'MBC 예능', search: true}, // MBC 예능(구해줘홈즈 등) — 모던코리아는 공개영상 1개뿐이라 제외
     };
     const src = u.searchParams.get('src') || 'kbs';
     const q = (u.searchParams.get('q') || '').trim();
@@ -998,7 +1003,8 @@ const server = http.createServer(async (req, res) => {
     const batch = 60; // 한 번에 60개(flat 긁기는 빨라서 체감 즉시)
     const srcInfo = ARCHIVE_CHANNELS[src];
     if (!srcInfo) return json(res, 400, {error: '알 수 없는 아카이브 소스입니다.'});
-    if (!q) return json(res, 400, {error: '주제를 입력하세요.'});
+    // 검색 지원 소스는 주제 필요, 미지원(전체목록) 소스는 빈 쿼리 허용.
+    if (srcInfo.search && !q) return json(res, 400, {error: '주제를 입력하세요.'});
     try {
       const videos = await searchArchiveChannel(srcInfo.channel, q, batch, () => {}, offset);
       // 받은 개수가 요청(batch)만큼이면 더 있을 가능성 → hasMore + nextOffset.

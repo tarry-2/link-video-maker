@@ -79,16 +79,26 @@ export async function searchArchiveChannel(
 ): Promise<ArchiveVideo[]> {
   const {common} = await buildCommon(log);
   const flat = common.filter((a) => a !== '--no-playlist'); // 채널 검색은 플레이리스트라 --no-playlist 제거
-  const url = `https://www.youtube.com/@${channel}/search?query=${encodeURIComponent(query)}`;
-  // ★offset으로 '더 보기' 페이지네이션 — playlist-start/end로 구간을 지정해 다음 묶음을 가져온다(flat=빠름).
-  const want = Math.max(1, Math.min(120, max)); // 한 번에 최대 120개까지
+  // channel이 'id:UCxxxx'면 채널ID로(한글 핸들이라 @검색이 안 되는 소스), 아니면 @핸들로.
+  const isId = channel.startsWith('id:');
+  const base = isId ? `https://www.youtube.com/channel/${channel.slice(3)}` : `https://www.youtube.com/@${encodeURIComponent(channel)}`;
+  const want = Math.max(1, Math.min(120, max));
   const start = Math.max(1, offset + 1);
   const end = offset + want;
-  log(`[아카이브] "${channel}" 채널에서 "${query}" 검색…${offset ? ` (${start}~${end}번째)` : ''}`);
-  const out = await run(YTDLP, [...flat, '--flat-playlist', '--playlist-start', String(start), '--playlist-end', String(end), '-J', url], log, 60000);
-  let data: any;
-  try { data = JSON.parse(out); } catch { throw new Error('목록을 읽지 못했습니다(응답 형식 오류).'); }
-  const entries: any[] = Array.isArray(data?.entries) ? data.entries : [];
+  // ★채널 내 검색(/search)을 먼저 시도하고, 결과가 없으면 전체 목록(/videos)으로 폴백.
+  //   일부 채널(한글 핸들·일부 아카이브)은 /search가 비어서, 검색어 유무와 무관하게 /videos를 긁어야 한다.
+  const fetchFrom = async (path: string): Promise<any[]> => {
+    const url = base + path;
+    try {
+      const out = await run(YTDLP, [...flat, '--flat-playlist', '--playlist-start', String(start), '--playlist-end', String(end), '-J', url], () => {}, 60000);
+      const data = JSON.parse(out);
+      return Array.isArray(data?.entries) ? data.entries : [];
+    } catch { return []; }
+  };
+  log(`[아카이브] "${channel}"에서 "${query || '최신'}" 가져오는 중…${offset ? ` (${start}~${end}번째)` : ''}`);
+  let entries: any[] = [];
+  if (query && query.trim()) entries = await fetchFrom(`/search?query=${encodeURIComponent(query)}`);
+  if (!entries.length) entries = await fetchFrom('/videos'); // 검색 안 되는 채널·검색어 없음 → 전체 목록
   const list = entries.filter((e) => e && e.id).map((e): ArchiveVideo => ({
     id: e.id,
     title: e.title || '(제목 없음)',
