@@ -332,10 +332,14 @@ select.input { appearance: none; cursor: pointer; }
   text-align: left; background: var(--card2); border: 1px solid var(--line); color: var(--text);
   border-radius: 12px; padding: 12px 14px; font-size: 14px; cursor: pointer; transition: all 0.15s;
   display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 600;
+  /* ★긴 주제 문구가 박스를 넘지 않게 — 줄바꿈 허용 + 긴 토큰 강제 줄바꿈(테리 스샷: '뇌 기능 15% 저하?!'가 삐져나감). */
+  width: 100%; box-sizing: border-box; min-width: 0;
+  overflow-wrap: anywhere; word-break: break-word; white-space: normal;
 }
 .topic-item:hover { border-color: var(--teal); }
 .topic-item.active { background: var(--grad); border-color: transparent; color: #fff; }
-.topic-why { font-size: 11px; font-weight: 700; opacity: 0.7; white-space: nowrap; }
+/* 주제 설명(why)은 오른쪽에 붙되, 좁으면 줄바꿈되게(nowrap이면 넘침). */
+.topic-why { font-size: 11px; font-weight: 700; opacity: 0.7; flex-shrink: 0; }
 /* 🔥 실시간 트렌드 아이템 — 키워드 + 트래픽 뱃지 + 뉴스 맥락. 줄바꿈 허용(뉴스가 길 수 있음). */
 .trend-item { flex-wrap: wrap; }
 .trend-fire { font-weight: 800; }

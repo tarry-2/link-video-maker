@@ -7,7 +7,7 @@ import {getPreset} from './presets';
 import {getStyle} from './styles';
 import {VOICES, pickVoice} from './tts';
 import {addPortfolio, listPortfolio} from './portfolio';
-import {pruneDir, dirSize, cleanTmpRemotion, mb} from './cleanup';
+import {pruneDir, dirSize, cleanTmpRemotion, cleanPublicJobs, mb} from './cleanup';
 import {r2Enabled, videoKey, uploadFile, deleteKey, getStream} from './storage';
 import {characterImagePath} from './characters';
 
@@ -109,8 +109,21 @@ export class Studio {
       }
     }
     const t = cleanTmpRemotion(); freed += t.bytes;
-    if ((delJobs || prunedFiles || t.removed) && opts.log)
-      opts.log(`[정리] 오래된 작업 ${delJobs}개 · 잔여파일 ${prunedFiles}개 · 임시 ${t.removed}개 삭제 (약 ${mb(freed)}MB 확보)`);
+    // ★public/jobs 렌더 잔재 청소(하이라이트 — 서버 재시작/크래시로 안 지워진 것, 테리 실측 182MB).
+    const j = cleanPublicJobs(); freed += j.bytes;
+    // ★볼륨에 studio 작업 폴더가 있는데 포트폴리오·project.json에도 없는 '진짜 고아 폴더'는 통째 삭제
+    //   (list()는 project.json 있는 것만 보므로, 깨진/중단 잔재가 디스크에 남을 수 있음).
+    let orphanDirs = 0;
+    try {
+      const known = new Set(projects.map((p) => p.id));
+      for (const name of fs.readdirSync(this.root)) {
+        if (!/^[0-9a-f-]{36}$/.test(name) || known.has(name)) continue;
+        const d = path.join(this.root, name);
+        try { if (fs.statSync(d).isDirectory()) { freed += dirSize(d); fs.rmSync(d, {recursive: true, force: true}); orphanDirs++; } } catch {}
+      }
+    } catch {}
+    if ((delJobs || prunedFiles || t.removed || j.removed || orphanDirs) && opts.log)
+      opts.log(`[정리] 오래된 작업 ${delJobs}개 · 잔여파일 ${prunedFiles}개 · 임시 ${t.removed}개 · 렌더잔재 ${j.removed}개 · 고아폴더 ${orphanDirs}개 삭제 (약 ${mb(freed)}MB 확보)`);
     return {freed};
   }
   directory(id: string) {

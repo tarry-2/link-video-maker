@@ -52,4 +52,25 @@ export function cleanTmpRemotion(maxAgeMs = 60 * 60 * 1000): {removed: number; b
   return {removed, bytes};
 }
 
+// ★public/jobs/highlight-* 잔재 삭제 — 하이라이트 렌더용 임시 클립 폴더. 보통 렌더 후 지우지만
+//   서버 재시작·크래시·중단으로 finally가 안 타면 남는다(테리 실측 182MB). 진행 중 작업을 건드리지
+//   않게 mtime 오래된 것(기본 1시간↑)만 삭제한다.
+export function cleanPublicJobs(maxAgeMs = 60 * 60 * 1000): {removed: number; bytes: number} {
+  const jobsDir = path.join(process.cwd(), 'public', 'jobs');
+  let removed = 0, bytes = 0;
+  let entries: fs.Dirent[];
+  try { entries = fs.readdirSync(jobsDir, {withFileTypes: true}); } catch { return {removed, bytes}; }
+  const now = Date.now();
+  for (const e of entries) {
+    const f = path.join(jobsDir, e.name);
+    try {
+      if (now - fs.statSync(f).mtimeMs < maxAgeMs) continue; // 최근(진행 중일 수 있음) 건 보존
+      bytes += e.isDirectory() ? dirSize(f) : fs.statSync(f).size;
+      fs.rmSync(f, {recursive: true, force: true});
+      removed++;
+    } catch {}
+  }
+  return {removed, bytes};
+}
+
 export function mb(bytes: number): string { return (bytes / 1024 ** 2).toFixed(1); }
