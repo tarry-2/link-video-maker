@@ -572,6 +572,8 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'web', 'studio.js'), 'text/javascript; charset=utf-8');
   if (p === '/app.js')
     return serveFile(res, path.join(ROOT, 'web', 'app.js'), 'text/javascript; charset=utf-8');
+  if (p === '/font-preview.js')
+    return serveFile(res, path.join(ROOT, 'web', 'font-preview.js'), 'text/javascript; charset=utf-8');
   if (p === '/style.css')
     return serveFile(res, path.join(ROOT, 'web', 'style.css'), 'text/css; charset=utf-8');
   // ── PWA 자산(앱 설치) — manifest·아이콘·파비콘. web/에 복원됨. ──
