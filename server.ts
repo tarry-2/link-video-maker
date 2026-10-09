@@ -223,8 +223,10 @@ async function ensureInstaVideoR2(id: string): Promise<string> {
   const src = resolveVideo(id);
   if (!src) return '';
   if (src.kind === 'mine') {
-    let key = readProjectOutputR2(id);
-    if (key) return key;
+    // ★project.json이 깨졌어도 resolveVideo가 포트폴리오 output으로 재구성한 결정적 R2 키를 쓴다.
+    //   (유튜브는 되는데 인스타만 '파일 못 찾음' 나던 원인 — 인스타 경로가 이 키를 안 썼다.)
+    let key = readProjectOutputR2(id) || src.r2key || '';
+    if (key && (await r2Head(key))) return key;
     if (!r2Enabled() || !fs.existsSync(src.file)) return '';
     key = videoKey(id, 'video-backfill.mp4');
     if (!(await uploadFile(key, src.file))) return '';
