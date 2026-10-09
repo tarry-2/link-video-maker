@@ -240,7 +240,10 @@ export async function getVideoStats(ids: string[], diag?: string[]): Promise<Rec
     }
   }
   diag?.push(`Data API ${Object.keys(out).length}개 조회`);
-  // 2) Analytics API — 스튜디오와 동일 집계로 덮어쓰기 + 공유수. 필터 없이 전체 영상 집계(콤마필터 미사용).
+  // 2) Analytics API — 공유수(Data API엔 없음) + 보정. ★단 '덮어쓰기'는 금지(최신이 안 되던 버그):
+  //   Analytics는 최근 1~2일 데이터가 아직 처리 안 돼 실시간 Data API(공개 조회수)보다 낮게 나온다.
+  //   그대로 덮으면 방금 오른 조회수가 옛날 값으로 깎여 "성과가 최신이 안 됨 / 스튜디오와 불일치"가 생긴다.
+  //   → views·likes·comments는 '둘 중 큰 값'(실시간 아래로 안 내려감), shares만 Analytics로.
   try {
     const today = new Date().toISOString().slice(0, 10);
     let start = 1, overlaid = 0;
@@ -257,10 +260,10 @@ export async function getVideoStats(ids: string[], diag?: string[]): Promise<Rec
         if (!id || !uniqSet.has(id)) continue; // 내가 추적하는 영상만 덮어쓰기
         const prev = out[id] || {views: 0, likes: 0, comments: 0, shares: 0};
         out[id] = {
-          views: ci('views') >= 0 ? Number(row[ci('views')]) : prev.views,
-          likes: ci('likes') >= 0 ? Number(row[ci('likes')]) : prev.likes,
-          comments: ci('comments') >= 0 ? Number(row[ci('comments')]) : prev.comments,
-          shares: ci('shares') >= 0 ? Number(row[ci('shares')]) : prev.shares,
+          views: Math.max(prev.views, ci('views') >= 0 ? Number(row[ci('views')]) : 0),
+          likes: Math.max(prev.likes, ci('likes') >= 0 ? Number(row[ci('likes')]) : 0),
+          comments: Math.max(prev.comments, ci('comments') >= 0 ? Number(row[ci('comments')]) : 0),
+          shares: ci('shares') >= 0 ? Number(row[ci('shares')]) : prev.shares, // 공유수는 Analytics만 제공
         };
         overlaid++;
       }

@@ -566,7 +566,7 @@
       }
       async function loadYtStats() {
         try {
-          const d = await (await fetch('/api/youtube/stats')).json();
+          const d = await (await fetch('/api/youtube/stats?t=' + Date.now(), {cache: 'no-store'})).json();
           window.__ytStats = {}; (d.items || []).forEach(it => { window.__ytStats[it.id] = it; });
           renderPerf('yt-stats', d, '📊 유튜브 성과');
           if (typeof curIdx === 'number' && myItems[curIdx]) selectVideo(curIdx, false);
@@ -574,7 +574,7 @@
       }
       async function loadIgStats() {
         try {
-          const d = await (await fetch('/api/instagram/stats')).json();
+          const d = await (await fetch('/api/instagram/stats?t=' + Date.now(), {cache: 'no-store'})).json();
           renderPerf('ig-stats', d, '📷 인스타 성과');
         } catch (e) {}
       }
