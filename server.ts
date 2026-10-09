@@ -524,6 +524,14 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, {ok: true});
   }
 
+  // ── 🔒 기능 페이지 진입 차단 — 비번(세션) 없으면 랜딩으로. 대시보드·기능·관리 화면은 로그인 필수. ──
+  //   랜딩(/)·로그인/버전 API·정적 자산·포트폴리오 쇼케이스(랜딩 캐러셀용)는 공개로 남긴다.
+  const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html']);
+  if (GATED_PAGES.has(p) && !authed(req)) {
+    res.writeHead(302, {Location: '/?login=1'});
+    return res.end();
+  }
+
   // ── 목소리 샘플 페이지 ──
   if (p === '/voices')
     return serveFile(res, path.join(ROOT, 'web', 'voices.html'), 'text/html; charset=utf-8');

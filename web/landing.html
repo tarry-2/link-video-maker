@@ -327,6 +327,23 @@
     .stats{grid-template-columns:1fr}
     .nav-cta .btn-ghost{display:none}
   }
+  /* 로그인 모달 — 비번 없이 기능 진입 금지 */
+  .login-modal{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;
+    background:rgba(5,4,10,.72);backdrop-filter:blur(8px)}
+  .login-modal[hidden]{display:none}
+  .login-box{position:relative;width:100%;max-width:380px;background:var(--panel);border:1px solid var(--line2);
+    border-radius:24px;padding:38px 30px 32px;text-align:center;box-shadow:0 40px 90px rgba(0,0,0,.5)}
+  .login-box .brand{justify-content:center;font-size:24px;margin-bottom:10px}
+  .login-desc{color:var(--muted);font-size:14.5px;margin-bottom:22px;font-weight:500}
+  .login-input{width:100%;padding:14px 16px;border-radius:12px;border:1px solid var(--line2);
+    background:var(--bg2);color:var(--text);font-size:15px;outline:none;transition:border-color .2s}
+  .login-input:focus{border-color:var(--teal)}
+  .login-box .btn-grad{width:100%;justify-content:center;margin-top:14px}
+  .login-err{color:var(--pink);font-size:13px;margin-top:12px;min-height:16px;font-weight:600}
+  .login-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);
+    font-size:18px;cursor:pointer;line-height:1;padding:4px}
+  .login-close:hover{color:var(--text)}
+
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
 </style>
 </head>
@@ -579,6 +596,18 @@
   <div class="wrap copy">© 2026 OnVideo · 온종일. All rights reserved.</div>
 </footer>
 
+<!-- 로그인 모달 — 비번 없이 대시보드·기능 진입 금지 -->
+<div id="login-modal" class="login-modal" hidden>
+  <div class="login-box">
+    <button id="login-close" class="login-close" type="button" aria-label="닫기">✕</button>
+    <div class="brand"><span class="mark">▶</span>On<b>Video</b></div>
+    <p class="login-desc">로그인하고 대시보드로 이동하세요</p>
+    <input id="login-pw" class="login-input" type="password" placeholder="비밀번호" autocomplete="current-password" />
+    <button id="login-submit" class="btn btn-grad btn-lg" type="button">로그인 →</button>
+    <p id="login-err" class="login-err"></p>
+  </div>
+</div>
+
 <script>
   // 네비 스크롤 효과
   const nav = document.getElementById('nav');
@@ -666,6 +695,48 @@
     } catch {/* 사진 폴백 유지 */}
   }
   if (track){ setupCarousel(); loadPortfolioShorts(); }
+
+  // ── 로그인 게이트: 비번 없이 대시보드·기능 페이지 진입 금지 ──
+  const loginModal = document.getElementById('login-modal');
+  const loginPw = document.getElementById('login-pw');
+  const loginErr = document.getElementById('login-err');
+  let pendingDest = '/app';
+  // 서버가 진짜 차단하므로 프론트는 UX(모달 안내)용. 기본은 '막힘' 가정(안전쪽).
+  let auth = { required: true, ok: false };
+  fetch('/api/auth').then(r => r.json()).then(a => { auth = a; }).catch(() => {});
+
+  function openLogin(dest){ pendingDest = dest || '/app'; loginModal.hidden = false; setTimeout(() => loginPw.focus(), 50); }
+  function closeLogin(){ loginModal.hidden = true; loginErr.textContent = ''; loginPw.value = ''; }
+  document.getElementById('login-close').addEventListener('click', closeLogin);
+  loginModal.addEventListener('click', (e) => { if (e.target === loginModal) closeLogin(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !loginModal.hidden) closeLogin(); });
+
+  async function doLogin(){
+    const pw = loginPw.value.trim();
+    if (!pw){ loginErr.textContent = '비밀번호를 입력하세요.'; return; }
+    loginErr.textContent = '';
+    try {
+      const r = await fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password: pw})});
+      if (r.ok){ location.href = pendingDest; }
+      else { const d = await r.json().catch(() => ({})); loginErr.textContent = d.error || '비밀번호를 확인하세요.'; loginPw.select(); }
+    } catch { loginErr.textContent = '로그인 중 오류가 발생했습니다.'; }
+  }
+  document.getElementById('login-submit').addEventListener('click', doLogin);
+  loginPw.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+
+  // 기능 링크(/app·/voices·/highlight·/monetize) — 비로그인이면 이동 막고 로그인 모달
+  const GATED = ['/app', '/voices', '/highlight', '/monetize'];
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a'); if (!a) return;
+    const dest = a.getAttribute('href') || '';
+    if (GATED.includes(dest.split('?')[0]) && auth.required && !auth.ok){
+      e.preventDefault(); openLogin(dest);
+    }
+  });
+  // 서버가 /?login=1 로 되돌려보냈으면(비번 없이 기능 접근 시도) 로그인 모달 자동 오픈
+  if (new URLSearchParams(location.search).get('login') === '1'){
+    fetch('/api/auth').then(r => r.json()).then(a => { auth = a; if (a.required && !a.ok) openLogin('/app'); }).catch(() => openLogin('/app'));
+  }
 </script>
 </body>
 </html>
