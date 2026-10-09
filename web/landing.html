@@ -443,32 +443,23 @@
   .mq-track:hover{animation-play-state:paused}
   @keyframes marq{from{transform:translateX(0)}to{transform:translateX(-50%)}}
   .mq-card{position:relative;flex:0 0 auto;width:156px;height:277px;margin-right:18px;border-radius:20px;overflow:hidden;
-    background:linear-gradient(158deg,var(--c1),var(--c2));
-    box-shadow:0 20px 44px rgba(0,0,0,.3),inset 0 0 0 1px rgba(255,255,255,.12);
+    background:#0a0912;box-shadow:0 20px 44px rgba(0,0,0,.3),inset 0 0 0 1px rgba(255,255,255,.1);
     transition:transform .3s var(--ease),box-shadow .3s}
-  .mq-card::before{content:'';position:absolute;inset:0;
-    background:radial-gradient(90% 55% at 50% 12%,rgba(255,255,255,.25),transparent 60%),
-      radial-gradient(80% 50% at 80% 100%,rgba(0,0,0,.3),transparent 60%)}
-  .mq-card:hover{transform:translateY(-8px) scale(1.04);box-shadow:0 30px 60px rgba(0,0,0,.42),inset 0 0 0 1px rgba(255,255,255,.2)}
-  .mq-card>*{position:relative;z-index:1}
-  .mq-top{position:absolute;top:18px;left:14px;right:14px;display:flex;flex-direction:column;gap:2px;
-    font-family:'Black Han Sans',sans-serif;line-height:1.14;text-align:center}
-  .mq-top b{font-size:18px;color:#fff;text-shadow:1.5px 1.5px 0 rgba(0,0,0,.35)}
-  .mq-top i{font-size:21px;font-style:normal;color:#ffe24b;text-shadow:1.5px 1.5px 0 rgba(0,0,0,.35)}
-  .mq-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;opacity:.92;
-    filter:drop-shadow(0 4px 12px rgba(0,0,0,.35))}
-  .mq-play svg{width:48px;height:48px}
-  .mq-sub{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);white-space:nowrap;
-    font-size:11.5px;font-weight:800;color:#fff;background:rgba(0,0,0,.42);padding:5px 11px;border-radius:7px}
-  .mq-wm{position:absolute;bottom:13px;left:50%;transform:translateX(-50%);white-space:nowrap;
-    font-size:10.5px;font-weight:800;color:rgba(255,255,255,.92);letter-spacing:.02em}
+  .mq-card video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+  .mq-card::after{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:linear-gradient(to top,rgba(0,0,0,.35),transparent 30%),linear-gradient(to bottom,rgba(0,0,0,.18),transparent 22%)}
+  .mq-card:hover{transform:translateY(-8px) scale(1.04);box-shadow:0 30px 60px rgba(0,0,0,.42),inset 0 0 0 1px rgba(255,255,255,.22)}
+  .mq-badge{position:absolute;top:11px;left:11px;z-index:2;font-size:11px;font-weight:800;color:#0b0a12;
+    background:var(--grad);padding:4px 10px;border-radius:999px;letter-spacing:.01em}
+  .mq-wm{position:absolute;bottom:11px;left:50%;transform:translateX(-50%);z-index:2;white-space:nowrap;
+    font-size:10.5px;font-weight:800;color:#fff;background:rgba(7,6,12,.5);padding:4px 10px;border-radius:999px;
+    backdrop-filter:blur(4px);letter-spacing:.02em}
   @media(max-width:620px){
     .marquee-band{padding:52px 0 58px}
     .marquee-band .sec-head{margin-bottom:28px}
     .mq-card{width:124px;height:220px;margin-right:13px;border-radius:17px}
-    .mq-top b{font-size:15px}.mq-top i{font-size:17px}
-    .mq-play,.mq-play svg{width:40px;height:40px}
-    .mq-sub{font-size:10.5px;bottom:34px}
+    .mq-badge{font-size:10px;padding:3px 8px}
+    .mq-wm{font-size:9.5px}
     .mq-track{animation-duration:30s}
   }
   @media(prefers-reduced-motion:reduce){.mq-track{animation:none}}
@@ -718,23 +709,29 @@
   </div>
 </section>
 <script>
-  // 쇼츠 템플릿 카드(그라데이션 + 후킹 + 자막 + 재생 + 로고)를 생성해 끊김 없이 2세트 채운다.
+  // 실제 OnVideo 완성작(바탕화면 제작물)을 미리보기로 재생. 끊김 없이 2세트.
   (function(){
     const SHORTS = [
-      {c1:'#1aa391', c2:'#0e2f52', h1:'퇴근길에 보면', h2:'하루가 리셋', sub:'링크만 넣으면 완성'},
-      {c1:'#7c4dff', c2:'#c2399a', h1:'요즘 뜨는', h2:'여행지 TOP5', sub:'주제만 적으면 자동'},
-      {c1:'#e24b8c', c2:'#e8822f', h1:'이것만 알면', h2:'조회수 터짐', sub:'후킹·자막 자동'},
-      {c1:'#2563eb', c2:'#22c7d6', h1:'첫 3초에', h2:'시선 고정', sub:'AI 목소리 15종'},
-      {c1:'#15a34a', c2:'#0d8a7e', h1:'긴 영상도', h2:'쇼츠 여러 편', sub:'하이라이트 자동'},
-      {c1:'#e0932a', c2:'#d8362f', h1:'클릭 한 번', h2:'SNS 자동', sub:'유튜브·인스타'},
+      {v:'/showcase/s1.mp4', tag:'건강'},
+      {v:'/showcase/s2.mp4', tag:'여행'},
+      {v:'/showcase/s3.mp4', tag:'꿀팁'},
+      {v:'/showcase/s4.mp4', tag:'건강'},
+      {v:'/showcase/s5.mp4', tag:'애니'},
+      {v:'/showcase/s6.mp4', tag:'레시피'},
     ];
-    const card = (s) => `<div class="mq-card" style="--c1:${s.c1};--c2:${s.c2}">`
-      + `<span class="mq-top"><b>${s.h1}</b><i>${s.h2}</i></span>`
-      + `<span class="mq-play"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="rgba(255,255,255,.22)"/><path d="M9.5 7.5v9l7-4.5z" fill="#fff"/></svg></span>`
-      + `<span class="mq-sub">${s.sub}</span>`
+    const card = (s) => `<div class="mq-card">`
+      + `<video src="${s.v}" muted loop playsinline preload="metadata"></video>`
+      + `<span class="mq-badge">${s.tag}</span>`
       + `<span class="mq-wm">▶ OnVideo</span></div>`;
     const track = document.getElementById('mq-track');
-    if (track) track.innerHTML = (SHORTS.map(card).join('')) + (SHORTS.map(card).join('')); // 2세트(루프용)
+    if (!track) return;
+    track.innerHTML = SHORTS.map(card).join('') + SHORTS.map(card).join(''); // 2세트(루프)
+    // 보이면 재생(성능: 섹션 벗어나면 정지)
+    const vids = [...track.querySelectorAll('video')];
+    const io = new IntersectionObserver((es) => {
+      es.forEach(e => { const v = e.target; if (e.isIntersecting) v.play().catch(()=>{}); else v.pause(); });
+    }, {threshold:.1});
+    vids.forEach(v => io.observe(v));
   })();
 </script>
 

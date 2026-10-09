@@ -591,6 +591,16 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'public', name), 'image/jpeg');
   }
 
+  // 랜딩 쇼케이스 영상(공개) — web/showcase/s{n}.mp4. 실제 완성작 미리보기(마퀴). 화이트리스트만.
+  if (p.startsWith('/showcase/')) {
+    const m = p.match(/^\/showcase\/(s[1-9])\.mp4$/);
+    if (!m) { res.writeHead(404); return res.end('not found'); }
+    return fs.readFile(path.join(ROOT, 'web', 'showcase', `${m[1]}.mp4`), (err, buf) => {
+      if (err) { res.writeHead(404); res.end('not found'); }
+      else { res.writeHead(200, {'Content-Type': 'video/mp4', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=86400'}); res.end(buf); }
+    });
+  }
+
   // 폰트 파일(공개) — public/fonts/{file}. 랜딩·폰트 미리보기 @font-face용. 파일명만 허용(경로우회 방지).
   if (p.startsWith('/fonts/')) {
     const name = path.basename(p);
