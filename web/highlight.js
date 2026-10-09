@@ -308,6 +308,8 @@
     upload: {label: '📁 내 영상', order: 3},
   };
   let histFilter = 'all'; // all 또는 search/archive/url/upload
+  let histPage = 0; // 작업내역 페이지(가로 페이지네이션)
+  const HIST_PER_PAGE = 10;
   function histItemHtml(it) {
     const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
     const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
@@ -338,14 +340,42 @@
         ${order.map((s) => `<button type="button" class="seg-btn hh-tab ${histFilter===s?'active':''}" data-f="${s}">${SRC_META[s].label} (${groups[s].length})</button>`).join('')}
       </div>`;
     }
+    // 선택된 소스들의 항목을 소스 순서대로 평탄화 → 10개씩 페이지. 밑으로 안 길어지게 가로 페이저.
     const shown = order.filter((s) => histFilter === 'all' || histFilter === s);
-    const body = shown.map((s) => {
+    const items = [];
+    for (const s of shown) {
       const list = groups[s].slice().sort((a, b) => (b.score || 0) - (a.score || 0));
-      const head = order.length > 1 ? `<div class="field-label" style="margin:10px 0 4px">${SRC_META[s].label} <span class="hint">${list.length}편</span></div>` : '';
-      return head + list.map(histItemHtml).join('');
-    }).join('');
-    box.innerHTML = tabs + body;
-    box.querySelectorAll('.hh-tab').forEach((b) => b.onclick = () => { histFilter = b.dataset.f; renderHistory(); });
+      for (const it of list) items.push(it);
+    }
+    const totalPages = Math.max(1, Math.ceil(items.length / HIST_PER_PAGE));
+    if (histPage >= totalPages) histPage = totalPages - 1;
+    if (histPage < 0) histPage = 0;
+    const from = histPage * HIST_PER_PAGE, to = from + HIST_PER_PAGE;
+    const pageItems = items.slice(from, to);
+    let body = '';
+    let lastSrc = null;
+    for (const it of pageItems) {
+      const s = SRC_META[it.source] ? it.source : 'search';
+      if (order.length > 1 && s !== lastSrc) { body += `<div class="field-label" style="margin:10px 0 4px">${SRC_META[s].label}</div>`; lastSrc = s; }
+      body += histItemHtml(it);
+    }
+    // 가로 페이저
+    let pager = '';
+    if (totalPages > 1) {
+      const nums = [];
+      for (let i = 0; i < totalPages; i++) {
+        if (i === 0 || i === totalPages - 1 || (i >= histPage - 2 && i <= histPage + 2)) nums.push(i);
+        else if (nums[nums.length - 1] !== '…') nums.push('…');
+      }
+      pager = `<div class="arc-pager" style="margin-top:12px">
+        <button type="button" class="arc-pg nav hh-pg" data-p="${Math.max(0, histPage - 1)}" ${histPage === 0 ? 'disabled' : ''}>◀</button>
+        ${nums.map((n) => n === '…' ? '<span class="arc-pg dots">…</span>' : `<button type="button" class="arc-pg hh-pg ${n === histPage ? 'active' : ''}" data-p="${n}">${n + 1}</button>`).join('')}
+        <button type="button" class="arc-pg nav hh-pg" data-p="${Math.min(totalPages - 1, histPage + 1)}" ${histPage >= totalPages - 1 ? 'disabled' : ''}>▶</button>
+      </div>`;
+    }
+    box.innerHTML = tabs + body + pager;
+    box.querySelectorAll('.hh-tab').forEach((b) => b.onclick = () => { histFilter = b.dataset.f; histPage = 0; renderHistory(); });
+    box.querySelectorAll('.hh-pg[data-p]').forEach((b) => b.onclick = () => { histPage = Number(b.dataset.p); renderHistory(); box.scrollIntoView({behavior: 'smooth', block: 'start'}); });
     box.querySelectorAll('.hh-edit').forEach((b) => b.onclick = () => openEditModal(b.dataset.id));
     box.querySelectorAll('.hh-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
     box.querySelectorAll('.hh-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, !!b.dataset.land));
@@ -1101,19 +1131,38 @@
   // 어느 기기(PC·모바일·태블릿)에서 하이라이트 제작을 시작하든, 다른 기기도 지금 진행 중인 그 작업에
   // 자동으로 붙어 로그·완성본이 실시간으로 보인다. (예전엔 'localStorage에 내 id 있을 때 1회만' 확인해서
   // 다른 기기엔 연동이 안 됐다 — 그 조건을 없애고, 진행 중이면 누구든 attach + 유휴 중 주기 폴링.)
+  let lastDoneJob = ''; // 같은 완료 작업을 중복 처리하지 않게
+  // ★작업이 끝났는데 진행화면이 '합성 중…'에 멈춰 보이던 문제 해결 — done이면 끝까지 완성 처리로 닫는다.
+  //   (긴 작업에서 SSE가 done을 놓치거나 세션이 끊겨 완료 신호를 못 받으면 진행바가 안 닫혔음. 테리 반복 지적.)
+  function finishFromDone(done) {
+    if (!done || lastDoneJob === (done.id || done.projectId)) return;
+    const wasRunning = !!curJobId; // 진행화면에 붙어 있었나(그럼 멈춘 로딩을 닫아줘야)
+    lastDoneJob = done.id || done.projectId;
+    if (curES) { try { curES.close(); } catch {} curES = null; }
+    curJobId = null; try { clearTimeout(tickTimer); } catch {}
+    try { localStorage.removeItem('onvideo-hljob'); localStorage.removeItem('onvideo-hljob-meta'); } catch {}
+    if (wasRunning) {
+      $('hl-stop')?.classList.add('hidden');
+      setEnergy(100, '완성! 🎉'); const f = $('hl-energy'); if (f) f.classList.remove('anim');
+      showStopped();
+      addLog('✅ 제작이 끝났어요 — 완성본은 아래 작업 내역에서 바로 올리거나 다운로드하세요.', 'done');
+      try { celebrate(); } catch {}
+    }
+    loadHistory();
+  }
   async function syncCurrentJob() {
-    if (curJobId) return; // 이미 어떤 작업에 붙어 진행 보고 있으면 건드리지 않음
     try {
       const d = await (await fetch('/api/jobs/current', {cache: 'no-store'})).json();
       if (d && d.id && (!d.kind || d.kind === 'highlight')) {
+        if (curJobId) return; // 이미 붙어 진행 보고 있으면 그대로
         // 다른 기기(또는 새로고침)에서 돌고 있는 하이라이트 작업 — 바로 붙어 실시간 표시.
         try { const mt = JSON.parse(localStorage.getItem('onvideo-hljob-meta') || 'null');
           if (mt) { if (mt.startTs) startTs = mt.startTs; estTotalText = mt.estTotalText || ''; } } catch {}
         addLog('🔗 진행 중인 제작에 연결했어요(다른 기기에서 시작한 작업도 여기서 실시간으로 보여요).', 'done');
         attachProgress(d.id);
-      } else if (d && d.done && d.done.kind === 'highlight' && !curJobId && !resultClips.length) {
-        // 방금(30분 내) 다른 기기에서 끝난 하이라이트 완성본을 이 기기에서도 바로 보이게 + 내역 갱신.
-        loadHistory();
+      } else if (d && d.done && d.done.kind === 'highlight') {
+        // ★끝난 작업 — 진행화면에 붙어 있었든(SSE가 done 놓침) 아니든, 완성 처리로 멈춘 로딩을 닫는다.
+        finishFromDone(d.done);
       }
     } catch {}
   }

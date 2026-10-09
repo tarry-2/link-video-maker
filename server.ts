@@ -41,6 +41,7 @@ const SAMPLE_DIR = path.join(ROOT, 'public', 'voice-samples');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const SESSION_SECRET = process.env.APP_SECRET || 'onvideo-dev-secret-change-me';
 const COOKIE = 'onvideo_sess';
+const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30일(초). 긴 제작 중 세션 끊김 방지.
 function sign(v: string) {
   return createHmac('sha256', SESSION_SECRET).update(v).digest('hex');
 }
@@ -441,9 +442,10 @@ const server = http.createServer(async (req, res) => {
     const ok = ADMIN_PASSWORD && a.length === exp.length && timingSafeEqual(a, exp);
     if (!ok) return json(res, 401, {error: '비밀번호를 확인하세요.'});
     const secure = (req.headers['x-forwarded-proto'] === 'https') ? ' Secure;' : '';
+    // 세션 30일 — 긴 제작(수십 분~시간) 중 자리 비워도 안 끊기게. 아래 인증 통과 요청마다 자동 갱신(rolling)도 함.
     res.setHeader(
       'Set-Cookie',
-      `${COOKIE}=${encodeURIComponent(makeToken())}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200;${secure}`,
+      `${COOKIE}=${encodeURIComponent(makeToken())}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MAX_AGE};${secure}`,
     );
     return json(res, 200, {ok: true});
   }
@@ -638,6 +640,13 @@ const server = http.createServer(async (req, res) => {
   // ── 이 아래 모든 /api 는 로그인 필요(비번 설정 시) ──
   if (p.startsWith('/api/') && !authed(req))
     return json(res, 401, {error: '로그인이 필요합니다.'});
+  // ★세션 자동 갱신(rolling) — 로그인된 상태로 API를 쓸 때마다 쿠키 만료를 30일 뒤로 밀어준다.
+  //   긴 제작 중 주기 폴링(jobs/current)이 계속 요청하므로, 자리 비워도 세션이 안 끊긴다.
+  if (p.startsWith('/api/') && ADMIN_PASSWORD && authed(req)) {
+    const secure = (req.headers['x-forwarded-proto'] === 'https') ? ' Secure;' : '';
+    const ck = (req.headers.cookie || '').match(new RegExp(COOKIE + '=([^;]+)'));
+    if (ck) res.setHeader('Set-Cookie', `${COOKIE}=${ck[1]}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MAX_AGE};${secure}`);
+  }
 
   // ── 유튜브: 연결 상태 ──
   if (p === '/api/youtube/status' && req.method === 'GET')
