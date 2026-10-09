@@ -280,12 +280,17 @@ export async function makeHighlights(
     const tpl = (opts.template && opts.template !== 'auto')
       ? getHlTemplate(opts.template)
       : pickHlTemplate(`${c.hookTop || ''} ${c.hookAccent || ''} ${meta.title}`);
+    // ★후킹은 나레이션(해설)과 무관하게 '항상' 들어가야 한다. c.hookTop이 비었거나 이모지만 있으면 제목으로 보장.
+    const hasVisibleHook = (s: string) => /[0-9A-Za-z가-힣]/.test(s || ''); // 글자(한/영/숫자)가 하나라도 있어야 '보이는 후킹'
+    let hookTopFinal = hasVisibleHook(c.hookTop) ? c.hookTop : cleanTitle(meta.title, 20);
+    if (!hasVisibleHook(hookTopFinal)) hookTopFinal = cleanTitle(meta.title, 20) || (meta.title || '').slice(0, 20) || '하이라이트';
+    log(`[하이라이트] ${i + 1}편 후킹: "${hookTopFinal}"${hasVisibleHook(c.hookTop) ? '' : ' (제목에서 보강)'}`); // 진단 — 후킹이 비면 로그로 바로 확인
     const scene: SceneData = {
       image: `${jobRel}/${clipName}`, // 폴백용(사용 안 함 — fullBleed가 video 사용)
       video: `${jobRel}/${clipName}`,
       fullBleed: true, // 이미 비율 맞춤 → 꽉 채우고 상단 후킹 + (해설 시)카라오케 자막
       template: tpl.id,
-      hookTop: c.hookTop || cleanTitle(meta.title, 20),
+      hookTop: hookTopFinal,
       hookAccent: c.hookAccent || '',
       accentColor: tpl.accentColor,
       words, // 해설 있으면 카라오케 자막, 없으면 []
@@ -449,6 +454,7 @@ export async function makeHighlights(
         createdAt, orientation, kind: 'highlight', score: c.score,
         source: opts.source || (isMine ? 'upload' : 'search'), // 작업내역 탭별 이원화용 소재 출처
         sourceKey, // 같은 소재 누적 회차('N편') 계산용
+        attribution, // ★출처를 포트폴리오에도 저장 — project.json이 날아가도 업로드 캡션/설명에 출처가 붙게.
       });
     } catch (e: any) { log('[하이라이트] 포트폴리오 등록 건너뜀: ' + (e?.message || '')); }
     // 출처(attribution)를 프로젝트 폴더에도 남긴다(상세설명 폴백 — project.json 읽기 실패 대비).

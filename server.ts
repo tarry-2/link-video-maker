@@ -256,6 +256,8 @@ function readAttribution(id: string): string {
     const f = path.join(dir, 'attribution.txt');
     if (fs.existsSync(f)) return fs.readFileSync(f, 'utf8').trim();
   } catch {}
+  // ★project.json·attribution.txt가 날아가도(ENOSPC) 포트폴리오에 저장해둔 출처로 폴백.
+  try { const it = listPortfolio().find((x) => x.projectId === id); if (it?.attribution) return String(it.attribution).trim(); } catch {}
   return '';
 }
 // 카드 게시물(캐러셀) 메타 — project.json에서 제목·나레이션(캡션 생성용) 읽기.

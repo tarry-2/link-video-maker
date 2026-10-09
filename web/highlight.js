@@ -754,8 +754,9 @@
     }));
   }
   // 아카이브 영상 → 하이라이트 카드 형식으로 매핑(미리보기·선택·제작 재사용).
-  function arcToCard(v) {
-    return {videoId: v.id, title: v.title, channel: '옛날티비', durationSec: v.duration || 0, thumb: v.thumbnail, views: v.viewCount || 0, isCc: false, risk: 'archive'};
+  function arcToCard(v, srcLabel) {
+    // ★채널=실제 소스 라벨(KBS 뉴스·EBS 다큐 등). 출처 표기가 '옛날티비' 하나로 뭉뚱그려지지 않게.
+    return {videoId: v.id, title: v.title, channel: srcLabel || '옛날티비', durationSec: v.duration || 0, thumb: v.thumbnail, views: v.viewCount || 0, isCc: false, risk: 'archive'};
   }
   function sortArc(list) {
     const a = list.slice();
@@ -822,7 +823,7 @@
     try {
       const d = await (await fetch(`/api/archive-search?src=${encodeURIComponent(archiveSrc)}&q=${encodeURIComponent(arcQuery)}&offset=${arcServerOffset}`)).json();
       if (d.error) { $('hl-search-state').textContent = '⚠️ ' + d.error; arcServerMore = false; return false; }
-      const vids = (d.videos || []).map(arcToCard);
+      const vids = (d.videos || []).map((v) => arcToCard(v, d.source));
       const seen = new Set(arcAll.map((x) => x.videoId));
       const fresh = vids.filter((v) => !seen.has(v.videoId));
       arcAll = arcAll.concat(fresh);

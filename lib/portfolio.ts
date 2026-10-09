@@ -23,6 +23,7 @@ export type PortfolioItem = {
   score?: number; // 하이라이트: AI 바이럴 점수(0~100). 카드 뱃지·정렬에 사용.
   source?: 'search' | 'url' | 'upload' | 'archive'; // 하이라이트 소재 출처(작업내역 탭별 이원화). 없으면 search 폴백.
   sourceKey?: string; // 같은 원본 소재 식별(videoId 또는 업로드 제목) — 'N편' 누적 회차 계산용.
+  attribution?: string; // 출처 표기(재사용 영상). ★project.json이 날아가도(ENOSPC) 살아남게 여기에도 저장 — 업로드 캡션/설명 폴백.
 };
 
 // 같은 소재(sourceKey)로 지금까지 만든 하이라이트 편 수 — 다음 편 회차('N편') 계산에 쓴다.
