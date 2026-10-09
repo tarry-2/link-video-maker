@@ -658,7 +658,7 @@
       track.innerHTML = picked.map(p => {
         const label = p.media === 'highlight' ? '🎬 방송 하이라이트' : '🎞 AI 이미지 영상';
         const poster = p.thumb ? ` poster="${p.thumb}"` : '';
-        return `<div class="slide"><video src="${p.video}"${poster} muted loop playsinline preload="metadata"></video><div class="ov"></div><div class="vlabel"><b></b>${label}</div></div>`;
+        return `<div class="slide"><video src="${p.video}"${poster} muted loop playsinline preload="none"></video><div class="ov"></div><div class="vlabel"><b></b>${label}</div></div>`;
       }).join('');
       hasVideo = true;
       screen?.classList.add('has-video');
