@@ -107,15 +107,26 @@ function resolveVideo(id: string): {kind: 'mine' | 'sample'; file: string; r2key
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
   const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
   const pjPath = path.join(dir, 'project.json');
-  if (!fs.existsSync(pjPath)) return null;
-  const proj = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
-  if (proj.status !== 'completed' || !proj.output || proj.output !== path.basename(proj.output)) return null;
-  const file = path.join(dir, proj.output);
-  // 로컬에 없고 R2에만 있으면 r2key로 표시(유튜브 업로드 시 임시 다운로드).
-  if (!fs.existsSync(file) && !proj.outputR2) return null;
-  const narrations = (proj.scenes || []).map((s: any) => s.narration || '');
-  const durSec = (proj.scenes || []).reduce((n: number, s: any) => n + (s.voice?.frames || 0), 0) / 30 || proj.input?.duration || 30;
-  return {kind: 'mine', file, r2key: fs.existsSync(file) ? undefined : proj.outputR2, title: proj.title, narrations, durSec};
+  let proj: any = null;
+  try { if (fs.existsSync(pjPath)) proj = JSON.parse(fs.readFileSync(pjPath, 'utf8')); } catch {}
+  if (proj && proj.status === 'completed' && proj.output && proj.output === path.basename(proj.output)) {
+    const file = path.join(dir, proj.output);
+    // 로컬에 없고 R2에만 있으면 r2key로 표시(유튜브 업로드 시 임시 다운로드).
+    if (fs.existsSync(file) || proj.outputR2) {
+      const narrations = (proj.scenes || []).map((s: any) => s.narration || '');
+      const durSec = (proj.scenes || []).reduce((n: number, s: any) => n + (s.voice?.frames || 0), 0) / 30 || proj.input?.duration || 30;
+      return {kind: 'mine', file, r2key: fs.existsSync(file) ? undefined : proj.outputR2, title: proj.title, narrations, durSec};
+    }
+  }
+  // ★project.json이 깨졌어도(렌더 중 볼륨 ENOSPC로 쓰기 실패 등) 포트폴리오 항목 + 결정적 R2 키로 복원해
+  //   업로드가 가능하게 한다(서빙과 동일 원칙). 파일이 R2에 있으면 '영상을 찾을 수 없다'가 안 난다.
+  const item = listPortfolio().find((x) => x.projectId === id && x.kind !== 'card-post');
+  if (item && item.output && item.output === path.basename(item.output) && r2Enabled()) {
+    const file = path.join(dir, item.output);
+    const r2key = videoKey(id, item.output);
+    return {kind: 'mine', file, r2key: fs.existsSync(file) ? undefined : r2key, title: item.title, narrations: [], durSec: 30};
+  }
+  return null;
 }
 // 유튜브 업로드용: 로컬 파일이 있으면 그대로, R2에만 있으면 임시로 내려받아 경로+정리콜백 반환.
 async function localVideoFile(src: {file: string; r2key?: string}): Promise<{file: string; cleanup: () => void}> {
@@ -132,13 +143,21 @@ async function localVideoFile(src: {file: string; r2key?: string}): Promise<{fil
 // 내 완성작의 썸네일(커버) 로컬 경로 확보 — 유튜브 커버 지정용. 로컬/R2/없음. 샘플은 썸네일 없음.
 async function localThumbFile(projectId: string): Promise<{file: string; cleanup: () => void} | null> {
   try {
-    const proj = JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8'));
-    if (!proj.thumb) return null;
-    const local = path.join(STUDIO_DATA_DIR, 'studio', projectId, proj.thumb);
-    if (fs.existsSync(local)) return {file: local, cleanup: () => {}};
-    if (!proj.thumbR2) return null;
+    let proj: any = {};
+    try { proj = JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')); } catch {}
+    const local = proj.thumb ? path.join(STUDIO_DATA_DIR, 'studio', projectId, proj.thumb) : '';
+    if (local && fs.existsSync(local)) return {file: local, cleanup: () => {}};
+    // ★project.json이 깨졌어도 R2의 표준 썸네일(thumb.png/cover.jpg)을 결정적으로 찾아 커버로 사용.
+    let thumbR2 = proj.thumbR2 || '';
+    if (!thumbR2 && r2Enabled()) {
+      for (const cand of ['thumb.png', 'cover.jpg']) {
+        const k = videoKey(projectId, cand);
+        if (await r2Head(k)) { thumbR2 = k; break; }
+      }
+    }
+    if (!thumbR2) return null;
     const tmp = path.join(os.tmpdir(), `thumb-${randomUUID()}.png`);
-    const got = await getStream(proj.thumbR2);
+    const got = await getStream(thumbR2);
     if (!got) return null;
     await new Promise<void>((resolve, reject) => {
       const w = fs.createWriteStream(tmp);
