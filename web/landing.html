@@ -392,7 +392,23 @@
   /* 섹션 전체를 위로(단계 칩이 화면에 보이게) — 상단 여백·제목 간격 축소 */
   #how{padding-top:54px}
   #how .sec-head{margin-bottom:32px}
-  @media(max-width:620px){.builder{gap:30px}.bld-phone{transform:none}.builder.finale .bld-phone{transform:scale(1.02)}}
+  @media(max-width:620px){
+    #how{padding-top:42px}
+    #how .sec-head{margin-bottom:22px}
+    .builder{flex-direction:column;flex-wrap:nowrap;align-items:center;justify-content:flex-start;gap:20px}
+    .bld-phone{width:188px;height:334px;transform:none}
+    .builder.finale .bld-phone{transform:scale(1.02)}
+    .bld-info{min-width:0;max-width:none;width:100%}
+    .bld-cap{padding:14px 15px;min-height:72px;border-radius:15px}
+    .bld-cap-ic{width:46px;height:46px;font-size:24px;border-radius:13px}
+    .bld-cap-ic svg{width:27px;height:27px}
+    .bld-cap-tx b{font-size:15.5px}
+    .bld-cap-tx p{font-size:12px}
+    .bld-bar{margin:12px 0 12px}
+    .bld-chips{gap:7px}
+    .bchip{border-radius:12px;font-size:21px;max-width:none}
+    .bchip svg{width:24px;height:24px}
+  }
 
   /* 로그인 모달 — 비번 없이 기능 진입 금지 */
   .login-modal{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:20px;
