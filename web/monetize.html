@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>OnVideo — 수익화 가이드</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+  <style>
+    :root {
+      --bg: #f6f1e8; --card: #fffdf8; --card2: #efe9dd; --line: #e3dccd;
+      --text: #2b271f; --muted: #857c6c; --teal: #12a998; --purple: #6b4cf0; --pink: #ff5d8f;
+    }
+    [data-theme="dark"] {
+      --bg: #231e18; --card: #2e2820; --card2: #38312a; --line: #473f35;
+      --text: #efe9e0; --muted: #a99f90; --teal: #4fe0d0; --purple: #7c5cff; --pink: #ff86ad;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; font-family: "Pretendard Variable", Pretendard, -apple-system, system-ui, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6; letter-spacing: -0.01em;
+    }
+    .topnav { display: flex; gap: 6px; padding: 10px 14px; overflow-x: auto; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10; }
+    .navtab { flex: 0 0 auto; text-decoration: none; color: var(--muted); font-weight: 700; font-size: 14px; padding: 8px 13px; border-radius: 999px; white-space: nowrap; }
+    .navtab.active { color: #fff; background: linear-gradient(120deg, var(--teal), var(--purple)); }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 24px 18px 80px; }
+
+    .hero { border-radius: 22px; padding: 34px 26px; color: #fff; position: relative; overflow: hidden;
+      background: linear-gradient(130deg, var(--teal) 0%, var(--purple) 70%, var(--pink) 130%); box-shadow: 0 16px 40px -18px rgba(107,76,240,.6); }
+    .hero::after { content:""; position:absolute; right:-40px; top:-40px; width:180px; height:180px; border-radius:50%; background:rgba(255,255,255,.14); }
+    .hero .eyebrow { font-size: 13px; font-weight: 800; opacity: .9; letter-spacing: .02em; }
+    .hero h1 { margin: 8px 0 10px; font-size: 30px; font-weight: 900; line-height: 1.25; }
+    .hero p { margin: 0; font-size: 15px; opacity: .95; max-width: 560px; }
+    .hero .chips { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .hero .chip { background: rgba(255,255,255,.18); backdrop-filter: blur(4px); padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+
+    .tldr { margin: 22px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .tldr .box { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 16px; }
+    .tldr .box b { display:block; font-size: 13px; color: var(--teal); font-weight: 800; margin-bottom: 4px; }
+    .tldr .box.p b { color: var(--purple); }
+    .tldr .box span { font-size: 14.5px; font-weight: 600; }
+
+    section { margin-top: 34px; }
+    .sec-h { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .sec-h .num { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 900; font-size: 15px; color: #fff; background: linear-gradient(135deg, var(--teal), var(--purple)); }
+    .sec-h h2 { margin: 0; font-size: 20px; font-weight: 900; }
+    .sec-sub { color: var(--muted); font-size: 14px; margin: 2px 0 14px 40px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 18px; }
+
+    table.cmp { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 14px; }
+    table.cmp th, table.cmp td { padding: 13px 14px; text-align: left; font-size: 14.5px; vertical-align: top; border-bottom: 1px solid var(--line); }
+    table.cmp thead th { font-size: 13px; font-weight: 800; }
+    table.cmp thead th.c-claim { color: var(--teal); }
+    table.cmp thead th.c-strike { color: var(--pink); }
+    table.cmp tbody td:first-child { color: var(--muted); font-weight: 700; width: 34%; }
+    table.cmp tr:last-child td { border-bottom: none; }
+    .tag-ok { color: var(--teal); font-weight: 800; }
+    .tag-bad { color: var(--pink); font-weight: 800; }
+
+    .steps { display: grid; gap: 10px; margin-top: 4px; }
+    .step { display: flex; gap: 12px; align-items: flex-start; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 15px; }
+    .step .dot { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; background: var(--card2); color: var(--teal); display: grid; place-items: center; font-weight: 900; font-size: 13px; }
+    .step b { font-size: 15px; }
+    .step p { margin: 3px 0 0; font-size: 13.5px; color: var(--muted); }
+
+    .branch { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .branch .b { border-radius: 16px; padding: 18px; border: 1.5px solid; }
+    .branch .b1 { border-color: var(--teal); background: linear-gradient(180deg, rgba(18,169,152,.07), transparent); }
+    .branch .b2 { border-color: var(--purple); background: linear-gradient(180deg, rgba(107,76,240,.07), transparent); }
+    .branch .b .t { font-weight: 900; font-size: 16px; margin-bottom: 6px; }
+    .branch .b1 .t { color: var(--teal); } .branch .b2 .t { color: var(--purple); }
+    .branch .b p { margin: 0; font-size: 14px; }
+    .branch .b .r { margin-top: 10px; font-size: 13px; font-weight: 800; }
+
+    ul.check { list-style: none; padding: 0; margin: 4px 0 0; }
+    ul.check li { position: relative; padding: 9px 0 9px 30px; border-bottom: 1px dashed var(--line); font-size: 14.5px; font-weight: 600; }
+    ul.check li:last-child { border-bottom: none; }
+    ul.check li::before { content: "✓"; position: absolute; left: 4px; top: 9px; color: var(--teal); font-weight: 900; }
+
+    .faq { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px 16px; }
+    .faq details { border-bottom: 1px solid var(--line); padding: 12px 0; }
+    .faq details:last-child { border-bottom: none; }
+    .faq summary { cursor: pointer; font-weight: 800; font-size: 15px; list-style: none; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::before { content: "＋"; color: var(--purple); font-weight: 900; margin-right: 8px; }
+    .faq details[open] summary::before { content: "－"; }
+    .faq p { margin: 10px 0 2px; font-size: 14px; color: var(--muted); }
+
+    .warn { margin-top: 14px; background: linear-gradient(180deg, rgba(255,93,143,.08), transparent); border: 1px solid var(--pink); border-radius: 14px; padding: 15px 16px; font-size: 14px; }
+    .warn b { color: var(--pink); }
+
+    .foot { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12.5px; }
+    .foot a { color: var(--teal); }
+    .theme-btn { margin-left: auto; flex: 0 0 auto; border: 1px solid var(--line); background: var(--card2); color: var(--text); border-radius: 999px; padding: 8px 12px; font-size: 14px; cursor: pointer; }
+    @media (max-width: 620px) { .tldr, .branch { grid-template-columns: 1fr; } .hero h1 { font-size: 24px; } }
+  </style>
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/" class="navtab">✏️ 영상 만들기</a>
+    <a href="/highlight" class="navtab">🎬 유튜브 하이라이트</a>
+    <a href="/voices?tab=pf" class="navtab">🎬 포트폴리오</a>
+    <a href="/monetize" class="navtab active">💰 수익화 가이드</a>
+    <button class="theme-btn" id="themeBtn" title="테마">🌙</button>
+  </nav>
+
+  <div class="wrap">
+    <div class="hero">
+      <div class="eyebrow">ONVIDEO · 저작권 & 수익화 완전정리</div>
+      <h1>클레임은 '벌'이 아니다.<br/>조건일 뿐이다.</h1>
+      <p>남의 영상을 재가공해도 채널은 죽지 않는다. 핵심은 딱 하나 — <b>원음을 어떻게 다루느냐</b>. 전세계 크리에이터가 이 원리로 수익화하고 있다.</p>
+      <div class="chips">
+        <span class="chip">✅ 클레임 ≠ 제재</span>
+        <span class="chip">🎚 원음 제거 = 무클레임</span>
+        <span class="chip">✂️ 변형 &gt; 길이</span>
+      </div>
+    </div>
+
+    <div class="tldr">
+      <div class="box"><b>한 줄 요약 ①</b><span>Content ID 클레임은 채널 벌점이 전혀 없다. 아무리 쌓여도 안전. 영상도 안 내려간다.</span></div>
+      <div class="box p"><b>한 줄 요약 ②</b><span>진짜 위험은 '수동 신고(스트라이크)'뿐. 재가공(변형)하면 거의 오지 않는다.</span></div>
+    </div>
+
+    <!-- 1 -->
+    <section>
+      <div class="sec-h"><div class="num">1</div><h2>클레임 vs 스트라이크 — 완전히 다르다</h2></div>
+      <div class="sec-sub">가장 많이 헷갈리는 부분. 이거 하나만 알아도 무서울 게 없다.</div>
+      <div class="card">
+        <table class="cmp">
+          <thead><tr><th></th><th class="c-claim">🟢 Content ID 클레임</th><th class="c-strike">🔴 저작권 스트라이크</th></tr></thead>
+          <tbody>
+            <tr><td>발생 방식</td><td>자동 (시스템이 지문 매칭)</td><td>수동 (저작권자가 직접 법적 신고)</td></tr>
+            <tr><td>영상 상태</td><td><span class="tag-ok">그대로 살아있음</span></td><td><span class="tag-bad">삭제됨</span></td></tr>
+            <tr><td>채널 벌점</td><td><span class="tag-ok">없음 (아무리 쌓여도 0)</span></td><td><span class="tag-bad">90일 벌점 · 3회면 채널 삭제</span></td></tr>
+            <tr><td>수익</td><td>그 영상 광고수익이 저작권자에게 감</td><td>해당 없음 (영상이 사라짐)</td></tr>
+            <tr><td>해결법</td><td>원음 제거 · 교체 · 구간 잘라내기</td><td>이의신청 / 콘텐츠 삭제</td></tr>
+          </tbody>
+        </table>
+        <div class="warn"><b>핵심:</b> 클레임이 와도 "시간을 줄이거나 원음을 빼라"는 <b>선택지</b>를 준다. 이건 처벌이 아니라 <b>"내 거 써도 돼, 대신 내 방식대로"</b>라는 조건 제시다.</div>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section>
+      <div class="sec-h"><div class="num">2</div><h2>무엇이 클레임을 부르나 → 원음(음악)</h2></div>
+      <div class="sec-sub">Content ID는 음성·음악 지문 매칭이 가장 강하다. 범인은 거의 항상 '소리'다.</div>
+      <div class="steps">
+        <div class="step"><div class="dot">1</div><div><b>원본 음악 / 대사 소리</b><p>가장 강하게 매칭된다. 걸리면 그 영상 수익이 저작권자에게 간다 — 당연하고 정상.</p></div></div>
+        <div class="step"><div class="dot">2</div><div><b>원본 영상 화면</b><p>지문 매칭 가능하지만, 크롭(9:16)·자막·재구성하면 약해진다.</p></div></div>
+        <div class="step"><div class="dot">3</div><div><b>우리가 직접 깐 배경음(BGM)</b><p>우리 것이라 아무 상관 없다. 원음만 지우고 우리 BGM을 얹으면 깨끗하다.</p></div></div>
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section>
+      <div class="sec-h"><div class="num">3</div><h2>회피책 = 원음 제거 + 재구성</h2></div>
+      <div class="sec-sub">유튜브가 직접 알려주는 공식 해결책. 변형이 길이보다 강력하다.</div>
+      <div class="card">
+        <ul class="check">
+          <li>원음(음악·대사)을 빼고 <b>우리 음성·자막·BGM으로 재구성</b>한다 → 매칭이 깨져 클레임 자체가 안 뜬다.</li>
+          <li>유튜브 스튜디오에서도 가능: 클레임 → <b>Take Action → Erase song / Replace song / Trim out segment</b> → 클레임 제거 → 수익화 복구.</li>
+          <li><b>매칭이 안 되면 수익도 우리 것.</b> 원작자에게 넘어가는 건 '클레임이 매칭됐을 때'만이다.</li>
+          <li>실측: <b>카지노(가로 2분 50초, 일반 영상)</b>를 원음 제거+재구성 → 무클레임 → 수익 온전히 우리 것. 크롭 없이 가로 롱폼도 변형만 제대로 하면 안 걸린다.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section>
+      <div class="sec-h"><div class="num">4</div><h2>전략 2갈래 — 둘 다 채널은 안 죽는다</h2></div>
+      <div class="sec-sub">무엇을 원하느냐에 따라 고르면 된다.</div>
+      <div class="branch">
+        <div class="b b1">
+          <div class="t">① 조회수 · 유입이 목적</div>
+          <p>수익이 저작권자에게 가도 괜찮다면, 클레임 그냥 두고 올린다. 영상은 살아있고 벌점은 0. 구독·유입은 전부 우리 것.</p>
+          <div class="r" style="color:var(--teal)">→ 손해 없음. 트래픽을 번다.</div>
+        </div>
+        <div class="b b2">
+          <div class="t">② 광고 수익이 목적</div>
+          <p>원음을 빼고 우리 음성·BGM으로 재구성 → 클레임 자체가 안 뜬다 → 그 영상 광고수익이 온전히 우리 것.</p>
+          <div class="r" style="color:var(--purple)">→ 돈을 번다. (카지노 방식)</div>
+        </div>
+      </div>
+      <div class="warn" style="border-color:var(--purple);background:linear-gradient(180deg,rgba(107,76,240,.08),transparent)">
+        💡 <b style="color:var(--purple)">인스타는 저작권 스캔이 느슨</b>하다. 유튜브보다 통과율이 높아 — 재가공 영상은 인스타 위주로 뿌리는 걸 추천.
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section>
+      <div class="sec-h"><div class="num">5</div><h2>진짜 CC vs 가짜 CC 구별</h2></div>
+      <div class="sec-sub">100% 자동 구별법은 없다. 하지만 신호는 읽을 수 있다.</div>
+      <div class="card">
+        <ul class="check">
+          <li>유튜브의 "재사용 허가(CC)" 표시는 <b>업로더가 맘대로 설정한 값</b> — 그대로 믿으면 안 된다 (미스터빈도 CC로 떠 있었다).</li>
+          <li><b>업로더가 원저작권자 공식 채널인가?</b> 개인이 유명 IP를 올렸으면 가짜 CC일 확률이 높다.</li>
+          <li><b>유명 IP인가?</b> 영화·방송·음원은 CC로 떠도 90%가 가짜 → Content ID에 걸린다.</li>
+          <li><b>카테고리</b>가 영화·음악·스포츠면 위험 신호.</li>
+          <li>OnVideo의 위험도 뱃지 <b>✅재사용허가 / 🆗무난 / ⚠️주의</b>가 이 휴리스틱을 자동으로 보여준다.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section>
+      <div class="sec-h"><div class="num">?</div><h2>자주 묻는 것</h2></div>
+      <div class="sec-sub" style="margin-left:40px">실전에서 바로 쓰는 답.</div>
+      <div class="faq">
+        <details><summary>클레임이 여러 개 쌓이면 채널이 위험한가요?</summary><p>아니요. 클레임은 아무리 많아도 채널 벌점이 0입니다. "A claim is not a strike — no channel penalty, no matter how many." 쌓여도 안전합니다.</p></details>
+        <details><summary>1분 미만으로 만들면 안 걸리나요?</summary><p>길이는 보조 수단입니다. 진짜 핵심은 '원음 제거'예요. 원음을 그대로 두면 짧아도 매칭될 수 있고, 원음을 빼면 길어도(카지노 2:50) 안 걸립니다.</p></details>
+        <details><summary>배경음악을 깔면 저작권자한테 수익이 가나요?</summary><p>원본 영상에 있던 음악이 매칭되면 그렇습니다. 하지만 <b>우리가 직접 추가한 BGM</b>은 우리 것이라 무관합니다. 원음만 지우면 됩니다.</p></details>
+        <details><summary>무클레임이면 영원히 안전한가요?</summary><p>Content ID는 나중에 소급 매칭될 수 있어 100% 영구 보장은 아닙니다. 다만 초기 스캔을 통과했으면 실무상 대부분 그대로 유지됩니다.</p></details>
+      </div>
+    </section>
+
+    <div class="foot">
+      이 가이드는 테리 실측 + 전세계 자료 교차확인(2026-10) 기준입니다.<br/>
+      출처: YouTube 고객센터(Content ID claims / claimed content 제거), TrademarkEngine(claim vs strike).<br/>
+      <b>OnVideo</b> — 링크 하나로 영상.
+    </div>
+  </div>
+
+  <script>
+    // 테마 토글(라이트 기본). 앱과 같은 localStorage 키 공유.
+    (function () {
+      var k = 'lvm-theme';
+      var saved = localStorage.getItem(k) || 'light';
+      if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      var btn = document.getElementById('themeBtn');
+      function sync() { btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '☀️' : '🌙'; }
+      sync();
+      btn.addEventListener('click', function () {
+        var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+        if (dark) { document.documentElement.removeAttribute('data-theme'); localStorage.setItem(k, 'light'); }
+        else { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem(k, 'dark'); }
+        sync();
+      });
+    })();
+  </script>
+</body>
+</html>

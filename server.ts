@@ -23,7 +23,7 @@ import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
-import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys} from './lib/storage';
+import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys, head as r2Head} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
 import {pngToJpeg} from './lib/img-util';
@@ -491,6 +491,10 @@ const server = http.createServer(async (req, res) => {
   if (p === '/voices')
     return serveFile(res, path.join(ROOT, 'web', 'voices.html'), 'text/html; charset=utf-8');
 
+  // ── 수익화 가이드(저작권·클레임·전략 정리) ──
+  if (p === '/monetize' || p === '/monetize.html')
+    return serveFile(res, path.join(ROOT, 'web', 'monetize.html'), 'text/html; charset=utf-8');
+
   // ── 유튜브 하이라이트 전용 페이지(영상 만들기와 완전 분리) ──
   if (p === '/highlight' || p === '/highlight.html')
     return serveFile(res, path.join(ROOT, 'web', 'highlight.html'), 'text/html; charset=utf-8');
@@ -568,7 +572,8 @@ const server = http.createServer(async (req, res) => {
         orientation: it.orientation || 'portrait', // 레거시(없음)=세로 폴백
         video: isPost ? '' : `/portfolio-item/${it.projectId}.mp4`,
         images: isPost ? (it.images || []).map((_, i) => `/portfolio-card/${it.projectId}/${i + 1}.png`) : undefined,
-        thumb: readProjectThumb(it.projectId).thumb ? `/portfolio-thumb/${it.projectId}.png` : '',
+        // ★영상 항목은 항상 썸네일 URL 발급(서빙이 R2에서 결정적으로 찾음). <video poster>라 404여도 깨짐 없음.
+        thumb: isPost ? '' : `/portfolio-thumb/${it.projectId}.png`,
         score: typeof it.score === 'number' ? it.score : undefined, // 하이라이트 바이럴 점수
         source: it.source, // 하이라이트 소재 출처(작업내역 탭별 이원화): search/url/upload/archive
       };
@@ -598,12 +603,21 @@ const server = http.createServer(async (req, res) => {
     if (!m) { res.writeHead(404); return res.end('not found'); }
     const item = listPortfolio().find((x) => x.projectId === m[1]);
     if (!item) { res.writeHead(404); return res.end('not found'); }
-    const {thumb, thumbR2} = readProjectThumb(m[1]);
-    if (!thumb) { res.writeHead(404); return res.end('not found'); }
+    let {thumb, thumbR2} = readProjectThumb(m[1]);
+    // ★project.json이 깨졌어도 R2의 표준 썸네일(studio/{id}/thumb.png or cover.jpg)을 결정적으로 시도.
+    //   영상 서빙과 같은 원칙 — 파일만 R2에 있으면 썸네일도 항상 뜬다(까만 썸네일 재발 차단).
+    if (!thumbR2 && r2Enabled()) {
+      for (const cand of ['thumb.png', 'cover.jpg']) {
+        const k = videoKey(m[1], cand);
+        if (await r2Head(k)) { thumbR2 = k; thumb = cand; break; }
+      }
+    }
+    if (!thumb && !thumbR2) { res.writeHead(404); return res.end('not found'); }
     if (thumbR2) {
       const got = await getStream(thumbR2);
       if (!got) { res.writeHead(404); return res.end('not found'); }
-      res.writeHead(200, {'Content-Type': 'image/png', 'Content-Length': got.size, 'Cache-Control': 'public, max-age=86400'});
+      const ct = /\.jpg$|\.jpeg$/i.test(thumbR2) ? 'image/jpeg' : 'image/png';
+      res.writeHead(200, {'Content-Type': ct, 'Content-Length': got.size, 'Cache-Control': 'public, max-age=86400'});
       return got.stream.pipe(res);
     }
     const file = path.join(STUDIO_DATA_DIR, 'studio', m[1], thumb);
@@ -641,9 +655,12 @@ const server = http.createServer(async (req, res) => {
     const item = listPortfolio().find((x) => x.projectId === m[1]);
     // 포트폴리오에 등록된 작업의 output만 서빙(목록에 없으면 비공개).
     if (!item || item.output !== path.basename(item.output)) { res.writeHead(404); return res.end('not found'); }
-    // 완성영상이 R2에 있으면 거기서 스트리밍(볼륨엔 없음).
-    const r2key = readProjectOutputR2(m[1]);
-    if (r2key) return streamR2Video(req, res, r2key);
+    // ★R2 키를 '결정적으로' 구한다: project.json에 기록된 키 우선, 없으면 포트폴리오 output 파일명으로 재구성.
+    //   R2 키는 항상 studio/{id}/{output}로 정해져 있으므로, project.json이 깨져도(쓰기 실패 등)
+    //   R2에 파일만 있으면 무조건 서빙된다 → '파일은 있는데 404' 재발을 구조적으로 차단(2026-10-09).
+    let r2key = readProjectOutputR2(m[1]);
+    if (!r2key && r2Enabled() && item.output) r2key = videoKey(m[1], item.output);
+    if (r2key && (await r2Head(r2key))) return streamR2Video(req, res, r2key);
     const file = path.join(STUDIO_DATA_DIR, 'studio', m[1], item.output);
     if (!fs.existsSync(file)) { res.writeHead(404); return res.end('not found'); }
     const size = fs.statSync(file).size;
