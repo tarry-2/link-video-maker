@@ -3,7 +3,7 @@
 // env(R2_ENDPOINT/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET)가 없으면 비활성 → 기존 로컬 방식 폴백.
 import fs from 'node:fs';
 import {Readable} from 'node:stream';
-import {S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand} from '@aws-sdk/client-s3';
+import {S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command} from '@aws-sdk/client-s3';
 import {getSignedUrl} from '@aws-sdk/s3-request-presigner';
 
 const {R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET} = process.env;
@@ -44,6 +44,19 @@ export async function presignGet(key: string, expiresIn = 3600): Promise<string 
 export async function deleteKey(key: string): Promise<void> {
   if (!enabled) return;
   try { await s3().send(new DeleteObjectCommand({Bucket: R2_BUCKET, Key: key})); } catch {}
+}
+
+// 접두사(prefix)로 R2 키 전체 목록 — 고아 파일(목록에 없는데 R2엔 있는 것) 청소용. 페이지네이션 자동.
+export async function listKeys(prefix = 'studio/'): Promise<{key: string; size: number}[]> {
+  if (!enabled) return [];
+  const out: {key: string; size: number}[] = [];
+  let token: string | undefined;
+  do {
+    const r: any = await s3().send(new ListObjectsV2Command({Bucket: R2_BUCKET, Prefix: prefix, ContinuationToken: token, MaxKeys: 1000}));
+    for (const o of (r.Contents || [])) if (o.Key) out.push({key: o.Key, size: o.Size || 0});
+    token = r.IsTruncated ? r.NextContinuationToken : undefined;
+  } while (token);
+  return out;
 }
 
 // R2에 객체 존재 여부 + 크기. 없으면 null.

@@ -23,7 +23,7 @@ import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
-import {getStream, presignGet, uploadFile, videoKey, r2Enabled} from './lib/storage';
+import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
 import {pngToJpeg} from './lib/img-util';
@@ -420,6 +420,43 @@ function runMaintenance(reason: string) {
   try { studio.cleanup({log: (s) => console.log('[유지보수:' + reason + '] ' + s)}); } catch {}
   const u = cleanOldUploads();
   if (u.removed) console.log(`[유지보수:${reason}] 버려진 업로드 ${u.removed}개 삭제`);
+}
+
+// 볼륨 사용량 + 큰 폴더 Top N (디스크 꽉참 진단용). 어느 폴더가 볼륨을 먹는지 한눈에.
+function diskReport(topN = 20): {volume: string; usedMB: number | null; dirs: {path: string; mb: number}[]} {
+  const out: {path: string; mb: number}[] = [];
+  const walk = (dir: string) => {
+    let total = 0;
+    try {
+      for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
+        const fp = path.join(dir, e.name);
+        if (e.isDirectory()) total += walk(fp);
+        else { try { total += fs.statSync(fp).size; } catch {} }
+      }
+    } catch {}
+    return total;
+  };
+  // studio/{id} 폴더별 크기 + hl-uploads + 기타 최상위
+  const roots = [path.join(STUDIO_DATA_DIR, 'studio'), HL_UPLOAD_DIR, STUDIO_DATA_DIR];
+  try {
+    const studioDir = path.join(STUDIO_DATA_DIR, 'studio');
+    if (fs.existsSync(studioDir)) {
+      for (const id of fs.readdirSync(studioDir)) {
+        const fp = path.join(studioDir, id);
+        try { if (fs.statSync(fp).isDirectory()) out.push({path: 'studio/' + id, mb: Math.round(walk(fp) / 1048576 * 10) / 10}); } catch {}
+      }
+    }
+    // 최상위 볼륨 파일/폴더(studio 제외)
+    for (const e of fs.readdirSync(STUDIO_DATA_DIR, {withFileTypes: true})) {
+      if (e.name === 'studio') continue;
+      const fp = path.join(STUDIO_DATA_DIR, e.name);
+      try { const sz = e.isDirectory() ? walk(fp) : fs.statSync(fp).size; out.push({path: e.name, mb: Math.round(sz / 1048576 * 10) / 10}); } catch {}
+    }
+  } catch {}
+  out.sort((a, b) => b.mb - a.mb);
+  let usedMB: number | null = null;
+  try { usedMB = Math.round(out.reduce((a, x) => a + x.mb, 0)); } catch {}
+  return {volume: STUDIO_DATA_DIR, usedMB, dirs: out.slice(0, topN)};
 }
 
 const server = http.createServer(async (req, res) => {
@@ -880,6 +917,17 @@ const server = http.createServer(async (req, res) => {
   if (p.startsWith('/api/portfolio/') && req.method === 'DELETE') {
     const id = p.slice('/api/portfolio/'.length);
     if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '잘못된 요청'});
+    // ★진짜로 삭제 — 목록만 지우면 R2 영상·썸네일·볼륨 폴더가 남아 '저장료·볼륨 꽉참'의 원인이 됐다(테리 지적).
+    //   ① project.json에서 R2 키를 읽어 ② R2 영상·썸네일 삭제 ③ 볼륨 작업폴더 통째 삭제 ④ 목록에서 제거.
+    try {
+      const pj = path.join(STUDIO_DATA_DIR, 'studio', id, 'project.json');
+      if (fs.existsSync(pj)) {
+        const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+        const keys = [proj.outputR2, proj.thumbR2, proj.sourceR2, proj.narrationR2, ...(Array.isArray(proj.imagesR2) ? proj.imagesR2 : [])].filter(Boolean);
+        for (const k of keys) { try { await deleteR2Key(k); } catch {} }
+      }
+      try { fs.rmSync(path.join(STUDIO_DATA_DIR, 'studio', id), {recursive: true, force: true}); } catch {}
+    } catch {}
     removePortfolio(id);
     return json(res, 200, {ok: true});
   }
@@ -1011,6 +1059,28 @@ const server = http.createServer(async (req, res) => {
       try { fs.rmSync(tmpDir, {recursive: true, force: true}); } catch {}
       return json(res, 200, {advice: null, error: (e?.message || '').slice(0, 80)});
     }
+  }
+  // ── 디스크 진단 — 볼륨에 뭐가 쌓였는지(어느 폴더가 큰지) 한눈에. 꽉참 원인 파악용. ──
+  if (p === '/api/disk' && req.method === 'GET') {
+    const force = u.searchParams.get('clean') === '1';
+    if (force) runMaintenance('수동');
+    return json(res, 200, diskReport(30));
+  }
+  // ── R2 고아 청소 — 지금까지 삭제해도 R2에 남은 영상들을 비운다(목록에 없는 projectId 전부 삭제). ──
+  //   ?dry=1이면 미리보기(삭제 안 함). 과거에 '목록만 삭제'돼 쌓인 저장료를 한 번에 회수.
+  if (p === '/api/r2-orphans' && req.method === 'GET') {
+    try {
+      const dry = u.searchParams.get('dry') === '1';
+      const live = new Set(listPortfolio().map((x) => x.projectId)); // 살아있는(보관할) 작업 id
+      const all = await listKeys('studio/');
+      // studio/{id}/... → id별로 그룹. live에 없으면 고아.
+      const byId: Record<string, {key: string; size: number}[]> = {};
+      for (const o of all) { const m = o.key.match(/^studio\/([0-9a-f-]{36})\//); if (m) (byId[m[1]] ||= []).push(o); }
+      const orphanIds = Object.keys(byId).filter((id) => !live.has(id));
+      let bytes = 0, deleted = 0;
+      for (const id of orphanIds) for (const o of byId[id]) { bytes += o.size; if (!dry) { await deleteR2Key(o.key); deleted++; } }
+      return json(res, 200, {dry, liveCount: live.size, orphanProjects: orphanIds.length, orphanFiles: orphanIds.reduce((a, id) => a + byId[id].length, 0), freedMB: Math.round(bytes / 1048576 * 10) / 10, deleted});
+    } catch (e: any) { return json(res, 500, {error: 'R2 청소 실패: ' + (e?.message || e)}); }
   }
   // ── 실시간 급상승 트렌드(지금 뜨는 주제) — Google Trends 공개 RSS. 조회수 '골든 윈도우'. ──
   if (p === '/api/trends' && req.method === 'GET') {
