@@ -145,7 +145,7 @@ export class Studio {
   list(): Project[] {
     return fs.readdirSync(this.root).filter(id => /^[0-9a-f-]{36}$/.test(id)).flatMap(id => {
       try { return [this.get(id)]; } catch { return []; }
-    }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    }).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
   }
   summary(p: Project) {
     return {id: p.id, title: p.title, status: p.status, phase: p.phase, updatedAt: p.updatedAt,

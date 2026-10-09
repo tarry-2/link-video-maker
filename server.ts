@@ -1131,10 +1131,12 @@ const server = http.createServer(async (req, res) => {
         // project.json 재생성 — scenes에 복원 설명을 넣어 업로드 메타 생성이 재료를 갖게 한다.
         const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
         try { fs.mkdirSync(dir, {recursive: true}); } catch {}
+        const nowIso = new Date().toISOString();
         const proj: any = {
           id, title, output: vid.name, outputR2: vid.key,
           thumb: thumb ? thumb.name : undefined, thumbR2: thumb ? thumb.key : undefined,
           scenes: desc ? [{narration: desc}] : [], sources: [], status: 'completed', orientation: 'portrait', recovered: true, kind,
+          createdAt: nowIso, updatedAt: nowIso,
         };
         try { fs.writeFileSync(path.join(dir, 'project.json'), JSON.stringify(proj)); } catch {}
         // 이미 목록에 있으면(재복구·쓰레기복구본) 먼저 치운 뒤 다시 등록(제목 갱신).
