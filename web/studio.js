@@ -405,6 +405,7 @@
       const p = await api('/api/studio', {mode, url:el('url').value.trim(), topic:el('topic-input') ? el('topic-input').value.trim() : '', images, keywords:el('keywords').value.trim(), facts:el('facts').value.trim(),
         duration:Number(el('duration').value), voice:el('voice').value, presetId:selectedPreset || '', quality:el('quality').value,
         imageStyle:el('image-style') ? el('image-style').value : 'real',
+        font:el('font') ? el('font').value : 'Black Han Sans',
         characterId:el('character-select') ? el('character-select').value : '',
         sceneCount:Number(el('scene-count')?.value) || 0,
         aiClips:Number(el('aiClips')?.value) || 0, autoShutdown:el('auto-shutdown') ? el('auto-shutdown').checked : true,

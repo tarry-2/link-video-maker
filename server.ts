@@ -36,6 +36,13 @@ try { const _ck = path.join(STUDIO_DATA_DIR, 'yt-cookies.txt'); if (!process.env
 const OUT_DIR = path.join(ROOT, 'out');
 const SAMPLE_DIR = path.join(ROOT, 'public', 'voice-samples');
 
+// 사용자가 고를 수 있는 제목 폰트(Scene.tsx TITLE_FONTS·web UI와 동일 목록). 외부 입력 검증용.
+const TITLE_FONTS = new Set([
+  'Black Han Sans', 'Jua', 'Do Hyeon', 'Gothic A1',
+  'Noto Sans KR', 'Noto Serif KR', 'Gowun Batang', 'Gaegu', 'Song Myung',
+]);
+const pickFont = (v: unknown): string | undefined => (typeof v === 'string' && TITLE_FONTS.has(v) ? v : undefined);
+
 // ── 로그인(비번) ──
 // ADMIN_PASSWORD 환경변수 있으면 로그인 필수, 없으면(로컬 개발) 로그인 생략.
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -532,7 +539,10 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'web', 'highlight.js'), 'application/javascript; charset=utf-8');
 
   // ── 정적 ──
-  if (p === '/' || p === '/index.html')
+  // 루트(/) = 마케팅 랜딩페이지. 앱(대시보드)은 /app 으로. "시작하기"가 /app 으로 보낸다.
+  if (p === '/' || p === '/landing' || p === '/landing.html')
+    return serveFile(res, path.join(ROOT, 'web', 'landing.html'), 'text/html; charset=utf-8');
+  if (p === '/app' || p === '/app.html' || p === '/index.html')
     return serveFile(res, path.join(ROOT, 'web', 'index.html'), 'text/html; charset=utf-8');
   // 서비스워커(PWA) — 항상 최신을 받도록 no-store(옛 SW 고착 방지).
   if (p === '/sw.js') {
@@ -565,6 +575,15 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'web', 'icon-512.png'), 'image/png');
   if (p === '/favicon.svg')
     return serveFile(res, path.join(ROOT, 'web', 'favicon.svg'), 'image/svg+xml; charset=utf-8');
+  // 폰트 파일(공개) — public/fonts/{file}. 랜딩·폰트 미리보기 @font-face용. 파일명만 허용(경로우회 방지).
+  if (p.startsWith('/fonts/')) {
+    const name = path.basename(p);
+    if (!/^[\w.-]+\.(ttf|otf|woff2?)$/.test(name)) { res.writeHead(404); return res.end('not found'); }
+    const ext = name.split('.').pop();
+    const ct = ext === 'otf' ? 'font/otf' : ext === 'woff' ? 'font/woff' : ext === 'woff2' ? 'font/woff2' : 'font/ttf';
+    return serveFile(res, path.join(ROOT, 'public', 'fonts', name), ct);
+  }
+
   // 디자인 템플릿 미리보기 이미지(공개) — web/tpl-preview/{id}.png. id는 알려진 템플릿만 허용(경로우회 방지).
   if (p.startsWith('/tpl-preview/')) {
     const m = p.match(/^\/tpl-preview\/([a-z]+)\.png$/);
@@ -713,7 +732,7 @@ const server = http.createServer(async (req, res) => {
     const err = u.searchParams.get('error') || '';
     const redirectUri = `${ytProto(req)}://${req.headers.host}/api/youtube/callback`;
     const done = (msg: string, ok: boolean) =>
-      res.end(`<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#231e18;color:#efe9e0;text-align:center;padding:60px"><h2>${ok ? '✅ 유튜브 연결 완료' : '❌ 연결 실패'}</h2><p>${msg}</p><p><a style="color:#4fe0d0" href="/">← 돌아가기</a> (이 창은 닫아도 됩니다)</p></body>`);
+      res.end(`<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#231e18;color:#efe9e0;text-align:center;padding:60px"><h2>${ok ? '✅ 유튜브 연결 완료' : '❌ 연결 실패'}</h2><p>${msg}</p><p><a style="color:#4fe0d0" href="/app">← 돌아가기</a> (이 창은 닫아도 됩니다)</p></body>`);
     res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
     if (err) return done('구글에서 취소됨: ' + err, false);
     if (!code) return done('인증 코드가 없습니다.', false);
@@ -1445,6 +1464,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           autoShutdown: b.autoShutdown !== false, // 기본 자동 종료(과금 방지)
           narration: b.narration !== false, // 나레이션 토글(기본 ON)
           bgm: b.bgm !== false,              // 배경음악 토글(기본 ON)
+          font: pickFont(b.font),            // 제목·후킹 폰트(화이트리스트 통과분만, 없으면 기본)
           log: (m) => jlog(job, m),
           isCancelled: () => !!job.cancelled, // ★중단 — 파이프라인이 단계마다 확인
         });
@@ -1518,6 +1538,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           duration: Number(b.duration) || 30,
           presetId: b.presetId || undefined,
           voice: b.voice || undefined,
+          font: pickFont(b.font), // 제목·후킹 폰트(화이트리스트 통과분만, 없으면 기본)
           log: (m) => jlog(job, m),
           isCancelled: () => !!job.cancelled, // ★중단 — 파이프라인이 단계마다 확인
         });

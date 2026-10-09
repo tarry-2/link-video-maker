@@ -59,6 +59,7 @@ export type PipelineOpts = {
   autoShutdown?: boolean; // 움직이는 영상 작업이 끝나면 RunPod 팟을 자동 종료(과금 중단). 기본 true.
   narration?: boolean; // 나레이션(AI 음성) 넣기. 기본 true. false면 음성·단어자막 없이 영상만.
   bgm?: boolean; // 배경음악 넣기. 기본 true. false면 음악 없음.
+  font?: string; // 제목·후킹 폰트(사용자 선택). 없으면 기본 Black Han Sans. Scene.tsx TITLE_FONTS와 동일 목록.
   transitionFrames?: number;
   log?: (m: string) => void;
   isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인해서 멈춘다(하이라이트와 동일).
@@ -200,6 +201,7 @@ export async function makeVideo(
       hookTop: s.hookTop,
       hookAccent: s.hookAccent,
       accentColor: s.accentColor || '#FFE24B',
+      font: opts.font, // 사용자가 고른 제목 폰트(없으면 Scene에서 기본값)
       words,
       durationInFrames,
       audioStartSec: startSec, // 통짜 오디오에서 이 장면 시작점

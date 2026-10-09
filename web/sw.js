@@ -14,7 +14,7 @@ self.addEventListener('fetch', (e) => {
   // API·영상·동적 라우트는 건드리지 않음(항상 네트워크).
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/portfolio')) return;
   // ★HTML/JS/CSS와 앱 페이지는 캐시 쓰지 않고 항상 네트워크에서 최신을 받는다(고착 방지).
-  const isAppCode = url.pathname === '/' || url.pathname === '/voices'
+  const isAppCode = ['/', '/app', '/landing', '/voices', '/highlight', '/monetize'].includes(url.pathname)
     || url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
   if (isAppCode) {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));

@@ -28,6 +28,13 @@ loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'),
 loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')});
 loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')});
 loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'});
+loadFont({family: 'Gaegu', url: staticFile('fonts/Gaegu-Bold.ttf'), weight: '700'});
+
+// 사용자가 고를 수 있는 제목 폰트 화이트리스트(위에서 loadFont로 다 등록됨). UI·server·여기 3곳 동일 유지.
+const TITLE_FONTS = new Set([
+  'Black Han Sans', 'Jua', 'Do Hyeon', 'Gothic A1',
+  'Noto Sans KR', 'Noto Serif KR', 'Gowun Batang', 'Gaegu', 'Song Myung',
+]);
 
 export const sceneSchema = z.object({
   image: z.string(),
@@ -41,6 +48,7 @@ export const sceneSchema = z.object({
   hookTop: z.string(),
   hookAccent: z.string(),
   accentColor: z.string(),
+  font: z.string().optional(), // 제목·후킹 폰트(사용자 선택). 없으면 기본 Black Han Sans.
   words: z.array(z.object({t: z.string(), s: z.number(), e: z.number()})),
   durationInFrames: z.number(),
   audioStartSec: z.number().optional(), // 통짜 오디오에서 이 장면 시작 시각(참고용)
@@ -68,12 +76,15 @@ export const Scene: React.FC<SceneData> = ({
   hookTop,
   hookAccent,
   accentColor,
+  font,
   words,
   punch,
   motion,
   comment,
 }) => {
   const frame = useCurrentFrame();
+  // 사용자가 고른 제목 폰트(화이트리스트 통과한 것만). 없거나 미등록이면 기본 Black Han Sans.
+  const titleFont = font && TITLE_FONTS.has(font) ? font : blackFont;
   const {fps, durationInFrames, width, height} = useVideoConfig();
   // ★세로(9:16)·가로(16:9) 레이아웃 분기. land=가로. 세로 값은 기존 그대로(무회귀), 가로만 튜닝 상수.
   const land = width > height;
@@ -293,7 +304,7 @@ export const Scene: React.FC<SceneData> = ({
       >
         <div
           style={{
-            fontFamily: blackFont,
+            fontFamily: titleFont + ', "Noto Color Emoji"',
             fontSize: L.fsHookTop,
             lineHeight: 1.12,
             color: '#fff',
@@ -307,7 +318,7 @@ export const Scene: React.FC<SceneData> = ({
         </div>
         <div
           style={{
-            fontFamily: blackFont,
+            fontFamily: titleFont + ', "Noto Color Emoji"',
             fontSize: L.fsHookAccent,
             lineHeight: 1.12,
             color: accentColor,

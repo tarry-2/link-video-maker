@@ -35,6 +35,7 @@ export type ManualOpts = {
   duration: number;
   presetId?: string;
   voice?: string;
+  font?: string; // 제목·후킹 폰트(사용자 선택). 없으면 기본 Black Han Sans.
   log?: (m: string) => void;
   isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인(영상·카드 파이프라인과 동일).
 };
@@ -211,6 +212,7 @@ export async function makeVideoManual(keys: PipelineKeys, opts: ManualOpts): Pro
       hookTop: s.hookTop,
       hookAccent: s.hookAccent,
       accentColor: s.accentColor || '#FFE24B',
+      font: opts.font, // 사용자가 고른 제목 폰트(없으면 Scene에서 기본값)
       words,
       durationInFrames,
       audioStartSec: startSec,

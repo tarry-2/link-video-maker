@@ -439,6 +439,7 @@ $('generate').onclick = async () => {
       autoShutdown: $('auto-shutdown') ? $('auto-shutdown').checked : true,
       narration: $('v-narration') ? $('v-narration').checked : true,
       bgm: $('v-bgm') ? $('v-bgm').checked : true,
+      font: $('font') ? $('font').value : 'Black Han Sans',
     };
   } else {
     if (!uploadedImages.length) { alert('이미지를 넣어주세요.'); return; }
@@ -450,6 +451,7 @@ $('generate').onclick = async () => {
       duration: Number($('duration').value),
       presetId: selectedPreset,
       voice: $('voice').value,
+      font: $('font') ? $('font').value : 'Black Han Sans',
     };
   }
   lastGen = {endpoint, body}; saveLastGen(); // ★같은 설정으로 다시/재시작용
@@ -916,6 +918,13 @@ function setSceneCount(n) {
 }
 document.querySelectorAll('.sc-n').forEach((b) => b.addEventListener('click', () => { setSceneCount(Number(b.dataset.n)); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); }));
 
+// 제목 폰트 선택 — 미리보기 칩. 고른 값은 hidden #font 에 저장되어 /api/generate 로 전달된다.
+function setFont(f) {
+  const hid = $('font'); if (hid) hid.value = f || 'Black Han Sans';
+  document.querySelectorAll('.font-chip').forEach((b) => b.classList.toggle('active', b.dataset.font === (f || 'Black Han Sans')));
+}
+document.querySelectorAll('.font-chip').forEach((b) => b.addEventListener('click', () => { setFont(b.dataset.font); saveFormState(); }));
+
 $('vtype-photo')?.addEventListener('click', () => { setAiClips(0); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); });
 $('vtype-motion')?.addEventListener('click', () => { setAiClips(lastMotionClips); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); });
 document.querySelectorAll('.vclip-n').forEach((b) => b.addEventListener('click', () => { setAiClips(Number(b.dataset.clips)); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); }));
@@ -1208,6 +1217,7 @@ function saveFormState() {
       imageStyle: $('image-style')?.value,
       characterId: $('character-select')?.value || '',
       quality: $('quality')?.value,
+      font: $('font')?.value || 'Black Han Sans',
       sceneCount: $('scene-count')?.value || '0',
       aiClips: $('aiClips')?.value || '0',
       keywords: $('keywords')?.value || '',
@@ -1243,6 +1253,7 @@ function restoreFormState() {
   syncCharacterRow();
   if (s.characterId != null && $('character-select')) { $('character-select').value = s.characterId; updateCharacterThumb(); }
   if (s.quality && $('quality')) $('quality').value = s.quality;
+  if (s.font != null) setFont(s.font);
   if (s.sceneCount != null) setSceneCount(Number(s.sceneCount));
   if (s.aiClips != null) setAiClips(Number(s.aiClips));
   if (s.keywords != null) $('keywords').value = s.keywords;

@@ -17,6 +17,7 @@ export const createSchema = z.object({
   voice: text(60).default(''), presetId: text(80).default(''),
   characterId: text(40).default(''), // 애니: 지정 캐릭터(비우면 랜덤 생성)
   quality: z.enum(['fast', 'high']).default('high'),
+  font: text(40).default('Black Han Sans'), // 제목·후킹 폰트(Scene.tsx TITLE_FONTS·web UI와 동일 목록). 미등록이면 렌더에서 기본값 폴백.
   imageStyle: z.enum(STYLE_IDS as [string, ...string[]]).default('real'),
   sceneCount: z.number().int().min(0).max(12).default(0), // 장면(이미지) 수 직접 지정(0=길이로 자동, 2~12)
   aiClips: z.number().int().min(0).max(3).default(0), // 움직이는 AI 영상(Wan) 클립 수(0=사진영상, 1~3=앞 N장면)

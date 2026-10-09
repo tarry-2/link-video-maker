@@ -2,7 +2,7 @@
   "name": "OnVideo — 링크 하나로 영상",
   "short_name": "OnVideo",
   "description": "링크를 넣으면 한국어 대본·나레이션·자막 MP4를 자동 생성합니다.",
-  "start_url": "/",
+  "start_url": "/app",
   "scope": "/",
   "display": "minimal-ui",
   "orientation": "any",

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OnVideo — 링크 하나로 쇼츠가 완성됩니다</title>
+<meta name="description" content="링크만 넣으면 AI가 대본·이미지·음성·자막·배경음악까지. 유튜브 하이라이트부터 카드뉴스까지 자동으로 만들고 SNS에 바로 올려드립니다." />
+<meta name="theme-color" content="#0b0a12" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<style>
+  /* 제품에서 실제로 쓰는 임팩트 한글 폰트 — 히어로 제목에 사용(일관성). /fonts/ 라우트에서 서빙 */
+  @font-face { font-family:'Black Han Sans'; src:url('/fonts/BlackHanSans.ttf') format('truetype'); font-display:swap; }
+  @font-face { font-family:'Jua'; src:url('/fonts/Jua.ttf') format('truetype'); font-display:swap; }
+
+  :root{
+    --bg:#0b0a12; --bg2:#0e0d18; --panel:#15131f; --panel2:#1c1930;
+    --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+    --text:#f4f2fb; --muted:#a79fc4; --muted2:#746c92;
+    --teal:#42e3cf; --purple:#9b84ff; --pink:#ff6ba9; --gold:#ffd24b;
+    --grad:linear-gradient(110deg,#42e3cf 0%,#9b84ff 48%,#ff6ba9 100%);
+    --grad-soft:linear-gradient(135deg,rgba(66,227,207,.18),rgba(155,132,255,.14) 50%,rgba(255,107,169,.16));
+    --radius:22px;
+    --maxw:1180px;
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  body{
+    font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    background:var(--bg); color:var(--text);
+    line-height:1.55; letter-spacing:-.01em; overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%;display:block}
+  ::selection{background:rgba(155,132,255,.35)}
+
+  /* ── 배경: 오로라 그라데이션 메쉬 + 그레인 ── */
+  .aurora{position:fixed;inset:0;z-index:-2;overflow:hidden;pointer-events:none}
+  .aurora span{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5;animation:drift 22s var(--ease) infinite alternate}
+  .aurora .a1{width:620px;height:620px;background:#2c9b8f;top:-220px;left:-140px}
+  .aurora .a2{width:560px;height:560px;background:#6b4cf0;top:-120px;right:-160px;animation-delay:-6s}
+  .aurora .a3{width:520px;height:520px;background:#c23c7a;top:720px;left:38%;animation-delay:-12s}
+  @keyframes drift{to{transform:translate3d(60px,70px,0) scale(1.15)}}
+  .grain{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.045;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
+
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+
+  /* ── 네비게이션 ── */
+  header.nav{position:sticky;top:0;z-index:60;backdrop-filter:blur(14px);
+    background:rgba(11,10,18,.6);border-bottom:1px solid transparent;transition:border-color .3s,background .3s}
+  header.nav.scrolled{border-bottom-color:var(--line);background:rgba(11,10,18,.82)}
+  .nav-inner{max-width:var(--maxw);margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:20px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:21px;letter-spacing:-.03em}
+  .brand .mark{width:30px;height:30px;border-radius:9px;background:var(--grad);display:grid;place-items:center;
+    box-shadow:0 6px 18px rgba(155,132,255,.4);font-size:16px}
+  .brand b{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .nav-links{display:flex;gap:26px;margin-left:14px;font-size:14.5px;color:var(--muted);font-weight:600}
+  .nav-links a{transition:color .2s}
+  .nav-links a:hover{color:var(--text)}
+  .nav-cta{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-weight:700;font-size:14.5px;border-radius:999px;
+    padding:11px 20px;cursor:pointer;border:1px solid transparent;transition:transform .15s var(--ease),box-shadow .25s,background .2s;white-space:nowrap}
+  .btn:active{transform:scale(.96)}
+  .btn-ghost{color:var(--text);border-color:var(--line2);background:rgba(255,255,255,.03)}
+  .btn-ghost:hover{background:rgba(255,255,255,.07)}
+  .btn-grad{background:var(--grad);color:#0b0a12;box-shadow:0 8px 24px rgba(155,132,255,.35)}
+  .btn-grad:hover{box-shadow:0 12px 34px rgba(155,132,255,.5);transform:translateY(-1px)}
+  .btn-lg{padding:16px 30px;font-size:16px}
+
+  /* ── 공통 애니메이션: 스크롤 등장 ── */
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .8s var(--ease),transform .8s var(--ease)}
+  .reveal.in{opacity:1;transform:none}
+
+  /* ── HERO ── */
+  .hero{position:relative;padding:72px 0 40px}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;letter-spacing:.02em;
+    color:var(--teal);background:rgba(66,227,207,.08);border:1px solid rgba(66,227,207,.22);
+    padding:7px 14px;border-radius:999px;margin-bottom:22px}
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 rgba(66,227,207,.6);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(66,227,207,.5)}70%{box-shadow:0 0 0 9px rgba(66,227,207,0)}100%{box-shadow:0 0 0 0 rgba(66,227,207,0)}}
+  h1.hero-title{font-family:'Black Han Sans',sans-serif;font-weight:400;font-size:clamp(40px,6.4vw,78px);
+    line-height:1.04;letter-spacing:-.02em;margin-bottom:22px}
+  h1.hero-title .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+    background-size:200% auto;animation:shine 6s linear infinite}
+  @keyframes shine{to{background-position:200% center}}
+  .hero-sub{font-size:clamp(16px,1.9vw,19px);color:var(--muted);max-width:30em;margin-bottom:30px;font-weight:500}
+  .hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:26px}
+  .hero-trust{display:flex;gap:20px;flex-wrap:wrap;color:var(--muted2);font-size:13.5px;font-weight:600}
+  .hero-trust span{display:inline-flex;align-items:center;gap:7px}
+  .hero-trust .ck{color:var(--teal);font-weight:800}
+
+  /* ── 히어로 모션그래픽(소개): 링크 → 쇼츠 → SNS ── */
+  .stage{position:relative;height:540px;display:grid;place-items:center}
+  .stage::before{content:'';position:absolute;width:360px;height:360px;border-radius:50%;
+    background:var(--grad-soft);filter:blur(40px);opacity:.9}
+  /* 뒤에 깔리는 미니 쇼츠 카드 2장(팬 아웃) */
+  .mini{position:absolute;width:150px;height:266px;border-radius:20px;border:1px solid var(--line2);
+    background:linear-gradient(160deg,#241f38,#15131f);box-shadow:0 30px 60px rgba(0,0,0,.5);overflow:hidden}
+  .mini.l{transform:rotate(-11deg) translate(-128px,24px);animation:floaty 7s var(--ease) infinite}
+  .mini.r{transform:rotate(11deg) translate(128px,10px);animation:floaty 7s var(--ease) infinite .9s}
+  .mini i{position:absolute;inset:0;background:
+    radial-gradient(120% 60% at 50% 0%,rgba(66,227,207,.22),transparent 60%),
+    linear-gradient(200deg,rgba(255,107,169,.14),transparent 50%)}
+  .mini b{position:absolute;left:12px;right:12px;top:16px;height:9px;border-radius:4px;background:rgba(255,255,255,.22)}
+  .mini b+b{top:32px;width:62%;background:rgba(255,255,255,.14)}
+  .mini u{position:absolute;left:12px;right:12px;bottom:18px;height:7px;border-radius:4px;background:var(--grad)}
+  @keyframes floaty{50%{transform:var(--t,rotate(-11deg) translate(-128px,24px)) translateY(-12px)}}
+  .mini.l{--t:rotate(-11deg) translate(-128px,24px)}
+  .mini.r{--t:rotate(11deg) translate(128px,10px)}
+
+  /* URL 입력 칩 + 빔 */
+  .url-chip{position:absolute;top:8px;z-index:4;display:flex;align-items:center;gap:9px;
+    background:rgba(20,18,30,.9);border:1px solid var(--line2);border-radius:999px;padding:9px 16px 9px 13px;
+    font-size:12.5px;color:var(--muted);box-shadow:0 10px 30px rgba(0,0,0,.4);backdrop-filter:blur(6px)}
+  .url-chip .lk{width:18px;height:18px;border-radius:6px;background:var(--grad);display:grid;place-items:center;font-size:10px;color:#0b0a12}
+  .url-chip .cursor{width:2px;height:14px;background:var(--teal);animation:blink 1s step-end infinite}
+  @keyframes blink{50%{opacity:0}}
+  .beam{position:absolute;top:52px;width:3px;height:70px;z-index:3;border-radius:3px;
+    background:linear-gradient(to bottom,var(--teal),transparent);overflow:hidden}
+  .beam::after{content:'';position:absolute;left:-1px;width:5px;height:24px;border-radius:5px;
+    background:var(--teal);box-shadow:0 0 14px 3px var(--teal);animation:flow 1.8s linear infinite}
+  @keyframes flow{from{top:-24px}to{top:72px}}
+
+  /* 메인 폰(9:16) */
+  .phone{position:relative;z-index:5;width:256px;height:454px;border-radius:34px;padding:9px;
+    background:linear-gradient(160deg,#2a2540,#120f1e);
+    box-shadow:0 40px 90px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08),inset 0 0 0 1px rgba(255,255,255,.04);
+    animation:floaty2 7s var(--ease) infinite}
+  @keyframes floaty2{50%{transform:translateY(-14px)}}
+  .screen{position:relative;width:100%;height:100%;border-radius:26px;overflow:hidden;background:#07060c}
+  .screen .bgimg{position:absolute;inset:0;
+    background:
+      radial-gradient(90% 70% at 30% 20%,rgba(255,210,75,.5),transparent 55%),
+      radial-gradient(90% 90% at 80% 90%,rgba(255,107,169,.45),transparent 55%),
+      linear-gradient(160deg,#3a2e5e,#1a2742 60%,#0e1a2e);
+    animation:kb 7s var(--ease) infinite}
+  @keyframes kb{0%{transform:scale(1.05)}50%{transform:scale(1.18) translate(-2%,1%)}100%{transform:scale(1.05)}}
+  .screen .scan{position:absolute;left:0;right:0;height:120px;z-index:2;
+    background:linear-gradient(to bottom,transparent,rgba(66,227,207,.22),transparent);
+    animation:scan 7s var(--ease) infinite}
+  @keyframes scan{0%,100%{top:-120px;opacity:0}20%{opacity:1}45%{top:100%;opacity:1}46%{opacity:0}}
+  .screen .hook{position:absolute;top:26px;left:16px;right:16px;z-index:3;text-align:center;
+    font-family:'Black Han Sans',sans-serif;line-height:1.14;
+    opacity:0;transform:translateY(10px) scale(.9);animation:hookin 7s var(--ease) infinite}
+  .screen .hook .l1{font-size:19px;color:#fff;text-shadow:2px 2px 0 #000,-1px 1px 0 #000}
+  .screen .hook .l2{font-size:23px;color:var(--gold);text-shadow:2px 2px 0 #000,-1px 1px 0 #000}
+  @keyframes hookin{0%,8%{opacity:0;transform:translateY(10px) scale(.9)}16%,88%{opacity:1;transform:none}96%,100%{opacity:0;transform:translateY(-6px) scale(.96)}}
+  .screen .subs{position:absolute;bottom:64px;left:12px;right:12px;z-index:3;text-align:center;
+    display:flex;flex-wrap:wrap;gap:4px 7px;justify-content:center}
+  .screen .subs span{font-weight:800;font-size:15px;color:#fff;text-shadow:1.5px 1.5px 0 #000,-1px 1px 0 #000;opacity:.82}
+  .screen .subs span.on{color:var(--gold);transform:scale(1.12);opacity:1}
+  .w1{animation:won 7s steps(1) infinite}.w2{animation:won 7s steps(1) infinite .3s}
+  .w3{animation:won 7s steps(1) infinite .6s}.w4{animation:won 7s steps(1) infinite .9s}
+  @keyframes won{0%,40%,55%,100%{color:#fff;transform:scale(1);opacity:.82}42%,53%{color:var(--gold);transform:scale(1.14);opacity:1}}
+  .screen .caption-badge{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);z-index:3;
+    font-size:10px;font-weight:700;color:var(--teal);background:rgba(7,6,12,.7);border:1px solid rgba(66,227,207,.3);
+    padding:4px 10px;border-radius:999px;display:flex;align-items:center;gap:5px}
+  .screen .caption-badge b{width:5px;height:5px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px var(--teal)}
+
+  /* SNS 팬아웃 */
+  .fanout{position:absolute;bottom:-6px;z-index:6;display:flex;gap:14px}
+  .fanout .p{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:21px;
+    background:rgba(20,18,30,.92);border:1px solid var(--line2);box-shadow:0 14px 30px rgba(0,0,0,.5);
+    opacity:.4;transform:translateY(6px);transition:.3s}
+  .fanout .p.yt{animation:popp 7s var(--ease) infinite}
+  .fanout .p.ig{animation:popp 7s var(--ease) infinite .25s}
+  .fanout .p.tt{animation:popp 7s var(--ease) infinite .5s}
+  @keyframes popp{0%,60%{opacity:.4;transform:translateY(6px)}68%,92%{opacity:1;transform:translateY(0);border-color:var(--teal);box-shadow:0 14px 34px rgba(66,227,207,.35)}100%{opacity:.4;transform:translateY(6px)}}
+
+  /* ── 섹션 공통 ── */
+  section{position:relative;padding:86px 0}
+  .sec-head{text-align:center;max-width:640px;margin:0 auto 56px}
+  .sec-tag{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:14px}
+  .sec-title{font-size:clamp(28px,4.2vw,44px);font-weight:800;letter-spacing:-.03em;line-height:1.14}
+  .sec-desc{color:var(--muted);font-size:17px;margin-top:16px;font-weight:500}
+
+  /* 지표 스트립 */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:8px}
+  .stat{background:linear-gradient(160deg,var(--panel),rgba(21,19,31,.4));border:1px solid var(--line);
+    border-radius:var(--radius);padding:26px 22px;text-align:center}
+  .stat .n{font-family:'Black Han Sans',sans-serif;font-size:38px;line-height:1;
+    background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat .l{color:var(--muted);font-size:13.5px;margin-top:10px;font-weight:600}
+
+  /* 기능 그리드 */
+  .features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .feat{position:relative;background:linear-gradient(165deg,var(--panel),rgba(16,13,24,.6));
+    border:1px solid var(--line);border-radius:var(--radius);padding:30px 26px;overflow:hidden;
+    transition:transform .35s var(--ease),border-color .35s,box-shadow .35s}
+  .feat::before{content:'';position:absolute;inset:0;background:var(--grad-soft);opacity:0;transition:opacity .35s}
+  .feat:hover{transform:translateY(-6px);border-color:var(--line2);box-shadow:0 30px 60px rgba(0,0,0,.4)}
+  .feat:hover::before{opacity:1}
+  .feat>*{position:relative;z-index:1}
+  .feat .ic{width:52px;height:52px;border-radius:15px;display:grid;place-items:center;font-size:25px;margin-bottom:18px;
+    background:rgba(255,255,255,.05);border:1px solid var(--line2)}
+  .feat h3{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .feat p{color:var(--muted);font-size:14.5px;font-weight:500}
+  .feat .new{font-size:11px;font-weight:800;color:#0b0a12;background:var(--grad);padding:3px 9px;border-radius:999px;letter-spacing:.02em}
+  .feat.wide{grid-column:span 2}
+
+  /* 폰트 칩 데모(기능카드 내부) */
+  .fontdemo{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px}
+  .fontdemo b{font-weight:400;font-size:17px;padding:7px 13px;border-radius:10px;border:1px solid var(--line2);
+    background:rgba(255,255,255,.04);color:var(--text)}
+  .fd-black{font-family:'Black Han Sans'}.fd-jua{font-family:'Jua'}
+
+  /* 3스텝 */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;counter-reset:s}
+  .step{position:relative;background:linear-gradient(160deg,var(--panel),rgba(16,13,24,.5));
+    border:1px solid var(--line);border-radius:var(--radius);padding:34px 28px}
+  .step::before{counter-increment:s;content:"0" counter(s);font-family:'Black Han Sans',sans-serif;font-size:46px;
+    background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;opacity:.9;display:block;margin-bottom:14px}
+  .step h4{font-size:19px;font-weight:800;margin-bottom:9px}
+  .step p{color:var(--muted);font-size:14.5px;font-weight:500}
+  .step .arrow{position:absolute;right:-28px;top:50%;transform:translateY(-50%);color:var(--muted2);font-size:22px;z-index:2}
+
+  /* 활용 사례 */
+  .cases{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .case{background:linear-gradient(165deg,var(--panel2),rgba(16,13,24,.5));border:1px solid var(--line);
+    border-radius:var(--radius);padding:30px 26px}
+  .case .who{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .case .who .av{width:46px;height:46px;border-radius:13px;background:var(--grad-soft);border:1px solid var(--line2);
+    display:grid;place-items:center;font-size:22px}
+  .case .who b{font-size:16.5px;font-weight:800}
+  .case .who span{display:block;font-size:12.5px;color:var(--muted2);font-weight:600}
+  .case q{display:block;color:var(--muted);font-size:14.5px;line-height:1.6;font-style:normal;font-weight:500}
+  .case .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .case .tags i{font-style:normal;font-size:12.5px;font-weight:700;color:var(--teal);
+    background:rgba(66,227,207,.08);border:1px solid rgba(66,227,207,.2);padding:5px 11px;border-radius:999px}
+
+  /* 최종 CTA */
+  .cta-band{position:relative;overflow:hidden;border-radius:30px;padding:70px 40px;text-align:center;
+    background:linear-gradient(135deg,rgba(66,227,207,.14),rgba(155,132,255,.12) 50%,rgba(255,107,169,.14));
+    border:1px solid var(--line2)}
+  .cta-band::before{content:'';position:absolute;inset:0;z-index:-1;background:
+    radial-gradient(60% 120% at 50% 0%,rgba(155,132,255,.25),transparent 70%)}
+  .cta-band h2{font-family:'Black Han Sans',sans-serif;font-weight:400;font-size:clamp(30px,5vw,54px);line-height:1.1;margin-bottom:18px}
+  .cta-band h2 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cta-band p{color:var(--muted);font-size:17px;margin-bottom:30px;font-weight:500}
+  .cta-note{margin-top:18px;color:var(--muted2);font-size:13px;font-weight:600}
+
+  /* 푸터 */
+  footer{border-top:1px solid var(--line);padding:50px 0 60px;margin-top:40px}
+  .foot{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap}
+  .foot .brand{margin-bottom:14px}
+  .foot p{color:var(--muted2);font-size:13.5px;max-width:28em}
+  .foot-links{display:flex;gap:46px;flex-wrap:wrap}
+  .foot-links div b{display:block;font-size:13px;color:var(--muted);margin-bottom:12px;font-weight:700}
+  .foot-links div a{display:block;color:var(--muted2);font-size:14px;margin-bottom:9px;transition:color .2s;font-weight:500}
+  .foot-links div a:hover{color:var(--text)}
+  .copy{margin-top:40px;padding-top:24px;border-top:1px solid var(--line);color:var(--muted2);font-size:12.5px}
+
+  /* 반응형 */
+  @media(max-width:920px){
+    .hero-grid{grid-template-columns:1fr;gap:10px}
+    .stage{height:480px;margin-top:10px}
+    .features,.steps,.cases,.stats{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .feat.wide{grid-column:auto}
+    .step .arrow{display:none}
+    .nav-links{display:none}
+  }
+  @media(max-width:480px){
+    .hero{padding:48px 0 20px}
+    section{padding:62px 0}
+    .stats{grid-template-columns:1fr}
+    .nav-cta .btn-ghost{display:none}
+  }
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="aurora"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div>
+<div class="grain"></div>
+
+<!-- 네비 -->
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <a href="/" class="brand"><span class="mark">▶</span>On<b>Video</b></a>
+    <nav class="nav-links">
+      <a href="#features">기능</a>
+      <a href="#how">만드는 법</a>
+      <a href="#cases">활용</a>
+      <a href="/monetize">수익화 가이드</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="/app" class="btn btn-ghost">로그인</a>
+      <a href="/app" class="btn btn-grad">무료로 시작 →</a>
+    </div>
+  </div>
+</header>
+
+<!-- 히어로 -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <span class="eyebrow reveal"><span class="dot"></span>AI 숏폼 자동 제작 스튜디오</span>
+      <h1 class="hero-title reveal">링크 하나로,<br><span class="g">쇼츠가 완성</span>됩니다</h1>
+      <p class="hero-sub reveal">링크나 주제만 넣으면 AI가 대본·이미지·AI 음성·단어별 자막·배경음악까지 자동으로.
+        유튜브 하이라이트부터 카드뉴스까지 만들고, SNS에 바로 올려드려요.</p>
+      <div class="hero-actions reveal">
+        <a href="/app" class="btn btn-grad btn-lg">무료로 시작하기 →</a>
+        <a href="#how" class="btn btn-ghost btn-lg">▷ 어떻게 되나요?</a>
+      </div>
+      <div class="hero-trust reveal">
+        <span><i class="ck">✓</i> 30초면 한 편 자동 제작</span>
+        <span><i class="ck">✓</i> 자막·후킹 자동</span>
+        <span><i class="ck">✓</i> SNS 자동 업로드</span>
+      </div>
+    </div>
+
+    <!-- 소개 모션그래픽: 링크 → AI 편집 → 쇼츠 → SNS -->
+    <div class="stage reveal" aria-hidden="true">
+      <div class="mini l"><i></i><b></b><b></b><u></u></div>
+      <div class="mini r"><i></i><b></b><b></b><u></u></div>
+
+      <div class="url-chip"><span class="lk">🔗</span>youtube.com/watch?v=<span class="cursor"></span></div>
+      <div class="beam"></div>
+
+      <div class="phone">
+        <div class="screen">
+          <div class="bgimg"></div>
+          <div class="scan"></div>
+          <div class="hook"><div class="l1">조회수 터지는</div><div class="l2">숏폼의 비밀</div></div>
+          <div class="subs">
+            <span class="w1">링크만</span><span class="w2">넣으면</span><span class="w3">자막까지</span><span class="w4">완성</span>
+          </div>
+          <div class="caption-badge"><b></b>AI 자동 편집 중</div>
+        </div>
+      </div>
+
+      <div class="fanout">
+        <div class="p yt">▶️</div><div class="p ig">📷</div><div class="p tt">🎵</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 지표 -->
+<section style="padding-top:20px">
+  <div class="wrap">
+    <div class="stats">
+      <div class="stat reveal"><div class="n">30초</div><div class="l">링크 → 영상 한 편</div></div>
+      <div class="stat reveal"><div class="n">9종</div><div class="l">고를 수 있는 제목 폰트</div></div>
+      <div class="stat reveal"><div class="n">15종</div><div class="l">한국어 AI 목소리</div></div>
+      <div class="stat reveal"><div class="n">3곳</div><div class="l">유튜브·인스타 자동 업로드</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 기능 -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-tag">Features</div>
+      <h2 class="sec-title">영상 한 편에 필요한 모든 것,<br>클릭 한 번으로</h2>
+      <p class="sec-desc">편집 프로그램도, 외주 비용도 필요 없어요. 만들고 싶은 방식만 고르세요.</p>
+    </div>
+    <div class="features">
+      <div class="feat reveal">
+        <div class="ic">🔗</div>
+        <h3>링크·주제 → 영상</h3>
+        <p>기사·블로그·레시피 링크나 주제만 넣으면 대본·이미지·AI 음성·단어별 자막·배경음악까지 자동으로 완성돼요.</p>
+      </div>
+      <div class="feat reveal">
+        <div class="ic">🎬</div>
+        <h3>유튜브 하이라이트</h3>
+        <p>긴 영상의 링크만 붙이면 AI가 터질 구간을 찾아 세로 쇼츠로 잘라주고 후킹·자막까지 얹어드려요.</p>
+      </div>
+      <div class="feat reveal">
+        <div class="ic">🎴</div>
+        <h3>카드뉴스</h3>
+        <p>표지·숫자·리스트·비교 등 다양한 카드로 구성되는 정보형 콘텐츠. 영상 릴스와 캐러셀 이미지 둘 다 만들어요.</p>
+      </div>
+      <div class="feat wide reveal">
+        <div class="ic">🔤</div>
+        <h3>제목 폰트 선택 <span class="new">NEW</span></h3>
+        <p>영상 위 큰 제목·후킹 글씨체를 취향대로. 임팩트부터 손글씨·명조까지, 미리보기 그대로 영상에 적용됩니다.</p>
+        <div class="fontdemo">
+          <b class="fd-black">임팩트</b><b class="fd-jua">주아</b><b style="font-family:'Pretendard';font-weight:800">고딕</b><b class="fd-black" style="color:var(--gold)">후킹</b>
+        </div>
+      </div>
+      <div class="feat reveal">
+        <div class="ic">🎙</div>
+        <h3>목소리 15종 + 자막</h3>
+        <p>앵커·선생님·동화 등 한국어 AI 목소리 15종. 말하는 단어가 노랗게 강조되는 카라오케 자막이 자동으로.</p>
+      </div>
+      <div class="feat reveal">
+        <div class="ic">🔥</div>
+        <h3>실시간 트렌드 주제</h3>
+        <p>지금 검색이 폭발하는 급상승 키워드를 바로 보여줘요. 조회수 골든 윈도우를 놓치지 않게.</p>
+      </div>
+      <div class="feat wide reveal">
+        <div class="ic">📤</div>
+        <h3>SNS 자동 업로드</h3>
+        <p>완성한 영상을 유튜브·인스타그램에 제목·설명·해시태그까지 맞춰 바로 올려요. 예약 업로드도 지원합니다.</p>
+      </div>
+      <div class="feat reveal">
+        <div class="ic">🎞</div>
+        <h3>전문가급 퀄리티</h3>
+        <p>줌 펀치·켄번스 움직임·효과음·배경음악 더킹까지. AI 티 안 나는 완성형 편집을 자동으로.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 만드는 법 -->
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-tag">How it works</div>
+      <h2 class="sec-title">이렇게 완성돼요</h2>
+      <p class="sec-desc">딱 세 단계. 나머지는 전부 AI가 알아서.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><h4>링크·주제 입력</h4><p>영상으로 만들 링크를 붙여넣거나, 주제 한 줄만 적으세요. 실시간 트렌드에서 골라도 돼요.<span class="arrow">→</span></p></div>
+      <div class="step reveal"><h4>AI 자동 편집</h4><p>대본·이미지·AI 음성·자막·배경음악·후킹·제목 폰트까지 한 번에. 필요하면 대본만 다듬어도 돼요.<span class="arrow">→</span></p></div>
+      <div class="step reveal"><h4>저장 또는 업로드</h4><p>완성본을 바로 내려받거나, 유튜브·인스타에 자동으로 올려요. 작업물은 포트폴리오에 쌓입니다.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 활용 -->
+<section id="cases">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="sec-tag">Use cases</div>
+      <h2 class="sec-title">이런 분들이 쓰고 있어요</h2>
+    </div>
+    <div class="cases">
+      <div class="case reveal">
+        <div class="who"><span class="av">🎥</span><div><b>1인 크리에이터</b><span>유튜브·릴스·틱톡</span></div></div>
+        <q>“긴 영상을 쇼츠로 재생산해야 하는 건 아는데, 편집할 시간이 없었어요. 이제 링크만 넣으면 끝이라 꾸준히 올립니다.”</q>
+        <div class="tags"><i>롱폼 1편 → 쇼츠 여러 편</i><i>편집 시간 ↓</i></div>
+      </div>
+      <div class="case reveal">
+        <div class="who"><span class="av">🏪</span><div><b>자영업자·강사</b><span>마케팅 숏폼</span></div></div>
+        <q>“강의·상담 영상은 쌓이는데 편집할 여유가 없었죠. 본업 영상이 마케팅 숏폼으로 자동 생성되니 너무 편해요.”</q>
+        <div class="tags"><i>본업 영상 → 숏폼</i><i>자막 자동</i></div>
+      </div>
+      <div class="case reveal">
+        <div class="who"><span class="av">🏢</span><div><b>마케팅팀·소상공인</b><span>콘텐츠 운영</span></div></div>
+        <q>“매번 새로 만들던 SNS 숏폼을 주제만 넣으면 뽑아줘요. 트렌드 주제 추천까지 있어서 기획 부담이 줄었습니다.”</q>
+        <div class="tags"><i>대량 자동 제작</i><i>트렌드 추천</i></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 최종 CTA -->
+<section>
+  <div class="wrap">
+    <div class="cta-band reveal">
+      <h2>다음 쇼츠, <span class="g">직접 만들지 마세요</span></h2>
+      <p>링크 하나만 넣으면 됩니다. 지금 바로 첫 영상을 받아보세요.</p>
+      <a href="/app" class="btn btn-grad btn-lg">무료로 시작하기 →</a>
+      <div class="cta-note">링크만 넣으면 자동 제작 · SNS 업로드 자동화 · 제목 폰트 선택</div>
+    </div>
+  </div>
+</section>
+
+<!-- 푸터 -->
+<footer>
+  <div class="wrap foot">
+    <div style="max-width:320px">
+      <a href="/" class="brand"><span class="mark">▶</span>On<b>Video</b></a>
+      <p>링크 하나로 한국어 대본·나레이션·자막 영상을 자동 생성하는 AI 숏폼 스튜디오. 온종일 패밀리 서비스.</p>
+    </div>
+    <div class="foot-links">
+      <div>
+        <b>서비스</b>
+        <a href="/app">영상 만들기</a>
+        <a href="/app">유튜브 하이라이트</a>
+        <a href="/voices?tab=voice">목소리 듣기</a>
+        <a href="/voices?tab=pf">포트폴리오</a>
+      </div>
+      <div>
+        <b>자료</b>
+        <a href="/monetize">수익화 가이드</a>
+        <a href="#features">기능 소개</a>
+        <a href="#how">만드는 법</a>
+      </div>
+      <div>
+        <b>시작하기</b>
+        <a href="/app">로그인 / 대시보드</a>
+        <a href="/app">무료로 시작</a>
+      </div>
+    </div>
+  </div>
+  <div class="wrap copy">© 2026 OnVideo · 온종일. All rights reserved.</div>
+</footer>
+
+<script>
+  // 네비 스크롤 효과
+  const nav = document.getElementById('nav');
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 10);
+  onScroll(); addEventListener('scroll', onScroll, {passive:true});
+
+  // 스크롤 등장(IntersectionObserver) + 히어로는 로드 시 스태거로 즉시
+  const io = new IntersectionObserver((es) => {
+    es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, {threshold:.12, rootMargin:'0px 0px -8% 0px'});
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+  // 히어로 카피 스태거(바로 보이게)
+  document.querySelectorAll('.hero-copy .reveal, .stage.reveal').forEach((el, i) => {
+    el.style.transitionDelay = (i * 90) + 'ms';
+    requestAnimationFrame(() => el.classList.add('in'));
+  });
+</script>
+</body>
+</html>

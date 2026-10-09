@@ -129,6 +129,7 @@ export const studioProviders: StudioDependencies = {
         video: s.video ? `${prefix}/${s.video.file}` : undefined, // 움직이는 영상 클립(있으면 Scene.tsx가 이미지 대신 렌더)
         hookTop: resolveProduct(s.hookTop, p.input.product), hookAccent: resolveProduct(s.hookAccent, p.input.product),
         accentColor: s.accentColor, words: s.voice!.words || [], durationInFrames: s.voice!.frames!,
+        font: p.input.font, // 사용자가 고른 제목 폰트(없으면 Scene에서 기본 Black Han Sans)
         motion: i, punch: i === 0, product: p.input.product || undefined,
       }));
       // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16 (자동·수동 모드와 동일 기준).
