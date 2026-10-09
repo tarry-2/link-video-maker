@@ -1072,21 +1072,34 @@ const server = http.createServer(async (req, res) => {
     if (force) runMaintenance('수동');
     return json(res, 200, diskReport(30));
   }
-  // ── R2 고아 청소 — 지금까지 삭제해도 R2에 남은 영상들을 비운다(목록에 없는 projectId 전부 삭제). ──
-  //   ?dry=1이면 미리보기(삭제 안 함). 과거에 '목록만 삭제'돼 쌓인 저장료를 한 번에 회수.
-  if (p === '/api/r2-orphans' && req.method === 'GET') {
+  // ── 죽은(재생 불가) 영상 정리 — R2에서 파일이 사라진 포트폴리오 항목을 '목록에서만' 제거한다. ──
+  //   ★R2는 절대 건드리지 않는다(이미 없는 파일이므로). ?dry=1이면 몇 개인지 미리보기만.
+  if (p === '/api/portfolio-prune-dead' && req.method === 'GET') {
     try {
       const dry = u.searchParams.get('dry') === '1';
-      const live = new Set(listPortfolio().map((x) => x.projectId)); // 살아있는(보관할) 작업 id
-      const all = await listKeys('studio/');
-      // studio/{id}/... → id별로 그룹. live에 없으면 고아.
-      const byId: Record<string, {key: string; size: number}[]> = {};
-      for (const o of all) { const m = o.key.match(/^studio\/([0-9a-f-]{36})\//); if (m) (byId[m[1]] ||= []).push(o); }
-      const orphanIds = Object.keys(byId).filter((id) => !live.has(id));
-      let bytes = 0, deleted = 0;
-      for (const id of orphanIds) for (const o of byId[id]) { bytes += o.size; if (!dry) { await deleteR2Key(o.key); deleted++; } }
-      return json(res, 200, {dry, liveCount: live.size, orphanProjects: orphanIds.length, orphanFiles: orphanIds.reduce((a, id) => a + byId[id].length, 0), freedMB: Math.round(bytes / 1048576 * 10) / 10, deleted});
-    } catch (e: any) { return json(res, 500, {error: 'R2 청소 실패: ' + (e?.message || e)}); }
+      const items = listPortfolio();
+      const dead: string[] = [];
+      const {head} = await import('./lib/storage');
+      for (const it of items) {
+        if (it.kind === 'card-post') continue; // 캐러셀은 영상 아님 — 건너뜀
+        // project.json에서 R2 키를 읽어 R2 head로 생존 확인. 없으면 로컬 파일로.
+        let alive = false;
+        try {
+          const r2key = readProjectOutputR2(it.projectId); // project.json의 outputR2
+          if (r2key) { alive = !!(await head(r2key)); }
+          else { alive = fs.existsSync(path.join(STUDIO_DATA_DIR, 'studio', it.projectId, it.output || '')); }
+        } catch { alive = false; }
+        if (!alive) dead.push(it.projectId);
+      }
+      if (!dry) for (const id of dead) removePortfolio(id); // 목록에서만 제거(R2 미접촉)
+      return json(res, 200, {dry, total: items.length, dead: dead.length, removed: dry ? 0 : dead.length});
+    } catch (e: any) { return json(res, 500, {error: '정리 실패: ' + (e?.message || e)}); }
+  }
+  // ── R2 고아 청소 기능은 영구 제거됨(2026-10-09). ──
+  //   ★이 기능이 '목록에 없는 R2 파일을 자동 삭제'하다 살아있는 사용자 영상까지 지운 사고가 있었다.
+  //   R2 영상은 '온비디오에서 사용자가 직접 삭제 버튼을 누른 것'만 지운다. 자동 대량삭제는 다시 만들지 않는다.
+  if (p === '/api/r2-orphans') {
+    return json(res, 410, {error: '안전을 위해 비활성화된 기능입니다. R2 영상은 온비디오에서 직접 삭제한 것만 지워집니다.'});
   }
   // ── 실시간 급상승 트렌드(지금 뜨는 주제) — Google Trends 공개 RSS. 조회수 '골든 윈도우'. ──
   if (p === '/api/trends' && req.method === 'GET') {

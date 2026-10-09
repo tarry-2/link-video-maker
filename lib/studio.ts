@@ -102,8 +102,9 @@ export class Studio {
         prunedFiles += r.removed; freed += r.bytes;
       } else {
         try {
-          if (p.outputR2) deleteKey(p.outputR2); // 폴더와 함께 R2 영상도 제거(고아 방지). 포트폴리오는 protected라 여기 안 옴.
-          if (p.thumbR2) deleteKey(p.thumbR2); // R2 썸네일도 함께 제거.
+          // ★R2 영상은 '자동으로 절대 삭제하지 않는다'(2026-10-09 사고: 목록 판단 오류로 살아있는 영상까지 날림).
+          //   볼륨 작업폴더(중간재료)만 정리하고, R2의 완성영상·썸네일은 그대로 둔다. R2 삭제는 사용자가
+          //   온비디오에서 '삭제' 버튼을 누를 때만(포트폴리오 DELETE 라우트).
           const d = this.directory(p.id); freed += dirSize(d); fs.rmSync(d, {recursive: true, force: true}); delJobs++;
         } catch {}
       }
