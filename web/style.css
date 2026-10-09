@@ -524,6 +524,16 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 /* 세로변환 ✨추천 뱃지(버튼 안, 영상 분석 결과) */
 .rf-badge { font-size: 11px; font-weight: 800; color: #e2543d; }
 .seg-btn.active .rf-badge { color: #fff; }
+/* 그라데이션 배경 active 버튼 안의 보조설명(.hint)이 흐린 색이라 안 보이던 문제 — 전부 흰색으로 */
+.seg-btn.active .hint,
+.chip.active .hint,
+.font-chip.active .hint,
+.hl-cat.active .hint,
+.arc-pg.active .hint,
+.topic-item.active .hint,
+.trend-item.active .hint,
+.tab.active .hint,
+.navtab.active .hint { color: rgba(255, 255, 255, 0.9); }
 /* 디자인 템플릿 미리보기 그리드 — 샘플 썸네일(9:16) + 이름, 선택 강조, 🔍 크게보기 */
 .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-top: 8px; }
 .tpl-card { position: relative; border: 2px solid var(--line); background: var(--card2); border-radius: 12px; padding: 8px 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; transition: border-color .15s, transform .1s, box-shadow .15s; }

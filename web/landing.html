@@ -167,6 +167,16 @@
   .slide{position:relative;flex:0 0 100%;width:100%;height:100%;overflow:hidden}
   .slide img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;animation:kb 8s var(--ease) infinite alternate}
   @keyframes kb{from{transform:scale(1.04)}to{transform:scale(1.16) translate(-1.5%,1%)}}
+  /* 실제 포트폴리오 영상 재생 슬라이드 */
+  .slide video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+  /* 영상 종류 칩(제목 대신 — 깔끔·안전). 영상엔 이미 자막·후킹이 들어있음 */
+  .vlabel{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:4;white-space:nowrap;
+    font-size:11.5px;font-weight:700;color:#fff;background:rgba(7,6,12,.6);border:1px solid var(--line2);
+    padding:6px 14px;border-radius:999px;backdrop-filter:blur(4px);display:flex;align-items:center;gap:6px}
+  .vlabel b{width:5px;height:5px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px var(--teal)}
+  /* 영상 모드에선 가운데 '편집 중' 뱃지 숨김(영상이 이미 완성본이라) */
+  .screen.has-video .caption-badge{display:none}
+  .screen.has-video .dots{bottom:46px}
   .slide .ov{position:absolute;inset:0;z-index:1;
     background:linear-gradient(to bottom,rgba(0,0,0,.42) 0%,rgba(0,0,0,.08) 34%,rgba(0,0,0,.2) 62%,rgba(0,0,0,.62) 100%)}
   .slide .hook{position:absolute;top:26px;left:14px;right:14px;z-index:3;text-align:center;
@@ -603,28 +613,59 @@
 
   // ── 폰 안 쇼츠 캐러셀 (좌우 버튼 + 점 탭, 자동 전환) ──
   const track = document.getElementById('shorts-track');
-  if (track) {
+  const screen = track?.closest('.screen');
+  const dotsWrap = document.getElementById('shorts-dots');
+  let carTimer, hasVideo = false;
+  function setupCarousel(){
     const slides = [...track.children];
-    const dotsWrap = document.getElementById('shorts-dots');
-    let idx = 0, timer;
-    slides.forEach((_, i) => {
-      const d = document.createElement('b');
-      d.addEventListener('click', () => go(i, true));
-      dotsWrap.appendChild(d);
-    });
+    const n = slides.length;
+    dotsWrap.innerHTML = '';
+    slides.forEach((_, i) => { const d = document.createElement('b'); d.addEventListener('click', () => go(i, true)); dotsWrap.appendChild(d); });
     const dots = [...dotsWrap.children];
+    let idx = 0;
     function go(i, user){
-      idx = (i + slides.length) % slides.length;
+      idx = (i + n) % n;
       track.style.transform = 'translateX(-' + (idx * 100) + '%)';
-      slides.forEach((s, k) => s.classList.toggle('active', k === idx));
+      slides.forEach((s, k) => {
+        s.classList.toggle('active', k === idx);
+        const v = s.querySelector('video');
+        if (v){ if (k === idx){ v.play().catch(()=>{}); } else { v.pause(); } }
+      });
       dots.forEach((d, k) => d.classList.toggle('on', k === idx));
       if (user) restart();
     }
-    function restart(){ clearInterval(timer); timer = setInterval(() => go(idx + 1), 3800); }
-    document.getElementById('ph-prev').addEventListener('click', () => go(idx - 1, true));
-    document.getElementById('ph-next').addEventListener('click', () => go(idx + 1, true));
+    function restart(){ clearInterval(carTimer); carTimer = setInterval(() => go(idx + 1), hasVideo ? 5200 : 3800); }
+    document.getElementById('ph-prev').onclick = () => go(idx - 1, true);
+    document.getElementById('ph-next').onclick = () => go(idx + 1, true);
     go(0); restart();
   }
+  // 실제 포트폴리오(완성작 영상 + 방송 하이라이트)를 폰 안에서 재생. 실패하면 샘플 사진 폴백 유지.
+  async function loadPortfolioShorts(){
+    try {
+      const d = await fetch('/api/portfolio').then(r => r.ok ? r.json() : null);
+      const all = (d?.items || []).filter(x => x.video && x.orientation !== 'landscape');
+      const samples = all.filter(x => x.kind === 'sample');            // 깔끔한 이미지 영상(검증)
+      const imgvids = all.filter(x => x.kind === 'mine' && x.media === 'video'); // 내 이미지 영상
+      const bcast  = all.filter(x => x.media === 'highlight');          // 방송 하이라이트
+      // 이미지영상(샘플 먼저) + 방송을 번갈아 섞어 다양하게, 최대 8개
+      const pool = [...samples, ...imgvids];
+      const picked = [];
+      for (let i = 0; picked.length < 8 && (i < pool.length || i < bcast.length); i++){
+        if (i < pool.length) picked.push(pool[i]);
+        if (picked.length < 8 && i < bcast.length) picked.push(bcast[i]);
+      }
+      if (picked.length < 3) return; // 너무 적으면 사진 폴백 유지
+      track.innerHTML = picked.map(p => {
+        const label = p.media === 'highlight' ? '🎬 방송 하이라이트' : '🎞 AI 이미지 영상';
+        const poster = p.thumb ? ` poster="${p.thumb}"` : '';
+        return `<div class="slide"><video src="${p.video}"${poster} muted loop playsinline preload="metadata"></video><div class="ov"></div><div class="vlabel"><b></b>${label}</div></div>`;
+      }).join('');
+      hasVideo = true;
+      screen?.classList.add('has-video');
+      setupCarousel();
+    } catch {/* 사진 폴백 유지 */}
+  }
+  if (track){ setupCarousel(); loadPortfolioShorts(); }
 </script>
 </body>
 </html>
