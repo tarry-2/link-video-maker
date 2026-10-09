@@ -56,19 +56,31 @@ export function cleanTmpRemotion(maxAgeMs = 60 * 60 * 1000): {removed: number; b
 //   서버 재시작·크래시·중단으로 finally가 안 타면 남는다(테리 실측 182MB). 진행 중 작업을 건드리지
 //   않게 mtime 오래된 것(기본 1시간↑)만 삭제한다.
 export function cleanPublicJobs(maxAgeMs = 60 * 60 * 1000): {removed: number; bytes: number} {
-  const jobsDir = path.join(process.cwd(), 'public', 'jobs');
+  // jobs 폴더는 환경에 따라 process.cwd()/public/jobs 또는 볼륨(STUDIO_DATA_DIR)/jobs에 떨어진다 → 둘 다 청소.
+  const dataDir = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data');
+  const candidates = [
+    path.join(process.cwd(), 'public', 'jobs'),
+    path.join(dataDir, 'jobs'),
+    path.join(dataDir, 'public', 'jobs'),
+  ];
   let removed = 0, bytes = 0;
-  let entries: fs.Dirent[];
-  try { entries = fs.readdirSync(jobsDir, {withFileTypes: true}); } catch { return {removed, bytes}; }
   const now = Date.now();
-  for (const e of entries) {
-    const f = path.join(jobsDir, e.name);
-    try {
-      if (now - fs.statSync(f).mtimeMs < maxAgeMs) continue; // 최근(진행 중일 수 있음) 건 보존
-      bytes += e.isDirectory() ? dirSize(f) : fs.statSync(f).size;
-      fs.rmSync(f, {recursive: true, force: true});
-      removed++;
-    } catch {}
+  const seen = new Set<string>();
+  for (const jobsDir of candidates) {
+    let real: string;
+    try { real = fs.realpathSync(jobsDir); } catch { real = jobsDir; }
+    if (seen.has(real)) continue; seen.add(real); // 심볼릭 링크로 같은 폴더면 한 번만
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(jobsDir, {withFileTypes: true}); } catch { continue; }
+    for (const e of entries) {
+      const f = path.join(jobsDir, e.name);
+      try {
+        if (now - fs.statSync(f).mtimeMs < maxAgeMs) continue; // 최근(진행 중일 수 있음) 건 보존
+        bytes += e.isDirectory() ? dirSize(f) : fs.statSync(f).size;
+        fs.rmSync(f, {recursive: true, force: true});
+        removed++;
+      } catch {}
+    }
   }
   return {removed, bytes};
 }
