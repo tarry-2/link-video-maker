@@ -22,7 +22,7 @@ import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
-import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
+import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getChannelVideos, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys, head as r2Head} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
@@ -791,9 +791,17 @@ const server = http.createServer(async (req, res) => {
       ...SAMPLES.map((s) => ({id: 'sample:' + s.file, title: s.title, voice: s.voice, category: s.category, goal: s.goal, url: sampleYt[s.file] || ''})),
     ];
     const withId = all.map((x) => ({...x, videoId: extractVideoId(x.url)})).filter((x) => x.videoId);
-    if (!withId.length) return json(res, 200, {connected: true, items: [], summary: null});
     const debug = u.searchParams.get('debug');
     const diag: string[] | undefined = debug ? [] : undefined;
+    // ★채널에 실제로 올라간 모든 영상을 합집합으로 추가(포트폴리오에 URL이 안 저장됐거나 앱 밖에서 올린 것도
+    //   포함 → "67 vs 70" 개수·합계 불일치 해소). 채널 조회 실패해도 기존 포트폴리오 기준으로는 동작(무회귀).
+    try {
+      const have = new Set(withId.map((x) => x.videoId));
+      const chan = await getChannelVideos();
+      for (const v of chan) if (!have.has(v.id)) { withId.push({id: 'yt:' + v.id, title: v.title, voice: undefined, category: undefined, goal: undefined, url: 'https://youtu.be/' + v.id, videoId: v.id} as any); have.add(v.id); }
+      diag?.push(`채널 업로드 ${chan.length}개 병합 → 추적 ${withId.length}개`);
+    } catch (e: any) { diag?.push('⚠️ 채널 목록 병합 실패(포트폴리오 기준 유지): ' + (e?.message || e)); }
+    if (!withId.length) return json(res, 200, {connected: true, items: [], summary: null});
     let stats: Record<string, {views: number; likes: number; comments: number; shares: number}> = {};
     try { stats = await getVideoStats(withId.map((x) => x.videoId), diag); }
     catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message, ...(diag ? {debug: [...diag, '예외:' + e.message]} : {})}); }
@@ -802,7 +810,8 @@ const server = http.createServer(async (req, res) => {
       .sort((a, b) => b.views - a.views);
     const avgBy = (key: 'voice' | 'category') => {
       const m: Record<string, number[]> = {};
-      for (const it of items) (m[(it as any)[key]] = m[(it as any)[key]] || []).push(it.views);
+      // 채널에서만 병합된 영상(앱 밖 업로드 등)은 voice·category가 없으니 목소리/카테고리 통계에서 제외('undefined' 버킷 방지).
+      for (const it of items) { const k = (it as any)[key]; if (!k) continue; (m[k] = m[k] || []).push(it.views); }
       return Object.entries(m)
         .map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length}))
         .sort((a, b) => b.avg - a.avg);

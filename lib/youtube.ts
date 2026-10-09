@@ -276,6 +276,39 @@ export async function getVideoStats(ids: string[], diag?: string[]): Promise<Rec
 
 // 업로드 현황: 주어진 영상 id들의 실제 게시 시각(snippet.publishedAt) 기준으로
 // "오늘(한국시간) 몇 개 · 마지막 게시 시각 · 총 개수" 반환. 업로드 페이스 모니터용.
+// 채널에 '실제로 올라가 있는' 모든 영상(업로드 재생목록). 성과 개수·합계를 실제 채널과 맞추기 위함
+//   — 포트폴리오에 URL이 안 저장됐거나 앱 밖에서 올린 영상도 포함돼 "67 vs 70" 불일치를 없앤다.
+export async function getChannelVideos(max = 400): Promise<{id: string; title: string; publishedAt: string}[]> {
+  const token = await accessToken();
+  // 1) 내 채널의 '업로드' 재생목록 ID
+  const cr = await fetch('https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true', {
+    headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
+  });
+  const cd: any = await cr.json();
+  if (!cr.ok) throw new Error('채널 조회 실패: ' + (cd?.error?.message || cr.status));
+  const uploads = cd.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploads) return [];
+  // 2) 업로드 재생목록 페이지네이션(50개씩, 최대 max개)
+  const out: {id: string; title: string; publishedAt: string}[] = [];
+  let pageToken = '';
+  for (let p = 0; p < 12 && out.length < max; p++) {
+    const sp = new URLSearchParams({part: 'snippet,contentDetails', playlistId: uploads, maxResults: '50'});
+    if (pageToken) sp.set('pageToken', pageToken);
+    const r = await fetch('https://www.googleapis.com/youtube/v3/playlistItems?' + sp.toString(), {
+      headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
+    });
+    const d: any = await r.json();
+    if (!r.ok) throw new Error('업로드 목록 실패: ' + (d?.error?.message || r.status));
+    for (const it of (d.items || [])) {
+      const vid = it.contentDetails?.videoId;
+      if (vid) out.push({id: vid, title: it.snippet?.title || '', publishedAt: it.contentDetails?.videoPublishedAt || it.snippet?.publishedAt || ''});
+    }
+    pageToken = d.nextPageToken || '';
+    if (!pageToken) break;
+  }
+  return out;
+}
+
 export async function getUploadActivity(ids: string[]): Promise<{today: number; lastAt: string | null; total: number; error?: string}> {
   if (!youtubeStatus().connected) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
   const uniq = [...new Set(ids.filter(Boolean))];
