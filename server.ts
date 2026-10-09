@@ -1048,8 +1048,8 @@ const server = http.createServer(async (req, res) => {
     const batch = 60; // 한 번에 60개(flat 긁기는 빨라서 체감 즉시)
     const srcInfo = ARCHIVE_CHANNELS[src];
     if (!srcInfo) return json(res, 400, {error: '알 수 없는 아카이브 소스입니다.'});
-    // 검색 지원 소스는 주제 필요, 미지원(전체목록) 소스는 빈 쿼리 허용.
-    if (srcInfo.search && !q) return json(res, 400, {error: '주제를 입력하세요.'});
+    // ★빈 쿼리도 허용 — searchArchiveChannel이 /videos(채널 최신 전체목록)로 폴백한다.
+    //   단일 장르 채널(뉴스·드라마·다큐·예능)은 탭만 눌러도 바로 영상이 뜨게 한다(테리 지시).
     try {
       const videos = await searchArchiveChannel(srcInfo.channel, q, batch, () => {}, offset);
       // 받은 개수가 요청(batch)만큼이면 더 있을 가능성 → hasMore + nextOffset.

@@ -836,9 +836,8 @@
     const st = $('hl-search-state');
     if (arcLoading) return;
     const q = (forcedQuery != null ? forcedQuery : ($('hl-arc-query')?.value || '')).trim();
-    // 검색 미지원 소스(M코리아 등)는 빈 쿼리로 전체목록을 받는다. 검색 지원 소스만 주제를 요구.
-    const canSearch = document.querySelector('.hl-arc-src.active')?.dataset.search !== '0';
-    if (!q && canSearch) { alert('장르·주제를 고르거나 검색어를 입력하세요.'); return; }
+    // ★빈 쿼리면 그 채널의 최신 전체목록(/videos)을 받는다 — 단일 장르 채널(뉴스·드라마 등)은 탭만 눌러도
+    //   바로 보이게(alert 제거). 옛날티비는 장르칩이 쿼리를 넣고, 직접검색도 됨.
     arcQuery = q; arcAll = []; arcServerOffset = 0; arcServerMore = false; arcPage = 0;
     picked = null; $('hl-picked').textContent = ''; $('hl-results').innerHTML = ''; renderCountSeg();
     $('hl-sort-row')?.classList.add('hidden'); $('hl-arc-pager')?.classList.add('hidden');
