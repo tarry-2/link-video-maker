@@ -21,7 +21,7 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
-import {listPortfolio, removePortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
+import {listPortfolio, removePortfolio, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
@@ -1071,6 +1071,38 @@ const server = http.createServer(async (req, res) => {
     const force = u.searchParams.get('clean') === '1';
     if (force) runMaintenance('수동');
     return json(res, 200, diskReport(30));
+  }
+  // ── 🛟 R2 복구 — R2에 영상 파일은 살아있는데 포트폴리오·project.json이 끊긴 것을 되살린다. ──
+  //   (삭제 오판·연결끊김으로 목록에서 사라진 영상을 R2 실제 파일로 복원. ?dry=1 미리보기.)
+  if (p === '/api/portfolio-recover' && req.method === 'GET') {
+    try {
+      const dry = u.searchParams.get('dry') === '1';
+      const all = await listKeys('studio/'); // R2 전체 키 + 크기
+      // id별 파일 모으기
+      const byId: Record<string, {key: string; size: number; name: string}[]> = {};
+      for (const o of all) { const m = o.key.match(/^studio\/([0-9a-f-]{36})\/(.+)$/); if (m) (byId[m[1]] ||= []).push({key: o.key, size: o.size, name: m[2]}); }
+      const liveIds = new Set(listPortfolio().map((x) => x.projectId));
+      let recovered = 0; const details: string[] = [];
+      for (const [id, files] of Object.entries(byId)) {
+        if (liveIds.has(id)) continue; // 이미 목록에 있으면 스킵
+        // 완성 영상 파일 찾기(highlight-*.mp4 or video*.mp4). 없으면 복구 불가(소재만 남음).
+        const vid = files.find((f) => /\.mp4$/.test(f.name) && !/source/.test(f.name));
+        if (!vid) continue;
+        const thumb = files.find((f) => /thumb.*\.png$/.test(f.name) || /cover\.jpg$/.test(f.name));
+        if (dry) { recovered++; details.push(id.slice(0, 8) + ' ← ' + vid.name); continue; }
+        // project.json 재생성(서빙·업로드가 읽는 최소 필드) + 포트폴리오 등록.
+        const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
+        try { fs.mkdirSync(dir, {recursive: true}); } catch {}
+        const proj: any = {
+          id, title: '(복구된 영상) ' + id.slice(0, 8), output: vid.name, outputR2: vid.key,
+          thumb: thumb ? thumb.name : undefined, thumbR2: thumb ? thumb.key : undefined,
+          scenes: [], sources: [], status: 'completed', orientation: 'portrait', recovered: true,
+        };
+        try { fs.writeFileSync(path.join(dir, 'project.json'), JSON.stringify(proj)); } catch {}
+        try { addPortfolio({projectId: id, title: proj.title, output: vid.name, voice: '복구됨', category: '🛟 복구된 영상', goal: 'info', createdAt: new Date().toISOString(), orientation: 'portrait', kind: 'highlight'}); recovered++; } catch {}
+      }
+      return json(res, 200, {dry, foldersInR2: Object.keys(byId).length, recoverable: dry ? recovered : undefined, recovered: dry ? 0 : recovered, sample: details.slice(0, 15)});
+    } catch (e: any) { return json(res, 500, {error: '복구 실패: ' + (e?.message || e)}); }
   }
   // ── 죽은(재생 불가) 영상 정리 — R2에서 파일이 사라진 포트폴리오 항목을 '목록에서만' 제거한다. ──
   //   ★R2는 절대 건드리지 않는다(이미 없는 파일이므로). ?dry=1이면 몇 개인지 미리보기만.
