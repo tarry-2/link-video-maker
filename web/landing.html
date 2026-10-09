@@ -428,30 +428,48 @@
     .bchip svg{width:24px;height:24px}
   }
 
-  /* ── 임팩트 밴드: 실제 쇼츠가 가로로 흐르는 마퀴 ── */
-  .marquee-band{padding:70px 0 80px;overflow:hidden}
-  .marquee-band .sec-head{margin-bottom:38px}
+  /* ── 임팩트 밴드: OnVideo 쇼츠 템플릿 카드가 가로로 흐르는 마퀴 ── */
+  .marquee-band{position:relative;padding:72px 0 84px;overflow:hidden;
+    background:radial-gradient(120% 100% at 50% 0%,rgba(155,132,255,.1),transparent 60%),
+      linear-gradient(180deg,rgba(66,227,207,.04),transparent)}
+  [data-theme="light"] .marquee-band{background:radial-gradient(120% 100% at 50% 0%,rgba(155,132,255,.14),transparent 60%)}
+  .marquee-band .sec-head{margin-bottom:40px}
   .mq-grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
   .mq-row{position:relative;width:100%;
-    -webkit-mask:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);
-    mask:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent)}
-  .mq-track{display:flex;gap:18px;width:max-content;animation:marq 34s linear infinite}
+    -webkit-mask:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
+    mask:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+  /* gap 대신 카드 margin-right로 균일 간격 → translateX -50% 루프가 정확히 맞아 끊김 없음 */
+  .mq-track{display:flex;width:max-content;animation:marq 40s linear infinite}
   .mq-track:hover{animation-play-state:paused}
   @keyframes marq{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-  .mq-card{position:relative;flex:0 0 auto;width:148px;height:263px;border-radius:18px;overflow:hidden;
-    border:1px solid var(--line2);box-shadow:0 18px 40px rgba(0,0,0,.28);background:#0a0912;
-    transition:transform .3s var(--ease)}
-  .mq-card:hover{transform:translateY(-6px) scale(1.03)}
-  .mq-card img{width:100%;height:100%;object-fit:cover}
-  .mq-card .mq-ov{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.62),transparent 55%)}
-  .mq-card .mq-hook{position:absolute;left:12px;right:12px;bottom:12px;z-index:2;color:#fff;
-    font-family:'Black Han Sans',sans-serif;font-size:16px;line-height:1.16;text-shadow:1.5px 1.5px 0 #000,-1px 1px 0 #000;word-break:keep-all}
+  .mq-card{position:relative;flex:0 0 auto;width:156px;height:277px;margin-right:18px;border-radius:20px;overflow:hidden;
+    background:linear-gradient(158deg,var(--c1),var(--c2));
+    box-shadow:0 20px 44px rgba(0,0,0,.3),inset 0 0 0 1px rgba(255,255,255,.12);
+    transition:transform .3s var(--ease),box-shadow .3s}
+  .mq-card::before{content:'';position:absolute;inset:0;
+    background:radial-gradient(90% 55% at 50% 12%,rgba(255,255,255,.25),transparent 60%),
+      radial-gradient(80% 50% at 80% 100%,rgba(0,0,0,.3),transparent 60%)}
+  .mq-card:hover{transform:translateY(-8px) scale(1.04);box-shadow:0 30px 60px rgba(0,0,0,.42),inset 0 0 0 1px rgba(255,255,255,.2)}
+  .mq-card>*{position:relative;z-index:1}
+  .mq-top{position:absolute;top:18px;left:14px;right:14px;display:flex;flex-direction:column;gap:2px;
+    font-family:'Black Han Sans',sans-serif;line-height:1.14;text-align:center}
+  .mq-top b{font-size:18px;color:#fff;text-shadow:1.5px 1.5px 0 rgba(0,0,0,.35)}
+  .mq-top i{font-size:21px;font-style:normal;color:#ffe24b;text-shadow:1.5px 1.5px 0 rgba(0,0,0,.35)}
+  .mq-play{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;opacity:.92;
+    filter:drop-shadow(0 4px 12px rgba(0,0,0,.35))}
+  .mq-play svg{width:48px;height:48px}
+  .mq-sub{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);white-space:nowrap;
+    font-size:11.5px;font-weight:800;color:#fff;background:rgba(0,0,0,.42);padding:5px 11px;border-radius:7px}
+  .mq-wm{position:absolute;bottom:13px;left:50%;transform:translateX(-50%);white-space:nowrap;
+    font-size:10.5px;font-weight:800;color:rgba(255,255,255,.92);letter-spacing:.02em}
   @media(max-width:620px){
-    .marquee-band{padding:50px 0 56px}
-    .marquee-band .sec-head{margin-bottom:26px}
-    .mq-card{width:118px;height:210px;border-radius:15px}
-    .mq-card .mq-hook{font-size:13.5px}
-    .mq-track{gap:13px;animation-duration:26s}
+    .marquee-band{padding:52px 0 58px}
+    .marquee-band .sec-head{margin-bottom:28px}
+    .mq-card{width:124px;height:220px;margin-right:13px;border-radius:17px}
+    .mq-top b{font-size:15px}.mq-top i{font-size:17px}
+    .mq-play,.mq-play svg{width:40px;height:40px}
+    .mq-sub{font-size:10.5px;bottom:34px}
+    .mq-track{animation-duration:30s}
   }
   @media(prefers-reduced-motion:reduce){.mq-track{animation:none}}
 
@@ -694,25 +712,31 @@
       <p class="sec-desc">링크 하나로 만들어진 쇼츠들이 매일 유튜브·인스타로 올라가고 있어요.</p>
     </div>
   </div>
-  <!-- 가로 무한 흐름(두 줄, 반대 방향) -->
+  <!-- 가로 무한 흐름 — 실제 OnVideo 쇼츠 템플릿처럼 디자인된 카드 -->
   <div class="mq-row">
-    <div class="mq-track mq-left">
-      <div class="mq-card"><img src="/landing-img/news1.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">퇴근길 감성</span></div>
-      <div class="mq-card"><img src="/landing-img/news3.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">가을 여행지</span></div>
-      <div class="mq-card"><img src="/landing-img/bg1.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">조회수 터지는 법</span></div>
-      <div class="mq-card"><img src="/landing-img/news2.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">3초 후킹</span></div>
-      <div class="mq-card"><img src="/landing-img/news4.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">하이라이트 컷</span></div>
-      <div class="mq-card"><img src="/landing-img/bg2.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">SNS 자동 업로드</span></div>
-      <!-- 복제(끊김 없는 루프) -->
-      <div class="mq-card" aria-hidden="true"><img src="/landing-img/news1.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">퇴근길 감성</span></div>
-      <div class="mq-card" aria-hidden="true"><img src="/landing-img/news3.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">가을 여행지</span></div>
-      <div class="mq-card" aria-hidden="true"><img src="/landing-img/bg1.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">조회수 터지는 법</span></div>
-      <div class="mq-card" aria-hidden="true"><img src="/landing-img/news2.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">3초 후킹</span></div>
-      <div class="mq-card" aria-hidden="true"><img src="/landing-img/news4.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">하이라이트 컷</span></div>
-      <div class="mq-card" aria-hidden="true"><img src="/landing-img/bg2.jpg" alt="" loading="lazy" /><span class="mq-ov"></span><span class="mq-hook">SNS 자동 업로드</span></div>
-    </div>
+    <div class="mq-track" id="mq-track"></div>
   </div>
 </section>
+<script>
+  // 쇼츠 템플릿 카드(그라데이션 + 후킹 + 자막 + 재생 + 로고)를 생성해 끊김 없이 2세트 채운다.
+  (function(){
+    const SHORTS = [
+      {c1:'#1aa391', c2:'#0e2f52', h1:'퇴근길에 보면', h2:'하루가 리셋', sub:'링크만 넣으면 완성'},
+      {c1:'#7c4dff', c2:'#c2399a', h1:'요즘 뜨는', h2:'여행지 TOP5', sub:'주제만 적으면 자동'},
+      {c1:'#e24b8c', c2:'#e8822f', h1:'이것만 알면', h2:'조회수 터짐', sub:'후킹·자막 자동'},
+      {c1:'#2563eb', c2:'#22c7d6', h1:'첫 3초에', h2:'시선 고정', sub:'AI 목소리 15종'},
+      {c1:'#15a34a', c2:'#0d8a7e', h1:'긴 영상도', h2:'쇼츠 여러 편', sub:'하이라이트 자동'},
+      {c1:'#e0932a', c2:'#d8362f', h1:'클릭 한 번', h2:'SNS 자동', sub:'유튜브·인스타'},
+    ];
+    const card = (s) => `<div class="mq-card" style="--c1:${s.c1};--c2:${s.c2}">`
+      + `<span class="mq-top"><b>${s.h1}</b><i>${s.h2}</i></span>`
+      + `<span class="mq-play"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="rgba(255,255,255,.22)"/><path d="M9.5 7.5v9l7-4.5z" fill="#fff"/></svg></span>`
+      + `<span class="mq-sub">${s.sub}</span>`
+      + `<span class="mq-wm">▶ OnVideo</span></div>`;
+    const track = document.getElementById('mq-track');
+    if (track) track.innerHTML = (SHORTS.map(card).join('')) + (SHORTS.map(card).join('')); // 2세트(루프용)
+  })();
+</script>
 
 <!-- 활용 -->
 <section id="cases">
