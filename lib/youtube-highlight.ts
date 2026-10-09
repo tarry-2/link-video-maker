@@ -37,6 +37,22 @@ export function stripUnrenderable(s: string): string {
 
 // 제목을 '단어/구분자 경계'에서 깔끔하게 자른다(글자 수로 뚝 자르면 "...1화 둘"처럼 단어 중간이 끊긴다).
 //   구분자(|·-·[]()·화/회/편) 앞에서 끊고, 없으면 공백 단위로. 그래도 길면 글자 수 폴백.
+// ★후킹은 '한국어'여야 한다. 제목·자막이 영어여도 한국어 후킹을 창작/번역한다(테리: 후킹은 한글이야).
+async function koreanHook(geminiKeys: string[], title: string, transcript: string, log: (m: string) => void): Promise<{hookTop: string; hookAccent: string} | null> {
+  if (!geminiKeys.length) return null;
+  const prompt = `아래 영상의 '한국어' 쇼츠 후킹을 만들어라. 제목/자막이 영어여도 반드시 자연스러운 한국어로 창작·번역한다.
+제목: ${title}
+내용(일부): ${(transcript || '').slice(0, 700)}
+요구: hookTop=스크롤을 멈추게 하는 한국어 12~16자(궁금증 폭탄·열린 고리. 제목 그대로 복붙 금지, 영어 금지), hookAccent=가장 센 한국어 단어 1~2개(6자 내).
+JSON만: {"hookTop":"...","hookAccent":"..."}`;
+  try {
+    const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 220, temperature: 0.9});
+    const m = raw.match(/\{[\s\S]*\}/); const d = m ? JSON.parse(m[0]) : {};
+    const ht = String(d.hookTop || '').slice(0, 24).trim();
+    if (!/[가-힣]/.test(ht)) return null; // 한글이 없으면 실패로 간주
+    return {hookTop: ht, hookAccent: String(d.hookAccent || '').slice(0, 12).trim()};
+  } catch (e: any) { log('[후킹] 한국어 후킹 생성 실패: ' + (e?.message || '').slice(0, 60)); return null; }
+}
 function cleanTitle(raw: string, max = 20): string {
   const t = stripUnrenderable(raw || '').trim();
   if (t.length <= max) return t;
@@ -280,18 +296,26 @@ export async function makeHighlights(
     const tpl = (opts.template && opts.template !== 'auto')
       ? getHlTemplate(opts.template)
       : pickHlTemplate(`${c.hookTop || ''} ${c.hookAccent || ''} ${meta.title}`);
-    // ★후킹은 나레이션(해설)과 무관하게 '항상' 들어가야 한다. c.hookTop이 비었거나 이모지만 있으면 제목으로 보장.
-    const hasVisibleHook = (s: string) => /[0-9A-Za-z가-힣]/.test(s || ''); // 글자(한/영/숫자)가 하나라도 있어야 '보이는 후킹'
+    // ★후킹은 나레이션(해설)과 무관하게 '항상', 그리고 '한국어'로 들어가야 한다.
+    const hasVisibleHook = (s: string) => /[0-9A-Za-z가-힣]/.test(s || '');
+    const hasKorean = (s: string) => /[가-힣]/.test(s || '');
     let hookTopFinal = hasVisibleHook(c.hookTop) ? c.hookTop : cleanTitle(meta.title, 20);
+    let hookAccentFinal = c.hookAccent || '';
+    // 후킹에 한글이 하나도 없으면(영어 제목·영어 자막이라 AI가 영어로 뽑았거나 제목으로 폴백된 경우)
+    //   제목+대사로 '한국어 후킹'을 새로 만든다. 이게 테리가 말한 "후킹은 한글이야".
+    if (!hasKorean(hookTopFinal)) {
+      const kh = await koreanHook(k.gemini, meta.title, c.transcript || '', log);
+      if (kh) { hookTopFinal = kh.hookTop; if (!hasKorean(hookAccentFinal)) hookAccentFinal = kh.hookAccent; }
+    }
     if (!hasVisibleHook(hookTopFinal)) hookTopFinal = cleanTitle(meta.title, 20) || (meta.title || '').slice(0, 20) || '하이라이트';
-    log(`[하이라이트] ${i + 1}편 후킹: "${hookTopFinal}"${hasVisibleHook(c.hookTop) ? '' : ' (제목에서 보강)'}`); // 진단 — 후킹이 비면 로그로 바로 확인
+    log(`[하이라이트] ${i + 1}편 후킹: "${hookTopFinal}"${hasKorean(hookTopFinal) ? '' : ' (한글 변환 실패—원문 유지)'}`);
     const scene: SceneData = {
       image: `${jobRel}/${clipName}`, // 폴백용(사용 안 함 — fullBleed가 video 사용)
       video: `${jobRel}/${clipName}`,
       fullBleed: true, // 이미 비율 맞춤 → 꽉 채우고 상단 후킹 + (해설 시)카라오케 자막
       template: tpl.id,
       hookTop: hookTopFinal,
-      hookAccent: c.hookAccent || '',
+      hookAccent: hookAccentFinal,
       accentColor: tpl.accentColor,
       words, // 해설 있으면 카라오케 자막, 없으면 []
       duckAudio: hasNarration, // 해설 깔면 원본 소리를 줄인다
@@ -350,9 +374,9 @@ export async function makeHighlights(
         try {
           await renderThumbnail(
             {image: `${jobRel}/${bgName}`,
-              big: c.hookTop ? c.hookTop.slice(0, 18) : cleanTitle(meta.title, 18),
+              big: hookTopFinal ? hookTopFinal.slice(0, 18) : cleanTitle(meta.title, 18),
               small: '',
-              badge: (c.hookAccent || '').slice(0, 8),
+              badge: (hookAccentFinal || '').slice(0, 8),
               accentColor: tpl.accentColor},
             thumbAbs, log, publicDir, orientation,
           );
@@ -370,7 +394,7 @@ export async function makeHighlights(
 
     // 후킹 그대로 + 끝에 누적 회차('N편'). 같은 소재 몇 번을 만들든 이어서 번호가 붙어 배포 구분이 쉽다.
     const episode = startEpisode + i + 1;
-    const baseT = c.hookTop ? c.hookTop.slice(0, 74) : cleanTitle(meta.title, 74);
+    const baseT = hookTopFinal ? hookTopFinal.slice(0, 74) : cleanTitle(meta.title, 74);
     const title = `${baseT} ${episode}편`;
     const createdAt = new Date().toISOString();
 
@@ -382,7 +406,7 @@ export async function makeHighlights(
     //   이렇게 해야 "말하는 나레이션 내용"과 "설명글"이 일치한다(테리 지적: 둘이 동떨어짐).
     const narrationSeed = (commentaryText && commentaryText.length > 15)
       ? commentaryText
-      : ([c.hookTop, c.hookAccent].filter(Boolean).join(' ').trim() || title);
+      : ([hookTopFinal, hookAccentFinal].filter(Boolean).join(' ').trim() || title);
     const proj: any = {
       id: projectId,
       title,
@@ -460,7 +484,7 @@ export async function makeHighlights(
     // 출처(attribution)를 프로젝트 폴더에도 남긴다(상세설명 폴백 — project.json 읽기 실패 대비).
     try { fs.writeFileSync(path.join(studioDir, 'attribution.txt'), attribution); } catch {}
 
-    results.push({projectId, file: output, title, hookTop: c.hookTop || '', score: c.score});
+    results.push({projectId, file: output, title, hookTop: hookTopFinal || '', score: c.score});
     // ★먼저 끝난 편은 바로 쓸 수 있게 — 완성 즉시 콜백(server가 SSE로 흘려 프론트 카드 노출).
     try { opts.onClip?.({projectId, file: output, title, score: c.score, reason: c.reason}); } catch {}
     log(`[하이라이트] ${i + 1}편 완성: ${title}`);

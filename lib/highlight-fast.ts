@@ -168,8 +168,8 @@ export async function renderHighlightFast(opts: {
     //   첫 구간만 1.12배 확대했다가 선형 축소 → overlay로는 어려워 scale2ref 대신 'crop 흔들림'은 과함. 간단·안전하게
     //   전체에 아주 약한 상시 스케일 대신, 첫 0.35초 흰 플래시 + 후킹 바운스로 임팩트를 준다(렌더 비용 거의 0).
     vParts.push(`[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},tpad=stop_mode=clone:stop_duration=3,setsar=1[bgc]`);
-    // 첫 0.18초 짧은 흰 플래시(임팩트) — 이후 사라짐. (color input 대신 drawbox로 가볍게)
-    vParts.push(`[bgc]drawbox=x=0:y=0:w=${W}:h=${H}:color=white@0.55:t=fill:enable='lt(t,0.12)',drawbox=x=0:y=0:w=${W}:h=${H}:color=white@0.28:t=fill:enable='between(t,0.12,0.22)'[bg]`);
+    // ★초반 흰 플래시 제거 — 시작 프레임이 허옇게 뜨는 '백탁현상'(테리 지적). 임팩트는 후킹 '팝'으로 충분.
+    vParts.push(`[bgc]null[bg]`);
     let vlab = '[bg]';
     if (hasHook) {
       // ★후킹 '팝' 등장 — 작게 시작→튕기며 커짐(0.9→1.08→1.0). 부드러운 fade 대신 시선을 확 잡는다.
