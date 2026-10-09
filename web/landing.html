@@ -315,15 +315,21 @@
   @media(max-width:920px){
     .hero-grid{grid-template-columns:1fr;gap:10px}
     .stage{height:480px;margin-top:10px}
-    .features,.steps,.cases,.stats{grid-template-columns:1fr}
+    .cases{grid-template-columns:1fr}
+    .features{grid-template-columns:repeat(2,1fr)} /* 기능 카드 2열(세로로 쭉 늘어지지 않게) */
     .stats{grid-template-columns:repeat(2,1fr)}
-    .feat.wide{grid-column:auto}
+    .feat.wide{grid-column:span 2} /* 넓은 카드는 한 줄 전체 */
     .step .arrow{display:none}
     .nav-links{display:none}
   }
   @media(max-width:480px){
     .hero{padding:48px 0 20px}
     section{padding:62px 0}
+    .features{grid-template-columns:repeat(2,1fr)} /* 작은 폰에서도 2열 유지 */
+    .feat{padding:20px 16px} /* 2열이라 패딩 줄여 내용 여유 */
+    .feat .ic{width:44px;height:44px;font-size:21px;margin-bottom:12px}
+    .feat h3{font-size:16.5px}
+    .feat p{font-size:13px}
     .stats{grid-template-columns:1fr}
     .nav-cta .btn-ghost{display:none}
   }
