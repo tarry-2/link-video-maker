@@ -1181,4 +1181,19 @@
   }
   syncCurrentJob();                          // 진입 즉시 1회
   setInterval(syncCurrentJob, 4000);         // 유휴 중 4초마다 — 다른 기기서 시작한 작업을 실시간 포착
+
+  // 🔆 작업 중 화면 꺼짐 방지(Screen Wake Lock). 하이라이트 제작 진행 중(curJobId)이면 화면을 켜둔다.
+  let wakeLock = null;
+  async function wakeSync() {
+    try {
+      if (curJobId && !wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!curJobId && wakeLock) {
+        await wakeLock.release(); wakeLock = null;
+      }
+    } catch { wakeLock = null; }
+  }
+  setInterval(wakeSync, 3000);
+  document.addEventListener('visibilitychange', wakeSync);
 })();

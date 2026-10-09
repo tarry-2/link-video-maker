@@ -47,6 +47,62 @@ export function dedupAccent(top: string, accent: string): string {
   return accent;
 }
 
+// ★후킹 강화 게이트 — 후킹이 '밋밋/보통'으로 나오는 걸 막고 "항상 90점 이상"으로 완전 고정(테리 지시).
+//   후킹만 따로 재작성 + self-score(0~100). 90점 미만이면 "이건 N점이다, 더 세게" 피드백 주며 다시 쓰기(최대 3회).
+//   3회 후에도 90 미만이면 '그때까지 제일 센 버전'을 박는다(완전 찍어놓기 = 최선 고정). 각 후킹은 장면 '내용'에 근거.
+export async function intensifyHooks(
+  geminiKeys: string[],
+  items: {hookTop: string; hookAccent: string; context: string}[],
+  log?: (m: string) => void,
+): Promise<{hookTop: string; hookAccent: string}[]> {
+  const best = items.map((i) => ({hookTop: i.hookTop, hookAccent: i.hookAccent, score: 0}));
+  if (!geminiKeys.length || !items.length) return best.map((b) => ({hookTop: b.hookTop, hookAccent: b.hookAccent}));
+  const TARGET = 90;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const weak = best.map((b, i) => (b.score < TARGET ? i : -1)).filter((i) => i >= 0);
+    if (!weak.length) break; // 전부 90+면 종료
+    const payload = weak.map((i) => ({i, 현재후킹: `${best[i].hookTop} / ${best[i].hookAccent}`, 현재점수: best[i].score, 내용: (items[i].context || '').slice(0, 140)}));
+    const prompt = `너는 조회수가 터지는 한국 유튜브·릴스 쇼츠의 '후킹' 심사관이자 작가다. 아래 후킹들은 ${TARGET}점 미만(밋밋/평범)이라 탈락이다.
+각각을 '첫 1초에 스크롤을 멈추게 하는 ${TARGET}점 이상 후킹'으로 다시 쓰고, 네가 쓴 결과에 냉정하게 점수(0~100)를 매겨라.
+조회수의 90%가 이 후킹에서 갈린다. 지금보다 무조건 더 세게.
+
+[강한 후킹 공식 — 가장 꽂히는 하나를 골라 세게]
+① 충격 숫자·구체("단 3일 만에","99%가 모르는") ② 반전·의외("알고 보니 정반대") ③ 금지·경고("절대 하지 마세요") ④ 정보격차("아무도 안 알려준") ⑤ 직격 질문("왜 당신만 안 될까?")
+
+[점수 기준 — 냉정하게]
+90+ = 나도 모르게 멈추고 끝까지 보게 됨(진짜 강한 것만). 70~89 = 괜찮지만 평범. 70 미만 = 밋밋/탈락.
+
+[규칙]
+- 각 후킹의 '내용'에 근거(없는 사실 지어내기 금지, 과장 OK·거짓 금지).
+- hookTop=긴장 셋업(10~16자), hookAccent=다른 단어의 펀치(6~12자). ★두 줄에 같은 단어 반복 금지.
+- '대박·레전드·충격·실화ㄷㄷ' 상투어 남발 금지 — 소재에 꽂히는 구체적인 말로.
+- 한국어로만.
+
+입력(JSON): ${JSON.stringify(payload)}
+출력 JSON만: {"hooks":[{"i":0,"hookTop":"...","hookAccent":"...","score":92}]}`;
+    try {
+      const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 1200, temperature: attempt === 1 ? 1.0 : 1.15, log});
+      const m = raw.match(/\{[\s\S]*\}/);
+      const d: any = m ? JSON.parse(m[0]) : {};
+      const arr: any[] = Array.isArray(d.hooks) ? d.hooks : [];
+      for (const r of arr) {
+        const idx = Number(r.i);
+        if (!(idx >= 0 && idx < best.length)) continue;
+        const top = stripEmoji(String(r.hookTop || '')).trim();
+        if (!top || !/[가-힣]/.test(top)) continue; // 한글 후킹만 채택
+        const acc = dedupAccent(top, stripEmoji(String(r.hookAccent || '')).trim());
+        const score = Math.max(0, Math.min(100, Number(r.score) || 0));
+        if (score >= best[idx].score) best[idx] = {hookTop: top, hookAccent: acc, score}; // 더 센 버전만 채택
+      }
+    } catch (e: any) {
+      log?.('[후킹강화] 시도 ' + attempt + ' 실패: ' + (e?.message || '').slice(0, 50));
+      break;
+    }
+  }
+  log?.('[후킹강화] 최종 점수: ' + best.map((b) => b.score).join('/') + ' (목표 90+)');
+  return best.map((b) => ({hookTop: b.hookTop, hookAccent: b.hookAccent}));
+}
+
 export type ThumbText = {big: string; small: string; badge: string};
 export type Storyboard = {
   title: string;
@@ -193,6 +249,11 @@ ${source.slice(0, 12000)}`;
   for (const s of sb.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = stripEmoji(s.narration || ''); }
   // ★후킹 중복 가드 — 아랫줄(accent)이 윗줄(top)과 같은 말이면 비운다("했던 말을 또 하는" 꼴 방지, 테리 지적).
   for (const s of sb.scenes) s.hookAccent = dedupAccent(s.hookTop, s.hookAccent);
+  // ★후킹 강화 게이트 — 후킹을 "항상 90점 이상"으로 재작성해 밋밋하게 안 나오게 완전 고정(테리 지시).
+  try {
+    const strong = await intensifyHooks(geminiKeys, sb.scenes.map((s) => ({hookTop: s.hookTop, hookAccent: s.hookAccent, context: s.narration || ''})), opts.log);
+    sb.scenes.forEach((s, i) => { if (strong[i]) { s.hookTop = strong[i].hookTop; s.hookAccent = strong[i].hookAccent; } });
+  } catch (e: any) { opts.log?.('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
   // ★모든 장면 나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
   for (const s of sb.scenes) s.narration = normalizeEnding(s.narration);
   // 썸네일 전용 문구 이모지 제거(폰트 깨짐 방지).

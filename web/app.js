@@ -768,6 +768,21 @@ function attachProgress(id, freshLog) {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && curJobId && !curES) { reconnTries = 0; attachProgress(curJobId, true); }
 });
+// 🔆 작업 중 화면 꺼짐 방지(Screen Wake Lock). 제작이 진행 중(curJobId)이면 화면을 켜두고, 끝나면 해제.
+//   wake lock은 백그라운드 가면 자동 해제되므로 3초마다 + 복귀 시 상태를 맞춘다. 단일 소스=curJobId.
+let _wakeLock = null;
+async function _wakeSync() {
+  try {
+    if (curJobId && !_wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    } else if (!curJobId && _wakeLock) {
+      await _wakeLock.release(); _wakeLock = null;
+    }
+  } catch { _wakeLock = null; }
+}
+setInterval(_wakeSync, 3000);
+document.addEventListener('visibilitychange', _wakeSync);
 // 페이지 다시 열었을 때 진행 중이던 작업 자동 복원 + (없으면) 서버의 현재 진행 작업에 붙어 모바일↔PC 실시간 공유
 async function syncCurrentJob() {
   if (curJobId || curES) return; // 이미 보고 있으면 패스

@@ -12,6 +12,7 @@ import {pipelineKeys} from './keys';
 import {extractHighlights} from './youtube-clip';
 import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {renderHighlightFast} from './highlight-fast';
+import {intensifyHooks} from './script';
 import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
 import {geminiGenerate} from './gemini';
@@ -330,6 +331,11 @@ export async function makeHighlights(
     // ★중복 가드 — hookAccent가 hookTop에 이미 들어간 말이면 "했던 말을 또 하는" 꼴이라 지운다(테리 지적).
     //   (공백·구두점 제거해 비교. 서로 substring이면 중복으로 본다.)
     hookAccentFinal = dedupAccent(hookTopFinal, hookAccentFinal);
+    // ★후킹 강화 게이트 — "항상 90점 이상"으로 재작성(밋밋 방지, 테리 지시). 영상 대사(transcript)에 근거.
+    try {
+      const [strong] = await intensifyHooks(k.gemini, [{hookTop: hookTopFinal, hookAccent: hookAccentFinal, context: (c.transcript || meta.title || '').slice(0, 300)}], log);
+      if (strong && strong.hookTop && hasKorean(strong.hookTop)) { hookTopFinal = strong.hookTop; hookAccentFinal = strong.hookAccent; }
+    } catch (e: any) { log('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
     log(`[하이라이트] ${i + 1}편 후킹: "${hookTopFinal}"${hookAccentFinal ? ` / "${hookAccentFinal}"` : ''}${hasKorean(hookTopFinal) ? '' : ' (한글 변환 실패—원문 유지)'}`);
     const scene: SceneData = {
       image: `${jobRel}/${clipName}`, // 폴백용(사용 안 함 — fullBleed가 video 사용)

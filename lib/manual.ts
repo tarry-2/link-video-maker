@@ -10,7 +10,7 @@ import {openaiJson} from './openai';
 import {ttsElevenJoined, alignToWords, VOICES, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
-import {normalizeEnding, stripEmoji, dedupAccent} from './script';
+import {normalizeEnding, stripEmoji, dedupAccent, intensifyHooks} from './script';
 import {renderVideo, buildRenderPublic} from './render';
 import type {PipelineKeys} from './pipeline';
 import type {SceneData} from '../src/Scene';
@@ -143,6 +143,11 @@ JSON만 출력:
   if (!plan) throw new Error('수동 대본 생성 실패(재시도 후): ' + lastErr);
   // ★나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
   for (const s of plan.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = dedupAccent(s.hookTop, stripEmoji(s.hookAccent || '')); s.narration = normalizeEnding(stripEmoji(s.narration)); }
+  // ★후킹 강화 게이트 — 후킹 "항상 90점 이상"으로 재작성(밋밋 방지, 테리 지시).
+  try {
+    const strong = await intensifyHooks(keys.gemini, plan.scenes.map((s) => ({hookTop: s.hookTop, hookAccent: s.hookAccent, context: s.narration || ''})), log);
+    plan.scenes.forEach((s, i) => { if (strong[i]) { s.hookTop = strong[i].hookTop; s.hookAccent = strong[i].hookAccent; } });
+  } catch (e: any) { log('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
   const totalChars = plan.scenes.reduce((a, s) => a + (s.narration || '').length, 0);
   log(`[수동] "${plan.title}" · ${plan.scenes.length}장면 구성 · 목표 ${perScene}자/장면 · 실제 총 ${totalChars}자(평균 ${Math.round(totalChars / plan.scenes.length)}자/장면)`);
   return {plan, sources};
