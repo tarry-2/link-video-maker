@@ -36,6 +36,7 @@ export type CardOpts = {
   cardTheme?: 'light' | 'dark'; // 본문 카드 톤(기본 light=매거진). cover/closing은 항상 사진 위 다크.
   motion?: MotionStyle;    // 등장 효과(auto/pop/slide/type/zoom/flip)
   skin?: string;           // 디자인 시스템 id(skins.ts). 미지정=주제로 자동 선택.
+  font?: string;           // 제목 폰트(모든 탭 공통, 화이트리스트 통과분). 미지정=스킨 폰트.
   storyboard?: CardStoryboard; // ★대본편집: 사용자가 고친 카드 대본(있으면 AI 재생성 안 하고 이걸로 제작).
   log?: (m: string) => void;
   isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인(영상 파이프라인과 동일).
@@ -155,6 +156,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
       theme: isHero ? 'dark' : (opts.cardTheme || 'light'),
       motion: opts.motion || 'auto',
       skin: skin.id,
+      font: opts.font || undefined, // 사용자가 고른 제목 폰트(모든 탭 공통). 자동이면 스킨 폰트 유지.
       kicker: isHero ? undefined : (preset?.label || undefined),
       badge: c.badge, big: c.big, small: c.small, title: c.title, body: c.body,
       number: c.number, unit: c.unit, items: c.items,

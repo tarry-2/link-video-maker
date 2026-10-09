@@ -408,6 +408,7 @@
   // 세로일 때만 "세로 변환 방식" 노출(가로는 무의미).
   function applyReframeRow() { const r = $('hl-reframe-row'); if (r) r.style.display = orient === 'portrait' ? '' : 'none'; }
   let commentary = 1, voice = ''; // 해설 넣기(0/1) · 해설 목소리 — 기본 ON(재업로드 강등 탈출·수익화 유리)
+  let font = ''; // 제목 폰트(모든 탭 공통). 빈값=자동(템플릿 폰트)
   let captionEn = 0; // 영어 번역 자막 함께(0/1, 해설 켤 때만)
   let license = 'cc'; // 영상 범위: cc(안전·재사용 허가만) / all(전체)
   let mode = 'search'; // 소재 가져오는 방법: search(주제로 찾기) / url(영상 URL 붙여넣기)
@@ -417,7 +418,7 @@
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, captionEn, voice, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
+        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, captionEn, voice, font, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -448,6 +449,8 @@
     // 해설(commentary) 기본값을 ON으로 바꿈(재업로드 강등 탈출). 기존 사용자(cmV2 없음)는 1회 ON으로 이행,
     //   이후엔 사용자가 끈 선택을 존중(cmV2 플래그가 저장됨).
     commentary = s.cmV2 ? (s.commentary ? 1 : 0) : 1; voice = s.voice || '';
+    font = s.font || '';
+    document.querySelectorAll('#hl-font-picker .font-chip').forEach((b) => b.classList.toggle('active', (b.dataset.font || '') === font));
     captionEn = s.captionEn ? 1 : 0;
     picked = s.picked || null;
     document.querySelectorAll('.hl-cm').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === commentary));
@@ -994,6 +997,10 @@
   document.querySelectorAll('.hl-tpl').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-tpl').forEach((x) => x.classList.remove('active')); b.classList.add('active'); tplMode = b.dataset.t; saveState();
   }));
+  // 🔤 제목 폰트 선택(모든 탭 공통) — 자동(빈값)이면 템플릿 폰트.
+  document.querySelectorAll('#hl-font-picker .font-chip').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('#hl-font-picker .font-chip').forEach((x) => x.classList.remove('active')); b.classList.add('active'); font = b.dataset.font || ''; saveState();
+  }));
   // 🔍 템플릿 미리보기 크게 보기 — 버튼 선택과 분리(stopPropagation), 샘플 이미지를 모달로 크게.
   document.querySelectorAll('.tpl-zoom').forEach((z) => z.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1109,7 +1116,7 @@
     try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
     // 소재 출처(작업내역 탭별 이원화) — 내 영상 업로드면 upload, 그 외는 현재 모드(search/url/archive).
     const src = picked.mine ? 'upload' : (['url', 'archive'].includes(mode) ? mode : 'search');
-    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, captionEn: !!captionEn, source: src, voice, isCc: picked.isCc !== false};
+    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, font, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, captionEn: !!captionEn, source: src, voice, isCc: picked.isCc !== false};
     generate(lastBody);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });

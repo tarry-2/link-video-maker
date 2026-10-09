@@ -262,6 +262,22 @@
               <span class="tpl-name">버블 팝</span>
             </button>
           </div>
+
+          <!-- 🔤 제목 폰트 — 영상 만들기·카드뉴스와 동일한 선택(모든 탭 공통). '자동'이면 템플릿 폰트. -->
+          <label class="field-label" style="margin-top:14px">🔤 제목 폰트 <button type="button" class="ghost-btn small" style="float:right;padding:4px 10px;font-size:12px" onclick="openFontPreview('#hl-font-picker')">🔍 느낌 미리보기</button> <span class="hint">— 후킹 글씨체 (자동=디자인 템플릿 폰트)</span></label>
+          <div id="hl-font-picker" class="font-picker">
+            <button type="button" class="font-chip active" data-font="">자동</button>
+            <button type="button" class="font-chip" data-font="Black Han Sans" style="font-family:'Black Han Sans'">임팩트</button>
+            <button type="button" class="font-chip" data-font="Do Hyeon" style="font-family:'Do Hyeon'">도현</button>
+            <button type="button" class="font-chip" data-font="Jua" style="font-family:'Jua'">주아</button>
+            <button type="button" class="font-chip" data-font="Gothic A1" style="font-family:'Gothic A1'">고딕</button>
+            <button type="button" class="font-chip" data-font="Noto Sans KR" style="font-family:'Noto Sans KR'">본고딕</button>
+            <button type="button" class="font-chip" data-font="Gaegu" style="font-family:'Gaegu'">손글씨</button>
+            <button type="button" class="font-chip" data-font="Noto Serif KR" style="font-family:'Noto Serif KR'">명조</button>
+            <button type="button" class="font-chip" data-font="Gowun Batang" style="font-family:'Gowun Batang'">고운바탕</button>
+            <button type="button" class="font-chip" data-font="Song Myung" style="font-family:'Song Myung'">송명</button>
+          </div>
+
           <p class="mini-state" id="hl-picked"></p>
           <button id="hl-generate" class="primary-btn" type="button" style="margin-top:12px">🎬 하이라이트 숏폼 만들기</button>
           <p class="mini-state">AI가 영상에서 터질 만한 순간을 골라 세로 숏폼으로 자릅니다. 상단 후킹 자막이 자동으로 얹혀요. 완성되면 유튜브·인스타로 바로 올릴 수 있어요. <b>원작자 출처는 자동 표기됩니다(CC BY).</b></p>
@@ -326,6 +342,7 @@
       </div>
     </div>
 
+    <script src="/font-preview.js"></script>
     <script src="/highlight.js"></script>
   </body>
 </html>

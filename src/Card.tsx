@@ -37,6 +37,7 @@ export const cardSchema = z.object({
   theme: z.enum(['light', 'dark']).optional(),
   motion: z.enum(['auto', 'pop', 'slide', 'type', 'zoom', 'flip']).optional(),
   skin: z.string().optional(),     // ★덱 디자인 시스템 id(skins.ts). 없으면 기본 스킨.
+  font: z.string().optional(),     // ★사용자가 고른 제목 폰트(모든 탭 공통). 있으면 스킨 폰트 대신 이걸로. 없으면(자동) 스킨 폰트.
   thumbTop: z.boolean().optional(), // ★썸네일 렌더 전용: cover/closing 글자를 상단 정렬(유튜브 썸네일 하단 가림 방지).
   kicker: z.string().optional(),
   brand: z.string().optional(),
@@ -189,7 +190,7 @@ const LineDraw: React.FC<{delay: number; color: string; h?: number; style?: Reac
 export const Card: React.FC<CardData> = (c) => {
   const {width, height} = useVideoConfig();
   const skin = getSkin(c.skin);
-  const head = skin.headFont;
+  const head = c.font || skin.headFont; // 사용자가 폰트를 골랐으면 그걸로(모든 탭 공통), '자동'이면 스킨 폰트.
   const headWeight = HEAD_WEIGHT[head];
   const defaultTheme: 'light' | 'dark' = c.theme || (c.type === 'cover' || c.type === 'closing' ? 'dark' : 'light');
   const isHero = c.type === 'cover' || c.type === 'closing';

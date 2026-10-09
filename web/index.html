@@ -288,9 +288,10 @@
 
         <!-- ★제목 폰트 — 중요 선택이라 세부 설정 밖, 항상 보이게(모바일에서도 바로 눈에 띔) -->
         <div id="font-row" style="margin-top:14px">
-          <label class="field-label">🔤 제목 폰트 <span class="hint">— 영상 위 큰 제목·후킹 글씨체를 골라요 (미리보기대로 나와요)</span></label>
+          <label class="field-label">🔤 제목 폰트 <button type="button" class="ghost-btn small" style="float:right;padding:4px 10px;font-size:12px" onclick="openFontPreview('#font-picker')">🔍 느낌 미리보기</button> <span class="hint">— 영상 위 큰 제목·후킹 글씨체를 골라요</span></label>
           <div id="font-picker" class="font-picker">
-            <button type="button" class="font-chip active" data-font="Black Han Sans" style="font-family:'Black Han Sans'">임팩트</button>
+            <button type="button" class="font-chip active" data-font="">자동</button>
+            <button type="button" class="font-chip" data-font="Black Han Sans" style="font-family:'Black Han Sans'">임팩트</button>
             <button type="button" class="font-chip" data-font="Do Hyeon" style="font-family:'Do Hyeon'">도현</button>
             <button type="button" class="font-chip" data-font="Jua" style="font-family:'Jua'">주아</button>
             <button type="button" class="font-chip" data-font="Gothic A1" style="font-family:'Gothic A1'">고딕</button>
@@ -300,8 +301,8 @@
             <button type="button" class="font-chip" data-font="Gowun Batang" style="font-family:'Gowun Batang'">고운바탕</button>
             <button type="button" class="font-chip" data-font="Song Myung" style="font-family:'Song Myung'">송명</button>
           </div>
-          <input type="hidden" id="font" value="Black Han Sans" />
-          <p class="mini-state">자막은 가독성을 위해 깔끔한 고딕으로 고정돼요. 제목·후킹에 고른 폰트가 적용됩니다.</p>
+          <input type="hidden" id="font" value="" />
+          <p class="mini-state">모든 탭(영상·카드뉴스·하이라이트)에 적용돼요. '자동'은 디자인에 맞는 글씨체가 자동 선택되고, 하나 고르면 제목·후킹에 그 폰트가 들어갑니다. 자막은 가독성을 위해 깔끔한 고딕 고정.</p>
         </div>
 
         <details class="studio-options">
@@ -503,6 +504,7 @@
       </div>
     </div>
 
+    <script src="/font-preview.js"></script>
     <script src="/app.js"></script>
     <script src="/studio.js"></script>
   </body>

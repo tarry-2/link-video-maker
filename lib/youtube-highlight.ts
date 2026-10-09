@@ -225,7 +225,7 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; source?: 'search' | 'url' | 'upload' | 'archive'; onClip?: (c: {projectId: string; file: string; title: string; score: number; reason?: string}) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; font?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; source?: 'search' | 'url' | 'upload' | 'archive'; onClip?: (c: {projectId: string; file: string; title: string; score: number; reason?: string}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -336,6 +336,7 @@ export async function makeHighlights(
       video: `${jobRel}/${clipName}`,
       fullBleed: true, // 이미 비율 맞춤 → 꽉 채우고 상단 후킹 + (해설 시)카라오케 자막
       template: tpl.id,
+      font: opts.font || undefined, // 사용자가 고른 제목 폰트(모든 탭 공통). 자동이면 템플릿 폰트.
       hookTop: hookTopFinal,
       hookAccent: hookAccentFinal,
       accentColor: tpl.accentColor,
@@ -385,7 +386,7 @@ export async function makeHighlights(
       log(`[하이라이트] ${i + 1}/${clips.length} 편 렌더…`);
       // ★빠른 렌더(프레임별 재렌더 없이 ffmpeg 합성) 우선 → 실패 시 기존 Remotion으로 폴백(무회귀).
       const fast = await renderHighlightFast({
-        clipAbs: c.file, outPath: outAbs, hookTop: scene.hookTop, hookAccent: scene.hookAccent, template: tpl.id,
+        clipAbs: c.file, outPath: outAbs, hookTop: scene.hookTop, hookAccent: scene.hookAccent, template: tpl.id, font: opts.font,
         words, narrationAbs: voiceRel ? path.join(pubClipDir, 'narration.mp3') : undefined,
         muteOriginal: !!opts.muteOriginal, duckAudio: !!voiceRel,
         durationSec: scene.durationInFrames / FPS, orientation, broll: brollCuts, subLines: enLines, log, isCancelled: cancelled,

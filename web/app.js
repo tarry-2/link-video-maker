@@ -49,7 +49,7 @@ function applyMode(m) {
   // 영상 종류(움직임)·오디오 토글은 카드 모드에선 숨김(자체 설정).
   $('advanced-row')?.classList.toggle('hidden', m === 'card');
   $('audio-row')?.classList.toggle('hidden', m === 'card');
-  $('font-row')?.classList.toggle('hidden', m === 'card'); // 제목 폰트도 카드 모드엔 숨김(세부설정 밖으로 뺐으므로 여기서 토글)
+  // 제목 폰트는 모든 탭(영상·카드·배치)에서 항상 보이게(테리: 모든 탭에 다 떠야 함). 카드도 '자동'이면 스킨 폰트 유지, 고르면 적용.
   if (m === 'batch' && typeof window.startBatchPoll === 'function') window.startBatchPoll();
 }
 function setMode(m) { applyMode(m); saveFormState(); }
@@ -517,6 +517,7 @@ window.startCardGen = async function () {
     imageStyle: $('image-style') ? $('image-style').value : 'real',
     motion: $('card-motion') ? $('card-motion').value : 'auto',
     cardTheme: $('card-theme') ? $('card-theme').value : 'light',
+    font: $('font') ? $('font').value : '', // 제목 폰트(모든 탭 공통)
   };
   cardPlanBody = body;
   // 1단계: 대본만 생성 → 편집(렌더 전에 문구 수정). 이미지·디자인은 제작 때 자동.
@@ -924,8 +925,9 @@ document.querySelectorAll('.sc-n').forEach((b) => b.addEventListener('click', ()
 
 // 제목 폰트 선택 — 미리보기 칩. 고른 값은 hidden #font 에 저장되어 /api/generate 로 전달된다.
 function setFont(f) {
-  const hid = $('font'); if (hid) hid.value = f || 'Black Han Sans';
-  document.querySelectorAll('.font-chip').forEach((b) => b.classList.toggle('active', b.dataset.font === (f || 'Black Han Sans')));
+  const v = f || ''; // 빈값 = '자동'(디자인별 기본 폰트)
+  const hid = $('font'); if (hid) hid.value = v;
+  document.querySelectorAll('.font-chip').forEach((b) => b.classList.toggle('active', (b.dataset.font || '') === v));
 }
 document.querySelectorAll('.font-chip').forEach((b) => b.addEventListener('click', () => { setFont(b.dataset.font); saveFormState(); }));
 
@@ -1221,7 +1223,7 @@ function saveFormState() {
       imageStyle: $('image-style')?.value,
       characterId: $('character-select')?.value || '',
       quality: $('quality')?.value,
-      font: $('font')?.value || 'Black Han Sans',
+      font: $('font')?.value || '', // 빈값=자동(디자인별 기본 폰트). 기본값 강제하면 '자동'이 안 유지됨.
       sceneCount: $('scene-count')?.value || '0',
       aiClips: $('aiClips')?.value || '0',
       keywords: $('keywords')?.value || '',

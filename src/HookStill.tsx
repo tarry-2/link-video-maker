@@ -23,6 +23,7 @@ export const hookStillSchema = z.object({
   hookTop: z.string(),
   hookAccent: z.string(),
   template: z.string().optional(),
+  font: z.string().optional(), // 사용자가 고른 제목 폰트(모든 탭 공통). 없으면 템플릿 폰트.
   orientation: z.enum(['portrait', 'landscape']).optional(),
 });
 export type HookStillData = z.infer<typeof hookStillSchema>;
@@ -30,9 +31,10 @@ export type HookStillData = z.infer<typeof hookStillSchema>;
 const outline = (px: number) =>
   `${px}px ${px}px 0 #000, -${px}px ${px}px 0 #000, ${px}px -${px}px 0 #000, -${px}px -${px}px 0 #000, 0 ${px}px 0 #000, 0 -${px}px 0 #000, ${px}px 0 0 #000, -${px}px 0 0 #000`;
 
-export const HookStill: React.FC<HookStillData> = ({hookTop, hookAccent, template, orientation}) => {
+export const HookStill: React.FC<HookStillData> = ({hookTop, hookAccent, template, font, orientation}) => {
   const land = orientation === 'landscape';
   const T = getHlTemplate(template);
+  const head = font || T.headFont; // 사용자가 폰트를 골랐으면 그걸로, 자동이면 템플릿 폰트.
   // Scene.tsx fullBleed와 동일 상수(세로/가로).
   const L = land
     ? {top: 40, pad: '0 90px', fsTop: 80, fsAcc: 96, boxPad: '18px 46px'}
@@ -58,10 +60,10 @@ export const HookStill: React.FC<HookStillData> = ({hookTop, hookAccent, templat
     <AbsoluteFill style={{backgroundColor: 'transparent'}}>
       <div style={{position: 'absolute', top: L.top, left: 0, right: 0, padding: L.pad, display: 'flex', justifyContent: 'center'}}>
         <div style={container}>
-          {hookTop && <div style={{fontFamily: T.headFont + EMOJI, fontSize: L.fsTop, color: T.textColor,
+          {hookTop && <div style={{fontFamily: head + EMOJI, fontSize: L.fsTop, color: T.textColor,
             lineHeight: 1.08, textShadow: ol ? outline(ol) : 'none', letterSpacing: -1,
             wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookTop}</div>}
-          {hookAccent && <div style={{fontFamily: T.headFont + EMOJI, fontSize: L.fsAcc, color: T.accentColor,
+          {hookAccent && <div style={{fontFamily: head + EMOJI, fontSize: L.fsAcc, color: T.accentColor,
             lineHeight: 1.12, marginTop: 4,
             textShadow: lightBg ? 'none' : `0 3px 14px ${T.accentColor}66, ${outline(ol)}`,
             letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookAccent}</div>}

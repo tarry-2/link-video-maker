@@ -144,6 +144,8 @@ export const Scene: React.FC<SceneData> = ({
   // ★유튜브 하이라이트(fullBleed): 이미 9:16로 크롭된 클립을 화면 꽉 채우고 원본 소리 재생 + 상단 후킹띠만.
   if (fullBleed && video) {
     const T = getHlTemplate(template); // 디자인 템플릿(폰트·후킹스타일·자막·색). 없으면 기본(예능).
+    // 사용자가 제목 폰트를 골랐으면(모든 탭 공통) 후킹에 그 폰트를, '자동'이면 템플릿 폰트를 쓴다.
+    const hookFont = (font && TITLE_FONTS.has(font)) ? font : T.headFont;
     // 후킹 컨테이너 스타일 — hookStyle별로 다르게. 'none'=글자만(시네마), 'bar'=꽉찬 띠, 그 외=박스/버블/그라데이션.
     const hookGlow = T.glow ? `, 0 0 40px ${T.accentColor}66` : '';
     const boxCommon: React.CSSProperties = {
@@ -174,10 +176,10 @@ export const Scene: React.FC<SceneData> = ({
             opacity: hookIn,
           }}>
             <div style={hookContainerStyle}>
-              {hookTop && <div style={{fontFamily: T.headFont + ', "Noto Color Emoji"', fontSize: L.fsHookTop, color: T.textColor,
+              {hookTop && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: L.fsHookTop, color: T.textColor,
                 lineHeight: 1.08, textShadow: olTop ? outline(olTop) : 'none', letterSpacing: -1,
                 wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookTop}</div>}
-              {hookAccent && <div style={{fontFamily: T.headFont + ', "Noto Color Emoji"', fontSize: L.fsHookAccent, color: T.accentColor,
+              {hookAccent && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: L.fsHookAccent, color: T.accentColor,
                 lineHeight: 1.12, marginTop: 4,
                 textShadow: lightBg ? 'none' : `0 3px 14px ${T.accentColor}66, ${outline(olTop)}`,
                 letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookAccent}</div>}
