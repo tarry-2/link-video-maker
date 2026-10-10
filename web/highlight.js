@@ -38,6 +38,20 @@
     } catch { b.className = 'gpu-badge unknown'; b.textContent = '● GPU 확인실패'; }
   }
   refreshGpu(); setInterval(refreshGpu, 60000);
+  // ★GPU 배지 클릭 = 바로 끄기 — 이 페이지엔 설정 모달·끄기 버튼이 없어 눌러도 창이 안 떴다(테리 지적).
+  //   켜져 있으면 확인 후 /api/runpod/stop로 즉시 종료(과금 중단). 꺼져 있으면 안내만.
+  $('gpu-badge')?.addEventListener('click', async () => {
+    try {
+      const d = await (await fetch('/api/runpod/status', {cache: 'no-store'})).json();
+      if (!d.configured) { alert('RunPod 키가 설정 안 돼 있어요(움직이는 영상 미사용).'); return; }
+      const running = (d.pods || []).filter((p) => p.status === 'RUNNING');
+      if (!running.length) { alert('✅ 켜진 GPU가 없어요 — 과금되지 않고 있어요.'); refreshGpu(); return; }
+      if (!confirm(`움직이는 영상 GPU ${running.length}대가 켜져 있어요(과금 중).\n지금 끌까요? (진행 중인 영상 작업이 있으면 실패할 수 있어요)`)) return;
+      const r = await (await fetch('/api/runpod/stop', {method: 'POST'})).json();
+      alert(r.stopped && r.stopped.length ? `GPU ${r.stopped.length}대 껐습니다 — 과금이 멈췄어요.` : '끄기 완료.');
+      refreshGpu();
+    } catch { alert('GPU 상태 확인/끄기에 실패했어요 — 잠시 후 다시 시도하세요.'); }
+  });
 
   // ── 로그(실시간 시각, 초기화 전까지 유지) ──
   function addLog(text, cls) {
