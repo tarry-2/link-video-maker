@@ -13,7 +13,26 @@
     <link rel="stylesheet" href="/style.css" />
     <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
     <style>
-      .cr-chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 2px}
+      /* ✍️ 창작 — '작가의 집필실' 에디토리얼. 명조 디스플레이 + 크림 종이 + teal/purple 액센트 절제. create 전용(회귀 0). */
+      .ed{--ink:#201d17;--edline:#d8cfbd;--hot:#e8612b}
+      /* 다크: 명조 제목이 먹색이라 배경에 묻힘 → 밝게. 보더도 어둡게. */
+      [data-theme="dark"] .ed{--ink:#f3eee4;--edline:#39352d}
+      [data-theme="dark"] .ed .cr-chip{background:var(--card)}
+      /* 히어로 */
+      .ed .page-head{position:relative;padding:18px 0 10px 22px;margin-bottom:20px}
+      .ed .page-head::before{content:'';position:absolute;left:0;top:14px;bottom:14px;width:4px;border-radius:4px;background:var(--grad)}
+      .ed .eyebrow{letter-spacing:.42em;font-size:11px;font-weight:800;color:var(--teal);text-transform:uppercase}
+      .ed .hero{font-family:'Noto Serif KR',serif;font-weight:900;font-size:clamp(2.1rem,5vw,3.3rem);line-height:1.1;letter-spacing:-.01em;color:var(--ink);margin:6px 0 10px}
+      .ed .sub{max-width:640px;color:var(--muted);font-size:15px;line-height:1.65}
+      /* 스텝 카드 — 큰 명조 번호가 배경에 은은히 */
+      .ed .card{position:relative;border:1px solid var(--edline);border-radius:20px;background:
+        linear-gradient(180deg,rgba(255,255,255,.5),transparent) , var(--card);
+        box-shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 10px 30px -18px rgba(40,30,15,.35);overflow:hidden}
+      .ed .block-title{font-family:'Noto Serif KR',serif;font-weight:900;font-size:19px;letter-spacing:-.01em;color:var(--ink);display:flex;align-items:baseline;gap:10px}
+      .ed .block-title .st-no{font-family:'Noto Serif KR',serif;font-size:14px;font-weight:900;color:var(--teal);letter-spacing:.05em}
+      .ed .field-label{font-size:12.5px;font-weight:800;letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+      /* 칩 */
+      .cr-chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 2px}
       .cr-chip{position:relative;padding:8px 15px;border-radius:999px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font-weight:700;font-size:14px;transition:all .15s}
       .cr-chip:hover{border-color:var(--teal);transform:translateY(-1px)}
       .cr-chip.active{background:var(--grad);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(18,169,152,.3)}
@@ -21,11 +40,23 @@
       .cr-chip.hot.active{border-color:transparent}
       .cr-fire{margin-left:4px;font-size:12px;filter:drop-shadow(0 0 3px rgba(255,120,40,.7))}
       .cr-hotline{font-size:12.5px;color:#ff7a2e;font-weight:700;margin:2px 0 0}
-      .cr-field{margin:14px 0}
-      .cr-field > .field-label{display:block;margin-bottom:6px}
-      .cr-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
-      .cr-table th,.cr-table td{border:1px solid var(--line);padding:7px;vertical-align:top;text-align:left}
-      .cr-table th{background:var(--chip,rgba(18,169,152,.08));font-size:12px;white-space:nowrap;font-weight:800}
+      .cr-field{margin:16px 0}
+      .cr-field > .field-label{display:block;margin-bottom:8px}
+      /* 세그 — 꽉찬 투박한 바 → 컴팩트 토글 pill(선택 시 그라데이션) */
+      .ed .seg{display:flex;flex-wrap:wrap;gap:8px;background:transparent;padding:0;border:none}
+      .ed .seg .seg-btn{flex:0 0 auto;min-width:76px;padding:9px 18px;border:1.5px solid var(--edline);border-radius:12px;background:var(--card);color:var(--text);font-weight:700;font-size:14px;transition:all .15s}
+      .ed .seg .seg-btn:hover{border-color:var(--teal);transform:translateY(-1px)}
+      .ed .seg .seg-btn.active{background:var(--grad);color:#fff;border-color:transparent;box-shadow:0 6px 16px -6px rgba(18,169,152,.5)}
+      /* 메인 CTA */
+      .ed .primary-btn{background:var(--grad);border:none;border-radius:14px;padding:15px 22px;font-size:16px;font-weight:800;letter-spacing:.01em;box-shadow:0 10px 26px -10px rgba(108,76,240,.6);transition:transform .12s, box-shadow .12s}
+      .ed .primary-btn:hover{transform:translateY(-2px);box-shadow:0 16px 34px -12px rgba(108,76,240,.7)}
+      .ed .input{border:1.5px solid var(--edline);border-radius:12px;background:var(--card)}
+      .ed .input:focus{border-color:var(--teal);outline:none}
+      .cr-table{width:100%;border-collapse:separate;border-spacing:0;margin-top:12px;font-size:13px;border:1px solid var(--edline);border-radius:14px;overflow:hidden}
+      .cr-table th,.cr-table td{border-bottom:1px solid var(--edline);border-right:1px solid var(--edline);padding:9px;vertical-align:top;text-align:left}
+      .cr-table th:last-child,.cr-table td:last-child{border-right:none}
+      .cr-table tr:last-child td{border-bottom:none}
+      .cr-table th{background:linear-gradient(180deg,rgba(18,169,152,.1),rgba(108,76,240,.06));font-family:'Noto Serif KR',serif;font-size:12.5px;white-space:nowrap;font-weight:900;color:var(--ink,#201d17)}
       .cr-table td[contenteditable]{min-width:92px;outline:none;line-height:1.5}
       .cr-table td[contenteditable]:focus{background:rgba(79,224,208,.14);box-shadow:inset 0 0 0 2px var(--teal)}
       .cr-scene-num{font-weight:800;text-align:center;width:30px;background:var(--chip,rgba(18,169,152,.06))}
@@ -60,23 +91,23 @@
       <a href="/monetize" class="navtab">💰 수익화 가이드</a>
     </nav>
 
-    <main class="wrap wide">
+    <main class="wrap wide ed">
       <div class="page-head">
-        <p class="eyebrow">ONVIDEO · 오리지널</p>
-        <h1 class="hero">창작 — AI 시나리오 작가</h1>
-        <p class="sub">장르·키워드만 고르면 방송·뮤지컬 작가처럼 <b>오리지널 시나리오</b>를 표로 써줘요. 표에서 고친 뒤 바로 영상으로. 한 편도, 시리즈도.</p>
+        <p class="eyebrow">ONVIDEO · ORIGINAL</p>
+        <h1 class="hero">당신의 이야기를,<br>한 편의 작품으로</h1>
+        <p class="sub">장르·키워드만 고르면 방송·뮤지컬 작가처럼 <b>오리지널 시나리오</b>를 한 장 한 장 써 내려가요. 표에서 직접 고치고, 그대로 영상이 됩니다 — 한 편도, 시리즈도.</p>
       </div>
 
       <!-- STEP 1: 키워드/설정 -->
       <section class="card" id="cr-step1">
-        <h2 class="block-title">1. 장르·키워드 고르기</h2>
+        <h2 class="block-title"><span class="st-no">01</span> 장르·키워드 고르기</h2>
         <p class="hint">원하는 분위기를 여러 개 골라도 돼요. 아래 칸에 직접 써도 됩니다.</p>
         <p class="cr-hotline">🔥 = 지금 전 세계 세로 숏드라마에서 조회수·완주율 터지는 장르</p>
         <div class="cr-chips" id="cr-genres"></div>
         <div class="cr-field">
           <input id="cr-brief" class="input" placeholder="(선택) 자유롭게 한 줄 — 예: 비 오는 밤, 복수를 결심한 형사" />
         </div>
-        <h2 class="block-title" style="margin-top:14px">2. 설정</h2>
+        <h2 class="block-title" style="margin-top:14px"><span class="st-no">02</span> 설정</h2>
         <div class="cr-field"><span class="field-label">길이</span><div class="seg" id="cr-dur"></div></div>
         <div class="cr-field"><span class="field-label">화면</span><div class="seg" id="cr-orient"></div></div>
         <div class="cr-field"><span class="field-label">그림체</span><div class="seg" id="cr-style"></div></div>
@@ -86,7 +117,7 @@
 
       <!-- STEP 2: 시나리오 표(편집) -->
       <section class="card hidden" id="cr-step2">
-        <h2 class="block-title">3. 시나리오 — 고치고 싶은 칸을 바로 눌러 수정하세요</h2>
+        <h2 class="block-title"><span class="st-no">03</span> 시나리오 — 고치고 싶은 칸을 바로 눌러 수정하세요</h2>
         <div class="cr-field"><span class="field-label">제목</span><input id="cr-title" class="input" /></div>
         <div class="cr-field"><span class="field-label">배경음악(BGM 무드)</span><input id="cr-music" class="input" /></div>
         <div style="overflow-x:auto">
@@ -102,7 +133,7 @@
 
       <!-- STEP 3: 제작 설정 -->
       <section class="card hidden" id="cr-step3">
-        <h2 class="block-title">4. 어떻게 만들까</h2>
+        <h2 class="block-title"><span class="st-no">04</span> 어떻게 만들까</h2>
         <div class="cr-field"><span class="field-label">출력</span><div class="seg" id="cr-out"></div></div>
         <div class="cr-field hidden" id="cr-clip-row">
           <span class="field-label">움직이는 장면 수</span><div class="seg" id="cr-clips"></div>
