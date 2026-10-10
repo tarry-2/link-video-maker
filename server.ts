@@ -374,7 +374,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight' | 'remake' | 'create'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean};
+type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight' | 'remake' | 'create' | 'scenario' | 'bible'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean; storyboard?: Storyboard; bible?: any};
 // ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
 function jlog(job: Job, s: string) {
   const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
@@ -1701,12 +1701,31 @@ ${extra}
       : `[장르·분위기] ${genre || '미스터리'}${kw.length ? `\n[키워드] ${kw.join(', ')}` : ''}
 
 이 장르·분위기로 시청자의 감정을 뒤흔들고 끝까지 몰입시키는 오리지널 창작 스토리를 만들어라.`;
-    try {
-      const sb = await generateStoryboard(k.gemini, brief, {
-        duration, orientation, imageStyle, sceneCount, creative: true, seriesBible, episode, episodesTotal, episodeLogline, openaiKey: k.openai,
-      });
-      return json(res, 200, {storyboard: sb});
-    } catch (e: any) { return json(res, 500, {error: '시나리오 생성 실패: ' + (e?.message || e)}); }
+    // ★비동기 작업으로: 시나리오 집필도 '모든 단계'가 로그에 찍히고(주제·장르·설정·집필·완성) 프론트가 에너지바로
+    //   진행을 보여준다(테리: "얼마나 걸리는지 몰라 답답"). 결과 storyboard는 job.done 때 SSE로 전달.
+    const isEp = !!(episode && episodesTotal);
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false, kind: 'scenario'};
+    jobs.set(id, job);
+    (async () => {
+      try {
+        jlog(job, `[주제] ${extra ? `"${extra}"` : '(자유 주제 없음 — 장르/키워드로 집필)'}`);
+        jlog(job, `[장르] ${genre || '미스터리'}${kw.length ? ` · 키워드: ${kw.join(', ')}` : ''}`);
+        jlog(job, `[설정] ${orientation === 'landscape' ? '가로' : '세로'} · ${duration}초 · 스타일 ${imageStyle}${sceneCount ? ` · 장면 ${sceneCount}개 지정` : ' · 장면수 자동'}${isEp ? ` · 시리즈 ${episode}/${episodesTotal}편` : ''}`);
+        if (episodeLogline) jlog(job, `[이 편] ${episodeLogline}`);
+        jlog(job, '[집필] AI가 시나리오를 쓰고 있어요…(보통 10~20초)');
+        const sb = await generateStoryboard(k.gemini, brief, {
+          duration, orientation, imageStyle, sceneCount, creative: true, seriesBible, episode, episodesTotal, episodeLogline, openaiKey: k.openai,
+          log: (m) => jlog(job, m),
+        });
+        jlog(job, `[완성] "${sb.title || '오리지널'}" · ${sb.scenes.length}장면`);
+        job.storyboard = sb; job.title = sb.title; job.done = true; job.doneAt = Date.now();
+      } catch (e: any) {
+        job.error = '시나리오 생성 실패: ' + (e?.message || e); job.done = true; job.doneAt = Date.now();
+        jlog(job, '[실패] ' + job.error);
+      }
+    })();
+    return json(res, 202, {id});
   }
 
   // ── 📖 시리즈 스토리 바이블: 장르·키워드·편수 → 세계관·인물·편별 로그라인(각 편 시나리오가 이걸 참조해 연속성 유지). ──
@@ -1724,14 +1743,29 @@ ${extra ? `[★이 시리즈의 핵심 주제·소재 — 반드시 이걸 중�
 ${bibleKw.length ? `[키워드] ${bibleKw.join(', ')}\n` : ''}반드시 아래 JSON만 출력(설명 금지):
 {"seriesTitle":"시리즈 제목(한국어, 자극적)","world":"세계관·배경 설정 2~3문장","cast":[{"name":"한국어 이름","look":"영어 외형 묘사(얼굴·머리·의상·색, 모든 편에서 똑같이 재사용)","desc":"성격·역할 한국어 한 줄"}],"episodes":[{"n":1,"logline":"이 편에서 벌어지는 핵심 사건 한 줄(클리프행어 포함)"}]}
 cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체가 하나의 큰 줄거리(기승전결)로 이어지되 편마다 긴장이 고조되게.`;
-    try {
-      let raw = '';
-      if (k.gemini.length) { try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 2048, temperature: 0.95}); } catch {} }
-      if (!raw && k.openai) { const {openaiJson} = await import('./lib/openai'); raw = await openaiJson(k.openai, prompt, 2048); }
-      const m = raw.match(/\{[\s\S]*\}/); const d = m ? JSON.parse(m[0]) : null;
-      if (!d || !Array.isArray(d.episodes) || !d.episodes.length) throw new Error('바이블 생성 결과가 비었습니다.');
-      return json(res, 200, {bible: d});
-    } catch (e: any) { return json(res, 500, {error: '스토리 바이블 생성 실패: ' + (e?.message || e)}); }
+    // ★시나리오와 동일하게 비동기 작업 — 바이블 설계도 전 단계가 로그에 찍히고 에너지바로 진행이 보인다.
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false, kind: 'bible'};
+    jobs.set(id, job);
+    (async () => {
+      try {
+        jlog(job, `[시리즈] ${episodes}부작 설계`);
+        jlog(job, `[주제] ${extra ? `"${extra}"` : '(자유 주제 없음 — 장르/키워드로 설계)'}`);
+        jlog(job, `[장르] ${genre || '미스터리'}${bibleKw.length ? ` · 키워드: ${bibleKw.join(', ')}` : ''}`);
+        jlog(job, '[바이블] 세계관·인물·편별 줄거리를 설계 중이에요…(보통 15~25초)');
+        let raw = '';
+        if (k.gemini.length) { try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 2048, temperature: 0.95}); } catch (e: any) { jlog(job, '[바이블] Gemini 실패' + (k.openai ? ' → OpenAI 폴백' : '') + ': ' + (e?.message || '').slice(0, 60)); } }
+        if (!raw && k.openai) { jlog(job, '[바이블] OpenAI로 생성'); const {openaiJson} = await import('./lib/openai'); raw = await openaiJson(k.openai, prompt, 2048); }
+        const m = raw.match(/\{[\s\S]*\}/); const d = m ? JSON.parse(m[0]) : null;
+        if (!d || !Array.isArray(d.episodes) || !d.episodes.length) throw new Error('바이블 생성 결과가 비었습니다.');
+        jlog(job, `[완성] "${d.seriesTitle || '시리즈'}" · 인물 ${(d.cast || []).length}명 · ${(d.episodes || []).length}편`);
+        job.bible = d; job.title = d.seriesTitle; job.done = true; job.doneAt = Date.now();
+      } catch (e: any) {
+        job.error = '스토리 바이블 생성 실패: ' + (e?.message || e); job.done = true; job.doneAt = Date.now();
+        jlog(job, '[실패] ' + job.error);
+      }
+    })();
+    return json(res, 202, {id});
   }
 
   // ── ✍️ 창작 제작: 사용자가 표에서 편집을 끝낸 시나리오로 영상을 만든다(대본 재생성 안 함). 재창작과 동일 등록(YT/IG·썸네일). ──
@@ -2234,7 +2268,7 @@ JSON만: {"hookTop":"...","hookAccent":"..."}`;
       else if (Date.now() - lastWrite > 15000) { res.write(': ping\n\n'); lastWrite = Date.now(); }
       if (job.done) {
         res.write(
-          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip, projectId: job.projectId, clips: job.clips})}\n\n`,
+          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip, projectId: job.projectId, clips: job.clips, storyboard: job.storyboard, bible: job.bible})}\n\n`,
         );
         clearInterval(timer);
         res.end();

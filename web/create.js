@@ -50,7 +50,9 @@
   const ORIENTS = [['portrait', '세로'], ['landscape', '가로']];
   const STYLES = [['real', '실사'], ['anime', '애니'], ['cinema', '시네마'], ['classic', '고전']];
   const OUTS = [['image', '🖼 이미지영상'], ['wan', '🎬 움직이는영상']];
-  const CLIPS = [1, 2, 3, 4, 6];
+  // ★'움직이는 장면 수' = 몇 '개'의 장면을 실제 움직이는 영상(GPU)으로 만들지. 예전엔 seg() 기본 포맷이 '초'를 붙여
+  //   "4초"처럼 보여 테리가 '길이(초)'로 오해함 → 명시적으로 '개' 라벨을 준다(초 아님).
+  const CLIPS = [[1, '1개'], [2, '2개'], [3, '3개'], [4, '4개'], [6, '6개']];
   const EPS = [[1, '단편 1개'], [3, '3부작'], [5, '5부작'], [10, '10부작']];
 
   // ── 상태 ──
@@ -125,18 +127,17 @@
     try {
       if (eps > 1) {
         // 시리즈: ①스토리 바이블 ②1편 시나리오
-        $('cr-gen-state').textContent = `📖 ${eps}부작 세계관·인물 설계 중… (15~25초)`;
-        const rb = await fetch('/api/create-bible', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...briefBody(), episodes: eps})});
-        const db = await rb.json(); if (!rb.ok) throw new Error(db.error || '바이블 생성 실패');
-        bible = db.bible; epScenarios = []; epProduced = []; curEp = 0;
+        bible = null; epScenarios = []; epProduced = []; curEp = 0;
+        $('cr-gen-state').textContent = `📖 ${eps}부작 세계관·인물 설계 중…`;
+        const mb = await runJob('/api/create-bible', {...briefBody(), episodes: eps}, {phase: `📖 ${eps}부작 설계`, working: '세계관·인물 설계 중…', estSec: 22});
+        bible = mb.bible;
         renderSeriesBar();
         await genEpisode(0);
       } else {
         bible = null; epScenarios = []; epProduced = [];
-        $('cr-gen-state').textContent = '✍️ 시나리오 집필 중… (10~20초)';
-        const r = await fetch('/api/create-scenario', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(briefBody())});
-        const d = await r.json(); if (!r.ok) throw new Error(d.error || '생성 실패');
-        scenario = d.storyboard; $('cr-series-bar').classList.add('hidden'); renderTable();
+        $('cr-gen-state').textContent = '✍️ 시나리오 집필 중…';
+        const m = await runJob('/api/create-scenario', briefBody(), {phase: '✍️ 시나리오 집필', working: '시나리오 집필 중…', estSec: 18});
+        scenario = m.storyboard; $('cr-series-bar').classList.add('hidden'); renderTable();
         $('cr-gen-state').textContent = '✅ 시나리오 완성 — 표에서 고친 뒤 아래에서 제작하세요.'; save();
         $('cr-step2').scrollIntoView({behavior: 'smooth', block: 'start'});
       }
@@ -155,14 +156,12 @@
   async function genEpisode(i) {
     curEp = i; renderSeriesBar();
     if (epScenarios[i]) { scenario = epScenarios[i]; renderTable(); return; }
-    $('cr-gen-state').textContent = `✍️ ${i + 1}편 시나리오 집필 중… (10~20초)`;
+    $('cr-gen-state').textContent = `✍️ ${i + 1}편 시나리오 집필 중…`;
     const logline = (bible.episodes && bible.episodes[i]) ? bible.episodes[i].logline : '';
-    const r = await fetch('/api/create-scenario', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({...briefBody(), seriesBible: bibleText(), episode: i + 1, episodesTotal: eps, episodeLogline: logline})});
-    const d = await r.json(); if (!r.ok) throw new Error(d.error || '생성 실패');
+    const m = await runJob('/api/create-scenario', {...briefBody(), seriesBible: bibleText(), episode: i + 1, episodesTotal: eps, episodeLogline: logline}, {phase: `✍️ ${i + 1}편 집필`, working: `${i + 1}편 집필 중…`, estSec: 18});
     // 제목에 시리즈·편 표기(제작·작업내역에서 'N편'으로 구분).
-    d.storyboard.title = `[${bible.seriesTitle || '시리즈'}] ${i + 1}편 · ${d.storyboard.title || ''}`.trim();
-    epScenarios[i] = d.storyboard; scenario = d.storyboard; renderTable();
+    m.storyboard.title = `[${bible.seriesTitle || '시리즈'}] ${i + 1}편 · ${m.storyboard.title || ''}`.trim();
+    epScenarios[i] = m.storyboard; scenario = m.storyboard; renderTable();
     $('cr-gen-state').textContent = `✅ ${i + 1}편 완성 — 표에서 고치고 제작하세요. ${i + 1 < eps ? '아래 편 탭에서 다음 편도 집필할 수 있어요.' : ''}`;
     save(); $('cr-step2').scrollIntoView({behavior: 'smooth', block: 'start'});
   }
@@ -216,6 +215,46 @@
   $('cr-log-modal-copy').onclick = () => navigator.clipboard?.writeText(logText());
   function startTick() { stopTick(); startTs = startTs || Date.now(); tickTimer = setInterval(() => { const s = Math.floor((Date.now() - startTs) / 1000); $('cr-elapsed').textContent = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }, 1000); }
   function stopTick() { if (tickTimer) { clearInterval(tickTimer); tickTimer = null; } }
+
+  // ── 범용 작업 실행(진행 패널+에너지바+실시간 로그) — 시나리오 집필·바이블 설계에 사용. 결과는 done 페이로드로 받는다.
+  //   LLM 대기는 중간 진행값이 없어 '조용'하므로, 예상시간(estSec) 기준으로 바를 90%까지 부드럽게 채우고
+  //   로그가 올 때마다 살짝 점프시킨다(테리: "얼마나 걸리는지 몰라 답답" → 멈춰있지 않게).
+  function runJob(url, body, opts) {
+    opts = opts || {};
+    return new Promise((resolve, reject) => {
+      $('cr-progress').classList.remove('hidden');
+      $('cr-result-block').classList.add('hidden');
+      $('cr-log').innerHTML = ''; setEnergy(6, '시작…');
+      $('cr-phase').textContent = opts.phase || '집필';
+      $('cr-stop').classList.add('hidden'); // 집필은 짧아 중단 버튼 없음
+      startTs = Date.now(); startTick();
+      const est = (opts.estSec || 18) * 1000;
+      let bumped = 0;
+      const creep = setInterval(() => {
+        const byTime = Math.min(88, (Date.now() - startTs) / est * 88);
+        setEnergy(Math.max(byTime, bumped), opts.working || '집필 중…');
+      }, 400);
+      const fail = (msg) => { clearInterval(creep); stopTick(); setEnergy(100, '실패'); addLog('⚠️ ' + msg); reject(new Error(msg)); };
+      fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)})
+        .then((r) => r.json().then((d) => ({ok: r.ok, d})))
+        .then(({ok, d}) => {
+          if (!ok || !d.id) return fail(d.error || '시작 실패');
+          const es = new EventSource('/api/progress?id=' + d.id);
+          es.onmessage = (ev) => {
+            let m; try { m = JSON.parse(ev.data); } catch { return; }
+            if (m.log) { addLog(m.log); bumped = Math.min(88, bumped + 14); setEnergy(bumped, opts.working || '집필 중…'); }
+            if (m.done) {
+              es.close(); clearInterval(creep); stopTick();
+              if (m.error) return fail(m.error);
+              setEnergy(100, '완성! 🎉');
+              resolve(m);
+            }
+          };
+          es.onerror = () => {}; // EventSource 자동 재연결(네트워크 블립). done에서 명시적으로 닫음.
+        })
+        .catch((e) => fail(e.message));
+    });
+  }
 
   // ── 제작 ──
   $('cr-make').onclick = async () => {

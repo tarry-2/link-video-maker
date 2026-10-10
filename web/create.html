@@ -144,8 +144,8 @@
         <h2 class="block-title"><span class="st-no">04</span> 어떻게 만들까</h2>
         <div class="cr-field"><span class="field-label">출력</span><div class="seg" id="cr-out"></div></div>
         <div class="cr-field hidden" id="cr-clip-row">
-          <span class="field-label">움직이는 장면 수</span><div class="seg" id="cr-clips"></div>
-          <p class="hint" id="cr-clip-note">앞에서부터 N개 장면이 움직여요(나머진 이미지). GPU 과금이 생깁니다.</p>
+          <span class="field-label">움직이는 장면 수 <span style="color:var(--teal)">(초 아님, 장면 개수)</span></span><div class="seg" id="cr-clips"></div>
+          <p class="hint" id="cr-clip-note">영상은 길이에 따라 여러 '장면'으로 나뉘어요. 그중 <b>앞에서부터 고른 개수만큼</b>만 실제로 움직이는 영상(GPU)으로 만들고, 나머지는 사진이에요. 숫자가 클수록 GPU 과금이 커져요.</p>
         </div>
         <div class="cr-field" style="display:flex;gap:16px;flex-wrap:wrap">
           <label class="hint"><input type="checkbox" id="cr-narr" checked /> 나레이션(음성)</label>
