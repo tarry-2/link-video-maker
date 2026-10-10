@@ -381,7 +381,7 @@ export const Scene: React.FC<SceneData> = ({
       ) : null}
 
       {/* 이지컷식 댓글 템플릿(옵션) */}
-      {comment ? (
+      {comment && comment.user ? (
         <div
           style={{
             position: 'absolute',

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OnVideo — 창작(오리지널 시나리오)</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#c0562a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="OnVideo" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
+    <style>
+      .cr-chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px}
+      .cr-chip{padding:7px 13px;border-radius:999px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font-weight:700;font-size:14px}
+      .cr-chip.active{background:linear-gradient(90deg,#4FE0D0,#9b7bff);color:#06202a;border-color:transparent}
+      .cr-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+      .cr-seg{display:flex;gap:6px;flex-wrap:wrap}
+      .cr-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+      .cr-table th,.cr-table td{border:1px solid var(--line);padding:6px;vertical-align:top;text-align:left}
+      .cr-table th{background:var(--card);font-size:12px;white-space:nowrap}
+      .cr-table td[contenteditable]{min-width:90px;outline:none}
+      .cr-table td[contenteditable]:focus{background:rgba(79,224,208,.12)}
+      .cr-scene-num{font-weight:800;text-align:center;width:28px}
+      .cr-meta input{width:100%;box-sizing:border-box}
+      .cr-hint-sm{font-size:12px;opacity:.7}
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:8px">
+        <div class="wordmark">On<span>Video</span></div>
+        <span class="ver-badge"><span class="live-dot"></span><span id="ver">v–</span></span>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center">
+        <button id="gpu-badge" class="gpu-badge off" type="button" title="움직이는 영상 GPU 상태">● GPU 확인중…</button>
+        <button id="theme-btn" class="ghost-btn small" title="밝게/어둡게">🌙</button>
+        <a href="/app" class="ghost-btn small">✏️ 영상 만들기</a>
+      </div>
+    </header>
+
+    <nav class="topnav">
+      <a href="/app" class="navtab">✏️ 영상 만들기</a>
+      <a href="/create" class="navtab active">✍️ 창작</a>
+      <a href="/highlight" class="navtab">🎬 유튜브 하이라이트</a>
+      <a href="/voices?tab=voice" class="navtab">🎙 목소리 듣기</a>
+      <a href="/voices?tab=pf" class="navtab">🎬 포트폴리오</a>
+      <a href="/monetize" class="navtab">💰 수익화 가이드</a>
+    </nav>
+
+    <main class="wrap wide">
+      <div class="page-head">
+        <p class="eyebrow">ONVIDEO · 오리지널</p>
+        <h1 class="hero">창작 — AI 시나리오 작가</h1>
+        <p class="sub">장르·키워드만 고르면 방송·뮤지컬 작가처럼 <b>오리지널 시나리오</b>를 표로 써줘요. 표에서 고친 뒤 바로 영상으로. 한 편도, 시리즈도.</p>
+      </div>
+
+      <!-- STEP 1: 키워드/설정 -->
+      <section class="card" id="cr-step1">
+        <h2 class="field-label">1. 장르·키워드 고르기</h2>
+        <div class="cr-chips" id="cr-genres"></div>
+        <div class="cr-row">
+          <input id="cr-brief" class="input" placeholder="(선택) 자유롭게 한 줄 — 예: 비 오는 밤, 복수를 결심한 형사" style="flex:1;min-width:220px" />
+        </div>
+        <h2 class="field-label" style="margin-top:12px">2. 설정</h2>
+        <div class="cr-row">
+          <span class="cr-hint-sm">길이</span>
+          <div class="cr-seg" id="cr-dur"></div>
+          <span class="cr-hint-sm" style="margin-left:10px">화면</span>
+          <div class="cr-seg" id="cr-orient"></div>
+        </div>
+        <div class="cr-row">
+          <span class="cr-hint-sm">그림체</span>
+          <div class="cr-seg" id="cr-style"></div>
+        </div>
+        <button id="cr-gen" class="btn" style="margin-top:10px">✍️ 시나리오 만들기</button>
+        <div id="cr-gen-state" class="hint" style="margin-top:8px"></div>
+      </section>
+
+      <!-- STEP 2: 시나리오 표(편집) -->
+      <section class="card hidden" id="cr-step2">
+        <h2 class="field-label">3. 시나리오 — 고치고 싶은 칸을 바로 눌러 수정하세요</h2>
+        <div class="cr-meta" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+          <label class="cr-hint-sm">제목 <input id="cr-title" class="input" /></label>
+          <label class="cr-hint-sm">배경음악(BGM 무드) <input id="cr-music" class="input" /></label>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="cr-table">
+            <thead><tr>
+              <th>#</th><th>샷</th><th>등장인물</th><th>후킹(윗줄)</th><th>후킹(강조)</th><th>대사/나레이션</th><th>화면(비주얼)</th>
+            </tr></thead>
+            <tbody id="cr-tbody"></tbody>
+          </table>
+        </div>
+        <button id="cr-regen" class="ghost-btn small" style="margin-top:8px">↻ 다시 집필(새 시나리오)</button>
+      </section>
+
+      <!-- STEP 3: 제작 설정 -->
+      <section class="card hidden" id="cr-step3">
+        <h2 class="field-label">4. 어떻게 만들까</h2>
+        <div class="cr-row">
+          <span class="cr-hint-sm">출력</span>
+          <div class="cr-seg" id="cr-out"></div>
+        </div>
+        <div class="cr-row hidden" id="cr-clip-row">
+          <span class="cr-hint-sm">움직이는 장면 수</span>
+          <div class="cr-seg" id="cr-clips"></div>
+          <span class="cr-hint-sm" id="cr-clip-note">앞에서부터 N개 장면이 움직여요(나머진 이미지).</span>
+        </div>
+        <div class="cr-row">
+          <label class="cr-hint-sm"><input type="checkbox" id="cr-narr" checked /> 나레이션</label>
+          <label class="cr-hint-sm"><input type="checkbox" id="cr-bgm" checked /> 배경음악</label>
+        </div>
+        <button id="cr-make" class="btn">🎬 이 시나리오로 영상 만들기</button>
+        <button id="cr-stop" class="ghost-btn small hidden" style="margin-left:8px">■ 중단</button>
+      </section>
+
+      <!-- 진행/결과 -->
+      <section class="card hidden" id="cr-progress">
+        <div class="energy-wrap"><div class="energy" id="cr-energy"><span id="cr-energy-label">준비…</span></div></div>
+        <div id="cr-log" class="log-box" style="margin-top:8px"></div>
+      </section>
+      <section id="cr-result-block" class="hidden"></section>
+    </main>
+
+    <script src="/create.js"></script>
+  </body>
+</html>

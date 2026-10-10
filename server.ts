@@ -7,6 +7,7 @@ import path from 'node:path';
 import {randomUUID, createHmac, timingSafeEqual} from 'node:crypto';
 import {execFileSync as cpExecFileSync} from 'node:child_process';
 import {makeVideo} from './lib/pipeline';
+import {generateStoryboard, type Storyboard} from './lib/script';
 import {registerVideoToPortfolio} from './lib/video-portfolio';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
@@ -373,7 +374,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight' | 'remake'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean};
+type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight' | 'remake' | 'create'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean};
 // ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
 function jlog(job: Job, s: string) {
   const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
@@ -553,7 +554,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── 🔒 기능 페이지 진입 차단 — 비번(세션) 없으면 랜딩으로. 대시보드·기능·관리 화면은 로그인 필수. ──
   //   랜딩(/)·로그인/버전 API·정적 자산·포트폴리오 쇼케이스(랜딩 캐러셀용)는 공개로 남긴다.
-  const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html']);
+  const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html', '/create', '/create.html']);
   if (GATED_PAGES.has(p) && !authed(req)) {
     res.writeHead(302, {Location: '/?login=1'});
     return res.end();
@@ -570,6 +571,8 @@ const server = http.createServer(async (req, res) => {
   // ── 유튜브 하이라이트 전용 페이지(영상 만들기와 완전 분리) ──
   if (p === '/highlight' || p === '/highlight.html')
     return serveFile(res, path.join(ROOT, 'web', 'highlight.html'), 'text/html; charset=utf-8');
+  if (p === '/create' || p === '/create.html')
+    return serveFile(res, path.join(ROOT, 'web', 'create.html'), 'text/html; charset=utf-8');
   if (p === '/highlight.js')
     return serveFile(res, path.join(ROOT, 'web', 'highlight.js'), 'application/javascript; charset=utf-8');
 
@@ -1657,6 +1660,80 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       } catch (e: any) {
         job.error = e.message;
         job.done = true; job.doneAt = Date.now();
+        jlog(job, '[실패] ' + e.message);
+      }
+    })();
+    return json(res, 202, {id});
+  }
+
+  // ── ✍️ 창작: 장르·키워드로 오리지널 '시나리오(표)'를 집필한다(영상 생성 X). 사용자가 표에서 고친 뒤 /api/create-produce로 제작. ──
+  if (p === '/api/create-scenario' && req.method === 'POST') {
+    const b = await readBody(req);
+    const genre = String(b.genre || '').trim();
+    const keywords: string[] = Array.isArray(b.keywords) ? b.keywords.map((x: any) => String(x || '').trim()).filter(Boolean).slice(0, 12) : [];
+    const extra = String(b.brief || '').trim(); // 자유 입력(선택)
+    if (!genre && !keywords.length && !extra) return json(res, 400, {error: '장르나 키워드를 하나 이상 골라주세요.'});
+    const k = pipelineKeys();
+    if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 대본 키(Gemini 또는 OpenAI)를 저장하세요.'});
+    const duration = Math.max(15, Math.min(180, Number(b.duration) || 60));
+    const orientation: 'portrait' | 'landscape' = b.orientation === 'landscape' ? 'landscape' : 'portrait';
+    const imageStyle = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
+    const sceneCount = Math.max(0, Math.min(12, Number(b.sceneCount) || 0));
+    const seriesBible = String(b.seriesBible || '').trim() || undefined; // 시리즈면 바이블 전달(연속성)
+    const brief = `장르: ${genre || '미스터리'}. 핵심 키워드: ${keywords.join(', ') || '반전'}.${extra ? ` 추가 요구: ${extra}.` : ''} 이 장르와 키워드로 시청자의 감정을 뒤흔들고 끝까지 몰입시키는 오리지널 창작 스토리를 만들어라.`;
+    try {
+      const sb = await generateStoryboard(k.gemini, brief, {
+        duration, orientation, imageStyle, sceneCount, creative: true, seriesBible, openaiKey: k.openai,
+      });
+      return json(res, 200, {storyboard: sb});
+    } catch (e: any) { return json(res, 500, {error: '시나리오 생성 실패: ' + (e?.message || e)}); }
+  }
+
+  // ── ✍️ 창작 제작: 사용자가 표에서 편집을 끝낸 시나리오로 영상을 만든다(대본 재생성 안 함). 재창작과 동일 등록(YT/IG·썸네일). ──
+  if (p === '/api/create-produce' && req.method === 'POST') {
+    const b = await readBody(req);
+    const storyboard = b.storyboard as Storyboard | undefined;
+    if (!storyboard || !Array.isArray(storyboard.scenes) || !storyboard.scenes.length) return json(res, 400, {error: '제작할 시나리오가 없습니다. 먼저 시나리오를 만들어 주세요.'});
+    const k = pipelineKeys();
+    const needsEleven = b.narration !== false || b.bgm !== false;
+    if (needsEleven && !k.elevenlabs) return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다(둘 다 끄면 키 없이 가능).'});
+    const orientation: 'portrait' | 'landscape' = b.orientation === 'landscape' ? 'landscape' : 'portrait';
+    const durSec = Math.max(15, Math.min(180, Number(b.duration) || 60));
+    const aiClips = Math.max(0, Math.min(20, Number(b.aiClips) || 0)); // 0=이미지영상 / N=움직이는영상(앞 N장면)
+    const imageStyle = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false, kind: 'create'}; // 창작 전용 kind — create 페이지만 이 작업에 연동(다른 탭이 안 가로채게)
+    jobs.set(id, job);
+    currentGenJob = id;
+    (async () => {
+      try {
+        jlog(job, `[창작] "${storyboard.title || '오리지널'}" 시나리오로 영상을 제작합니다(${aiClips > 0 ? '움직이는 영상' : '이미지 영상'}).`);
+        const r = await makeVideo([], k, {
+          storyboard, duration: durSec, orientation, imageStyle, aiClips,
+          autoShutdown: b.autoShutdown !== false, narration: b.narration !== false, bgm: b.bgm !== false,
+          voice: b.voice || undefined, font: pickFont(b.font),
+          log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
+        });
+        let pid = '';
+        try {
+          pid = await registerVideoToPortfolio({
+            out: r.out, title: r.title, thumb: r.thumb, imageDir: r.imageDir,
+            voice: String(b.voice || '창작'), category: '✍️ 창작', goal: 'issue',
+            orientation, durSec, source: 'archive', motion: aiClips > 0, log: (m) => jlog(job, m),
+          });
+        } catch (e: any) { jlog(job, '[포트폴리오] 등록 실패(영상은 완성됨): ' + (e?.message || e)); }
+        job.clips = [{projectId: pid, file: path.basename(r.out), title: r.title}];
+        job.file = path.basename(r.out); job.title = r.title; if (pid) job.projectId = pid;
+        try {
+          const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
+          const today = new Date().toLocaleDateString('sv-SE');
+          const folder = path.join(os.homedir(), 'Desktop', `온비디오 창작 ${today}`, safe);
+          fs.mkdirSync(folder, {recursive: true});
+          fs.copyFileSync(r.out, path.join(folder, `${safe}.mp4`));
+        } catch { /* Desktop 없는 환경 무시 */ }
+        job.done = true; job.doneAt = Date.now();
+      } catch (e: any) {
+        job.error = e.message; job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
     })();

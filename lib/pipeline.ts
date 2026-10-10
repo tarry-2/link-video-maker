@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdir, writeFile, rm} from 'node:fs/promises';
 import fs from 'node:fs';
 import path from 'node:path';
-import {generateStoryboard} from './script';
+import {generateStoryboard, type Storyboard} from './script';
 import {generateImageFlux, generateImageNano} from './image';
 import {ttsElevenJoined, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
@@ -65,6 +65,9 @@ export type PipelineOpts = {
   // ★재창작(리메이크): URL을 긁지 않고 '이미 확보한 내용 텍스트'를 소스로 바로 쓴다. 인기 영상(서프라이즈 등)의
   //   제목·자막을 뽑아 이걸로 넘기면 generateStoryboard가 우리 대본·이미지·목소리로 새 영상을 만든다(저작권 free).
   sourceText?: string;
+  // ★창작 탭: 사용자가 표에서 편집을 끝낸 '완성 시나리오(스토리보드)'를 그대로 받아 제작한다(대본 재생성 안 함).
+  //   있으면 generateStoryboard·fetchSource를 건너뛰고 이 스토리보드로 바로 이미지·음성·BGM·렌더.
+  storyboard?: Storyboard;
   // ★화면 방향 강제 — 지정하면 길이와 무관하게 이 방향으로(재창작은 길이·방향을 따로 고르므로 필수). 없으면 길이로 자동.
   orientation?: 'portrait' | 'landscape';
   log?: (m: string) => void;
@@ -88,27 +91,33 @@ export async function makeVideo(
   const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
   await mkdir(abs(pubRel), {recursive: true});
 
-  // 재창작이면 넘어온 내용 텍스트를 소스로, 아니면 기존대로 URL을 긁는다(무회귀).
-  const source = opts.sourceText && opts.sourceText.trim().length > 20
-    ? opts.sourceText.trim().slice(0, 40000)
-    : await fetchSource(urls, log);
-  ck();
-
   // ★카테고리 프리셋: 있으면 톤·이미지·목소리·BGM을 그 바닥 최적값으로 자동 세팅.
   const preset = opts.presetId ? getPreset(opts.presetId) : undefined;
   if (preset) log(`[카테고리] ${preset.emoji} ${preset.label} — 최적 세팅 자동 적용`);
 
-  log('[대본] 생성 중…');
-  const sb = await generateStoryboard(keys.gemini, source, {
-    duration: opts.duration,
-    orientation, // ★이미지 비율도 고른 방향에 맞춘다(세로 120초면 세로 이미지로)
-    purpose: opts.purpose,
-    preset,
-    imageStyle: opts.imageStyle,
-    sceneCount: opts.sceneCount,
-    openaiKey: keys.openai,
-    log,
-  });
+  let sb: Storyboard;
+  if (opts.storyboard && opts.storyboard.scenes?.length) {
+    // 창작 탭: 사용자가 표에서 편집을 끝낸 시나리오를 그대로 제작(대본 재생성 안 함).
+    sb = opts.storyboard;
+    log(`[대본] 편집한 시나리오 그대로 제작 · ${sb.scenes.length}장면`);
+  } else {
+    // 재창작이면 넘어온 내용 텍스트를 소스로, 아니면 기존대로 URL을 긁는다(무회귀).
+    const source = opts.sourceText && opts.sourceText.trim().length > 20
+      ? opts.sourceText.trim().slice(0, 40000)
+      : await fetchSource(urls, log);
+    ck();
+    log('[대본] 생성 중…');
+    sb = await generateStoryboard(keys.gemini, source, {
+      duration: opts.duration,
+      orientation, // ★이미지 비율도 고른 방향에 맞춘다(세로 120초면 세로 이미지로)
+      purpose: opts.purpose,
+      preset,
+      imageStyle: opts.imageStyle,
+      sceneCount: opts.sceneCount,
+      openaiKey: keys.openai,
+      log,
+    });
+  }
   log(`[대본] "${sb.title}" · ${sb.scenes.length}장면`);
   ck();
 

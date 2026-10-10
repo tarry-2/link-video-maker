@@ -131,6 +131,8 @@ export async function generateStoryboard(
     imageStyle?: string; // ★사용자가 고른 아트스타일 id(visualPrompt를 이 스타일에 맞게 생성)
     sceneCount?: number; // ★사용자가 장면(이미지) 수를 직접 지정(0/미지정=길이로 자동). 2~12.
     orientation?: 'portrait' | 'landscape'; // ★방향 강제(지정되면 길이 무관). 없으면 길이로 자동.
+    creative?: boolean; // ★창작 탭: source를 '사실 자료'가 아니라 '창작 의뢰(장르·키워드)'로 보고 오리지널 픽션 시나리오를 쓴다.
+    seriesBible?: string; // ★시리즈: 세계관·인물·전체 아크(스토리 바이블). 있으면 이 편이 그 설정을 지키며 이어지게.
     openaiKey?: string;
     log?: (m: string) => void;
   },
@@ -180,7 +182,10 @@ export async function generateStoryboard(
 
   const catLine = preset ? `[카테고리] ${preset.label} (${preset.group})` : '';
 
-  const prompt = `너는 구독자 100만 한국 유튜브 쇼츠 채널의 기획자이자 대본 작가다. 아래 자료로 '한 편의 영화처럼 기승전결이 있어 끝까지 보게 되는' 한국어 ${orient} ${format} 대본을 JSON으로 쓴다.
+  const intro = opts.creative
+    ? `너는 수백만 조회수를 내는 한국 숏드라마·웹드라마 작가이자 뮤지컬 극작가다. 아래 '창작 의뢰(장르·키워드)'로 실제 자료 없이 완전히 새로운 '오리지널 픽션 시나리오'를 창작한다. 지어내도 된다(픽션). '한 편의 영화·뮤지컬처럼 기승전결이 살아있고 끝까지 보게 되는' 한국어 ${orient} ${format} 시나리오를 JSON으로 쓴다.`
+    : `너는 구독자 100만 한국 유튜브 쇼츠 채널의 기획자이자 대본 작가다. 아래 자료로 '한 편의 영화처럼 기승전결이 있어 끝까지 보게 되는' 한국어 ${orient} ${format} 대본을 JSON으로 쓴다.`;
+  const prompt = `${intro}${opts.seriesBible ? `\n\n[시리즈 설정 — 반드시 지켜라(스토리 바이블)]\n이 영상은 시리즈의 한 편이다. 아래 세계관·인물·전체 줄거리를 '그대로' 지키며(인물 이름·성격·외형·관계·설정 유지), 이 편의 분량을 이어서 써라. 이 편의 마지막은 다음 편이 궁금해 미치게 만드는 클리프행어로 끊어라.\n${opts.seriesBible.slice(0, 4000)}` : ''}
 
 ${catLine}
 [화법·톤] ${toneGuide}
@@ -238,7 +243,7 @@ ${(wantsPeople || true) ? `  ★★등장인물 일관성(서사형에서 매우
 반드시 아래 JSON만 출력(설명·마크다운 금지):
 {"title":"...","subject":"...","cast":[{"name":"...","look":"..."}],"musicPrompt":"...","thumb":{"big":"...","small":"...","badge":"..."},"scenes":[{"narration":"...","hookTop":"...","hookAccent":"...","accentColor":"#FFE24B","visualPrompt":"...","characters":["..."],"shot":"...","comment":{"user":"...","text":"...","likes":"..."}}]}
 
-[자료]
+[${opts.creative ? '창작 의뢰(이 장르·키워드로 오리지널 스토리를 지어내라)' : '자료'}]
 ${source.slice(0, 12000)}`;
 
   // ★우선순위 Gemini(키 폴백+모델 폴백), 없거나 전부 실패하면 OpenAI 폴백.
@@ -277,10 +282,11 @@ ${source.slice(0, 12000)}`;
   } else sb.cast = undefined;
   // 서사형(cast 있음)이면 subject를 비워 pipeline이 단일-소재 강제를 걸지 않게 한다(난쟁이·조연이 장면에서 사라지던 원인).
   if (sb.cast && sb.cast.length) sb.subject = '';
-  // 장면별 characters/shot 정규화.
+  // 장면별 characters/shot 정규화 + 빈 comment 제거(LLM이 comment:{} 를 뱉으면 Scene 렌더가 comment.user.slice에서 터진다).
   for (const s of sb.scenes) {
     s.characters = Array.isArray(s.characters) ? s.characters.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 6) : [];
     s.shot = typeof s.shot === 'string' ? s.shot.trim().slice(0, 60) : '';
+    if (s.comment && !(s.comment.user && String(s.comment.user).trim() && s.comment.text && String(s.comment.text).trim())) delete s.comment;
   }
   // 자막·후킹·나레이션 이모지 제거(폰트에 없어 깨짐). title은 유튜브용이라 유지.
   for (const s of sb.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = stripEmoji(s.narration || ''); }
