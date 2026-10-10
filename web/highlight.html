@@ -162,6 +162,14 @@
               <button type="button" class="seg-btn hl-rmout active" data-out="image">🖼 이미지영상(빠름·저렴)</button>
               <button type="button" class="seg-btn hl-rmout" data-out="wan">🎬 움직이는영상(툴 제작 · 비용↑)</button>
             </div>
+            <!-- 그림 스타일 — 이미지영상·움직이는영상 둘 다 적용(실사/애니 등) -->
+            <label class="field-label" style="margin-top:10px">🎨 그림 스타일 <span class="hint">— 영상 분위기(실사·애니 등)</span></label>
+            <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+              <button type="button" class="seg-btn hl-rmstyle active" data-style="real">📷 실사</button>
+              <button type="button" class="seg-btn hl-rmstyle" data-style="anime">🎨 애니</button>
+              <button type="button" class="seg-btn hl-rmstyle" data-style="cinema">🎞️ 시네마</button>
+              <button type="button" class="seg-btn hl-rmstyle" data-style="classic">🏛️ 고전</button>
+            </div>
             <!-- 움직이는영상 고를 때만: 몇 장면을 움직이게 할지(임의 지정 + 저장) -->
             <div id="hl-rm-motion" class="hidden" style="margin-top:10px">
               <label class="field-label">움직이는 장면 수 <span class="hint">(많을수록 생생·비용↑. 비용 대부분은 GPU 고정비)</span></label>

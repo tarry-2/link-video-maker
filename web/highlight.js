@@ -422,6 +422,7 @@
   let makeMode = 'clip'; // 제작 방식: clip(원본 자르기=하이라이트) / remake(재창작=내용만 뽑아 새 영상)
   let rmOut = 'image';   // 재창작 출력: image(이미지영상) / wan(움직이는영상)
   let rmClips = 1;       // 재창작 움직이는영상 장면 수(기본 1) — restoreState 전에 선언(TDZ 방지)
+  let rmStyle = 'real';  // 재창작 그림 스타일(real/anime/cinema/classic) — 이미지·움직이는영상 둘 다 적용
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
   const STATE_KEY = 'onvideo-hl-state';
@@ -429,7 +430,7 @@
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
         region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, captionEn, voice, font, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
-        makeMode, rmOut, rmClips, // 재창작 설정도 저장(탭 나갔다 와도 유지 — 테리 지시)
+        makeMode, rmOut, rmClips, rmStyle, // 재창작 설정도 저장(탭 나갔다 와도 유지 — 테리 지시)
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -472,6 +473,8 @@
     makeMode = s.makeMode === 'remake' ? 'remake' : 'clip';
     rmOut = s.rmOut === 'wan' ? 'wan' : 'image';
     rmClips = Math.max(1, Math.min(20, Number(s.rmClips) || 1));
+    rmStyle = ['real','anime','cinema','classic'].includes(s.rmStyle) ? s.rmStyle : 'real';
+    document.querySelectorAll('.hl-rmstyle').forEach((b) => b.classList.toggle('active', b.dataset.style === rmStyle));
     applyMakeMode();
     // 버튼 활성 복원
     document.querySelectorAll('.hl-region').forEach((b) => b.classList.toggle('active', b.dataset.region === region));
@@ -1137,6 +1140,12 @@
   }
   $('hl-rmclip-save')?.addEventListener('click', saveRmClip);
   $('hl-rmclip-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveRmClip(); } });
+  // 재창작 그림 스타일 선택.
+  document.querySelectorAll('.hl-rmstyle').forEach((b) => b.addEventListener('click', () => {
+    rmStyle = b.dataset.style || 'real';
+    document.querySelectorAll('.hl-rmstyle').forEach((x) => x.classList.toggle('active', x.dataset.style === rmStyle));
+    saveState(); addLog(`🎨 그림 스타일 = ${b.textContent.trim()}`);
+  }));
   async function generate(body, endpoint) {
     const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
     resultClips = []; $('hl-result-block')?.classList.add('hidden'); // 새 제작 → 이전 결과 비움
@@ -1158,12 +1167,13 @@
       addLog('• 방식: 원본 영상·소리·로고 미사용 → 그 이야기로 완전 새 영상(저작권 걱정 0)');
       addLog(`• 출력: ${rmOut === 'wan' ? `🎬 움직이는영상(툴 제작 · 장면 ${rmClips}개)` : '🖼 이미지영상'} · 길이 ${sec}초 · ${orient === 'landscape' ? '가로' : '세로'}`);
       addLog(`• 목소리: ${$('hl-voice')?.selectedOptions[0]?.textContent || voice || '자동'}`);
+      addLog(`• 그림 스타일: ${document.querySelector('.hl-rmstyle.active')?.textContent.trim() || rmStyle}`);
       addLog('────────────────────────────');
       startTs = Date.now(); setEnergy(8, '재창작을 시작합니다…'); estTotalText = '약 3~8분';
       try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
       lastBody = {
         title: picked.title, channel: picked.channel || '',
-        duration: sec, orientation: orient, voice, font,
+        duration: sec, orientation: orient, voice, font, imageStyle: rmStyle,
         aiClips: rmOut === 'wan' ? rmClips : 0, // >0 = 움직이는영상(앞 N장면 Wan), 0 = 이미지영상
       };
       lastEndpoint = '/api/generate-remake';
