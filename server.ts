@@ -1099,6 +1099,9 @@ const server = http.createServer(async (req, res) => {
       kbsnews: {channel: 'newskbs', label: 'KBS 뉴스', search: true},
       ebs: {channel: 'EBSDocumentary', label: 'EBS 다큐', search: true},
       mbc: {channel: 'MBCentertainment', label: 'MBC 예능', search: true}, // MBC 예능(구해줘홈즈 등) — 모던코리아는 공개영상 1개뿐이라 제외
+      // ★MBC 미스터리(공식, 101만 구독) = 신비한TV 서프라이즈 + 심야괴담회. '진짜 미스터리'(실제 미제사건·
+      //   초자연·심령·외계인·실화 괴담)가 가득 — KBS 아카이브엔 없는 장르라 전용 소스로 추가(테리 지시).
+      mbcmystery: {channel: 'mbcmystery', label: 'MBC 미스터리', search: true},
     };
     const src = u.searchParams.get('src') || 'kbs';
     const q = (u.searchParams.get('q') || '').trim();
