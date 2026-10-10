@@ -208,7 +208,13 @@ export async function makeVideo(
       try {
         log(`[장면 ${i + 1}] 🎬 움직이는 영상 생성(I2V, 720p)…`);
         if (fs.existsSync(abs(imgRel))) {
-          await wanI2V(wanPod, wanPrompt, abs(imgRel), abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+          // I2V 우선. 실패하면 '검증된 T2V'로 폴백(정지 이미지로 떨어지지 않게 — 움직이는 영상 보장).
+          try {
+            await wanI2V(wanPod, wanPrompt, abs(imgRel), abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+          } catch (e1: any) {
+            log(`[장면 ${i + 1}] I2V 실패(${(e1?.message || '').slice(0, 60)}) → T2V로 폴백`);
+            await wanT2V(wanPod, wanPrompt, abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+          }
         } else {
           await wanT2V(wanPod, wanPrompt, abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
         }

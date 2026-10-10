@@ -104,7 +104,13 @@ export const studioProviders: StudioDependencies = {
         try {
           log(`[장면 ${i + 1}/${n}] 🎬 움직이는 영상 생성(I2V, 720p)…(수 분 걸릴 수 있어요)`);
           if (stillPath && existsSync(stillPath)) {
-            await wanI2V(pod, wanPrompt, stillPath, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+            // I2V 우선, 실패하면 '검증된 T2V'로 폴백(정지 사진으로 떨어지지 않게).
+            try {
+              await wanI2V(pod, wanPrompt, stillPath, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+            } catch (e1: any) {
+              log(`[장면 ${i + 1}] I2V 실패(${(e1?.message || '').slice(0, 60)}) → T2V로 폴백`);
+              await wanT2V(pod, wanPrompt, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+            }
           } else {
             await wanT2V(pod, wanPrompt, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
           }
