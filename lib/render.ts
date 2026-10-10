@@ -56,8 +56,14 @@ function pickConcurrency(memGB: number): number {
 }
 
 // 번들은 한 번만(재사용). 이미지/음성이 public/에 있으면 staticFile로 잡힌다.
+// ★재검증 필수: 캐시된 번들 폴더(/tmp/remotion-webpack-bundle-*)는 cleanup(cleanTmpRemotion)이 1시간 뒤
+//   mtime 기준으로 지울 수 있다. 캐시 변수만 남고 실제 폴더가 사라지면 "Tried to serve the Webpack bundle …
+//   file doesn't exist"로 렌더가 터진다(빠른렌더 renderHookStill이 매번 실패→느린 폴백으로 샜던 원인).
+//   호출 전에 폴더 존재를 확인하고, 없으면 다시 번들링한다. 모든 render* 함수가 이 한 곳을 지나므로 일괄 해결.
 async function getServeUrl(log?: (m: string) => void): Promise<string> {
-  if (cachedServeUrl) return cachedServeUrl;
+  if (cachedServeUrl && fs.existsSync(cachedServeUrl)) return cachedServeUrl;
+  if (cachedServeUrl) log?.('[렌더] 캐시 번들이 정리돼 다시 번들링합니다…');
+  cachedServeUrl = null;
   const entry = path.join(process.cwd(), 'src/index.ts');
   log?.('[렌더] 번들링 중…');
   cachedServeUrl = await bundle({entryPoint: entry});

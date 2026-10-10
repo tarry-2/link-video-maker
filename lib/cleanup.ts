@@ -41,6 +41,10 @@ export function cleanTmpRemotion(maxAgeMs = 60 * 60 * 1000): {removed: number; b
   const now = Date.now();
   for (const e of entries) {
     if (!e.name.startsWith('remotion-')) continue;
+    // ★webpack 번들은 getServeUrl이 메모리에 캐시해 재사용하는 '살아있는' 폴더다. mtime은 읽기만 해선 안
+    //   갱신돼 1시간 뒤 여기서 지워지는데, 캐시 변수는 그대로라 다음 렌더가 "bundle file doesn't exist"로
+    //   터졌다. 번들은 작고(수 MB) 재사용되므로 청소 대상에서 제외한다(렌더 임시 remotion-render-*만 지움).
+    if (e.name.startsWith('remotion-webpack-bundle')) continue;
     const f = path.join(tmp, e.name);
     try {
       if (now - fs.statSync(f).mtimeMs < maxAgeMs) continue;

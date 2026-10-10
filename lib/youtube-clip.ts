@@ -28,7 +28,9 @@ function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 
     ps.on('close', (code) => {
       clearTimeout(t); if (ca) clearInterval(ca);
       if (killedByCancel) return reject(new Error('사용자가 중단했습니다.'));
-      code === 0 ? resolve(out) : reject(new Error((err || out).slice(-400)));
+      // ★실패 사유는 보통 마지막 몇 줄(필터 config 실패의 '원인'이 'Failed to configure …' 바로 앞에 찍힌다).
+      //   300~400자로 자르면 진짜 원인이 잘려 나가 "왜 터졌는지" 못 봄 → 800자로 넉넉히 남긴다(테리 진단로그 규칙).
+      code === 0 ? resolve(out) : reject(new Error((err || out).slice(-800)));
     });
   });
 }
@@ -411,11 +413,15 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
 async function cutClip(videoPath: string, outPath: string, orientation: 'portrait' | 'landscape', log: (m: string) => void, totalSec: number, cancelled?: () => boolean): Promise<void> {
   // ★남 채널 워터마크(보통 모서리) 지우기: 입력을 6% 확대 크롭해 가장자리를 화면 밖으로 밀어낸다.
   //   화질 손상 거의 없음(1080p 기준 ~6%). 중앙 큰 워터마크는 못 지움(드묾).
-  const dewm = 'crop=iw/1.12:ih/1.12'; // 12% 확대 크롭 — 모서리 워터마크 대부분 제거(상하좌우 ~6%씩 잘림)
+  // ★crop 결과를 '짝수'로 강제(trunc(/2)*2) — 홀수 폭/높이는 yuv420p에서 downstream scale/pad의 output pad
+  //   구성이 실패("Failed to configure output pad on Parsed_scale_N")할 수 있다. 저해상도·비표준 해상도 원본
+  //   (아카이브·오래된 영상)에서 clip이 전부 실패하던 원인 후보. 짝수화는 화질·동작에 무해.
+  const dewm = `crop='trunc(iw/1.12/2)*2':'trunc(ih/1.12/2)*2'`;
   let args: string[];
+  let fallbackArgs: string[] | null = null; // 복잡 필터가 터질 때 쓰는 '단순·튼튼한' 폴백(무회귀)
   if (orientation === 'landscape') {
     // 가로: 워터마크 크롭 후 16:9(1920x1080)에 맞춤(레터박스). 자막 보존·화질 손실 거의 없음.
-    const vf = `${dewm},scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black`;
+    const vf = `${dewm},scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
     args = ['-vf', vf];
   } else {
     // 세로: 워터마크 크롭 후 원본 안 자르고 세로 중앙에 통째로 + 위아래 블러배경(자막 안 잘림).
@@ -426,9 +432,12 @@ async function cutClip(videoPath: string, outPath: string, orientation: 'portrai
       `[0:v]${dewm},split=2[a][b]`,
       '[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=8:1,eq=brightness=-0.12,scale=1080:1920[bg]',
       '[b]scale=1080:1920:force_original_aspect_ratio=decrease[fg]',
-      '[bg][fg]overlay=(W-w)/2:(H-h)/2',
+      '[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1',
     ].join(';');
     args = ['-filter_complex', vf];
+    // 폴백: 블러배경 없이 검은 레터박스(가로 path와 동일 방식). split/overlay 없이 단순해 거의 안 터진다.
+    //   블러가 실패해도 클립이 '0개'가 되는 참사(테리 지적)를 막는다 — 검은 배경이라도 결과물은 나온다.
+    fallbackArgs = ['-vf', `scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1`];
   }
   // 진행률 하트비트 — ffmpeg stderr의 time= 을 읽어 "자르는 중 N%"를 주기적으로 찍는다.
   //   (클립당 로그가 1줄뿐이라 몇 분간 멈춘 것처럼 보이던 문제 해결.)
@@ -444,9 +453,26 @@ async function cutClip(videoPath: string, outPath: string, orientation: 'portrai
   };
   // crf 20 = 선명(화질 고정). ★preset ultrafast — 이 크롭 결과는 '중간물'로, 뒤 renderHighlightFast가 다시
   //   재인코딩(후킹·자막 합성)하므로 여기선 속도 최우선이어도 최종 화질에 영향 없다(crf 동일). 파일만 조금 커짐.
-  await run(FFMPEG, ['-y', '-i', videoPath,
-    ...args, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20',
-    '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath], log, 420000, onLine, cancelled);
+  const tail = ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath];
+  try {
+    await run(FFMPEG, ['-y', '-i', videoPath, ...args, ...tail], log, 420000, onLine, cancelled);
+  } catch (e: any) {
+    if (/사용자가 중단/.test(e?.message || '') || !fallbackArgs) throw e;
+    // 블러 배경 필터가 이 원본에서 터졌다 → 입력 해상도를 찍어 원인을 남기고, 단순 검은 레터박스로 재시도(무회귀).
+    let dims = '';
+    try { const wh = await probeWH(videoPath); if (wh) dims = ` (입력 ${wh})`; } catch {}
+    log(`[하이라이트]   세로 블러 실패${dims} → 검은 레터박스로 재시도: ` + (e?.message || '').replace(/\s+/g, ' ').slice(-180));
+    await run(FFMPEG, ['-y', '-i', videoPath, ...fallbackArgs, ...tail], log, 420000, onLine, cancelled);
+  }
+}
+
+// 영상 해상도(WxH) — 실패 진단용. ffprobe 없으면 빈 문자열.
+async function probeWH(src: string): Promise<string> {
+  const probe = (process.env.FFPROBE_PATH || FFMPEG.replace(/ffmpeg$/, 'ffprobe'));
+  try {
+    const out = await run(probe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', src], () => {}, 15000);
+    return out.trim();
+  } catch { return ''; }
 }
 
 // 로컬 파일(본인 업로드 영상)에서 [start,end] 구간만 잘라 sec-i.mp4로. YouTube downloadSection의 로컬판.
