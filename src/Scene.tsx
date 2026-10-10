@@ -233,32 +233,23 @@ export const Scene: React.FC<SceneData> = ({
         <Audio src={staticFile(punch ? 'sfx/impact.mp3' : 'sfx/whoosh.mp3')} volume={0.5} />
       </Sequence>
 
-      {/* 블러 백드롭 (영상이면 영상, 아니면 이미지) */}
+      {/* 블러 백드롭 — ★항상 '정지 이미지'(scene.image)에만 블러를 건다(영상엔 절대 blur 금지).
+          영상(OffthreadVideo)에 blur(60px)을 걸면 서버의 CPU 렌더(swiftshader)가 '매 프레임' 60px 가우시안
+          블러를 재계산해 렌더가 0%에서 사실상 멈춘다(Remotion 공식: blur/backdrop-filter는 프레임마다 재합성되는
+          고비용 연산 — discussions #3070, performance 문서). 정지 이미지는 한 번만 계산·캐시되므로 싸다(이미지영상이
+          멈춘 적 없는 이유). video 장면도 scene.image(폴백 스틸)가 항상 있어 배경으로 쓸 수 있고, 실제 움직임은
+          아래 '중앙 창'의 OffthreadVideo 1개로만 보여준다(장면당 OffthreadVideo 2개→1개로 줄어 hang 위험도↓). */}
       <AbsoluteFill>
-        {video ? (
-          <OffthreadVideo
-            src={staticFile(video)}
-            muted
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              filter: 'blur(60px) brightness(0.35)',
-              transform: 'scale(1.2)',
-            }}
-          />
-        ) : (
-          <Img
-            src={staticFile(image)}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              filter: 'blur(60px) brightness(0.35)',
-              transform: 'scale(1.2)',
-            }}
-          />
-        )}
+        <Img
+          src={staticFile(image)}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            filter: 'blur(60px) brightness(0.35)',
+            transform: 'scale(1.2)',
+          }}
+        />
       </AbsoluteFill>
 
       {/* 중앙 이미지 창 */}

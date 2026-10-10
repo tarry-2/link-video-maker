@@ -1544,6 +1544,18 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           log: (m) => jlog(job, m),
           isCancelled: () => !!job.cancelled, // ★중단 — 파이프라인이 단계마다 확인
         });
+        // ★포트폴리오 등록(영상 만들기 탭) — 이게 있어야 작업내역에 뜨고 유튜브·인스타 업로드·다운로드가 된다
+        //   (다른 탭은 다 등록하는데 '영상 만들기'만 빠져 있었음 — 반쪽. 테리 지적). origin:'video'로 탭 분리.
+        let pid = '';
+        try {
+          pid = await registerVideoToPortfolio({
+            out: r.out, title: r.title, thumb: r.thumb, imageDir: r.imageDir,
+            voice: String(b.voice || '기본'), category: '🎬 영상', goal: 'issue', origin: 'video',
+            orientation: b.orientation === 'landscape' ? 'landscape' : 'portrait',
+            durSec: Number(b.duration) || 30, source: 'url',
+            motion: (Number(b.aiClips) || 0) > 0, log: (m) => jlog(job, m),
+          });
+        } catch (e: any) { jlog(job, '[포트폴리오] 등록 실패(영상은 완성됨): ' + (e?.message || e)); }
         // 바탕화면 폴더에도 저장
         const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
         const today = new Date().toLocaleDateString('sv-SE');
@@ -1555,6 +1567,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
             fs.copyFileSync(path.join(r.imageDir, f), path.join(folder, f));
         job.file = path.basename(r.out);
         job.title = r.title;
+        if (pid) job.projectId = pid;
         job.done = true; job.doneAt = Date.now();
         jlog(job, `[완료] 바탕화면에도 저장됨: ${folder}`);
       } catch (e: any) {

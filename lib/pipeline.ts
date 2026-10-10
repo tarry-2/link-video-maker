@@ -152,6 +152,7 @@ export async function makeVideo(
   const useNano = style.id === 'anime';
   let charRefAbs = '';
   let wanPod: string | undefined;
+  let clipsDone = 0; // 실제로 완성된 움직이는 클립 수(완성/목표를 로그에 보여줘 테리가 헷갈리지 않게)
   // ★GPU는 '움직이는 영상(aiClips>0)'일 때만 켠다. 이미지영상(aiClips=0)이면 여기 자체를 안 타므로 절대 안 켜진다.
   if (aiClips > 0) {
     if (!keys.runpod) log('[영상] RunPod 키가 없어 움직이는 영상을 건너뜁니다(이미지로 진행).');
@@ -228,8 +229,10 @@ export async function makeVideo(
         } else {
           await wanT2V(wanPod, wanPrompt, abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
         }
+        clipsDone++;
+        log(`[영상] 🎬 움직이는 클립 ${clipsDone}/${aiClips}개 완성 (장면 ${i + 1}). 남은 ${aiClips - clipsDone}개 더 만드는 중…`);
       } catch (e: any) {
-        log(`[장면 ${i + 1}] ⚠️ 움직이는 영상 실패(${e.message}) → 이미지 사용`);
+        log(`[장면 ${i + 1}] ⚠️ 움직이는 영상 실패(${e.message}) → 이 장면은 사진으로 대체합니다(진행 계속).`);
         videoRel = undefined;
       }
     }
@@ -273,16 +276,21 @@ export async function makeVideo(
     // ★움직이는 영상 클립을 다 뽑았거나(정상) 중간에 에러/중단이 났어도 RunPod 팟을 반드시 종료한다(렌더는
     //   Railway에서 하므로 팟 불필요). autoShutdown=false면 켜둔다(다음 작업 빠르게 — 대신 과금 계속). 종료 실패 시
     //   한 번 더 재시도(과금 방지 최우선).
+    if (wanPod) {
+      // ★왜 지금 GPU를 끄는지 또렷이 — 테리: "GPU 꺼진 게 왜 꺼졌는지 모르겠다". 움직이는 클립은 GPU가 필요하고,
+      //   이후 단계(자막·음악·합성)는 GPU가 전혀 필요 없으므로 여기서 끄는 게 '정상'이고 돈을 아끼는 거다.
+      log(`[영상] ✅ 움직이는 클립 ${clipsDone}/${aiClips}개 다 만들었어요. GPU는 '움직이는 영상'에만 필요하고, 다음 단계(배경음악·자막·최종 합성)는 GPU 없이 하니 지금 끄는 게 맞아요(여기서 꺼야 돈이 안 나가요).`);
+    }
     if (wanPod && opts.autoShutdown !== false) {
-      try { await terminatePod(keys.runpod!, wanPod); log('[영상] RunPod 팟 종료(과금 중단).'); }
+      try { await terminatePod(keys.runpod!, wanPod); log('[영상] ✅ RunPod GPU 종료 완료 — 이제부터 GPU 과금은 0원입니다.'); }
       catch (e: any) {
-        log(`[영상] ⚠️ 팟 종료 실패(${(e?.message || '').slice(0, 60)}) — 5초 후 재시도…`);
+        log(`[영상] ⚠️ GPU 종료 실패(${(e?.message || '').slice(0, 60)}) — 돈이 계속 나갈 수 있어 5초 후 다시 끕니다…`);
         await new Promise((r) => setTimeout(r, 5000));
-        try { await terminatePod(keys.runpod!, wanPod); log('[영상] RunPod 팟 종료(재시도 성공, 과금 중단).'); }
-        catch (e2: any) { log(`[영상] ⚠️ 팟 자동 종료 최종 실패(${(e2?.message || '').slice(0, 60)}) — 상단 GPU 배지를 눌러 꼭 꺼주세요.`); }
+        try { await terminatePod(keys.runpod!, wanPod); log('[영상] ✅ RunPod GPU 종료 완료(재시도 성공) — GPU 과금 0원.'); }
+        catch (e2: any) { log(`[영상] 🔴 GPU 자동 종료 최종 실패(${(e2?.message || '').slice(0, 60)}) — 돈이 계속 나갑니다! 상단의 빨간 'GPU 켜짐' 배지를 눌러 꼭 꺼주세요.`); }
       }
     } else if (wanPod) {
-      log('[영상] RunPod 팟을 켜둡니다(자동 종료 OFF). 끝나면 설정에서 꺼주세요(과금 계속).');
+      log('[영상] ⚠️ 자동 종료 OFF라 GPU를 켜둡니다 — 다음 작업은 빨라지지만 그동안 과금이 계속돼요. 안 쓸 거면 상단 GPU 배지로 꺼주세요.');
     }
   }
 

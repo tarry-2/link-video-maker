@@ -1,7 +1,7 @@
 // Remotion 프로그래매틱 렌더 — CLI 없이 코드에서 scenes 데이터를 주입해 MP4 생성.
 // pipeline이 대본→이미지→음성으로 scenes를 만든 뒤 이 함수만 호출하면 된다.
 import {bundle} from '@remotion/bundler';
-import {selectComposition, renderMedia, renderStill} from '@remotion/renderer';
+import {selectComposition, renderMedia, renderStill, makeCancelSignal} from '@remotion/renderer';
 import os from 'node:os';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -95,36 +95,69 @@ export async function renderVideo(
   const hostGB = os.totalmem() / 1024 ** 3;
   const concurrency = pickConcurrency(memGB);
   const memNote = memGB < hostGB * 0.9 ? `컨테이너 ${memGB.toFixed(1)}GB` : `${memGB.toFixed(1)}GB`;
+  const totalFrames = composition.durationInFrames;
   log?.(
-    `[렌더] ${scenes.length}장면 · ${composition.durationInFrames}프레임 인코딩 (동시성 ${concurrency} · 메모리한계 ${memNote})`,
+    `[렌더] ${scenes.length}장면 · ${totalFrames}프레임 인코딩 (동시성 ${concurrency} · 메모리한계 ${memNote})`,
   );
   if (memGB < 4)
     log?.(`[렌더] ⚠️ 컨테이너 메모리 한계가 ${memGB.toFixed(1)}GB로 작습니다. Railway 서비스 메모리를 4GB 이상으로 올리면 안정적입니다.`);
-  let lastPct = -1;
-  await renderMedia({
-    composition,
-    serveUrl,
-    codec: 'h264',
-    outputLocation: outPath,
-    inputProps,
-    // 메모리 기준 동시성(OOM 방지). 메모리가 풀린 뒤엔 1보다 크게 잡아 속도↑.
-    concurrency,
-    // ★enableMultiProcessOnLinux는 반드시 true. false면 단일프로세스 Chrome이 리눅스에서 0%에 hang 걸린다
-    // (메모리와 무관한 별개 버그). gl swiftshader는 서버 GPU 없는 환경 필수.
-    chromiumOptions: {gl: 'swiftshader', enableMultiProcessOnLinux: true},
-    // 중간 프레임을 JPEG로(PNG보다 메모리·디스크 대폭 절감), 품질은 쇼츠에 충분한 수준.
-    imageFormat: 'jpeg',
-    jpegQuality: 80,
-    offthreadVideoCacheSizeInBytes: 150 * 1024 * 1024,
-    onProgress: ({progress}) => {
-      const pct = Math.round(progress * 100);
-      if (pct !== lastPct && pct % 10 === 0) {
-        lastPct = pct;
-        log?.(`[렌더] ${pct}%`);
-      }
-    },
-  });
-  log?.(`[렌더] 완료 → ${outPath}`);
+  // ★GPU는 이 단계에서 안 쓴다(움직이는 클립은 이미 다 뽑음) — 추가 과금 없음을 명시(테리: GPU 꺼진 게 불안).
+  log?.(`[렌더] 이제부터는 GPU 없이 CPU로 영상을 합칩니다(추가 과금 없음). 총 ${totalFrames}프레임을 한 장씩 그려서 합쳐요 — 멈춘 게 아니라 프레임 수가 계속 올라가면 정상이에요.`);
+  const renderStart = Date.now();
+  let lastPct = -1, lastAt = 0;
+  // ★OffthreadVideo 캐시 — 작으면(150MB) 렌더 20~30%에서 'cache pruned'로 기어가듯 느려진다(Remotion #3070).
+  //   컨테이너 메모리의 20%(0.3~2GB)로 넉넉히 잡아 움직이는 클립이 섞인 영상도 끝까지 일정 속도로 렌더되게 한다.
+  const cacheBytes = Math.round(Math.min(2, Math.max(0.3, memGB * 0.2)) * 1024 ** 3);
+  // ★멈춤 감시(watchdog) — 90초 동안 진행률이 '1도' 안 오르면 멈춘 것으로 보고 렌더를 취소한다. blur 수정으로
+  //   애초에 멈추지 않지만, 어떤 이유로든 또 걸려도 테리가 15분씩 기다리지 않고 바로 에러로 끝나 다시 시도할 수 있다.
+  const {cancelSignal, cancel} = makeCancelSignal();
+  let lastProgressAt = Date.now(), lastProgressVal = -1, watchdogFired = false;
+  const watchdog = setInterval(() => {
+    if (Date.now() - lastProgressAt > 90000) {
+      watchdogFired = true;
+      log?.('[렌더] 🔴 90초 동안 진행이 멈춰 중단합니다 — 서버 과부하이거나 영상이 너무 무거워요(움직이는 장면 수를 줄이거나 잠시 후 다시 시도하세요).');
+      try { cancel(); } catch {}
+    }
+  }, 5000);
+  try {
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: 'h264',
+      outputLocation: outPath,
+      inputProps,
+      // 메모리 기준 동시성(OOM 방지). 메모리가 풀린 뒤엔 1보다 크게 잡아 속도↑.
+      concurrency,
+      // ★enableMultiProcessOnLinux는 반드시 true. false면 단일프로세스 Chrome이 리눅스에서 0%에 hang 걸린다
+      // (메모리와 무관한 별개 버그). gl swiftshader는 서버 GPU 없는 환경 필수.
+      chromiumOptions: {gl: 'swiftshader', enableMultiProcessOnLinux: true},
+      // 중간 프레임을 JPEG로(PNG보다 메모리·디스크 대폭 절감), 품질은 쇼츠에 충분한 수준.
+      imageFormat: 'jpeg',
+      jpegQuality: 80,
+      offthreadVideoCacheSizeInBytes: cacheBytes,
+      cancelSignal,
+      // ★진행률을 '자주 + 프레임 수까지' 찍는다(테리: 0%에서 멈춘 것처럼 보여 답답). 예전엔 10%마다만 찍어
+      //   0%→10% 사이 수십 초가 '완전 침묵'이었다 → 이제 3% 오르거나 4초 지날 때마다 "N/총프레임"을 찍어
+      //   숫자가 계속 올라가는 게 보이게 한다(살아있음 증거). muxing(소리·영상 합치기)도 구분해 표시.
+      onProgress: ({progress, renderedFrames, stitchStage}) => {
+        if (progress > lastProgressVal) { lastProgressVal = progress; lastProgressAt = Date.now(); } // watchdog용 진행 갱신
+        const pct = Math.round(progress * 100);
+        const now = Date.now();
+        const jumped = pct >= lastPct + 3 || pct === 100;
+        const stale = now - lastAt > 4000; // 조용하면 같은 %라도 4초마다 프레임 수를 찍어 '멈춤 아님'을 보여준다
+        if (jumped || stale) {
+          lastPct = Math.max(lastPct, pct); lastAt = now;
+          const elapsed = Math.round((now - renderStart) / 1000);
+          const stage = stitchStage === 'muxing' ? '🔊 소리·영상 합치는 중' : '🎞 프레임 그리는 중';
+          log?.(`[렌더] ${pct}% · ${stage} (${renderedFrames ?? 0}/${totalFrames}프레임 · ${elapsed}초 경과)`);
+        }
+      },
+    });
+  } finally {
+    clearInterval(watchdog); // throw(취소·에러) 나도 반드시 인터벌 정리
+  }
+  if (watchdogFired) throw new Error('렌더가 90초 이상 멈춰 중단했어요. 서버 과부하이거나 영상이 무거워요 — 움직이는 장면 수를 줄이거나 잠시 후 다시 시도하세요.');
+  log?.(`[렌더] ✅ 합성 완료(${Math.round((Date.now() - renderStart) / 1000)}초) → 파일 저장 중…`);
   } finally {
     if (publicDir) await rm(serveUrl, {recursive: true, force: true});
   }
@@ -149,16 +182,25 @@ export async function renderCardVideo(
     const composition = await selectComposition({serveUrl, id: 'CardVideo', inputProps});
     const memGB = containerMemGB();
     const concurrency = pickConcurrency(memGB);
-    log?.(`[렌더] 카드 ${cards.length}장 · ${composition.durationInFrames}프레임 인코딩 (동시성 ${concurrency})`);
-    let lastPct = -1;
+    const totalFrames = composition.durationInFrames;
+    log?.(`[렌더] 카드 ${cards.length}장 · ${totalFrames}프레임 인코딩 (동시성 ${concurrency})`);
+    log?.(`[렌더] GPU 없이 CPU로 합칩니다(추가 과금 없음). 총 ${totalFrames}프레임 — 프레임 수가 올라가면 정상이에요.`);
+    const renderStart = Date.now();
+    let lastPct = -1, lastAt = 0;
     await renderMedia({
       composition, serveUrl, codec: 'h264', outputLocation: outPath, inputProps, concurrency,
       chromiumOptions: {gl: 'swiftshader', enableMultiProcessOnLinux: true},
       imageFormat: 'jpeg', jpegQuality: 80,
       offthreadVideoCacheSizeInBytes: 150 * 1024 * 1024,
-      onProgress: ({progress}) => {
+      // 영상 렌더와 동일 — 자주(3%/4초) + 프레임 수까지 찍어 '멈춤 아님'을 보여준다.
+      onProgress: ({progress, renderedFrames, stitchStage}) => {
         const pct = Math.round(progress * 100);
-        if (pct !== lastPct && pct % 10 === 0) { lastPct = pct; log?.(`[렌더] ${pct}%`); }
+        const now = Date.now();
+        if (pct >= lastPct + 3 || pct === 100 || now - lastAt > 4000) {
+          lastPct = Math.max(lastPct, pct); lastAt = now;
+          const stage = stitchStage === 'muxing' ? '🔊 소리·영상 합치는 중' : '🎞 프레임 그리는 중';
+          log?.(`[렌더] ${pct}% · ${stage} (${renderedFrames ?? 0}/${totalFrames}프레임 · ${Math.round((now - renderStart) / 1000)}초 경과)`);
+        }
       },
     });
     log?.(`[렌더] 완료 → ${outPath}`);

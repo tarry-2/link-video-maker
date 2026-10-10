@@ -344,6 +344,15 @@ export class Studio {
       await this.deps.render(p, this.directory(id), outAbs, log, thumbAbs);
       p.output = output; p.outputRevision = p.revision; p.outputR2 = undefined;
       p.thumb = fs.existsSync(thumbAbs) ? thumbName : undefined; p.thumbR2 = undefined;
+      // ★바탕화면에도 내보내기(로컬 맥에서만 — Railway엔 Desktop 없어 try/catch 무시). 다른 탭과 동일 정책.
+      //   render 직후·R2 업로드(아래) 전에 복사해야 한다(R2가 outAbs를 삭제하므로).
+      try {
+        const safeT = (p.title || 'onvideo').replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
+        const today = new Date().toLocaleDateString('sv-SE');
+        const folder = path.join(os.homedir(), 'Desktop', `온비디오 ${today}`);
+        fs.mkdirSync(folder, {recursive: true});
+        fs.copyFileSync(outAbs, path.join(folder, `${safeT}.mp4`));
+      } catch {}
       // ★완성 영상을 R2로 올린다(R2 비활성이면 outAbs가 볼륨이라 그대로 로컬 보관=폴백).
       if (r2Enabled()) {
         try {

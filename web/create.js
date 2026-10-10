@@ -60,7 +60,7 @@
   let dur = 60, orient = 'portrait', style = 'real';
   let out = 'image', clips = 2, narr = true, bgm = true;
   let scenario = null;
-  let curJobId = null, curES = null, startTs = 0, tickTimer = null;
+  let curJobId = null, curES = null, startTs = 0, tickTimer = null, lastLogAt = 0;
   // 시리즈 상태
   let eps = 1;              // 편 수(1=단편)
   let bible = null;         // 스토리 바이블(JSON) — 시리즈일 때
@@ -134,7 +134,20 @@
   $('cr-orient').addEventListener('click', (e) => { const b = e.target.closest('[data-o]'); if (!b) return; orient = b.dataset.o; renderSegs(); save(); });
   $('cr-style').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; style = b.dataset.s; renderSegs(); save(); });
   $('cr-out').addEventListener('click', (e) => { const b = e.target.closest('[data-out]'); if (!b) return; out = b.dataset.out; renderSegs(); save(); });
-  $('cr-clips').addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; clips = Number(b.dataset.c); renderSegs(); save(); });
+  $('cr-clips').addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; clips = Number(b.dataset.c); if ($('cr-clip-saved')) $('cr-clip-saved').textContent = ''; renderSegs(); save(); });
+  // 움직이는 장면 수 직접 입력 + 저장 — 프리셋(1~6) 말고 원하는 수(1~20)를 넣고 '저장' 누르면 '저장되었습니다'.
+  function saveClips() {
+    const raw = Number($('cr-clip-custom')?.value);
+    const s = $('cr-clip-saved');
+    if (!Number.isFinite(raw) || raw < 1) { if (s) { s.style.color = '#e0410a'; s.textContent = '1~20 사이 숫자를 넣어주세요.'; } return; }
+    clips = Math.max(1, Math.min(20, Math.round(raw)));
+    renderSegs(); // 프리셋 버튼 활성/요약·표 아이콘 갱신
+    const T = totalScenes();
+    if (s) { s.style.color = '#2bb673'; s.textContent = T && clips > T ? `✅ 저장되었습니다 — 단, 총 ${T}장면뿐이라 ${T}장면까지만 움직여요.` : `✅ 저장되었습니다 — 움직이는 장면 ${clips}개로 만들어요.`; }
+    save();
+  }
+  $('cr-clip-save')?.addEventListener('click', saveClips);
+  $('cr-clip-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveClips(); } });
   $('cr-narr').addEventListener('change', (e) => { narr = e.target.checked; updatePlan(); save(); });
   $('cr-bgm').addEventListener('change', (e) => { bgm = e.target.checked; updatePlan(); save(); });
   $('cr-brief').addEventListener('input', save);
@@ -252,7 +265,19 @@
   $('cr-log-expand').onclick = () => { $('cr-log-big').innerHTML = $('cr-log').innerHTML; $('cr-log-modal').classList.remove('hidden'); };
   $('cr-log-modal-close').onclick = () => $('cr-log-modal').classList.add('hidden');
   $('cr-log-modal-copy').onclick = () => navigator.clipboard?.writeText(logText());
-  function startTick() { stopTick(); startTs = startTs || Date.now(); tickTimer = setInterval(() => { const s = Math.floor((Date.now() - startTs) / 1000); $('cr-elapsed').textContent = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }, 1000); }
+  function startTick() {
+    stopTick(); startTs = startTs || Date.now();
+    tickTimer = setInterval(() => {
+      const s = Math.floor((Date.now() - startTs) / 1000);
+      let txt = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      // ★멈춤 감지 — 서버에서 새 로그가 안 오는 시간을 센다. 20초 넘게 조용하면 '멈춤 의심'을 눈에 띄게 알린다
+      //   (테리: "15분째 이 상태인데 진행 중인지 멈췄는지 모르겠다"). 서버 렌더 로그는 4초마다 오므로, 그게
+      //   끊기면 진짜 멈춘 것 → 바로 표시된다.
+      const quiet = (curJobId && lastLogAt) ? Math.floor((Date.now() - lastLogAt) / 1000) : 0;
+      if (quiet >= 20) txt += ` · ⚠️ ${quiet}초째 새 소식 없음(무거운 단계 처리 중이거나 멈춤일 수 있어요)`;
+      $('cr-elapsed').textContent = txt;
+    }, 1000);
+  }
   function stopTick() { if (tickTimer) { clearInterval(tickTimer); tickTimer = null; } }
 
   // ── 범용 작업 실행(진행 패널+에너지바+실시간 로그) — 시나리오 집필·바이블 설계에 사용. 결과는 done 페이로드로 받는다.
@@ -321,7 +346,20 @@
     startTick();
     es.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
-      if (m.log) { addLog(m.log); n++; setEnergy(Math.min(92, 10 + n * 3), '제작 중…'); const mm = m.log.match(/^\[([^\]]+)\]/); if (mm) $('cr-phase').textContent = mm[1]; }
+      if (m.log) {
+        addLog(m.log); n++;
+        const mm = m.log.match(/^\[([^\]]+)\]/); if (mm) $('cr-phase').textContent = mm[1];
+        lastLogAt = Date.now(); // 하트비트용(멈춤 감지)
+        // ★렌더 % 로그가 오면 그걸 에너지바에 직접 반영(렌더=마지막 단계 → 바의 70~99% 구간).
+        //   예전엔 로그 '줄 수'로만 올려서 렌더가 길면 92%에 멈춘 듯 보였다 → 이제 실제 % + 프레임 수가 라벨에.
+        const rm = m.log.match(/\[렌더\]\s*(\d+)%(?:[^\(]*\(([^\)]*프레임[^\)]*)\))?/);
+        if (rm) {
+          const rp = Number(rm[1]);
+          setEnergy(70 + Math.min(29, rp * 0.29), `🎬 최종 합성 ${rp}%` + (rm[2] ? ` · ${rm[2]}` : ''));
+        } else {
+          setEnergy(Math.min(68, 10 + n * 3), '제작 중…');
+        }
+      }
       if (m.done) {
         es.close(); curES = null; curJobId = null; stopTick();
         try { localStorage.removeItem('onvideo-create-job'); } catch {}

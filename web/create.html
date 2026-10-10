@@ -150,6 +150,11 @@
         <div class="cr-field"><span class="field-label">출력</span><div class="seg" id="cr-out"></div></div>
         <div class="cr-field hidden" id="cr-clip-row">
           <span class="field-label">움직이는 장면 수 <span style="color:var(--teal)">(초 아님, 장면 개수)</span></span><div class="seg" id="cr-clips"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <input id="cr-clip-custom" class="input" type="number" min="1" max="20" placeholder="직접 입력(개)" style="max-width:150px" />
+            <button id="cr-clip-save" type="button" class="ghost-btn small">💾 저장</button>
+            <span id="cr-clip-saved" class="mini-state"></span>
+          </div>
           <p class="hint" id="cr-clip-note">영상은 길이에 따라 여러 '장면'으로 나뉘어요. 그중 <b>앞에서부터 고른 개수만큼</b>만 실제로 움직이는 영상(GPU)으로 만들고, 나머지는 사진이에요. 숫자가 클수록 GPU 과금이 커져요.</p>
         </div>
         <div class="cr-field" style="display:flex;gap:16px;flex-wrap:wrap">

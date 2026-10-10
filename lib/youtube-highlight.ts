@@ -480,6 +480,16 @@ export async function makeHighlights(
           if (await uploadFile(tk, thumbAbs, 'image/png')) proj.thumbR2 = tk; } catch {}
       }
     } else { log('[썸네일] 커버 생성 실패(커버 없이 진행)'); }
+    // ★바탕화면에도 내보내기(로컬 맥에서만 — Railway엔 Desktop 없어 try/catch로 무시). 다른 탭과 동일 정책.
+    //   여기서 복사해야 한다 — 아래 R2 블록이 outAbs(/tmp)를 업로드 후 삭제하므로 그 전에.
+    try {
+      const safeT = title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
+      const today = new Date().toLocaleDateString('sv-SE');
+      const folder = path.join(os.homedir(), 'Desktop', `온비디오 하이라이트 ${today}`);
+      fs.mkdirSync(folder, {recursive: true});
+      fs.copyFileSync(outAbs, path.join(folder, `${safeT}.mp4`));
+      log(`[완료] 바탕화면에도 저장됨: ${folder}`);
+    } catch {}
     // R2 활성이면 완성본(/tmp)을 R2로 올리고 삭제(볼륨 안 씀=228 회피). 실패하면 볼륨으로 폴백 복사해 로컬 서빙.
     if (r2Enabled()) {
       const volFile = path.join(studioDir, output);
