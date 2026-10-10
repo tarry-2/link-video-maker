@@ -14,9 +14,13 @@
     <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
     <style>
       .cr-chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 2px}
-      .cr-chip{padding:8px 15px;border-radius:999px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font-weight:700;font-size:14px;transition:all .15s}
-      .cr-chip:hover{border-color:var(--teal)}
+      .cr-chip{position:relative;padding:8px 15px;border-radius:999px;border:1.5px solid var(--line);background:var(--card);cursor:pointer;font-weight:700;font-size:14px;transition:all .15s}
+      .cr-chip:hover{border-color:var(--teal);transform:translateY(-1px)}
       .cr-chip.active{background:var(--grad);color:#fff;border-color:transparent;box-shadow:0 4px 12px rgba(18,169,152,.3)}
+      .cr-chip.hot{border-color:#ff8a3c}
+      .cr-chip.hot.active{border-color:transparent}
+      .cr-fire{margin-left:4px;font-size:12px;filter:drop-shadow(0 0 3px rgba(255,120,40,.7))}
+      .cr-hotline{font-size:12.5px;color:#ff7a2e;font-weight:700;margin:2px 0 0}
       .cr-field{margin:14px 0}
       .cr-field > .field-label{display:block;margin-bottom:6px}
       .cr-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
@@ -67,6 +71,7 @@
       <section class="card" id="cr-step1">
         <h2 class="block-title">1. 장르·키워드 고르기</h2>
         <p class="hint">원하는 분위기를 여러 개 골라도 돼요. 아래 칸에 직접 써도 됩니다.</p>
+        <p class="cr-hotline">🔥 = 지금 전 세계 세로 숏드라마에서 조회수·완주율 터지는 장르</p>
         <div class="cr-chips" id="cr-genres"></div>
         <div class="cr-field">
           <input id="cr-brief" class="input" placeholder="(선택) 자유롭게 한 줄 — 예: 비 오는 밤, 복수를 결심한 형사" />

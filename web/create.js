@@ -5,10 +5,17 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 
   // ── 공통 보일러플레이트(테마·버전·GPU 배지) ──
-  if ((localStorage.getItem('lvm-theme') || 'light') === 'dark') document.documentElement.classList.add('dark');
-  $('theme-btn') && ($('theme-btn').onclick = () => {
-    document.documentElement.classList.toggle('dark');
-    localStorage.setItem('lvm-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  // ★테마는 data-theme 속성으로(style.css가 이걸 봄). classList('dark')는 CSS가 안 먹어 토글이 안 됐다(테리 지적). highlight와 동일.
+  const theme0 = localStorage.getItem('lvm-theme') || 'light';
+  if (theme0 === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  if ($('theme-btn')) $('theme-btn').textContent = theme0 === 'dark' ? '☀️' : '🌙';
+  $('theme-btn')?.addEventListener('click', () => {
+    const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    if (cur === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('lvm-theme', cur);
+    if ($('theme-btn')) $('theme-btn').textContent = cur === 'dark' ? '☀️' : '🌙';
   });
   fetch('/api/version').then((r) => r.json()).then((d) => { if ($('ver')) $('ver').textContent = 'v' + d.version; }).catch(() => {});
   async function refreshGpu() {
@@ -35,6 +42,9 @@
   }
 
   // ── 선택지 ──
+  // 🔥=지금 전 세계 세로 숏드라마(ReelShort·DramaBox, 2026)에서 조회수·완주율 최상위 장르(복수·로맨스·스릴러·심리호러·반전).
+  //   리서치 근거: 로맨스=최대 완주율, 스릴러=가장 빠른 성장(18~30), 심리호러=급부상, 복수·재벌반전=대표 흥행 소재.
+  const HOT = {사랑: 1, 복수: 1, 스릴러: 1, 반전: 1, 공포: 1, 배신: 1};
   const GENRES = ['미스터리', '공포', '귀신', '사랑', '배신', '복수', '교훈', '감동', '운명', '반전', '스릴러', '판타지', '코미디', '실화풍'];
   const DURS = [30, 60, 90, 120];
   const ORIENTS = [['portrait', '세로'], ['landscape', '가로']];
@@ -51,7 +61,7 @@
 
   // ── 렌더: 칩/세그 ──
   function renderGenres() {
-    $('cr-genres').innerHTML = GENRES.map((g) => `<button type="button" class="cr-chip${genres.includes(g) ? ' active' : ''}" data-g="${g}">${g}</button>`).join('');
+    $('cr-genres').innerHTML = GENRES.map((g) => `<button type="button" class="cr-chip${genres.includes(g) ? ' active' : ''}${HOT[g] ? ' hot' : ''}" data-g="${g}">${g}${HOT[g] ? '<span class="cr-fire" title="지금 숏드라마에서 조회수 터지는 장르">🔥</span>' : ''}</button>`).join('');
   }
   function seg(el, list, cur, attr) {
     el.innerHTML = list.map((x) => {
