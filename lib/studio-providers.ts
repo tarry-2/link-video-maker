@@ -97,19 +97,19 @@ export const studioProviders: StudioDependencies = {
         const file = `clip-${i}-${sig}.mp4`;
         if (s.video?.signature === sig && existsSync(path.join(dir, file))) { log(`[장면 ${i + 1}] 🎬 기존 움직이는 영상 재사용`); continue; }
         const wanPrompt = `${vp}. ${style.promptAdd}. ${motionCue}`;
-        // ★720p + I2V: 이 장면의 flux 스틸을 첫 프레임으로(캐릭터·구도 유지). 스틸 없으면 T2V 폴백.
-        const wanW = landscape ? 1280 : 720;
-        const wanH = landscape ? 720 : 1280;
+        // ★고퀄(I2V+720p)은 미검증 → env(WAN_I2V=1)로만. 기본 OFF=검증된 T2V 480p(퇴보·GPU낭비 방지).
+        const hiQ = process.env.WAN_I2V === '1';
+        const wanW = landscape ? (hiQ ? 1280 : 832) : (hiQ ? 720 : 480);
+        const wanH = landscape ? (hiQ ? 720 : 480) : (hiQ ? 1280 : 832);
         const stillPath = s.image?.file ? path.join(dir, s.image.file) : '';
         try {
-          log(`[장면 ${i + 1}/${n}] 🎬 움직이는 영상 생성(I2V, 720p)…(수 분 걸릴 수 있어요)`);
-          if (stillPath && existsSync(stillPath)) {
-            // I2V 우선, 실패하면 '검증된 T2V'로 폴백(정지 사진으로 떨어지지 않게).
+          log(`[장면 ${i + 1}/${n}] 🎬 움직이는 영상 생성(${hiQ ? 'I2V 720p' : 'T2V 480p'})…(수 분 걸릴 수 있어요)`);
+          if (hiQ && stillPath && existsSync(stillPath)) {
             try {
               await wanI2V(pod, wanPrompt, stillPath, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
             } catch (e1: any) {
               log(`[장면 ${i + 1}] I2V 실패(${(e1?.message || '').slice(0, 60)}) → T2V로 폴백`);
-              await wanT2V(pod, wanPrompt, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+              await wanT2V(pod, wanPrompt, path.join(dir, file), {width: landscape ? 832 : 480, height: landscape ? 480 : 832, length: 81, interpolate: true, log});
             }
           } else {
             await wanT2V(pod, wanPrompt, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});

@@ -201,19 +201,20 @@ export async function makeVideo(
         ? 'smooth animated motion, gentle character movement, soft parallax camera, fluid 2D animation'
         : 'natural lifelike motion, subtle cinematic camera movement, smooth and fluid';
       const wanPrompt = `${vp}. ${style.promptAdd}. ${motionCue}`;
-      // ★720p 품질 + I2V: 방금 만든 flux 스틸(imgRel)을 '첫 프레임'으로 넣어 그 이미지가 살아 움직이게 한다
-      //   (캐릭터·구도·스타일 유지 → "짜깁기·부자연" 해결). 스틸이 있으면 I2V, 없으면 T2V 폴백.
-      const wanW = landscape ? 1280 : 720;
-      const wanH = landscape ? 720 : 1280;
+      // ★고퀄(I2V+720p)은 미검증이라 env 스위치(WAN_I2V=1)로만 켠다. 기본 OFF = 검증된 T2V 480p(테리가 쓰던 그대로,
+      //   퇴보·GPU 낭비 방지). 팟에서 I2V 워크플로 파일명을 무과금 확정한 뒤에만 켤 것.
+      const hiQ = process.env.WAN_I2V === '1';
+      const wanW = landscape ? (hiQ ? 1280 : 832) : (hiQ ? 720 : 480);
+      const wanH = landscape ? (hiQ ? 720 : 480) : (hiQ ? 1280 : 832);
       try {
-        log(`[장면 ${i + 1}] 🎬 움직이는 영상 생성(I2V, 720p)…`);
-        if (fs.existsSync(abs(imgRel))) {
-          // I2V 우선. 실패하면 '검증된 T2V'로 폴백(정지 이미지로 떨어지지 않게 — 움직이는 영상 보장).
+        log(`[장면 ${i + 1}] 🎬 움직이는 영상 생성(${hiQ ? 'I2V 720p' : 'T2V 480p'})…`);
+        if (hiQ && fs.existsSync(abs(imgRel))) {
+          // I2V 우선(스틸=첫 프레임). 실패하면 검증된 T2V로 폴백(정지 이미지로 안 떨어지게).
           try {
             await wanI2V(wanPod, wanPrompt, abs(imgRel), abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
           } catch (e1: any) {
             log(`[장면 ${i + 1}] I2V 실패(${(e1?.message || '').slice(0, 60)}) → T2V로 폴백`);
-            await wanT2V(wanPod, wanPrompt, abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+            await wanT2V(wanPod, wanPrompt, abs(videoRel), {width: landscape ? 832 : 480, height: landscape ? 480 : 832, length: 81, interpolate: true, log});
           }
         } else {
           await wanT2V(wanPod, wanPrompt, abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
