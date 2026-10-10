@@ -67,6 +67,11 @@
       .cr-card-body{padding:10px}
       .cr-card-body b{display:block;margin-bottom:8px;font-size:14px;line-height:1.35}
       .cr-card-actions{display:flex;gap:6px;flex-wrap:wrap}
+      /* 제작 요약 박스 — 몇 편/총 장면/움직임·사진을 또렷하게 */
+      .cr-plan{margin:4px 0 14px;padding:12px 14px;border:1.5px solid var(--edline);border-left:4px solid var(--teal);border-radius:12px;background:linear-gradient(180deg,rgba(18,169,152,.08),rgba(108,76,240,.05));font-size:13.5px;line-height:1.7;color:var(--ink,#201d17)}
+      .cr-plan b{color:var(--teal)}
+      /* 표 장면번호 아래 움직임/사진 아이콘 */
+      .cr-scene-num .cr-mv{display:block;font-size:14px;margin-top:2px;line-height:1}
     </style>
   </head>
   <body>
@@ -151,6 +156,8 @@
           <label class="hint"><input type="checkbox" id="cr-narr" checked /> 나레이션(음성)</label>
           <label class="hint"><input type="checkbox" id="cr-bgm" checked /> 배경음악</label>
         </div>
+        <!-- 제작 요약 — 몇 편/총 몇 장면/움직임 몇·사진 몇을 한 줄로(테리: 흐름을 모르겠다) -->
+        <div id="cr-make-summary" class="cr-plan"></div>
         <button id="cr-make" class="primary-btn">🎬 이 시나리오로 영상 만들기</button>
       </section>
 

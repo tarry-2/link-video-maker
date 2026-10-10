@@ -88,6 +88,44 @@
     $('cr-clip-row').classList.toggle('hidden', out !== 'wan');
     const note = $('cr-eps-note'); if (note) note.textContent = eps > 1 ? `${eps}부작 시리즈 — 세계관·인물이 이어지고 편마다 다음 편이 궁금한 클리프행어로 끊겨요.` : '단편 1개를 만들어요.';
     $('cr-gen').textContent = eps > 1 ? `✍️ ${eps}부작 시리즈 설계하기` : '✍️ 시나리오 만들기';
+    updatePlan();
+  }
+
+  // ── 제작 '설계' 한눈에 — 몇 편/총 몇 장면/움직임 몇·사진 몇을 또렷이(테리: 흐름을 모르겠다) ──
+  function totalScenes() { return (scenario && Array.isArray(scenario.scenes)) ? scenario.scenes.length : 0; }
+  function updatePlan() {
+    const T = totalScenes();
+    // 움직이는 장면 = 고른 개수와 총 장면 중 작은 값(서버 pipeline도 scenes.length로 클램프). 이미지영상이면 0.
+    const moving = out === 'wan' ? Math.min(clips, T || clips) : 0;
+    // step04 안내 문구 — 총 장면을 모르면 '시나리오 먼저', 알면 정확한 분배를 보여준다.
+    const note = $('cr-clip-note');
+    if (note) {
+      note.innerHTML = !T
+        ? '시나리오를 먼저 만들면 <b>총 장면 수</b>가 정해져요. 그중 <b>앞에서부터 고른 개수</b>만 움직이는 영상(GPU)으로, 나머지는 사진으로 만들어요. 숫자가 클수록 GPU 과금이 커져요.'
+        : `이 시나리오는 총 <b>${T}장면</b>이에요 → 앞 <b>${moving}장면</b>은 🎬 움직이는 영상(GPU 과금), 나머지 <b>${T - moving}장면</b>은 🖼 사진이에요.`;
+    }
+    // 제작 요약(몇 편인지 = 테리가 가장 궁금해한 것).
+    const sum = $('cr-make-summary');
+    if (sum) {
+      const epsN = eps > 1 ? eps : 1;
+      const epLabel = epsN > 1 ? `<b>${epsN}편</b>(${epsN}부작 시리즈 — 한 편씩 제작)` : '<b>1편</b>';
+      const sceneLabel = T
+        ? (out === 'wan' ? `편당 총 <b>${T}장면</b> = 🎬 움직임 ${moving} + 🖼 사진 ${T - moving}` : `편당 총 <b>${T}장면</b> (🖼 전부 사진)`)
+        : '장면 수는 시나리오를 만들면 정해져요';
+      sum.innerHTML = `🎬 <b>만들 결과</b> — ${orient === 'landscape' ? '가로' : '세로'} ${dur}초 영상 ${epLabel}<br>· ${sceneLabel}<br>· 나레이션 ${narr ? '켜짐' : '끔'} · 배경음악 ${bgm ? '켜짐' : '끔'}${moving ? ' · <b style="color:#e8612b">GPU 사용(과금)</b>' : ''}`;
+    }
+    markTableMoving(moving);
+  }
+  // 시나리오 표의 각 장면에 🎬(움직임)/🖼(사진) 표시 — 어느 장면이 움직이는지 눈으로 보이게.
+  function markTableMoving(moving) {
+    document.querySelectorAll('#cr-tbody tr').forEach((tr) => {
+      const i = Number(tr.dataset.i);
+      const numCell = tr.querySelector('.cr-scene-num');
+      if (!numCell) return;
+      numCell.innerHTML = out === 'wan'
+        ? `${i + 1}<span class="cr-mv" title="${i < moving ? '움직이는 영상(GPU)' : '사진'}">${i < moving ? '🎬' : '🖼'}</span>`
+        : `${i + 1}`;
+    });
   }
 
   $('cr-genres').addEventListener('click', (e) => { const b = e.target.closest('.cr-chip'); if (!b) return; const g = b.dataset.g; if (genres.includes(g)) genres = genres.filter((x) => x !== g); else genres.push(g); renderGenres(); save(); });
@@ -97,8 +135,8 @@
   $('cr-style').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; style = b.dataset.s; renderSegs(); save(); });
   $('cr-out').addEventListener('click', (e) => { const b = e.target.closest('[data-out]'); if (!b) return; out = b.dataset.out; renderSegs(); save(); });
   $('cr-clips').addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; clips = Number(b.dataset.c); renderSegs(); save(); });
-  $('cr-narr').addEventListener('change', (e) => { narr = e.target.checked; save(); });
-  $('cr-bgm').addEventListener('change', (e) => { bgm = e.target.checked; save(); });
+  $('cr-narr').addEventListener('change', (e) => { narr = e.target.checked; updatePlan(); save(); });
+  $('cr-bgm').addEventListener('change', (e) => { bgm = e.target.checked; updatePlan(); save(); });
   $('cr-brief').addEventListener('input', save);
 
   // ── 상태 저장/복원(탭 이동·새로고침·기기 바꿔도 유지) ──
@@ -187,6 +225,7 @@
     $('cr-tbody').innerHTML = scenario.scenes.map((s, i) => `<tr data-i="${i}">
       <td class="cr-scene-num">${i + 1}</td>${cell(s.shot || '')}${cell((s.characters || []).join(', '))}${cell(s.hookTop || '')}${cell(s.hookAccent || '')}${cell(s.narration || '')}${cell(s.visualPrompt || '')}
     </tr>`).join('');
+    updatePlan(); // 총 장면 수가 정해졌으니 설계 요약·표 아이콘 갱신
   }
   function syncTableToScenario() {
     if (!scenario || !scenario.scenes) return;
