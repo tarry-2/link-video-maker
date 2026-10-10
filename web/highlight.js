@@ -267,12 +267,12 @@
   }
 
   // ── 업로드 모달(유튜브·인스타) — projectId 기반, 영상과 동일 엔드포인트 ──
-  function modal(innerHtml, wire) {
+  function modal(innerHtml, wire, onClose) {
     let box = $('hl-up-modal');
     if (!box) { box = document.createElement('div'); box.id = 'hl-up-modal'; document.body.appendChild(box); }
     box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60';
     box.innerHTML = `<div style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">${innerHtml}</div>`;
-    const close = () => box.remove();
+    const close = () => { try { onClose && onClose(); } catch {} box.remove(); };
     box.onclick = (e) => { if (e.target === box || e.target.closest('[data-x="close"]')) close(); };
     wire(box, close); return box;
   }
@@ -1027,6 +1027,77 @@
       if (voice) sel.value = voice; else voice = sel.value;
     } catch {}
   })();
+  // 목소리 목록 다시 불러오기(추가/삭제 후) — 현재 선택 유지.
+  async function reloadVoices(selectId) {
+    try {
+      const d = await (await fetch('/api/categories', {cache: 'no-store'})).json();
+      const sel = $('hl-voice'); if (!sel || !d.voices) return;
+      const groups = [];
+      d.voices.forEach((v) => { const c = v.cat || '🎙 기타'; let g = groups.find((x) => x.cat === c); if (!g) { g = {cat: c, items: []}; groups.push(g); } g.items.push(v); });
+      sel.innerHTML = groups.map((g) => `<optgroup label="${esc(g.cat)}">${g.items.map((v) => `<option value="${v.id}">${esc(v.label)}${v.note ? ' · ' + esc(v.note) : ''}</option>`).join('')}</optgroup>`).join('');
+      if (selectId) { sel.value = selectId; voice = selectId; } else if (voice) sel.value = voice;
+    } catch {}
+  }
+  // 🔎 서프라이즈급 목소리 찾기 — ElevenLabs 라이브러리 검색 → 미리듣기(네 귀로) → 추가.
+  let voiceFindAudio = null;
+  $('hl-voice-find')?.addEventListener('click', () => {
+    modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>🔎 서프라이즈급 목소리 찾기</h2><button class="ghost-btn" data-x="close">✕</button></div>
+      <p class="hint" style="margin-bottom:10px">ElevenLabs 라이브러리에서 미스터리·서스펜스 목소리를 찾아 <b>직접 들어보고</b> 추가하세요. 추가하면 목소리 목록 '🎬 스릴러·미스터리'에 들어가 바로 쓸 수 있어요.</p>
+      <div class="seg" style="flex-wrap:wrap;margin-bottom:8px">
+        <button type="button" class="seg-btn vf-preset active" data-q="mystery suspense">미스터리·서스펜스</button>
+        <button type="button" class="seg-btn vf-preset" data-q="dramatic narration storytelling">드라마틱 내레이션</button>
+        <button type="button" class="seg-btn vf-preset" data-q="dark thriller">다크·스릴러</button>
+      </div>
+      <div class="voice-row" style="margin-bottom:8px">
+        <input id="vf-q" class="input" placeholder="검색어(영어가 더 잘 나와요: mystery, suspense, narrator…)" style="flex:1;min-width:160px">
+        <select id="vf-gender" class="input" style="max-width:110px"><option value="female">여성</option><option value="male">남성</option><option value="">전체</option></select>
+        <button type="button" id="vf-search" class="primary-btn" style="padding:8px 16px">검색</button>
+      </div>
+      <p id="vf-state" class="mini-state"></p>
+      <div id="vf-results" style="display:grid;gap:8px;max-height:52vh;overflow:auto"></div>`,
+      (box, close) => {
+        const stop = () => { if (voiceFindAudio) { try { voiceFindAudio.pause(); } catch {} voiceFindAudio = null; } };
+        let q = 'mystery suspense';
+        box.querySelectorAll('.vf-preset').forEach((b) => b.onclick = () => { box.querySelectorAll('.vf-preset').forEach((x) => x.classList.remove('active')); b.classList.add('active'); q = b.dataset.q; box.querySelector('#vf-q').value = ''; doSearch(); });
+        box.querySelector('#vf-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+        box.querySelector('#vf-search').onclick = doSearch;
+        async function doSearch() {
+          stop();
+          const kw = box.querySelector('#vf-q').value.trim() || q;
+          const gender = box.querySelector('#vf-gender').value;
+          const st = box.querySelector('#vf-state'); st.textContent = '찾는 중…';
+          const results = box.querySelector('#vf-results'); results.innerHTML = '';
+          try {
+            const d = await (await fetch(`/api/voice-library?q=${encodeURIComponent(kw)}&gender=${gender}`)).json();
+            if (d.error) { st.textContent = '⚠️ ' + d.error; return; }
+            const vs = d.voices || [];
+            if (!vs.length) { st.textContent = '결과가 없어요. 다른 검색어로.'; return; }
+            st.textContent = `${vs.length}개 — ▶로 들어보고, 맘에 들면 '추가'`;
+            results.innerHTML = vs.map((v, i) => `<div class="card" data-i="${i}" style="display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line,#e3dccd);border-radius:12px">
+              <button type="button" class="ghost-btn small vf-play" data-vid="${esc(v.voiceId)}" style="flex:0 0 auto">▶ 듣기</button>
+              <div style="flex:1;min-width:0"><b>${esc(v.name)}</b><div class="hint" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.desc || v.useCase || '')} ${v.accent ? '· ' + esc(v.accent) : ''}</div></div>
+              <button type="button" class="primary-btn vf-add" data-vid="${esc(v.voiceId)}" data-name="${esc(v.name)}" data-gender="${v.gender === 'male' ? '남' : '여'}" style="flex:0 0 auto;padding:7px 12px">추가</button>
+            </div>`).join('');
+            results.querySelectorAll('.vf-play').forEach((b) => b.onclick = async () => {
+              stop(); const o = b.textContent; b.textContent = '⏳'; b.disabled = true;
+              try { voiceFindAudio = new Audio('/api/voice-library-preview?voiceId=' + encodeURIComponent(b.dataset.vid)); voiceFindAudio.onended = () => { b.textContent = '▶ 듣기'; }; await voiceFindAudio.play(); b.textContent = '⏸ 재생중'; }
+              catch { b.textContent = '▶ 듣기'; alert('이 목소리는 미리듣기를 못 만들었어요.'); }
+              finally { b.disabled = false; }
+            });
+            results.querySelectorAll('.vf-add').forEach((b) => b.onclick = async () => {
+              b.disabled = true; b.textContent = '추가 중…';
+              try {
+                const r = await (await fetch('/api/voice-add', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({voiceId: b.dataset.vid, name: b.dataset.name, gender: b.dataset.gender})})).json();
+                if (r.error) throw new Error(r.error);
+                await reloadVoices(r.key); stop(); close();
+                addLog(`🎙 목소리 추가됨: ${r.label} — 지금 선택됐어요.`);
+              } catch (e) { b.disabled = false; b.textContent = '추가'; alert('추가 실패: ' + e.message); }
+            });
+          } catch (e) { st.textContent = '검색 실패 — 잠시 후 다시.'; }
+        }
+        doSearch();
+      }, () => stop());
+  });
   document.querySelectorAll('.hl-orient').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-orient').forEach((x) => x.classList.remove('active')); b.classList.add('active'); orient = b.dataset.o; applyReframeRow(); saveState();
   }));
