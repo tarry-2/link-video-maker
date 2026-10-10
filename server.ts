@@ -383,6 +383,32 @@ const jobs = new Map<string, Job>();
 // ★모바일↔PC 실시간 동기화: 현재 진행 중인 생성 작업 id. 어느 기기든 로드 시 이걸 받아 같은 SSE에 붙는다.
 let currentGenJob = '';
 
+// 지금 '움직이는 영상(GPU)'을 쓰는 작업이 실제로 돌고 있는지 — 유휴 팟 자동종료 워치독의 판단 근거.
+function anyGpuJobRunning(): boolean {
+  for (const j of jobs.values()) if (!j.done && !j.cancelled) return true;
+  return false;
+}
+// ★GPU 유휴 자동종료 워치독 — 작업이 하나도 안 도는데 RunPod 팟이 떠 있으면(자동종료 실패·크래시 잔재) 자동으로
+//   끈다. 과금은 '움직이는 영상 쓸 때만, 그리고 끝나면 반드시 꺼짐'을 서버가 최종 보장(테리 지시). 2분마다.
+let gpuIdleSince = 0;
+async function gpuIdleWatchdog() {
+  try {
+    const e = loadEnv();
+    if (!e.RUNPOD_API_KEY) return;
+    if (anyGpuJobRunning()) { gpuIdleSince = 0; return; } // 작업 중이면 손대지 않음
+    const st = await runpodStatus(e.RUNPOD_API_KEY);
+    const running = (st.pods || []).filter((p) => p.status === 'RUNNING');
+    if (!running.length) { gpuIdleSince = 0; return; }
+    // 유휴 상태가 '연속 2회(약 4분)' 확인되면 끈다 — 작업 시작 직전의 찰나 떠 있는 팟을 성급히 죽이지 않게.
+    if (!gpuIdleSince) { gpuIdleSince = Date.now(); return; }
+    const stopped = await stopAllWanPods(e.RUNPOD_API_KEY);
+    console.log(`[GPU워치독] 작업 없는데 팟 ${running.length}대 떠 있어 자동 종료: ${stopped.join(', ')}`);
+    gpuIdleSince = 0;
+  } catch (err: any) { /* 조회 실패는 다음 주기에 재시도 */ }
+}
+setInterval(gpuIdleWatchdog, 2 * 60 * 1000); // 2분마다
+setTimeout(gpuIdleWatchdog, 30 * 1000);      // 부팅 30초 뒤 1회(크래시 잔재 정리)
+
 function json(res: http.ServerResponse, code: number, data: unknown) {
   const b = JSON.stringify(data);
   res.writeHead(code, {'Content-Type': 'application/json; charset=utf-8'});

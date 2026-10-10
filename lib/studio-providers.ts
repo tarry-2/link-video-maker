@@ -107,10 +107,15 @@ export const studioProviders: StudioDependencies = {
       }
     } finally {
       // 클립을 다 뽑았으면 팟 종료(렌더는 Railway에서 하므로 팟 불필요). autoShutdown=false면 켜둔다(과금 계속).
-      if (p.input.autoShutdown !== false) {
+      if (pod && p.input.autoShutdown !== false) {
         try { await terminatePod(k.runpod, pod); log('[영상] RunPod 팟 종료(과금 중단).'); }
-        catch (e: any) { log(`[영상] ⚠️ 팟 자동 종료 실패(${e.message}) — 설정에서 수동으로 꺼주세요.`); }
-      } else log('[영상] RunPod 팟을 켜둡니다(자동 종료 OFF). 끝나면 설정에서 꺼주세요(과금 계속).');
+        catch (e: any) {
+          log(`[영상] ⚠️ 팟 종료 실패(${(e?.message || '').slice(0, 60)}) — 5초 후 재시도…`);
+          await new Promise((r) => setTimeout(r, 5000));
+          try { await terminatePod(k.runpod, pod); log('[영상] RunPod 팟 종료(재시도 성공, 과금 중단).'); }
+          catch (e2: any) { log(`[영상] ⚠️ 팟 자동 종료 최종 실패 — 상단 GPU 배지를 눌러 꼭 꺼주세요.`); }
+        }
+      } else if (pod) log('[영상] RunPod 팟을 켜둡니다(자동 종료 OFF). 끝나면 설정에서 꺼주세요(과금 계속).');
     }
   },
   async render(p, dir, output, log, thumbOut) {

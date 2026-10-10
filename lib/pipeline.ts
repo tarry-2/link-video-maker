@@ -138,6 +138,7 @@ export async function makeVideo(
   const aiClips = Math.max(0, Math.min(sb.scenes.length, Math.floor(opts.aiClips || 0)));
   const style = getStyle(opts.imageStyle);
   let wanPod: string | undefined;
+  // ★GPU는 '움직이는 영상(aiClips>0)'일 때만 켠다. 이미지영상(aiClips=0)이면 여기 자체를 안 타므로 절대 안 켜진다.
   if (aiClips > 0) {
     if (!keys.runpod) log('[영상] RunPod 키가 없어 움직이는 영상을 건너뜁니다(이미지로 진행).');
     else {
@@ -146,6 +147,9 @@ export async function makeVideo(
     }
   }
 
+  // ★팟을 켰으면 '무슨 일이 있어도'(중단·에러 포함) 반드시 끈다 — try/finally로 감싼다. 예전엔 루프 중간에 에러·중단이
+  //   나면 아래 종료 코드를 건너뛰고 함수가 빠져나가 팟이 계속 켜진 채 과금됐다(테리 지적: 자동종료 가끔 실패).
+  try {
   for (let i = 0; i < sb.scenes.length; i++) {
     ck(); // 장면마다(이미지·영상 생성이 길어 중단 요청이 여기서 바로 반영됨)
     const s = sb.scenes[i];
@@ -221,13 +225,21 @@ export async function makeVideo(
     });
   }
 
-  // ★움직이는 영상 클립을 다 뽑았으면 RunPod 팟을 종료한다(렌더는 Railway에서 하므로 팟은 더 필요 없음).
-  //   autoShutdown=false면 팟을 켜둔다(다음 작업 빠르게 — 대신 시간당 과금 계속). 기본 종료(과금 방지).
-  if (wanPod && opts.autoShutdown !== false) {
-    try { await terminatePod(keys.runpod!, wanPod); log('[영상] RunPod 팟 종료(과금 중단).'); }
-    catch (e: any) { log(`[영상] ⚠️ 팟 자동 종료 실패(${e.message}) — 설정에서 수동으로 꺼주세요.`); }
-  } else if (wanPod) {
-    log('[영상] RunPod 팟을 켜둡니다(자동 종료 OFF). 끝나면 설정에서 꺼주세요(과금 계속).');
+  } finally {
+    // ★움직이는 영상 클립을 다 뽑았거나(정상) 중간에 에러/중단이 났어도 RunPod 팟을 반드시 종료한다(렌더는
+    //   Railway에서 하므로 팟 불필요). autoShutdown=false면 켜둔다(다음 작업 빠르게 — 대신 과금 계속). 종료 실패 시
+    //   한 번 더 재시도(과금 방지 최우선).
+    if (wanPod && opts.autoShutdown !== false) {
+      try { await terminatePod(keys.runpod!, wanPod); log('[영상] RunPod 팟 종료(과금 중단).'); }
+      catch (e: any) {
+        log(`[영상] ⚠️ 팟 종료 실패(${(e?.message || '').slice(0, 60)}) — 5초 후 재시도…`);
+        await new Promise((r) => setTimeout(r, 5000));
+        try { await terminatePod(keys.runpod!, wanPod); log('[영상] RunPod 팟 종료(재시도 성공, 과금 중단).'); }
+        catch (e2: any) { log(`[영상] ⚠️ 팟 자동 종료 최종 실패(${(e2?.message || '').slice(0, 60)}) — 상단 GPU 배지를 눌러 꼭 꺼주세요.`); }
+      }
+    } else if (wanPod) {
+      log('[영상] RunPod 팟을 켜둡니다(자동 종료 OFF). 끝나면 설정에서 꺼주세요(과금 계속).');
+    }
   }
 
   // ★통짜 음성이라 장면 전환은 0(전환으로 겹치면 오디오 싱크가 깨진다). 컷 편집으로 딱딱.
