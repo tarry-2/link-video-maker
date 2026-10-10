@@ -172,6 +172,8 @@
         <div class="pf-filter" id="pf-filter" role="tablist">
           <button data-media="all" class="on">전체</button>
           <button data-media="video">🎬 영상</button>
+          <button data-media="create">✍️ 창작</button>
+          <button data-media="remake">🎭 재창작</button>
           <button data-media="card">🎴 카드</button>
           <button data-media="highlight">🎬 하이라이트</button>
         </div>
@@ -291,7 +293,10 @@
       const PAGE = 12;
       const isCard = it => it.media === 'card' || it.media === 'card-post';
       const isHighlight = it => it.media === 'highlight'; // 유튜브 하이라이트(별도 보관)
-      const isVideo = it => it.media === 'video' || !it.media; // 레거시=영상(하이라이트·카드 제외)
+      const isCreate = it => it.origin === 'create'; // ✍️ 창작
+      const isRemake = it => it.origin === 'remake'; // 🎭 재창작
+      // 순수 영상(영상 만들기) = video인데 창작·재창작 아님(이원화).
+      const isVideo = it => (it.media === 'video' || !it.media) && !isCreate(it) && !isRemake(it);
       async function loadMyVideos(keepIdx) {
         try {
           const a = await (await fetch('/api/auth')).json();
@@ -307,8 +312,14 @@
         if (!allItems.length) { sec.hidden = true; return; }
         sec.hidden = false;
         const nV = allItems.filter(isVideo).length, nC = allItems.filter(isCard).length, nH = allItems.filter(isHighlight).length;
-        $('mypf-count').textContent = `(영상 ${nV} · 카드 ${nC}${nH ? ` · 하이라이트 ${nH}` : ''})`;
-        myItems = allItems.filter(it => mediaFilter === 'all' ? true : mediaFilter === 'card' ? isCard(it) : mediaFilter === 'highlight' ? isHighlight(it) : isVideo(it));
+        const nCr = allItems.filter(isCreate).length, nRm = allItems.filter(isRemake).length;
+        $('mypf-count').textContent = `(영상 ${nV}${nCr ? ` · 창작 ${nCr}` : ''}${nRm ? ` · 재창작 ${nRm}` : ''} · 카드 ${nC}${nH ? ` · 하이라이트 ${nH}` : ''})`;
+        myItems = allItems.filter(it => mediaFilter === 'all' ? true
+          : mediaFilter === 'card' ? isCard(it)
+          : mediaFilter === 'highlight' ? isHighlight(it)
+          : mediaFilter === 'create' ? isCreate(it)
+          : mediaFilter === 'remake' ? isRemake(it)
+          : isVideo(it));
         if (!myItems.length) {
           $('pf-select').innerHTML = '';
           $('mypf-grid').innerHTML = '<p class="pf-sub" style="padding:24px 4px">이 분류엔 아직 없어요.</p>';
