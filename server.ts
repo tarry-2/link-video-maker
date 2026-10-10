@@ -37,22 +37,6 @@ try { const _ck = path.join(STUDIO_DATA_DIR, 'yt-cookies.txt'); if (!process.env
 const OUT_DIR = path.join(ROOT, 'out');
 const SAMPLE_DIR = path.join(ROOT, 'public', 'voice-samples');
 
-// ★사용자가 ElevenLabs 라이브러리에서 직접 찾아 추가한 목소리(서프라이즈급 등) — data에 저장하고 VOICES에 주입해
-//   기존 목소리와 똑같이 미리듣기·선택·제작에 쓰인다. 부팅 때 로드(재배포해도 볼륨에 유지).
-const CUSTOM_VOICES_FILE = path.join(STUDIO_DATA_DIR, 'custom-voices.json');
-function loadCustomVoices() {
-  try {
-    const d = JSON.parse(fs.readFileSync(CUSTOM_VOICES_FILE, 'utf8'));
-    for (const [k, v] of Object.entries(d)) (VOICES as any)[k] = v;
-  } catch { /* 없으면 무시 */ }
-}
-function saveCustomVoices() {
-  const custom: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(VOICES)) if (k.startsWith('custom_')) custom[k] = v;
-  try { fs.mkdirSync(STUDIO_DATA_DIR, {recursive: true}); fs.writeFileSync(CUSTOM_VOICES_FILE, JSON.stringify(custom, null, 2)); } catch {}
-}
-loadCustomVoices();
-
 // 사용자가 고를 수 있는 제목 폰트(Scene.tsx TITLE_FONTS·web UI와 동일 목록). 외부 입력 검증용.
 const TITLE_FONTS = new Set([
   'Black Han Sans', 'Jua', 'Do Hyeon', 'Gothic A1',
@@ -1457,74 +1441,6 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     if (!e.RUNPOD_API_KEY) return json(res, 400, {error: 'RunPod 키가 없습니다.'});
     try { const ids = await stopAllWanPods(e.RUNPOD_API_KEY); return json(res, 200, {stopped: ids}); }
     catch (err: any) { return json(res, 502, {error: err?.message || '종료 실패'}); }
-  }
-
-  // ── 🔎 목소리 찾기(라이브러리 검색) — ElevenLabs 공개 라이브러리에서 서프라이즈급(미스터리·서스펜스·내레이션) 검색 ──
-  if (p === '/api/voice-library' && req.method === 'GET') {
-    const k = pipelineKeys();
-    if (!k.elevenlabs) return json(res, 400, {error: 'ElevenLabs 키를 저장하세요.'});
-    const q = (u.searchParams.get('q') || '').trim();
-    const gender = u.searchParams.get('gender') || ''; // female/male/''
-    const lang = u.searchParams.get('lang') || ''; // ko/en/''
-    // ElevenLabs shared-voices — search/gender/language/use_cases. 미스터리는 키워드 검색이 제일 잘 걸린다.
-    const sp = new URLSearchParams({page_size: '40', sort: 'trending'});
-    if (q) sp.set('search', q);
-    if (gender) sp.set('gender', gender);
-    if (lang) sp.set('language', lang);
-    try {
-      const r = await fetch('https://api.elevenlabs.io/v1/shared-voices?' + sp.toString(), {headers: {'xi-api-key': k.elevenlabs}, signal: AbortSignal.timeout(20000)});
-      if (!r.ok) return json(res, 502, {error: '목소리 라이브러리 조회 실패(' + r.status + ')'});
-      const d: any = await r.json();
-      const voices = (d.voices || []).slice(0, 40).map((v: any) => ({
-        voiceId: v.voice_id, ownerId: v.public_owner_id, name: v.name,
-        preview: v.preview_url || '', desc: v.description || '',
-        gender: v.gender || v.labels?.gender || '', accent: v.accent || v.labels?.accent || '',
-        language: v.language || v.labels?.language || '', useCase: v.use_case || v.labels?.use_case || '',
-      }));
-      return json(res, 200, {voices});
-    } catch (e: any) { return json(res, 502, {error: '목소리 라이브러리 조회 실패: ' + (e?.message || e)}); }
-  }
-
-  // ── 라이브러리 목소리 미리듣기 — 그 목소리로 '서프라이즈풍 미스터리 대본'을 직접 읽어준다(네 귀로 판단) ──
-  if (p === '/api/voice-library-preview' && req.method === 'GET') {
-    const voiceId = (u.searchParams.get('voiceId') || '').trim();
-    if (!/^[\w-]{10,}$/.test(voiceId)) return json(res, 400, {error: '목소리 ID를 확인하세요.'});
-    const k = pipelineKeys();
-    if (!k.elevenlabs) return json(res, 400, {error: 'ElevenLabs 키를 저장하세요.'});
-    fs.mkdirSync(SAMPLE_DIR, {recursive: true});
-    const file = path.join(SAMPLE_DIR, `lib_${voiceId.slice(0, 16)}.mp3`);
-    const previewText = '그날 밤, 그곳에서 벌어진 일은 아무도 설명하지 못했습니다. 지금부터, 그 믿기 힘든 이야기를 시작합니다.';
-    if (!fs.existsSync(file)) {
-      try { await ttsEleven(k.elevenlabs, previewText, file, voiceId); }
-      catch (e: any) { return json(res, 502, {error: '이 목소리는 미리듣기를 못 만들었어요(계정에서 지원 안 될 수 있어요): ' + (e?.message || '').slice(0, 80)}); }
-    }
-    const buf = fs.readFileSync(file);
-    res.writeHead(200, {'Content-Type': 'audio/mpeg', 'Content-Length': buf.length});
-    return res.end(buf);
-  }
-
-  // ── 라이브러리 목소리를 '내 목소리'로 추가 — custom_로 저장+VOICES 주입 → 기존처럼 선택·제작 가능 ──
-  if (p === '/api/voice-add' && req.method === 'POST') {
-    const b = await readBody(req);
-    const voiceId = String(b.voiceId || '').trim();
-    const name = String(b.name || '').trim().slice(0, 30) || '추가 목소리';
-    const gender = b.gender === '남' ? '남' : '여';
-    const cat = String(b.cat || '🎬 스릴러·미스터리').slice(0, 40);
-    if (!/^[\w-]{10,}$/.test(voiceId)) return json(res, 400, {error: '목소리 ID를 확인하세요.'});
-    const key = 'custom_' + voiceId.slice(0, 12);
-    (VOICES as any)[key] = {label: `${name} · 추가`, id: voiceId, note: '라이브러리에서 추가', tip: '🔎 내가 추가한 목소리', gender, use: ['issue', 'info'], cat};
-    saveCustomVoices();
-    return json(res, 200, {key, label: `${name} · 추가`});
-  }
-
-  // ── 추가한 목소리 삭제 ──
-  if (p === '/api/voice-remove' && req.method === 'POST') {
-    const b = await readBody(req);
-    const key = String(b.key || '').trim();
-    if (!key.startsWith('custom_') || !(VOICES as any)[key]) return json(res, 400, {error: '삭제할 수 없는 목소리입니다.'});
-    delete (VOICES as any)[key];
-    saveCustomVoices();
-    return json(res, 200, {ok: true});
   }
 
   // ── 목소리 미리듣기 ──
