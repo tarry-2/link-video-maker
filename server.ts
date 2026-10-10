@@ -1684,13 +1684,42 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const imageStyle = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
     const sceneCount = Math.max(0, Math.min(12, Number(b.sceneCount) || 0));
     const seriesBible = String(b.seriesBible || '').trim() || undefined; // 시리즈면 바이블 전달(연속성)
+    const episode = Number(b.episode) || undefined;
+    const episodesTotal = Number(b.episodesTotal) || undefined;
+    const episodeLogline = String(b.episodeLogline || '').trim() || undefined;
     const brief = `장르: ${genre || '미스터리'}. 핵심 키워드: ${keywords.join(', ') || '반전'}.${extra ? ` 추가 요구: ${extra}.` : ''} 이 장르와 키워드로 시청자의 감정을 뒤흔들고 끝까지 몰입시키는 오리지널 창작 스토리를 만들어라.`;
     try {
       const sb = await generateStoryboard(k.gemini, brief, {
-        duration, orientation, imageStyle, sceneCount, creative: true, seriesBible, openaiKey: k.openai,
+        duration, orientation, imageStyle, sceneCount, creative: true, seriesBible, episode, episodesTotal, episodeLogline, openaiKey: k.openai,
       });
       return json(res, 200, {storyboard: sb});
     } catch (e: any) { return json(res, 500, {error: '시나리오 생성 실패: ' + (e?.message || e)}); }
+  }
+
+  // ── 📖 시리즈 스토리 바이블: 장르·키워드·편수 → 세계관·인물·편별 로그라인(각 편 시나리오가 이걸 참조해 연속성 유지). ──
+  if (p === '/api/create-bible' && req.method === 'POST') {
+    const b = await readBody(req);
+    const genre = String(b.genre || '').trim();
+    const keywords: string[] = Array.isArray(b.keywords) ? b.keywords.map((x: any) => String(x || '').trim()).filter(Boolean).slice(0, 12) : [];
+    const extra = String(b.brief || '').trim();
+    const episodes = Math.max(2, Math.min(20, Number(b.episodes) || 3));
+    const k = pipelineKeys();
+    if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 대본 키(Gemini 또는 OpenAI)를 저장하세요.'});
+    const prompt = `너는 수백만 조회수를 내는 한국 세로 숏드라마(ReelShort·DramaBox 스타일) 시리즈 기획자다. 아래 장르·키워드로 '${episodes}부작' 오리지널 시리즈의 스토리 바이블을 설계하라. 매 편이 60~120초이고, 각 편 끝은 다음 편이 미치도록 궁금한 클리프행어여야 한다. 반전·감정·몰입이 핵심.
+[장르] ${genre || '미스터리'}
+[키워드] ${keywords.join(', ') || '반전, 배신'}
+${extra ? `[추가 요구] ${extra}\n` : ''}
+반드시 아래 JSON만 출력(설명 금지):
+{"seriesTitle":"시리즈 제목(한국어, 자극적)","world":"세계관·배경 설정 2~3문장","cast":[{"name":"한국어 이름","look":"영어 외형 묘사(얼굴·머리·의상·색, 모든 편에서 똑같이 재사용)","desc":"성격·역할 한국어 한 줄"}],"episodes":[{"n":1,"logline":"이 편에서 벌어지는 핵심 사건 한 줄(클리프행어 포함)"}]}
+cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체가 하나의 큰 줄거리(기승전결)로 이어지되 편마다 긴장이 고조되게.`;
+    try {
+      let raw = '';
+      if (k.gemini.length) { try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 2048, temperature: 0.95}); } catch {} }
+      if (!raw && k.openai) { const {openaiJson} = await import('./lib/openai'); raw = await openaiJson(k.openai, prompt, 2048); }
+      const m = raw.match(/\{[\s\S]*\}/); const d = m ? JSON.parse(m[0]) : null;
+      if (!d || !Array.isArray(d.episodes) || !d.episodes.length) throw new Error('바이블 생성 결과가 비었습니다.');
+      return json(res, 200, {bible: d});
+    } catch (e: any) { return json(res, 500, {error: '스토리 바이블 생성 실패: ' + (e?.message || e)}); }
   }
 
   // ── ✍️ 창작 제작: 사용자가 표에서 편집을 끝낸 시나리오로 영상을 만든다(대본 재생성 안 함). 재창작과 동일 등록(YT/IG·썸네일). ──

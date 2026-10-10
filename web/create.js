@@ -51,6 +51,7 @@
   const STYLES = [['real', '실사'], ['anime', '애니'], ['cinema', '시네마'], ['classic', '고전']];
   const OUTS = [['image', '🖼 이미지영상'], ['wan', '🎬 움직이는영상']];
   const CLIPS = [1, 2, 3, 4, 6];
+  const EPS = [[1, '단편 1개'], [3, '3부작'], [5, '5부작'], [10, '10부작']];
 
   // ── 상태 ──
   let genres = ['미스터리'];
@@ -58,6 +59,12 @@
   let out = 'image', clips = 2, narr = true, bgm = true;
   let scenario = null;
   let curJobId = null, curES = null, startTs = 0, tickTimer = null;
+  // 시리즈 상태
+  let eps = 1;              // 편 수(1=단편)
+  let bible = null;         // 스토리 바이블(JSON) — 시리즈일 때
+  let epScenarios = [];     // 편별 시나리오(인덱스 0=1편)
+  let epProduced = [];      // 편별 완성 projectId
+  let curEp = 0;            // 현재 보고 있는 편(0-base)
 
   // ── 렌더: 칩/세그 ──
   function renderGenres() {
@@ -70,15 +77,19 @@
     }).join('');
   }
   function renderSegs() {
+    seg($('cr-eps'), EPS, eps, 'e');
     seg($('cr-dur'), DURS, dur, 'd');
     seg($('cr-orient'), ORIENTS, orient, 'o');
     seg($('cr-style'), STYLES, style, 's');
     seg($('cr-out'), OUTS, out, 'out');
     seg($('cr-clips'), CLIPS, clips, 'c');
     $('cr-clip-row').classList.toggle('hidden', out !== 'wan');
+    const note = $('cr-eps-note'); if (note) note.textContent = eps > 1 ? `${eps}부작 시리즈 — 세계관·인물이 이어지고 편마다 다음 편이 궁금한 클리프행어로 끊겨요.` : '단편 1개를 만들어요.';
+    $('cr-gen').textContent = eps > 1 ? `✍️ ${eps}부작 시리즈 설계하기` : '✍️ 시나리오 만들기';
   }
 
   $('cr-genres').addEventListener('click', (e) => { const b = e.target.closest('.cr-chip'); if (!b) return; const g = b.dataset.g; if (genres.includes(g)) genres = genres.filter((x) => x !== g); else genres.push(g); renderGenres(); save(); });
+  $('cr-eps').addEventListener('click', (e) => { const b = e.target.closest('[data-e]'); if (!b) return; eps = Number(b.dataset.e); renderSegs(); save(); });
   $('cr-dur').addEventListener('click', (e) => { const b = e.target.closest('[data-d]'); if (!b) return; dur = Number(b.dataset.d); renderSegs(); save(); });
   $('cr-orient').addEventListener('click', (e) => { const b = e.target.closest('[data-o]'); if (!b) return; orient = b.dataset.o; renderSegs(); save(); });
   $('cr-style').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; style = b.dataset.s; renderSegs(); save(); });
@@ -91,7 +102,7 @@
   // ── 상태 저장/복원(탭 이동·새로고침·기기 바꿔도 유지) ──
   const KEY = 'onvideo-create-state';
   function save() {
-    try { syncTableToScenario(); localStorage.setItem(KEY, JSON.stringify({genres, dur, orient, style, out, clips, narr, bgm, brief: $('cr-brief').value, scenario})); } catch {}
+    try { syncTableToScenario(); localStorage.setItem(KEY, JSON.stringify({genres, dur, orient, style, out, clips, narr, bgm, brief: $('cr-brief').value, scenario, eps, bible, epScenarios, epProduced, curEp})); } catch {}
   }
   function restore() {
     let s; try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch {}
@@ -100,25 +111,73 @@
     dur = s.dur || dur; orient = s.orient || orient; style = s.style || style;
     out = s.out === 'wan' ? 'wan' : 'image'; clips = s.clips || clips;
     narr = s.narr !== false; bgm = s.bgm !== false;
+    eps = s.eps || 1; bible = s.bible || null; epScenarios = Array.isArray(s.epScenarios) ? s.epScenarios : []; epProduced = Array.isArray(s.epProduced) ? s.epProduced : []; curEp = s.curEp || 0;
     $('cr-brief').value = s.brief || ''; $('cr-narr').checked = narr; $('cr-bgm').checked = bgm;
-    if (s.scenario && s.scenario.scenes) { scenario = s.scenario; renderTable(); }
+    if (eps > 1 && bible) { renderSeriesBar(); scenario = epScenarios[curEp] || null; if (scenario) renderTable(); }
+    else if (s.scenario && s.scenario.scenes) { scenario = s.scenario; renderTable(); }
   }
 
-  // ── 시나리오 생성 ──
+  // ── 시나리오 생성(단편/시리즈) ──
+  const briefBody = () => ({genre: genres.join(' '), keywords: genres, brief: $('cr-brief').value.trim(), duration: dur, orientation: orient, imageStyle: style});
   $('cr-gen').onclick = $('cr-regen').onclick = async () => {
     if (!genres.length && !$('cr-brief').value.trim()) { $('cr-gen-state').textContent = '장르나 키워드를 하나 이상 골라주세요.'; return; }
-    $('cr-gen').disabled = true; $('cr-gen-state').textContent = '✍️ 시나리오 집필 중… (10~20초)';
+    $('cr-gen').disabled = true;
     try {
-      const r = await fetch('/api/create-scenario', {method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({genre: genres.join(' '), keywords: genres, brief: $('cr-brief').value.trim(), duration: dur, orientation: orient, imageStyle: style})});
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || '생성 실패');
-      scenario = d.storyboard; renderTable();
-      $('cr-gen-state').textContent = '✅ 시나리오 완성 — 표에서 고친 뒤 아래에서 제작하세요.'; save();
-      $('cr-step2').scrollIntoView({behavior: 'smooth', block: 'start'});
+      if (eps > 1) {
+        // 시리즈: ①스토리 바이블 ②1편 시나리오
+        $('cr-gen-state').textContent = `📖 ${eps}부작 세계관·인물 설계 중… (15~25초)`;
+        const rb = await fetch('/api/create-bible', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({...briefBody(), episodes: eps})});
+        const db = await rb.json(); if (!rb.ok) throw new Error(db.error || '바이블 생성 실패');
+        bible = db.bible; epScenarios = []; epProduced = []; curEp = 0;
+        renderSeriesBar();
+        await genEpisode(0);
+      } else {
+        bible = null; epScenarios = []; epProduced = [];
+        $('cr-gen-state').textContent = '✍️ 시나리오 집필 중… (10~20초)';
+        const r = await fetch('/api/create-scenario', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(briefBody())});
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || '생성 실패');
+        scenario = d.storyboard; $('cr-series-bar').classList.add('hidden'); renderTable();
+        $('cr-gen-state').textContent = '✅ 시나리오 완성 — 표에서 고친 뒤 아래에서 제작하세요.'; save();
+        $('cr-step2').scrollIntoView({behavior: 'smooth', block: 'start'});
+      }
     } catch (e) { $('cr-gen-state').textContent = '⚠️ ' + e.message; }
     finally { $('cr-gen').disabled = false; }
   };
+
+  // 바이블을 seriesBible 문자열로 — 각 편 생성 시 연속성 유지용.
+  function bibleText() {
+    if (!bible) return '';
+    const cast = (bible.cast || []).map((c) => `- ${c.name}: ${c.look}${c.desc ? ' / ' + c.desc : ''}`).join('\n');
+    const epl = (bible.episodes || []).map((e) => `${e.n}편: ${e.logline}`).join('\n');
+    return `제목: ${bible.seriesTitle || ''}\n[세계관]\n${bible.world || ''}\n[등장인물]\n${cast}\n[편별 줄거리]\n${epl}`;
+  }
+  // N편(0-base) 시나리오 생성 → epScenarios[i]에 저장.
+  async function genEpisode(i) {
+    curEp = i; renderSeriesBar();
+    if (epScenarios[i]) { scenario = epScenarios[i]; renderTable(); return; }
+    $('cr-gen-state').textContent = `✍️ ${i + 1}편 시나리오 집필 중… (10~20초)`;
+    const logline = (bible.episodes && bible.episodes[i]) ? bible.episodes[i].logline : '';
+    const r = await fetch('/api/create-scenario', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({...briefBody(), seriesBible: bibleText(), episode: i + 1, episodesTotal: eps, episodeLogline: logline})});
+    const d = await r.json(); if (!r.ok) throw new Error(d.error || '생성 실패');
+    // 제목에 시리즈·편 표기(제작·작업내역에서 'N편'으로 구분).
+    d.storyboard.title = `[${bible.seriesTitle || '시리즈'}] ${i + 1}편 · ${d.storyboard.title || ''}`.trim();
+    epScenarios[i] = d.storyboard; scenario = d.storyboard; renderTable();
+    $('cr-gen-state').textContent = `✅ ${i + 1}편 완성 — 표에서 고치고 제작하세요. ${i + 1 < eps ? '아래 편 탭에서 다음 편도 집필할 수 있어요.' : ''}`;
+    save(); $('cr-step2').scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+  // 시리즈 편 탭 렌더.
+  function renderSeriesBar() {
+    const bar = $('cr-series-bar');
+    if (eps <= 1 || !bible) { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    $('cr-series-title').textContent = `📖 ${bible.seriesTitle || '시리즈'} · 전 ${eps}편`;
+    $('cr-ep-tabs').innerHTML = Array.from({length: eps}, (_, i) => {
+      const done = epProduced[i] ? ' ✅' : (epScenarios[i] ? ' ✍️' : '');
+      return `<button type="button" class="cr-chip${i === curEp ? ' active' : ''}" data-ep="${i}">${i + 1}편${done}</button>`;
+    }).join('');
+    $('cr-ep-tabs').querySelectorAll('[data-ep]').forEach((b) => b.onclick = async () => { $('cr-gen').disabled = true; try { await genEpisode(Number(b.dataset.ep)); } catch (e) { $('cr-gen-state').textContent = '⚠️ ' + e.message; } finally { $('cr-gen').disabled = false; } });
+  }
 
   // ── 편집 표 ──
   const cell = (v) => `<td contenteditable>${esc(v)}</td>`;
@@ -191,7 +250,9 @@
         $('cr-make').disabled = false; $('cr-stop').classList.add('hidden'); refreshGpu();
         if (m.error) { setEnergy(100, m.error.includes('중단') ? '중단됨' : '실패'); addLog('⚠️ ' + m.error); return; }
         setEnergy(100, '완성! 🎉');
-        showResult(m.projectId || (m.clips && m.clips[0] && m.clips[0].projectId), m.title);
+        const pid = m.projectId || (m.clips && m.clips[0] && m.clips[0].projectId);
+        if (eps > 1 && bible) { epProduced[curEp] = pid; renderSeriesBar(); save(); }
+        showResult(pid, m.title);
         loadHistory();
       }
     };

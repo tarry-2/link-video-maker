@@ -133,6 +133,9 @@ export async function generateStoryboard(
     orientation?: 'portrait' | 'landscape'; // ★방향 강제(지정되면 길이 무관). 없으면 길이로 자동.
     creative?: boolean; // ★창작 탭: source를 '사실 자료'가 아니라 '창작 의뢰(장르·키워드)'로 보고 오리지널 픽션 시나리오를 쓴다.
     seriesBible?: string; // ★시리즈: 세계관·인물·전체 아크(스토리 바이블). 있으면 이 편이 그 설정을 지키며 이어지게.
+    episode?: number; // ★시리즈: 지금 몇 편(1부터).
+    episodesTotal?: number; // ★시리즈: 전체 편 수.
+    episodeLogline?: string; // ★시리즈: 이 편에서 벌어질 일(바이블의 해당 편 로그라인).
     openaiKey?: string;
     log?: (m: string) => void;
   },
@@ -185,7 +188,10 @@ export async function generateStoryboard(
   const intro = opts.creative
     ? `너는 수백만 조회수를 내는 한국 숏드라마·웹드라마 작가이자 뮤지컬 극작가다. 아래 '창작 의뢰(장르·키워드)'로 실제 자료 없이 완전히 새로운 '오리지널 픽션 시나리오'를 창작한다. 지어내도 된다(픽션). '한 편의 영화·뮤지컬처럼 기승전결이 살아있고 끝까지 보게 되는' 한국어 ${orient} ${format} 시나리오를 JSON으로 쓴다.`
     : `너는 구독자 100만 한국 유튜브 쇼츠 채널의 기획자이자 대본 작가다. 아래 자료로 '한 편의 영화처럼 기승전결이 있어 끝까지 보게 되는' 한국어 ${orient} ${format} 대본을 JSON으로 쓴다.`;
-  const prompt = `${intro}${opts.seriesBible ? `\n\n[시리즈 설정 — 반드시 지켜라(스토리 바이블)]\n이 영상은 시리즈의 한 편이다. 아래 세계관·인물·전체 줄거리를 '그대로' 지키며(인물 이름·성격·외형·관계·설정 유지), 이 편의 분량을 이어서 써라. 이 편의 마지막은 다음 편이 궁금해 미치게 만드는 클리프행어로 끊어라.\n${opts.seriesBible.slice(0, 4000)}` : ''}
+  const epLine = opts.episode && opts.episodesTotal
+    ? `\n★지금은 전체 ${opts.episodesTotal}편 중 ${opts.episode}편이다.${opts.episode > 1 ? ' 앞 편들의 전개를 자연스럽게 이어받아라(1편부터 본 사람이 "그래서 이렇게 됐구나" 싶게).' : ' 1편이므로 세계관과 인물을 자연스럽게 소개하되, 초반 3초에 강한 훅으로 시작하라.'}${opts.episode < opts.episodesTotal ? ' 이 편은 반드시 다음 편이 미치도록 궁금한 클리프행어(결정적 순간/충격 폭로/위기)로 끊어라 — 절대 깔끔하게 마무리하지 마라.' : ' 마지막 편이므로 전체 시리즈를 감정적으로 매듭지어 큰 여운을 남겨라.'}${opts.episodeLogline ? `\n이 편에서 벌어질 일: ${opts.episodeLogline}` : ''}`
+    : '';
+  const prompt = `${intro}${opts.seriesBible ? `\n\n[시리즈 설정 — 반드시 지켜라(스토리 바이블)]\n이 영상은 시리즈의 한 편이다. 아래 세계관·인물·전체 줄거리를 '그대로' 지키며(인물 이름·성격·외형·관계·설정 유지), 이 편의 분량을 써라.${epLine}\n${opts.seriesBible.slice(0, 4000)}` : ''}
 
 ${catLine}
 [화법·톤] ${toneGuide}

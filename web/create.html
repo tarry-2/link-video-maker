@@ -108,7 +108,10 @@
           <input id="cr-brief" class="input" placeholder="(선택) 자유롭게 한 줄 — 예: 비 오는 밤, 복수를 결심한 형사" />
         </div>
         <h2 class="block-title" style="margin-top:14px"><span class="st-no">02</span> 설정</h2>
-        <div class="cr-field"><span class="field-label">길이</span><div class="seg" id="cr-dur"></div></div>
+        <div class="cr-field"><span class="field-label">편 수 <span style="color:var(--teal)">(여러 편 = 시리즈)</span></span><div class="seg" id="cr-eps"></div>
+          <p class="hint" id="cr-eps-note">단편 1개를 만들어요.</p>
+        </div>
+        <div class="cr-field"><span class="field-label">길이(편당)</span><div class="seg" id="cr-dur"></div></div>
         <div class="cr-field"><span class="field-label">화면</span><div class="seg" id="cr-orient"></div></div>
         <div class="cr-field"><span class="field-label">그림체</span><div class="seg" id="cr-style"></div></div>
         <button id="cr-gen" class="primary-btn" style="margin-top:6px">✍️ 시나리오 만들기</button>
@@ -118,6 +121,11 @@
       <!-- STEP 2: 시나리오 표(편집) -->
       <section class="card hidden" id="cr-step2">
         <h2 class="block-title"><span class="st-no">03</span> 시나리오 — 고치고 싶은 칸을 바로 눌러 수정하세요</h2>
+        <!-- 시리즈 편 네비(단편이면 숨김) -->
+        <div id="cr-series-bar" class="hidden" style="margin:10px 0 2px">
+          <div id="cr-series-title" style="font-family:'Noto Serif KR',serif;font-weight:900;font-size:16px;margin-bottom:6px"></div>
+          <div class="cr-chips" id="cr-ep-tabs"></div>
+        </div>
         <div class="cr-field"><span class="field-label">제목</span><input id="cr-title" class="input" /></div>
         <div class="cr-field"><span class="field-label">배경음악(BGM 무드)</span><input id="cr-music" class="input" /></div>
         <div style="overflow-x:auto">
