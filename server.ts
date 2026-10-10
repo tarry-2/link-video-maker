@@ -1700,6 +1700,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const episode = Number(b.episode) || undefined;
     const episodesTotal = Number(b.episodesTotal) || undefined;
     const episodeLogline = String(b.episodeLogline || '').trim() || undefined;
+    const preferOpenAI = !!b.premiumScript && !!k.openai; // ★고급 대본 토글(GPT). 키 없으면 자동으로 무료 Gemini.
     // ★사용자가 직접 쓴 주제(extra)가 있으면 그게 '이야기의 중심 소재'다 — 장르·키워드는 톤일 뿐.
     //   예전엔 extra를 "추가 요구"로 뒤에 흘려 넣어 AI가 무시 → 주제와 무관한 복수·배신 막장만 나왔다(테리 지적:
     //   "미지의 세계"를 넣었는데 "그녀의 복수"가 나옴). 주제를 맨 앞·대문자로 못박아 반드시 지키게 한다.
@@ -1726,9 +1727,9 @@ ${extra}
         jlog(job, `[장르] ${genre || '미스터리'}${kw.length ? ` · 키워드: ${kw.join(', ')}` : ''}`);
         jlog(job, `[설정] ${orientation === 'landscape' ? '가로' : '세로'} · ${duration}초 · 스타일 ${imageStyle}${sceneCount ? ` · 장면 ${sceneCount}개 지정` : ' · 장면수 자동'}${isEp ? ` · 시리즈 ${episode}/${episodesTotal}편` : ''}`);
         if (episodeLogline) jlog(job, `[이 편] ${episodeLogline}`);
-        jlog(job, '[집필] AI가 시나리오를 쓰고 있어요…(보통 10~20초)');
+        jlog(job, preferOpenAI ? '[집필] 🤖 GPT(고급·유료)로 시나리오를 쓰고 있어요…(보통 20~40초)' : '[집필] AI가 시나리오를 쓰고 있어요…(보통 10~20초, 무료)');
         const sb = await generateStoryboard(k.gemini, brief, {
-          duration, orientation, imageStyle, sceneCount, creative: true, seriesBible, episode, episodesTotal, episodeLogline, openaiKey: k.openai,
+          duration, orientation, imageStyle, sceneCount, creative: true, seriesBible, episode, episodesTotal, episodeLogline, openaiKey: k.openai, preferOpenAI,
           log: (m) => jlog(job, m),
         });
         jlog(job, `[완성] "${sb.title || '오리지널'}" · ${sb.scenes.length}장면`);
@@ -1750,6 +1751,7 @@ ${extra}
     const episodes = Math.max(2, Math.min(20, Number(b.episodes) || 3));
     const k = pipelineKeys();
     if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 대본 키(Gemini 또는 OpenAI)를 저장하세요.'});
+    const preferOpenAI = !!b.premiumScript && !!k.openai; // ★고급 대본 토글(GPT)
     const bibleKw = keywords.filter((x) => x && x !== genre); // keywords=genres라 장르와 중복이면 제거(사용자 지정 키워드만)
     const prompt = `너는 수백만 조회수를 내는 한국 장편 시리즈 기획자다(장르 불문 — 드라마·미스터리·SF·판타지·역사 다 쓴다). 아래 의뢰로 '${episodes}부작' 오리지널 시리즈의 스토리 바이블을 설계하라. 매 편이 60~120초이고, 각 편 끝은 다음 편이 미치도록 궁금한 클리프행어여야 한다. 감정·몰입이 핵심.
 ${extra ? `[★이 시리즈의 핵심 주제·소재 — 반드시 이걸 중심으로 전체 줄거리를 지어내라]\n${extra}\n★주제를 버리고 흔한 복수·배신·불륜 막장 클리셰로 흐르지 마라. 위 주제가 그대로 시리즈의 소재·세계관이 되어야 한다.\n` : ''}[장르·분위기] ${genre || '미스터리'}
@@ -1765,10 +1767,16 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
         jlog(job, `[시리즈] ${episodes}부작 설계`);
         jlog(job, `[주제] ${extra ? `"${extra}"` : '(자유 주제 없음 — 장르/키워드로 설계)'}`);
         jlog(job, `[장르] ${genre || '미스터리'}${bibleKw.length ? ` · 키워드: ${bibleKw.join(', ')}` : ''}`);
-        jlog(job, '[바이블] 세계관·인물·편별 줄거리를 설계 중이에요…(보통 15~25초)');
+        jlog(job, preferOpenAI ? '[바이블] 🤖 GPT(고급·유료)로 세계관·인물·줄거리 설계 중…' : '[바이블] 세계관·인물·편별 줄거리를 설계 중이에요…(보통 15~25초, 무료)');
         let raw = '';
-        if (k.gemini.length) { try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 2048, temperature: 0.95}); } catch (e: any) { jlog(job, '[바이블] Gemini 실패' + (k.openai ? ' → OpenAI 폴백' : '') + ': ' + (e?.message || '').slice(0, 60)); } }
-        if (!raw && k.openai) { jlog(job, '[바이블] OpenAI로 생성'); const {openaiJson} = await import('./lib/openai'); raw = await openaiJson(k.openai, prompt, 2048); }
+        if (preferOpenAI) {
+          try { const {openaiJson} = await import('./lib/openai'); raw = await openaiJson(k.openai!, prompt, 2048, 'gpt-4.1'); }
+          catch (e: any) { jlog(job, '[바이블] GPT 실패' + (k.gemini.length ? ' → Gemini 폴백' : '') + ': ' + (e?.message || '').slice(0, 60)); }
+          if (!raw && k.gemini.length) { try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 2048, temperature: 0.95}); } catch (e: any) { jlog(job, '[바이블] Gemini 실패: ' + (e?.message || '').slice(0, 60)); } }
+        } else {
+          if (k.gemini.length) { try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 2048, temperature: 0.95}); } catch (e: any) { jlog(job, '[바이블] Gemini 실패' + (k.openai ? ' → OpenAI 폴백' : '') + ': ' + (e?.message || '').slice(0, 60)); } }
+          if (!raw && k.openai) { jlog(job, '[바이블] OpenAI로 생성'); const {openaiJson} = await import('./lib/openai'); raw = await openaiJson(k.openai, prompt, 2048); }
+        }
         const m = raw.match(/\{[\s\S]*\}/); const d = m ? JSON.parse(m[0]) : null;
         if (!d || !Array.isArray(d.episodes) || !d.episodes.length) throw new Error('바이블 생성 결과가 비었습니다.');
         jlog(job, `[완성] "${d.seriesTitle || '시리즈'}" · 인물 ${(d.cast || []).length}명 · ${(d.episodes || []).length}편`);

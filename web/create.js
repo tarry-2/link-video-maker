@@ -41,6 +41,16 @@
     wire(box, close); return box;
   }
 
+  // ── 가벼운 저장 확인 팝업(토스트) — "저장되었습니다"를 화면 가운데 띄우고 1.6초 뒤 사라진다. ──
+  function toast(msg, ok) {
+    let t = $('cr-toast');
+    if (!t) { t = document.createElement('div'); t.id = 'cr-toast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--card);border:2px solid ' + (ok === false ? '#e0410a' : 'var(--teal)') + ';border-radius:16px;padding:18px 30px;font-weight:800;font-size:17px;z-index:90;box-shadow:0 14px 48px rgba(0,0,0,.35);opacity:0;transition:opacity .15s;text-align:center;max-width:86vw;white-space:pre-line;line-height:1.5';
+    requestAnimationFrame(() => { t.style.opacity = '1'; });
+    clearTimeout(t._tm); t._tm = setTimeout(() => { t.style.opacity = '0'; setTimeout(() => { if (t) t.remove(); }, 220); }, 1600);
+  }
+
   // ── 선택지 ──
   // 🔥=지금 전 세계 세로 숏드라마(ReelShort·DramaBox, 2026)에서 조회수·완주율 최상위 장르(복수·로맨스·스릴러·심리호러·반전).
   //   리서치 근거: 로맨스=최대 완주율, 스릴러=가장 빠른 성장(18~30), 심리호러=급부상, 복수·재벌반전=대표 흥행 소재.
@@ -54,13 +64,17 @@
   //   "4초"처럼 보여 테리가 '길이(초)'로 오해함 → 명시적으로 '개' 라벨을 준다(초 아님).
   const CLIPS = [[1, '1개'], [2, '2개'], [3, '3개'], [4, '4개'], [6, '6개']];
   const EPS = [[1, '단편 1개'], [3, '3부작'], [5, '5부작'], [10, '10부작']];
+  // 대본 AI 엔진 — free=무료 Gemini(2패스 재집필로 무료 최대치) / gpt=결제한 OpenAI GPT-4.1(방송국·뮤지컬 수준).
+  const ENGINES = [['free', '🆓 무료 (Gemini)'], ['gpt', '⭐ 고급 (GPT)']];
 
   // ── 상태 ──
   let genres = ['미스터리'];
   let dur = 60, orient = 'portrait', style = 'real';
   let out = 'image', clips = 2, narr = true, bgm = true;
+  let engine = 'free'; // 대본 AI 엔진(free=무료 Gemini / gpt=고급 GPT)
   let scenario = null;
   let curJobId = null, curES = null, startTs = 0, tickTimer = null, lastLogAt = 0;
+  let shownResultId = null, resultTimer = null; // 완성 결과카드: 같은 완성작 중복표시 방지 + 5분 뒤 자동 정리
   // 시리즈 상태
   let eps = 1;              // 편 수(1=단편)
   let bible = null;         // 스토리 바이블(JSON) — 시리즈일 때
@@ -78,6 +92,15 @@
       return `<button type="button" class="seg-btn${String(cur) === String(v) ? ' active' : ''}" data-${attr}="${v}">${label}</button>`;
     }).join('');
   }
+  // 대본 AI 엔진 설명 — 무료 Gemini vs 고급 GPT가 '뭐가 다른지' 공부형으로 또렷이(선택된 쪽을 강조).
+  function renderEngineNote() {
+    const el = $('cr-engine-note'); if (!el) return;
+    const on = (k) => engine === k ? 'opacity:1' : 'opacity:.55';
+    el.innerHTML = `
+      <div style="${on('free')}"><b>🆓 무료 (Gemini)</b> — 구글 Gemini로 집필. <b>공짜</b>, 빠름(10~20초). 초고를 쓴 뒤 <b>AI가 한 번 더 고쳐 쓰는 2패스</b>로 무료 안에서 품질을 최대한 끌어올려요. 평소 대량 제작용.</div>
+      <div style="${on('gpt')};margin-top:6px"><b>⭐ 고급 (GPT-4.1)</b> — 당신이 <b>결제한 OpenAI 키</b>로 집필. 플롯 짜임새·문장력·<b>반전 설계</b>가 한 수 위예요(방송국 드라마·뮤지컬 수준 목표). 느림(20~40초), <b>글값만</b> 조금 들어요(몇 원~수십 원 — 영상 GPU·제작비와 무관). 승부 볼 중요한 영상에.</div>
+      <div style="margin-top:6px;color:#e8612b">※ 고급(GPT)은 <b>⚙ 키 설정에 OpenAI 키</b>가 있어야 작동해요(없으면 자동으로 무료 Gemini로 만들어요).</div>`;
+  }
   function renderSegs() {
     seg($('cr-eps'), EPS, eps, 'e');
     seg($('cr-dur'), DURS, dur, 'd');
@@ -85,9 +108,14 @@
     seg($('cr-style'), STYLES, style, 's');
     seg($('cr-out'), OUTS, out, 'out');
     seg($('cr-clips'), CLIPS, clips, 'c');
+    seg($('cr-engine'), ENGINES, engine, 'eng');
+    renderEngineNote();
     $('cr-clip-row').classList.toggle('hidden', out !== 'wan');
     const note = $('cr-eps-note'); if (note) note.textContent = eps > 1 ? `${eps}부작 시리즈 — 세계관·인물이 이어지고 편마다 다음 편이 궁금한 클리프행어로 끊겨요.` : '단편 1개를 만들어요.';
     $('cr-gen').textContent = eps > 1 ? `✍️ ${eps}부작 시리즈 설계하기` : '✍️ 시나리오 만들기';
+    // 직접입력 칸은 항상 현재 값을 비춘다(프리셋 클릭·직접저장·복원 어느 쪽이든 일치).
+    if ($('cr-eps-custom')) $('cr-eps-custom').value = eps;
+    if ($('cr-dur-custom')) $('cr-dur-custom').value = dur;
     updatePlan();
   }
 
@@ -135,6 +163,7 @@
   $('cr-style').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; style = b.dataset.s; renderSegs(); save(); });
   $('cr-out').addEventListener('click', (e) => { const b = e.target.closest('[data-out]'); if (!b) return; out = b.dataset.out; renderSegs(); save(); });
   $('cr-clips').addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; clips = Number(b.dataset.c); if ($('cr-clip-saved')) $('cr-clip-saved').textContent = ''; renderSegs(); save(); });
+  $('cr-engine').addEventListener('click', (e) => { const b = e.target.closest('[data-eng]'); if (!b) return; engine = b.dataset.eng; renderSegs(); save(); });
   // 움직이는 장면 수 직접 입력 + 저장 — 프리셋(1~6) 말고 원하는 수(1~20)를 넣고 '저장' 누르면 '저장되었습니다'.
   function saveClips() {
     const raw = Number($('cr-clip-custom')?.value);
@@ -148,6 +177,28 @@
   }
   $('cr-clip-save')?.addEventListener('click', saveClips);
   $('cr-clip-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveClips(); } });
+
+  // ── 편 수·길이 직접 입력 + 저장 — 프리셋(버튼) 말고 원하는 숫자를 넣고 '저장'하면 "저장되었습니다" 팝업. ──
+  //   서버 한계와 동일하게 편수 1~20, 길이 15~180초로 클램프(그 밖 입력은 안내).
+  function saveSettings() {
+    const epsRaw = ($('cr-eps-custom')?.value || '').trim();
+    const durRaw = ($('cr-dur-custom')?.value || '').trim();
+    if (epsRaw !== '') {
+      const v = Number(epsRaw);
+      if (!Number.isFinite(v) || v < 1 || v > 20) { toast('편 수는 1~20 사이 숫자를 넣어주세요.', false); return; }
+      eps = Math.max(1, Math.min(20, Math.round(v)));
+    }
+    if (durRaw !== '') {
+      const v = Number(durRaw);
+      if (!Number.isFinite(v) || v < 15 || v > 180) { toast('길이는 15~180초 사이 숫자를 넣어주세요.', false); return; }
+      dur = Math.max(15, Math.min(180, Math.round(v)));
+    }
+    renderSegs(); save();
+    toast(`✅ 저장되었습니다\n${eps > 1 ? eps + '부작 시리즈' : '단편 1개'} · 편당 ${dur}초`);
+  }
+  $('cr-setting-save')?.addEventListener('click', saveSettings);
+  $('cr-eps-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveSettings(); } });
+  $('cr-dur-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveSettings(); } });
   $('cr-narr').addEventListener('change', (e) => { narr = e.target.checked; updatePlan(); save(); });
   $('cr-bgm').addEventListener('change', (e) => { bgm = e.target.checked; updatePlan(); save(); });
   $('cr-brief').addEventListener('input', save);
@@ -155,7 +206,7 @@
   // ── 상태 저장/복원(탭 이동·새로고침·기기 바꿔도 유지) ──
   const KEY = 'onvideo-create-state';
   function save() {
-    try { syncTableToScenario(); localStorage.setItem(KEY, JSON.stringify({genres, dur, orient, style, out, clips, narr, bgm, brief: $('cr-brief').value, scenario, eps, bible, epScenarios, epProduced, curEp})); } catch {}
+    try { syncTableToScenario(); localStorage.setItem(KEY, JSON.stringify({genres, dur, orient, style, out, clips, narr, bgm, engine, brief: $('cr-brief').value, scenario, eps, bible, epScenarios, epProduced, curEp})); } catch {}
   }
   function restore() {
     let s; try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch {}
@@ -163,15 +214,16 @@
     genres = Array.isArray(s.genres) && s.genres.length ? s.genres : genres;
     dur = s.dur || dur; orient = s.orient || orient; style = s.style || style;
     out = s.out === 'wan' ? 'wan' : 'image'; clips = s.clips || clips;
-    narr = s.narr !== false; bgm = s.bgm !== false;
+    narr = s.narr !== false; bgm = s.bgm !== false; engine = s.engine === 'gpt' ? 'gpt' : 'free';
     eps = s.eps || 1; bible = s.bible || null; epScenarios = Array.isArray(s.epScenarios) ? s.epScenarios : []; epProduced = Array.isArray(s.epProduced) ? s.epProduced : []; curEp = s.curEp || 0;
     $('cr-brief').value = s.brief || ''; $('cr-narr').checked = narr; $('cr-bgm').checked = bgm;
+    renderGenres(); renderSegs(); // 복원된 장르·편수·길이를 칩/세그/직접입력칸에 반영(안 하면 기본값으로 보였다)
     if (eps > 1 && bible) { renderSeriesBar(); scenario = epScenarios[curEp] || null; if (scenario) renderTable(); }
     else if (s.scenario && s.scenario.scenes) { scenario = s.scenario; renderTable(); }
   }
 
   // ── 시나리오 생성(단편/시리즈) ──
-  const briefBody = () => ({genre: genres.join(' '), keywords: genres, brief: $('cr-brief').value.trim(), duration: dur, orientation: orient, imageStyle: style});
+  const briefBody = () => ({genre: genres.join(' '), keywords: genres, brief: $('cr-brief').value.trim(), duration: dur, orientation: orient, imageStyle: style, premiumScript: engine === 'gpt'});
   $('cr-gen').onclick = $('cr-regen').onclick = async () => {
     if (!genres.length && !$('cr-brief').value.trim()) { $('cr-gen-state').textContent = '장르나 키워드를 하나 이상 골라주세요.'; return; }
     $('cr-gen').disabled = true;
@@ -325,6 +377,7 @@
     syncTableToScenario();
     if (!scenario || !scenario.scenes || !scenario.scenes.length) { alert('먼저 시나리오를 만들어 주세요.'); return; }
     save();
+    shownResultId = null; clearTimeout(resultTimer); // 새 제작 — 이전 결과카드 가드·5분 타이머 초기화(새 완성작이 제대로 뜨고, 옛 타이머가 새 카드를 숨기지 않게)
     $('cr-progress').classList.remove('hidden'); $('cr-result-block').classList.add('hidden');
     $('cr-log').innerHTML = ''; setEnergy(6, '시작…'); $('cr-make').disabled = true; $('cr-stop').classList.remove('hidden');
     $('cr-phase').textContent = '제작 준비'; startTs = Date.now(); startTick();
@@ -378,6 +431,11 @@
   // ── 결과 카드(크게보기·다운로드·유튜브·인스타) ──
   function showResult(projectId, title) {
     const box = $('cr-result-block'); if (!box) return;
+    // ★중복표시 가드 — syncCurrentJob이 4초마다 done 상태로 이 함수를 다시 부른다. 같은 완성작이면 재렌더·재스크롤
+    //   하지 않는다(안 그러면 4초마다 화면이 결과카드로 끌려 내려가 스크롤이 안 됨 — 테리: "강제로 하단으로 끌고간다").
+    const key = projectId || '_done';
+    if (key === shownResultId) return;
+    shownResultId = key;
     box.classList.remove('hidden');
     if (!projectId) { box.innerHTML = '<p class="mini-state">완성됐어요 — 아래 작업 내역에서 확인하세요.</p>'; return; }
     const b = Date.now();
@@ -398,6 +456,10 @@
     box.querySelector('.cr-yt').onclick = (e) => uploadYouTube(e.target, e.target.dataset.id);
     box.querySelector('.cr-ig').onclick = (e) => uploadInstagram(e.target, e.target.dataset.id, !!e.target.dataset.land);
     box.scrollIntoView({behavior: 'smooth', block: 'start'});
+    // ★껍데기 5분 뒤 자동 정리 — 영상은 이미 포폴·작업 내역에 저장됐으니, 이 결과카드는 5분만 유지하고 비운다.
+    //   (5분 동안은 재생·다운로드·업로드 전부 멀쩡히 동작. 중복표시 가드 덕에 이 타이머는 리셋되지 않는다.)
+    clearTimeout(resultTimer);
+    resultTimer = setTimeout(() => { box.classList.add('hidden'); box.innerHTML = ''; }, 5 * 60 * 1000);
   }
 
   function bigView(id, isLand) {

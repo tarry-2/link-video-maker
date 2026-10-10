@@ -137,6 +137,7 @@ export async function generateStoryboard(
     episodesTotal?: number; // ★시리즈: 전체 편 수.
     episodeLogline?: string; // ★시리즈: 이 편에서 벌어질 일(바이블의 해당 편 로그라인).
     openaiKey?: string;
+    preferOpenAI?: boolean; // ★고급 대본 토글: 유료 GPT(gpt-4.1)를 '주 집필자'로. 끄면 무료 Gemini.
     log?: (m: string) => void;
   },
 ): Promise<Storyboard> {
@@ -203,7 +204,25 @@ ${catLine}
 - narration은 정보 나열이 아니라 '감정을 건드리는 이야기'로. 장면이 넘어갈수록 감정이 쌓이고, 중반에 울림(공감·놀라움·뭉클), 후반에 벅차오름이나 깊은 여운이 오게.
 - 오감·심상을 자극하는 구체적 묘사와 '너/당신'을 향한 2인칭 호명으로 시청자를 장면 안으로 끌어들여라(관찰자가 아니라 당사자로).
 - 주제와 분위기에 따라 톤을 바꿔라: 미스터리=서늘하고 신비롭게 심장 쫄깃, 감동=따뜻하게 벅차게, 정보=경쾌하고 똑부러지게. 소재에 맞는 '분위기'를 끝까지 유지하라.
-[서사 구조 — 반드시 지켜라]
+${opts.creative ? `[★★★이야기 설계 — 가장 중요: '하나의 일관된 이야기'를 기승전결로 짜라]
+① 먼저 딱 한 줄 로그라인을 정하라: "누가(주인공 1명) + 무엇을 원하는데 + 무슨 장애물 때문에 + 어떤 위기에 빠진다". 모든 장면은 이 한 줄에서 절대 벗어나지 마라.
+② 장르를 여러 개 받았어도 '각각 다른 이야기'로 쪼개지 마라 — 하나의 이야기에 섞는 '분위기 양념'일 뿐이다(예: 공포+반전+복수 → "반전 있는 공포 복수극" 하나). 여러 사건을 어거지로 욱여넣지 마라.
+③ 장면 ${n}개를 기-승-전-결로 배치하라:
+   · 기(발단, 1번 장면): 주인공과 상황을 0.5초에 세우고, '이상한 사건/신호'로 훅. 질문을 던진다.
+   · 승(전개, 중반): 주인공이 파고들수록 단서·위기가 '쌓인다'. 매 장면이 앞 장면의 결과로 이어진다(원인→결과).
+   · 전(반전·절정): ★여기서 반드시 예상을 뒤집는 '반전' 하나를 터뜨려라(믿었던 게 거짓/진짜 정체 폭로/상황이 정반대였음). 감정·긴장 최고조.
+   · 결(해소, 마지막): 반전 뒤의 결말과 여운. 1번 장면의 질문에 답하며 닫되(루프), 설명이 아니라 감정의 잔상으로.
+④ ★시청자가 "무슨 말인지 모르겠다"가 되면 완전한 실패다. 사건이 또렷하고(누가 뭘 왜 했는지) 인과가 분명해야 한다. 서로 무관한 장면 나열, 분위기만 잡고 사건이 없는 장면, 설명만 하는 장면 금지.
+
+[★★★대본 품질 기준 — 지상파 방송국 드라마·웨스트엔드 뮤지컬 수준(테리 못박음, 이 이하는 전부 탈락)]
+너는 지금 수준 낮은 '썰 요약 쇼츠'가 아니라, 프로 방송 작가와 뮤지컬 극작가가 쓴 '작품'을 쓴다. 다음을 반드시 지켜라:
+- 보여주기(Show, don't tell): "그는 무서웠다" 같은 설명 금지. 행동·감각으로 보여줘라("손끝이 떨렸고, 숨을 삼켰다"). 매 장면은 '벌어지는 사건의 한 순간'이지 요약·해설이 아니다.
+- 오감·구체: 추상어("신비로운 일이 생겼다") 금지. 눈에 보이고 귀에 들리고 살갗에 닿는 구체로("녹슨 문이 삐걱 열리자, 멈춰버린 벽시계가 3시 17분을 가리키고 있었다").
+- 뮤지컬식 감정 설계: 감정을 계단처럼 쌓아 '정점(클라이맥스)'에서 벅차게 터뜨리고, 여운으로 가라앉혀라. 처음·중간·끝에 '반복되는 한 마디나 이미지(모티프)'를 심어 수미상관으로 묶어라(뮤지컬의 리프라이즈처럼).
+- 복선과 회수: 반전은 갑툭튀 금지. 앞 장면에 '작은 단서(복선)'를 심어두고 전(반전)에서 회수해 "아, 그래서 그랬구나"가 터지게 하라.
+- 프로의 문장: 나레이션은 방송 작가가 다듬은 듯 간결하고 리듬감 있게. 군더더기·상투어·뻔한 교훈 0. 한 문장도 버릴 게 없어야 한다.
+- 품격: 싸구려 막장(출생의 비밀·불륜·흔한 복수극)·자극만을 위한 자극 금지. 격조 있으면서도 손에 땀을 쥐게.
+` : ''}[서사 구조 — 반드시 지켜라]
 - 1번 장면 = 스크롤을 멈추게 하는 강렬한 훅. ${hookRule} 절대 평범하게 시작하지 마.
   ★★★첫 1초가 생사다(얼굴 안 나오는 영상은 더). 쇼츠 알고리즘은 '첫 1초에 스와이프하느냐'로 확산 여부를 1차 결정한다. 그래서:
    · 1번 장면 narration '첫 문장'은 인사·배경설명·"오늘은~"류 뜸들이기 절대 금지. 바로 가장 센 결론·충격·질문부터 때려라(패턴 인터럽트). 예 방식: 숫자 충격 / "왜 ○○는 ~할까?" / "이거 하나로 ~가 바뀝니다".
@@ -258,17 +277,29 @@ ${source.slice(0, 12000)}`;
   //   재생성(최대 3회, 재시도는 저온도로 JSON 안정화). 코드펜스(```json)도 벗겨낸다.
   const gk = geminiKeys.filter(Boolean);
   if (!gk.length && !opts.openaiKey) throw new Error('Gemini/OpenAI 키가 모두 없습니다.');
+  // ★고급 대본 토글: 유료 GPT 키가 있고 preferOpenAI면 GPT(gpt-4.1 풀)를 주 집필자로, 실패 시 무료 Gemini 폴백.
+  //   끄면(기본) 무료 Gemini 우선, 실패 시 OpenAI(mini) 폴백 — 기존 동작.
+  const preferGpt = !!opts.preferOpenAI && !!opts.openaiKey;
   let sb: Storyboard | null = null;
   let lastErr = '대본 생성 실패';
   for (let attempt = 0; attempt < 3; attempt++) {
     let raw = '';
-    if (gk.length) {
-      try { raw = await geminiGenerate(gk, prompt, {json: true, maxTokens: 4096, temperature: attempt === 0 ? 0.9 : 0.6, log: opts.log}); }
-      catch (e: any) { lastErr = e?.message || '생성 실패'; opts.log?.(`[대본] Gemini 실패${opts.openaiKey ? ' → OpenAI 폴백' : ''}: ${lastErr}`); }
-    }
-    if (!raw && opts.openaiKey) {
-      try { opts.log?.('[대본] OpenAI로 생성'); raw = await openaiJson(opts.openaiKey, prompt, 4096); }
-      catch (e: any) { lastErr = e?.message || '생성 실패'; }
+    if (preferGpt) {
+      try { opts.log?.('[대본] 🤖 GPT(고급·유료)로 집필'); raw = await openaiJson(opts.openaiKey!, prompt, 4096, 'gpt-4.1'); }
+      catch (e: any) { lastErr = e?.message || '생성 실패'; opts.log?.(`[대본] GPT 실패${gk.length ? ' → Gemini 폴백' : ''}: ${lastErr}`); }
+      if (!raw && gk.length) {
+        try { raw = await geminiGenerate(gk, prompt, {json: true, maxTokens: 4096, temperature: attempt === 0 ? 0.9 : 0.6, log: opts.log}); }
+        catch (e: any) { lastErr = e?.message || '생성 실패'; }
+      }
+    } else {
+      if (gk.length) {
+        try { raw = await geminiGenerate(gk, prompt, {json: true, maxTokens: 4096, temperature: attempt === 0 ? 0.9 : 0.6, log: opts.log}); }
+        catch (e: any) { lastErr = e?.message || '생성 실패'; opts.log?.(`[대본] Gemini 실패${opts.openaiKey ? ' → OpenAI 폴백' : ''}: ${lastErr}`); }
+      }
+      if (!raw && opts.openaiKey) {
+        try { opts.log?.('[대본] OpenAI로 생성'); raw = await openaiJson(opts.openaiKey, prompt, 4096); }
+        catch (e: any) { lastErr = e?.message || '생성 실패'; }
+      }
     }
     if (!raw) continue;
     try {
@@ -279,6 +310,45 @@ ${source.slice(0, 12000)}`;
     } catch (e: any) { lastErr = e?.message || '대본 JSON 파싱 실패'; opts.log?.(`[대본] JSON 파싱 실패 → 재생성(${attempt + 1}/3)`); }
   }
   if (!sb) throw new Error('대본 생성 실패(재시도 후): ' + lastErr);
+
+  // ★★2패스 재집필(창작 전용, 무료 flash) — 초고를 '극작 심사관'이 냉정히 까고 방송국·뮤지컬 수준으로 다시 쓴다.
+  //   스토리 본체(narration·후킹)만 고쳐 쓰고 장면 수·구조·visualPrompt·cast는 그대로 → 하류(파이프라인) 안전.
+  //   유료 pro 모델이 아니라 같은 flash를 한 번 더 부르는 것뿐이라 비용 없음. 실패해도 초고로 진행(try/catch).
+  if (opts.creative && (gk.length || preferGpt)) {
+    try {
+      opts.log?.(preferGpt ? '[대본] 2패스 — 🤖 GPT 극작 심사관이 다듬는 중…' : '[대본] 2패스 — 초고를 극작 심사관이 다듬는 중…');
+      const draftJson = JSON.stringify({title: sb.title, scenes: sb.scenes.map((s) => ({narration: s.narration, hookTop: s.hookTop, hookAccent: s.hookAccent}))});
+      const critic = `너는 지상파 방송국 드라마국의 베테랑 극작 심사관이자 작가다. 아래는 쇼츠 대본 '초고'다. 냉정하게 심사하고 지상파 드라마·웨스트엔드 뮤지컬 수준으로 '다시 써라'(세계 최강의 각본을 목표로).
+[심사 기준 — 하나라도 걸리면 고친다]
+① 기승전결이 또렷한가(발단-전개-반전-해소). ② 전(轉)에 '예상을 뒤집는 반전'이 있고, 그 반전이 앞 장면에 깔아둔 복선으로 납득되는가(갑툭튀 금지). ③ 설명(telling)이 아니라 장면·행동·대사로 보여주는가(showing). ④ 매 장면이 앞 장면의 결과로 인과가 이어지는가. ⑤ 추상어·상투어·뻔한 교훈·막장 클리셰(출생의 비밀·불륜)가 없는가. ⑥ 1번 장면 첫 문장이 0.5초에 꽂히는가. ⑦ 마지막이 첫 장면으로 되돌아가는 여운(루프)인가. ⑧ 오감·구체적 디테일로 생생한가.
+[재집필 지시]
+- 장면 수(${sb.scenes.length}개)와 순서는 '그대로' 유지한다. 각 장면 narration을 장면당 약 ${perScene}자로 다시 써라 — 방송 작가가 다듬은 듯 간결하고 리듬감 있게, 버릴 문장이 하나도 없게.
+- hookTop(공백 포함 12자 이내)·hookAccent(10자 이내)도 더 세게 다시 써라. ★두 줄에 같은 단어 반복 금지.
+- 전체가 '하나의 일관된 이야기'여야 한다. 초고가 횡설수설이거나 주제에서 샜으면 사건을 또렷하게 바로잡아라.
+- 안전: 정치·종교·성/폭력 자극 표현 금지.
+반드시 아래 JSON만 출력(장면 수 정확히 ${sb.scenes.length}개):
+{"scenes":[{"narration":"...","hookTop":"...","hookAccent":"..."}]}
+
+[초고]
+${draftJson}`;
+      const raw2 = preferGpt
+        ? await openaiJson(opts.openaiKey!, critic, 4096, 'gpt-4.1')
+        : await geminiGenerate(gk, critic, {json: true, maxTokens: 4096, temperature: 0.85, log: opts.log});
+      const s2 = raw2.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+      const ref = JSON.parse(s2.startsWith('{') ? s2 : (s2.match(/\{[\s\S]*\}/)?.[0] || s2));
+      if (Array.isArray(ref?.scenes) && ref.scenes.length === sb.scenes.length) {
+        ref.scenes.forEach((r: any, i: number) => {
+          if (r?.narration && String(r.narration).trim()) sb!.scenes[i].narration = String(r.narration).trim();
+          if (r?.hookTop && String(r.hookTop).trim()) sb!.scenes[i].hookTop = String(r.hookTop).trim();
+          if (r?.hookAccent && String(r.hookAccent).trim()) sb!.scenes[i].hookAccent = String(r.hookAccent).trim();
+        });
+        opts.log?.('[대본] 2패스 완성 — 재집필본 반영(방송국·뮤지컬 수준 목표)');
+      } else {
+        opts.log?.('[대본] 2패스 장면수 불일치 → 초고 유지');
+      }
+    } catch (e: any) { opts.log?.('[대본] 2패스 건너뜀: ' + (e?.message || '').slice(0, 50)); }
+  }
+
   // ★cast 정규화(서사형) — {name,look} 배열만 남긴다. 없으면 undefined(단일 소재형).
   if (Array.isArray((sb as any).cast)) {
     const cast = (sb as any).cast
