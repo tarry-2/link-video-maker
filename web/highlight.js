@@ -124,8 +124,12 @@
           if (resultClips.length) showResults(resultClips, false);
           loadHistory();
         }
-        // 🎭 재창작은 단일 영상(kind='video') — /api/video/<file>로 보기·다운로드 + 포폴(업로드) 링크.
-        if (m.kind === 'video' && m.file && !m.error) { showVideoResult(m.file, m.title, m.projectId); loadHistory(); }
+        // 🎭 재창작은 단일 영상(kind='video') — 하이라이트와 '똑같은' 결과 카드로(다운로드·유튜브·인스타·그 자리에서).
+        //   포폴 등록(projectId)됐으므로 showResults가 /portfolio-item·/portfolio-thumb·업로드 버튼을 그대로 쓴다.
+        if (m.kind === 'video' && m.projectId && !m.error) {
+          showResults([{projectId: m.projectId, title: m.title}], false);
+          loadHistory();
+        }
       }
     };
     es.onerror = () => {
@@ -159,42 +163,26 @@
     if (!resultClips.some((x) => x.projectId === c.projectId)) resultClips.push(c);
     showResults(resultClips, !!curJobId); // 아직 작업 중이면 "나머지 제작 중" 표시
   }
-  // 🎭 재창작 단일 영상 결과 — 미리보기 + 다운로드 + 포트폴리오(유튜브·인스타 업로드).
-  function showVideoResult(file, title, projectId) {
-    const box = $('hl-result-block'); if (!box || !file) return;
-    box.classList.remove('hidden');
-    const src = '/api/video/' + encodeURIComponent(file);
-    const t = (title || '재창작 영상');
-    box.innerHTML = `<div class="hl-result-head">🎭 재창작 완성!</div>
-      <div class="hl-result-grid"><div class="hl-rcard">
-        <video src="${src}" controls playsinline preload="metadata" style="width:100%;border-radius:12px;background:#000"></video>
-        <div class="hl-rcard-title">${esc(t)}</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-          <a class="ghost-btn small" href="${src}" download="${esc(t)}.mp4">⬇ 다운로드</a>
-          <a class="ghost-btn small" href="/voices?tab=pf" target="_blank">📤 포트폴리오에서 유튜브·인스타 올리기</a>
-        </div>
-      </div></div>
-      <p class="mini-state" style="margin-top:6px">✅ 포트폴리오에 자동 등록됐어요 — 포트폴리오 탭에서 유튜브·인스타로 바로 올릴 수 있어요.</p>`;
-  }
   function showResults(clips, inProgress) {
     const box = $('hl-result-block'); if (!box) return;
     box.classList.remove('hidden');
     if (!clips.length) { box.innerHTML = '<p class="mini-state">완성된 클립이 없어요.</p>'; return; }
     clips = clips.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
-    const head = inProgress
+    const remake = makeMode === 'remake';
+    const head = remake ? '🎭 재창작 완성!' : (inProgress
       ? `✅ ${clips.length}편 완성 · 나머지 제작 중…`
-      : `🎬 하이라이트 ${clips.length}편 완성!`;
+      : `🎬 하이라이트 ${clips.length}편 완성!`);
     box.innerHTML = `<h2 style="margin:0 0 4px">${head}</h2>
-      <p class="mini-state" style="margin-bottom:12px">🏅 등급 = AI가 예측한 "터질 확률"(<b>A+ 강추 → D 약함</b>, 높은 순 정렬). 등급 아래 '올려 말아' 판정을 보고 고르세요. ${inProgress ? '<b>먼저 끝난 편은 지금 바로</b> 다운로드·업로드할 수 있어요(나머지는 계속 제작 중).' : '유튜브·인스타로 바로 올릴 수 있고, 작업 내역에도 저장됐어요.'}</p>
+      <p class="mini-state" style="margin-bottom:12px">${remake ? '그 자리에서 바로 다운로드·유튜브·인스타 업로드할 수 있어요. 작업 내역에도 저장됐어요.' : `🏅 등급 = AI가 예측한 "터질 확률"(<b>A+ 강추 → D 약함</b>, 높은 순 정렬). 등급 아래 '올려 말아' 판정을 보고 고르세요. ${inProgress ? '<b>먼저 끝난 편은 지금 바로</b> 다운로드·업로드할 수 있어요(나머지는 계속 제작 중).' : '유튜브·인스타로 바로 올릴 수 있고, 작업 내역에도 저장됐어요.'}`}</p>
       <div class="hl-result-grid">${clips.map((c, i) => `
         <div class="hl-result-item ${orient === 'landscape' ? 'land' : ''}" style="position:relative">
           ${scoreBadge(c.score, true)}
           <video poster="/portfolio-thumb/${c.projectId}.png${bust()}" src="/portfolio-item/${c.projectId}.mp4${bust()}#t=0.5" controls playsinline preload="metadata"></video>
-          <b style="display:block;margin:6px 0">${esc(c.title || ('하이라이트 ' + (i+1)))}</b>
+          <b style="display:block;margin:6px 0">${esc(c.title || (remake ? '재창작 영상' : '하이라이트 ' + (i+1)))}</b>
           ${typeof c.score === 'number' ? `<div class="hl-verdict ${gradeOf(c.score).cls}">${gradeOf(c.score).verdict}${c.reason ? ` · <span style="opacity:.8">${esc(c.reason)}</span>` : ''}</div>` : ''}
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="ghost-btn small hl-edit" data-id="${c.projectId}">✏️ 편집</button>
-            <a class="ghost-btn small" href="/portfolio-item/${c.projectId}.mp4" download="${esc(c.title || 'highlight')}.mp4">⬇ 다운로드</a>
+            ${remake ? '' : `<button class="ghost-btn small hl-edit" data-id="${c.projectId}">✏️ 편집</button>`}
+            <a class="ghost-btn small" href="/portfolio-item/${c.projectId}.mp4" download="${esc(c.title || 'onvideo')}.mp4">⬇ 다운로드</a>
             <button class="ghost-btn small hl-yt" data-id="${c.projectId}">📺 유튜브</button>
             <button class="ghost-btn small hl-ig" data-id="${c.projectId}">📷 인스타</button>
           </div>
