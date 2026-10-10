@@ -162,6 +162,15 @@
               <button type="button" class="seg-btn hl-rmout active" data-out="image">🖼 이미지영상(빠름·저렴)</button>
               <button type="button" class="seg-btn hl-rmout" data-out="wan">🎬 움직이는영상(툴 제작 · 비용↑)</button>
             </div>
+            <!-- 몇 편 만들지 — 같은 소재로 서로 다른 N편(각 편 각색이 달라짐). 움직이는영상은 편당 비용·시간↑ -->
+            <label class="field-label" style="margin-top:10px">몇 편 만들까요 <span class="hint">— 같은 소재로 서로 다르게 여러 편</span></label>
+            <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+              <button type="button" class="seg-btn hl-rmcount active" data-c="1">1편</button>
+              <button type="button" class="seg-btn hl-rmcount" data-c="2">2편</button>
+              <button type="button" class="seg-btn hl-rmcount" data-c="3">3편</button>
+              <button type="button" class="seg-btn hl-rmcount" data-c="5">5편</button>
+            </div>
+            <p id="hl-rmcount-note" class="hint" style="margin-top:4px"></p>
             <!-- 그림 스타일 — 이미지영상·움직이는영상 둘 다 적용(실사/애니 등) -->
             <label class="field-label" style="margin-top:10px">🎨 그림 스타일 <span class="hint">— 영상 분위기(실사·애니 등)</span></label>
             <div class="seg" style="margin-top:6px;flex-wrap:wrap">

@@ -138,10 +138,12 @@
           if (resultClips.length) showResults(resultClips, false);
           loadHistory();
         }
-        // 🎭 재창작은 단일 영상(kind='video') — 하이라이트와 '똑같은' 결과 카드로(다운로드·유튜브·인스타·그 자리에서).
-        //   포폴 등록(projectId)됐으므로 showResults가 /portfolio-item·/portfolio-thumb·업로드 버튼을 그대로 쓴다.
-        if (m.kind === 'video' && m.projectId && !m.error) {
-          showResults([{projectId: m.projectId, title: m.title}], false);
+        // 🎭 재창작(kind='video') — 하이라이트와 '똑같은' 결과 카드로(다운로드·유튜브·인스타·그 자리에서).
+        //   N편이면 clips 전부, 1편이면 projectId 단일. 포폴 등록돼 showResults가 그대로 쓴다.
+        if (m.kind === 'video' && !m.error) {
+          const clips = (m.clips && m.clips.length) ? m.clips.filter((c) => c.projectId)
+            : (m.projectId ? [{projectId: m.projectId, title: m.title}] : []);
+          if (clips.length) showResults(clips, false);
           loadHistory();
         }
       }
@@ -437,6 +439,7 @@
   let rmOut = 'image';   // 재창작 출력: image(이미지영상) / wan(움직이는영상)
   let rmClips = 1;       // 재창작 움직이는영상 장면 수(기본 1) — restoreState 전에 선언(TDZ 방지)
   let rmStyle = 'real';  // 재창작 그림 스타일(real/anime/cinema/classic) — 이미지·움직이는영상 둘 다 적용
+  let rmCount = 1;       // 재창작 편수(같은 소재로 서로 다른 N편)
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
   const STATE_KEY = 'onvideo-hl-state';
@@ -444,7 +447,7 @@
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
         region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, captionEn, voice, font, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
-        makeMode, rmOut, rmClips, rmStyle, // 재창작 설정도 저장(탭 나갔다 와도 유지 — 테리 지시)
+        makeMode, rmOut, rmClips, rmStyle, rmCount, // 재창작 설정도 저장(탭 나갔다 와도 유지 — 테리 지시)
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -489,7 +492,9 @@
     rmClips = Math.max(1, Math.min(20, Number(s.rmClips) || 1));
     rmStyle = ['real','anime','cinema','classic'].includes(s.rmStyle) ? s.rmStyle : 'real';
     document.querySelectorAll('.hl-rmstyle').forEach((b) => b.classList.toggle('active', b.dataset.style === rmStyle));
-    applyMakeMode();
+    rmCount = Math.max(1, Math.min(5, Number(s.rmCount) || 1));
+    document.querySelectorAll('.hl-rmcount').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === rmCount));
+    applyMakeMode(); if (typeof applyRmCountNote === 'function') applyRmCountNote();
     // 버튼 활성 복원
     document.querySelectorAll('.hl-region').forEach((b) => b.classList.toggle('active', b.dataset.region === region));
     document.querySelectorAll('.hl-order').forEach((b) => b.classList.toggle('active', b.dataset.order === order));
@@ -1015,7 +1020,10 @@
     try {
       const d = await (await fetch('/api/categories')).json();
       const sel = $('hl-voice'); if (!sel || !d.voices) return;
-      sel.innerHTML = d.voices.map((v) => `<option value="${v.id}">${esc(v.label)}${v.note ? ' · ' + esc(v.note) : ''}</option>`).join('');
+      // ★용도 카테고리(스릴러·시사·힐링 등)로 묶어 보여준다(테리 지시) — <optgroup>. cat 순서는 첫 등장 순.
+      const groups = [];
+      d.voices.forEach((v) => { const c = v.cat || '🎙 기타'; let g = groups.find((x) => x.cat === c); if (!g) { g = {cat: c, items: []}; groups.push(g); } g.items.push(v); });
+      sel.innerHTML = groups.map((g) => `<optgroup label="${esc(g.cat)}">${g.items.map((v) => `<option value="${v.id}">${esc(v.label)}${v.note ? ' · ' + esc(v.note) : ''}</option>`).join('')}</optgroup>`).join('');
       if (voice) sel.value = voice; else voice = sel.value;
     } catch {}
   })();
@@ -1126,6 +1134,7 @@
   function applyRmMotion() {
     $('hl-rm-motion')?.classList.toggle('hidden', !(makeMode === 'remake' && rmOut === 'wan'));
     document.querySelectorAll('.hl-rmclip').forEach((x) => x.classList.toggle('active', Number(x.dataset.n) === rmClips));
+    if (typeof applyRmCountNote === 'function') applyRmCountNote();
   }
   document.querySelectorAll('.hl-make').forEach((b) => b.addEventListener('click', () => {
     makeMode = b.dataset.make === 'remake' ? 'remake' : 'clip'; applyMakeMode();
@@ -1160,6 +1169,18 @@
     document.querySelectorAll('.hl-rmstyle').forEach((x) => x.classList.toggle('active', x.dataset.style === rmStyle));
     saveState(); addLog(`🎨 그림 스타일 = ${b.textContent.trim()}`);
   }));
+  // 재창작 편수 선택 + 움직이는영상일 때 비용/시간 경고.
+  function applyRmCountNote() {
+    const n = $('hl-rmcount-note'); if (!n) return;
+    if (rmCount > 1 && rmOut === 'wan') n.innerHTML = `⚠️ 움직이는영상 ${rmCount}편은 편당 GPU 비용·시간이 크게 늘어요(편당 수분~십수분). 비용을 아끼려면 이미지영상을 권장해요.`;
+    else if (rmCount > 1) n.textContent = `같은 소재로 ${rmCount}편을 서로 다르게 만들어요(각 편 각색이 달라져요).`;
+    else n.textContent = '';
+  }
+  document.querySelectorAll('.hl-rmcount').forEach((b) => b.addEventListener('click', () => {
+    rmCount = Math.max(1, Math.min(5, Number(b.dataset.c) || 1));
+    document.querySelectorAll('.hl-rmcount').forEach((x) => x.classList.toggle('active', Number(x.dataset.c) === rmCount));
+    applyRmCountNote(); saveState(); addLog(`🎬 재창작 편수 = ${rmCount}편`);
+  }));
   async function generate(body, endpoint) {
     const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
     resultClips = []; $('hl-result-block')?.classList.add('hidden'); // 새 제작 → 이전 결과 비움
@@ -1187,7 +1208,8 @@
       try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
       lastBody = {
         title: picked.title, channel: picked.channel || '',
-        duration: sec, orientation: orient, voice, font, imageStyle: rmStyle,
+        videoId: picked.videoId || '', // ★원본 실제 내용(자막/음성STT) 확보용 — 서버가 이걸로 전사해 충실히 각색
+        duration: sec, orientation: orient, voice, font, imageStyle: rmStyle, count: rmCount,
         aiClips: rmOut === 'wan' ? rmClips : 0, // >0 = 움직이는영상(앞 N장면 Wan), 0 = 이미지영상
       };
       lastEndpoint = '/api/generate-remake';

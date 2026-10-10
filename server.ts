@@ -11,7 +11,7 @@ import {registerVideoToPortfolio} from './lib/video-portfolio';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
 import {makeHighlights, backfillHighlightProjects, reRenderHighlight} from './lib/youtube-highlight';
-import {searchArchiveChannel, sampleForAnalysis} from './lib/youtube-clip';
+import {searchArchiveChannel, sampleForAnalysis, fetchSourceTranscript} from './lib/youtube-clip';
 import {analyzeReframe} from './lib/reframe';
 import {getTrends} from './lib/trends';
 import {generateCardStoryboard} from './lib/cards';
@@ -1394,6 +1394,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         tip: v.tip,
         gender: v.gender,
         use: v.use,
+        cat: v.cat, // 콘텐츠 카테고리(스릴러·시사·힐링 등) — 목소리 선택 그룹핑
       })),
     });
 
@@ -1546,11 +1547,8 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const needsEleven = b.narration !== false || b.bgm !== false;
     if (needsEleven && !k.elevenlabs) return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다(둘 다 끄면 키 없이 가능).'});
 
-    // 내용 소스(seed) — 자막이 있으면 그 내용을 재구성, 없으면 제목으로 '그 실제 이야기'를 새로 집필하게 지시.
-    //   ★원문 문장 복붙 금지·우리 말로 새로(표현 저작권 회피)를 명시. 사실·전개·훅은 유지(먹히는 구성 계승).
-    const sourceText = transcript.length >= 40
-      ? `아래는 인기 영상의 실제 내용(자막)이다. 이 이야기를 바탕으로 우리만의 새 콘텐츠로 재구성하라. 원문 문장을 그대로 베끼지 말고 우리 말로 새로 쓰되, 사실·전개·몰입 포인트는 유지하라.\n\n[원본 제목] ${title}\n\n[원본 내용]\n${transcript}`
-      : `"${title}" — 이 제목의 실제 미스터리/이야기를 소재로, 시청자를 처음부터 끝까지 몰입시키는 콘텐츠를 새로 집필하라. 실제 사건·전설이면 사실에 기반해 긴장감 있게 전개하고, 반전·여운으로 맺어라.`;
+    const videoId = String(b.videoId || '').trim();
+    const orientation: 'portrait' | 'landscape' = b.orientation === 'landscape' ? 'landscape' : 'portrait';
 
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false, kind: 'video'};
@@ -1559,49 +1557,74 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     (async () => {
       try {
         jlog(job, `[재창작] "${title.slice(0, 40)}" 내용을 우리 영상으로 새로 만듭니다(원본 미디어·로고 미사용 → 저작권 free).`);
-        jlog(job, transcript.length >= 40 ? '[재창작] 원본 자막을 각색해 대본을 씁니다.' : '[재창작] 자막이 없어 제목 기반으로 그 이야기를 새로 집필합니다.');
-        const r = await makeVideo([], k, {
-          sourceText,
-          duration: Number(b.duration) || 30,
-          presetId: b.presetId || 'mystery', // 재창작 기본 결=미스터리(서프라이즈 톤). UI에서 바꿀 수 있음.
-          voice: b.voice || undefined,
-          quality: b.quality === 'fast' ? 'fast' : 'high',
-          imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
-          sceneCount: Number(b.sceneCount) || 0,
-          aiClips: Number(b.aiClips) || 0, // >0 = 움직이는영상(Wan), 0 = 이미지영상
-          autoShutdown: b.autoShutdown !== false,
-          narration: b.narration !== false,
-          bgm: b.bgm !== false,
-          font: pickFont(b.font),
-          log: (m) => jlog(job, m),
-          isCancelled: () => !!job.cancelled,
-        });
-        // ★포트폴리오 등록 — 유튜브·인스타 업로드·다운로드·삭제 스택이 전부 project.json을 읽으므로, 등록해야
-        //   재창작 영상도 업로드가 된다(테리 지시). orientation은 길이로(롱폼≥90초=가로) makeVideo와 동일 기준.
-        try {
-          const pid = await registerVideoToPortfolio({
-            out: r.out, title: r.title, imageDir: r.imageDir,
-            voice: String(b.voice || '재창작'),
-            category: '🎭 재창작', goal: 'issue',
-            orientation: (Number(b.duration) || 30) >= 90 ? 'landscape' : 'portrait',
-            durSec: Number(b.duration) || 30,
-            attribution: title ? `원 소재: ${title}` : undefined,
-            source: 'archive',
-            motion: (Number(b.aiClips) || 0) > 0, // 움직이는영상(Wan)이면 작업내역 '🎬 영상' 배지
+        // ★원본 실제 내용 확보 — 프론트가 자막을 줬으면 그걸, 아니면 서버가 videoId로 자막→음성STT 전사한다.
+        //   이게 있어야 '제목만 보고 지어내기'(팩트X·카피X·재미X, 테리 지적)가 아니라 원본 실제 전개를 각색한다.
+        let realContent = transcript;
+        if (realContent.length < 40 && videoId && /^[\w-]{11}$/.test(videoId)) {
+          try {
+            const tmpDir = path.join(ROOT, 'public', 'jobs', 'remake-src-' + id);
+            realContent = await fetchSourceTranscript(videoId, tmpDir, k.elevenlabs, (m) => jlog(job, m),
+              {maxSec: 360, isCancelled: () => !!job.cancelled});
+            try { fs.rmSync(tmpDir, {recursive: true, force: true}); } catch {}
+          } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; jlog(job, '[재창작] 원본 전사 실패 → 제목으로 진행: ' + (e?.message || '').slice(0, 60)); }
+        }
+        // 대본 지시(seed) — 원본 실제 내용이 있으면 '충실히 각색'(흥미 포인트·반전·팩트 유지), 없으면 제목 기반 집필.
+        //   ★서프라이즈 톤: 긴장감 있게, 사실에 기반, 반전·여운. 원문 문장 복붙 금지(표현 저작권 회피)·내용은 유지.
+        const sourceText = realContent.length >= 40
+          ? `아래는 인기 미스터리 영상(서프라이즈류)의 실제 내용이다. 이 '내용 그대로'를 우리 영상으로 충실히 재현하라 — 사건의 사실·전개 순서·반전·흥미 포인트를 하나도 빠뜨리지 말고 살려라. 단 문장은 우리 말로 새로 써라(그대로 베끼지 말 것). 밋밋하게 요약하지 말고, 원본처럼 긴장감 있게 이야기하듯 풀어라.\n\n[원본 제목] ${title}\n\n[원본 실제 내용]\n${realContent}`
+          : `"${title}" — 이 제목의 실제 미스터리/사건을 소재로, 시청자를 처음부터 끝까지 몰입시키는 콘텐츠를 집필하라. 실제 사건·전설이면 사실에 기반해 긴장감 있게 전개하고, 충격 포인트·반전·여운으로 맺어라. 밋밋한 설명 금지.`;
+        jlog(job, realContent.length >= 40 ? `[재창작] 원본 실제 내용(${realContent.length}자)을 충실히 각색합니다.` : '[재창작] 원본 내용을 못 받아 제목 기반으로 집필합니다(품질↓ — 자막 있는 영상이 더 좋아요).');
+        const durSec = Number(b.duration) || 30;
+        const count = Math.max(1, Math.min(5, Number(b.count) || 1)); // 같은 소재로 서로 다른 N편
+        const aiClips = Number(b.aiClips) || 0;
+        const imageStyle = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
+        job.clips = [];
+        for (let i = 0; i < count; i++) {
+          if (job.cancelled) break;
+          if (count > 1) jlog(job, `──── ${i + 1}/${count}편 제작 ────`);
+          const r = await makeVideo([], k, {
+            sourceText,
+            duration: durSec,
+            orientation, // ★내가 고른 방향 그대로(세로면 길이 길어도 세로)
+            presetId: b.presetId || 'mystery', // 재창작 기본 결=미스터리(서프라이즈 톤). UI에서 바꿀 수 있음.
+            voice: b.voice || undefined,
+            quality: 'high', // 재창작은 항상 고퀄 이미지(테리 지적: 이미지 퀄 약함)
+            imageStyle,
+            sceneCount: Number(b.sceneCount) || 0,
+            aiClips, // >0 = 움직이는영상(Wan), 0 = 이미지영상
+            autoShutdown: b.autoShutdown !== false,
+            narration: b.narration !== false,
+            bgm: b.bgm !== false,
+            font: pickFont(b.font),
             log: (m) => jlog(job, m),
+            isCancelled: () => !!job.cancelled,
           });
-          job.projectId = pid;
-        } catch (e: any) { jlog(job, '[포트폴리오] 등록 실패(영상은 완성됨): ' + (e?.message || e)); }
-        try {
-          const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
-          const today = new Date().toLocaleDateString('sv-SE');
-          const folder = path.join(os.homedir(), 'Desktop', `온비디오 재창작 ${today}`, safe);
-          fs.mkdirSync(folder, {recursive: true});
-          fs.copyFileSync(r.out, path.join(folder, `${safe}.mp4`));
-          jlog(job, `[완료] 바탕화면에도 저장됨: ${folder}`);
-        } catch { /* Desktop 없는 환경 무시 */ }
-        job.file = path.basename(r.out);
-        job.title = r.title;
+          // 포트폴리오 등록 — 유튜브·인스타 업로드·다운로드·삭제 스택이 project.json을 읽으므로 등록 필수(업로드 가능).
+          let pid = '';
+          try {
+            pid = await registerVideoToPortfolio({
+              out: r.out, title: r.title, imageDir: r.imageDir,
+              voice: String(b.voice || '재창작'),
+              category: '🎭 재창작', goal: 'issue',
+              orientation, // ★고른 방향 그대로(세로/가로 버그 수정)
+              durSec,
+              attribution: title ? `원 소재: ${title}` : undefined,
+              source: 'archive',
+              motion: aiClips > 0, // 움직이는영상(Wan)이면 작업내역 '🎬 영상' 배지
+              log: (m) => jlog(job, m),
+            });
+          } catch (e: any) { jlog(job, '[포트폴리오] 등록 실패(영상은 완성됨): ' + (e?.message || e)); }
+          job.clips.push({projectId: pid, file: path.basename(r.out), title: r.title});
+          job.file = path.basename(r.out); job.title = r.title; if (pid) job.projectId = pid;
+          try {
+            const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
+            const today = new Date().toLocaleDateString('sv-SE');
+            const folder = path.join(os.homedir(), 'Desktop', `온비디오 재창작 ${today}`, safe);
+            fs.mkdirSync(folder, {recursive: true});
+            fs.copyFileSync(r.out, path.join(folder, `${safe}.mp4`));
+          } catch { /* Desktop 없는 환경 무시 */ }
+        }
+        if (!job.clips.length) throw new Error('재창작 영상을 만들지 못했습니다.');
         job.done = true; job.doneAt = Date.now();
       } catch (e: any) {
         job.error = e.message;

@@ -447,7 +447,7 @@ export const Scene: React.FC<SceneData> = ({
                 marginTop: 10,
               }}
             >
-              👍 {comment.likes}　답글
+              ♡ {comment.likes}　답글
             </div>
           </div>
         </div>

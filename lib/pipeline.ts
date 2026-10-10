@@ -64,6 +64,8 @@ export type PipelineOpts = {
   // ★재창작(리메이크): URL을 긁지 않고 '이미 확보한 내용 텍스트'를 소스로 바로 쓴다. 인기 영상(서프라이즈 등)의
   //   제목·자막을 뽑아 이걸로 넘기면 generateStoryboard가 우리 대본·이미지·목소리로 새 영상을 만든다(저작권 free).
   sourceText?: string;
+  // ★화면 방향 강제 — 지정하면 길이와 무관하게 이 방향으로(재창작은 길이·방향을 따로 고르므로 필수). 없으면 길이로 자동.
+  orientation?: 'portrait' | 'landscape';
   log?: (m: string) => void;
   isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인해서 멈춘다(하이라이트와 동일).
 };
@@ -76,9 +78,10 @@ export async function makeVideo(
   const log = opts.log || (() => {});
   // ★중단 체크 — 각 단계 경계에서 호출. 사용자가 중단을 누르면 여기서 멈춘다(렌더 같은 통짜 단계는 끝난 뒤 경계에서).
   const ck = () => { if (opts.isCancelled?.()) throw new Error('사용자가 중단했습니다.'); };
-  // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16. UI "롱폼" optgroup(90/120/180)과 일치.
-  const landscape = opts.duration >= 90;
-  const orientation: 'portrait' | 'landscape' = landscape ? 'landscape' : 'portrait';
+  // ★화면비: orientation이 명시되면 그대로(재창작은 길이·방향을 따로 고름 — 세로 120초도 가능). 없으면 길이로
+  //   자동(영상 만들기 UI는 쇼츠=세로/롱폼=가로로 길이가 묶여 있어 무회귀). 예전엔 길이만 봐서 세로+120초가 가로로 나갔다(테리 지적).
+  const orientation: 'portrait' | 'landscape' = opts.orientation || (opts.duration >= 90 ? 'landscape' : 'portrait');
+  const landscape = orientation === 'landscape';
   const id = randomUUID().slice(0, 8);
   const pubRel = `jobs/${id}`;
   const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
@@ -97,6 +100,7 @@ export async function makeVideo(
   log('[대본] 생성 중…');
   const sb = await generateStoryboard(keys.gemini, source, {
     duration: opts.duration,
+    orientation, // ★이미지 비율도 고른 방향에 맞춘다(세로 120초면 세로 이미지로)
     purpose: opts.purpose,
     preset,
     imageStyle: opts.imageStyle,

@@ -8,6 +8,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {geminiGenerate} from './gemini';
 import {reframeClip} from './reframe';
+import {sttWords} from './align';
 
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
@@ -642,4 +643,53 @@ export async function extractHighlights(
   }
   if (!results.length) throw new Error('클립을 하나도 만들지 못했습니다.');
   return results;
+}
+
+// ★재창작용 — 원본 영상의 '실제 대사'를 받아온다. 자막이 있으면 자막, 없으면(서프라이즈 등 음성만) 음성을
+//   ElevenLabs STT로 전사한다. 이게 있어야 재창작이 '제목만 보고 지어내기'가 아니라 원본 실제 내용(팩트·전개·
+//   흥미 포인트)을 그대로 각색한다(테리 지적: 지금은 제목만 봐서 카피가 안 되고 재미없음). 앞 maxSec초만 받아 절약.
+//   실패하면 ''(호출부가 제목 폴백). elevenKey는 이미 결제된 ElevenLabs 키 재사용.
+export async function fetchSourceTranscript(
+  videoId: string, dir: string, elevenKey: string, log: (m: string) => void,
+  opts: {maxSec?: number; isCancelled?: () => boolean} = {},
+): Promise<string> {
+  const cancelled = opts.isCancelled || (() => false);
+  const maxSec = Math.max(60, Math.min(600, opts.maxSec || 300));
+  await fsp.mkdir(dir, {recursive: true});
+  // 1) 자막 먼저(가볍고 정확). 있으면 그대로 쓴다.
+  try {
+    if (await ytdlpAvailable()) {
+      const {common} = await buildCommon(log);
+      const meta = await fetchMetaAndSubs(videoId, dir, log, common, !!process.env.YT_COOKIES_FILE, cancelled);
+      const subClean = (meta.subText || '').replace(/^\[\d+s\]\s*/gm, '').replace(/\s+/g, ' ').trim();
+      if (subClean.length > 80) { log(`[재창작] 원본 자막 ${subClean.length}자 확보 — 실제 내용으로 각색합니다.`); return subClean.slice(0, 20000); }
+    }
+  } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; }
+  // 2) 자막 없으면 음성만 받아 STT로 전사(서프라이즈 등 '목소리가 전부'인 영상 핵심).
+  if (!elevenKey) { log('[재창작] 음성 전사용 키가 없어 제목으로 진행합니다.'); return ''; }
+  const {common} = await buildCommon(log);
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const outBase = path.join(dir, 'srcaudio');
+  const find = () => { try { return fs.readdirSync(dir).map((x) => path.join(dir, x)).find((x) => /srcaudio\.(mp3|m4a|webm|opus)$/.test(x)); } catch { return undefined; } };
+  let got = '';
+  log('[재창작] 자막이 없어 원본 음성을 받아 글자로 바꿉니다(STT)…');
+  for (const client of CLIENTS) {
+    if (cancelled()) throw new Error('사용자가 중단했습니다.');
+    const prev = find(); if (prev) { try { fs.rmSync(prev, {force: true}); } catch {} }
+    const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
+    try {
+      await run(YTDLP, [...common, ...ca, '-f', 'bestaudio/best', '-x', '--audio-format', 'mp3',
+        '--download-sections', `*0-${maxSec}`, '-o', outBase + '.%(ext)s', url], () => {}, 240000, undefined, cancelled);
+      const f = find(); if (f && fs.statSync(f).size > 2000) { got = f; break; }
+    } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; }
+  }
+  if (!got) { log('[재창작] 원본 음성을 받지 못해 제목으로 진행합니다.'); return ''; }
+  try {
+    const {words} = await sttWords(elevenKey, got, 30);
+    const text = words.map((w) => w.t).join(' ').replace(/\s+/g, ' ').trim();
+    try { fs.rmSync(got, {force: true}); } catch {}
+    if (text.length < 40) { log('[재창작] 전사 내용이 너무 짧아 제목으로 진행합니다.'); return ''; }
+    log(`[재창작] 원본 대사 ${text.length}자 확보 — 실제 내용으로 각색합니다.`);
+    return text.slice(0, 20000);
+  } catch (e: any) { log('[재창작] STT 실패(' + (e?.message || '').slice(0, 60) + ') → 제목으로 진행'); return ''; }
 }

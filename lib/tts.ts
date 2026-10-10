@@ -13,31 +13,32 @@ export type VoiceInfo = {
   gender: '남' | '여';
   use: ('issue' | 'info' | 'sell' | 'heal' | 'anime')[];
   anime?: boolean; // 애니/동화/키즈 전용 목소리(밝고 명랑, 성인 나레이션과 분리 표시)
+  cat: string; // ★콘텐츠 카테고리(목소리 선택을 용도별로 묶어 보여줌 — 스릴러·시사·힐링 등, 테리 지시)
 };
 export const VOICES: Record<string, VoiceInfo> = {
   // ── 남성 진중(이슈·경고·미스터리) — 무게감·긴장감 ──
-  shin: {label: 'Shin · 깊고 묵직', id: 'GNmgFU0yNiLKxTCw3OT9', note: '깊고 묵직한 저음', tip: '🎬 미스터리·사건·다큐에. 긴장감과 몰입을 줄 때', gender: '남', use: ['issue', 'info']},
-  juan: {label: 'Juan · 깊고 프로', id: 'hjCvGtSCRPyjYwe2lDf1', note: '깊고 또렷한 전문 나레이터', tip: '📰 시사·이슈·경고성 콘텐츠에. 신뢰감 있게', gender: '남', use: ['issue', 'info']},
-  mirae: {label: 'Mirae · 차분 중년', id: 'TdWVmpJ5ISmH5crnLTIJ', note: '차분한 중년 남성', tip: '💰 재테크·창업·전문 정보에. 믿음직하게', gender: '남', use: ['issue', 'info']},
+  shin: {label: 'Shin · 깊고 묵직', id: 'GNmgFU0yNiLKxTCw3OT9', note: '깊고 묵직한 저음', tip: '🎬 미스터리·사건·다큐에. 긴장감과 몰입을 줄 때', gender: '남', use: ['issue', 'info'], cat: '🎬 스릴러·미스터리'},
+  juan: {label: 'Juan · 깊고 프로', id: 'hjCvGtSCRPyjYwe2lDf1', note: '깊고 또렷한 전문 나레이터', tip: '📰 시사·이슈·경고성 콘텐츠에. 신뢰감 있게', gender: '남', use: ['issue', 'info'], cat: '📰 시사·뉴스'},
+  mirae: {label: 'Mirae · 차분 중년', id: 'TdWVmpJ5ISmH5crnLTIJ', note: '차분한 중년 남성', tip: '💰 재테크·창업·전문 정보에. 믿음직하게', gender: '남', use: ['issue', 'info'], cat: '💰 재테크·전문'},
   // ── 남성 자연(정보·건강) — 로봇소리 없는 자연스러움 ──
-  jaewon: {label: 'Jaewon · 가장 자연', id: 'CcEnHvRQWqsfDDMt24RK', note: '로봇소리 0, 가장 사람같은', tip: '✅ AI 티 안 나게 하고 싶을 때 1순위. 어떤 정보든 무난', gender: '남', use: ['info', 'issue']},
-  hocho: {label: 'HoCho · 차분 신뢰', id: 'ZXhi0czBiSzyk3bQNu5W', note: '차분하고 신뢰가는', tip: '💊 건강·상식 정보에. 안정감 있게 설명', gender: '남', use: ['info']},
-  mj: {label: 'MJ · 또렷 차분', id: 'jctVgUrrEJoJjGpfN5Ef', note: '또렷하고 자연스러운', tip: '💻 IT·리뷰에. 깔끔하고 명확하게', gender: '남', use: ['info', 'sell']},
+  jaewon: {label: 'Jaewon · 가장 자연', id: 'CcEnHvRQWqsfDDMt24RK', note: '로봇소리 0, 가장 사람같은', tip: '✅ AI 티 안 나게 하고 싶을 때 1순위. 어떤 정보든 무난', gender: '남', use: ['info', 'issue'], cat: '✅ 자연·무난(만능)'},
+  hocho: {label: 'HoCho · 차분 신뢰', id: 'ZXhi0czBiSzyk3bQNu5W', note: '차분하고 신뢰가는', tip: '💊 건강·상식 정보에. 안정감 있게 설명', gender: '남', use: ['info'], cat: '💊 건강·정보'},
+  mj: {label: 'MJ · 또렷 차분', id: 'jctVgUrrEJoJjGpfN5Ef', note: '또렷하고 자연스러운', tip: '💻 IT·리뷰에. 깔끔하고 명확하게', gender: '남', use: ['info', 'sell'], cat: '💻 IT·리뷰'},
   // ── 남성 밝음(판매·리뷰) — 에너지 ──
-  clamon: {label: 'Clamon · 에너지', id: 'WXwRayfQq3D3Kys5yMx9', note: '밝고 에너지 넘치는', tip: '🛍️ 상품 홍보·광고에. 텐션 올려 구매 자극', gender: '남', use: ['sell']},
+  clamon: {label: 'Clamon · 에너지', id: 'WXwRayfQq3D3Kys5yMx9', note: '밝고 에너지 넘치는', tip: '🛍️ 상품 홍보·광고에. 텐션 올려 구매 자극', gender: '남', use: ['sell'], cat: '🛍️ 광고·판매'},
   // ── 여성 따뜻(힐링·음식·여행) ──
-  kyung: {label: 'Kyung · 따뜻 여성', id: 'JQaWvPoEUkcuOTfxFYpJ', note: '따뜻하고 차분한 여성 나레이터', tip: '🐾 반려동물·여행·힐링에. 포근하게', gender: '여', use: ['heal', 'info']},
-  luna: {label: 'Luna · 다정 여성', id: 'kZJ3sOVD7WvNyF75aJZW', note: '다정하고 부드러운', tip: '🍳 음식·감성 콘텐츠에. 사랑스럽게', gender: '여', use: ['heal', 'sell']},
-  suzie: {label: 'Suzie · 차분 30대', id: 'UqW1DivwFt1NwUMSGnTn', note: '차분한 30대 여성', tip: '🌿 건강·힐링·정보에. 편안하고 신뢰감', gender: '여', use: ['info', 'heal']},
+  kyung: {label: 'Kyung · 따뜻 여성', id: 'JQaWvPoEUkcuOTfxFYpJ', note: '따뜻하고 차분한 여성 나레이터', tip: '🐾 반려동물·여행·힐링에. 포근하게', gender: '여', use: ['heal', 'info'], cat: '🌿 힐링·감성'},
+  luna: {label: 'Luna · 다정 여성', id: 'kZJ3sOVD7WvNyF75aJZW', note: '다정하고 부드러운', tip: '🍳 음식·감성 콘텐츠에. 사랑스럽게', gender: '여', use: ['heal', 'sell'], cat: '🌿 힐링·감성'},
+  suzie: {label: 'Suzie · 차분 30대', id: 'UqW1DivwFt1NwUMSGnTn', note: '차분한 30대 여성', tip: '🌿 건강·힐링·정보에. 편안하고 신뢰감', gender: '여', use: ['info', 'heal'], cat: '🌿 힐링·감성'},
   // ── 여성 밝음(판매·리뷰) ──
-  yuna: {label: 'Yuna · 밝은 여성', id: 'ajfBUI2mmJMjvf2H6Yw7', note: '밝고 발랄한', tip: '✨ 꿀팁·리뷰·판매에. 발랄하고 친근하게', gender: '여', use: ['sell', 'heal']},
+  yuna: {label: 'Yuna · 밝은 여성', id: 'ajfBUI2mmJMjvf2H6Yw7', note: '밝고 발랄한', tip: '✨ 꿀팁·리뷰·판매에. 발랄하고 친근하게', gender: '여', use: ['sell', 'heal'], cat: '🛍️ 광고·판매'},
 
   // ── 🎨 애니/동화/키즈 전용 — 밝고 명랑, 아이가 봐도 재밌는 톤(성인 나레이션과 분리) ──
-  sujin: {label: 'Sujin · 명랑 애니', id: '9cino9hfS3ougiPeFvp1', note: '명랑하고 친근한 여성', tip: '🎨 애니·동화·키즈에. 밝고 사랑스럽게 들려줄 때', gender: '여', use: ['anime', 'heal'], anime: true},
-  juwon: {label: 'Juwon · 활기 애니', id: 'oZLQ9kHPMuIyd7Ja0YNU', note: '활기차고 표현력 풍부한 여성', tip: '🎨 애니·동화에. 리액션 크고 생동감 있게 읽어줄 때', gender: '여', use: ['anime', 'sell'], anime: true},
-  bokdeok: {label: 'Bokdeok · 맑은 누나', id: 'PjmtdeplRoyIlaqlTeS3', note: '맑고 밝은 누나 톤', tip: '🎨 애니·키즈에. 깨끗하고 또렷하게 동화 읽어줄 때', gender: '여', use: ['anime', 'heal'], anime: true},
-  taek: {label: 'Taek · 친근 소년', id: 'rCm09Tf1yMYbOyCRLDyB', note: '친근하고 동적인 소년 톤', tip: '🎨 애니·모험·동화에. 주인공 소년처럼 신나게', gender: '남', use: ['anime', 'info'], anime: true},
-  deoksu: {label: 'Deoksu · 귀여운 캐릭', id: 'IAETYMYM3nJvjnlkVTKI', note: '통통하고 귀여운 캐릭터 남성', tip: '🎨 애니·코믹에. 엉뚱하고 귀여운 캐릭터로', gender: '남', use: ['anime', 'sell'], anime: true},
+  sujin: {label: 'Sujin · 명랑 애니', id: '9cino9hfS3ougiPeFvp1', note: '명랑하고 친근한 여성', tip: '🎨 애니·동화·키즈에. 밝고 사랑스럽게 들려줄 때', gender: '여', use: ['anime', 'heal'], anime: true, cat: '🎨 애니·동화'},
+  juwon: {label: 'Juwon · 활기 애니', id: 'oZLQ9kHPMuIyd7Ja0YNU', note: '활기차고 표현력 풍부한 여성', tip: '🎨 애니·동화에. 리액션 크고 생동감 있게 읽어줄 때', gender: '여', use: ['anime', 'sell'], anime: true, cat: '🎨 애니·동화'},
+  bokdeok: {label: 'Bokdeok · 맑은 누나', id: 'PjmtdeplRoyIlaqlTeS3', note: '맑고 밝은 누나 톤', tip: '🎨 애니·키즈에. 깨끗하고 또렷하게 동화 읽어줄 때', gender: '여', use: ['anime', 'heal'], anime: true, cat: '🎨 애니·동화'},
+  taek: {label: 'Taek · 친근 소년', id: 'rCm09Tf1yMYbOyCRLDyB', note: '친근하고 동적인 소년 톤', tip: '🎨 애니·모험·동화에. 주인공 소년처럼 신나게', gender: '남', use: ['anime', 'info'], anime: true, cat: '🎨 애니·동화'},
+  deoksu: {label: 'Deoksu · 귀여운 캐릭', id: 'IAETYMYM3nJvjnlkVTKI', note: '통통하고 귀여운 캐릭터 남성', tip: '🎨 애니·코믹에. 엉뚱하고 귀여운 캐릭터로', gender: '남', use: ['anime', 'sell'], anime: true, cat: '🎨 애니·동화'},
 };
 
 // 애니 스타일 기본 목소리(사용자가 목소리 직접 안 고르면 이걸로 추천).

@@ -123,13 +123,14 @@ export async function generateStoryboard(
     preset?: Preset; // ★카테고리 프리셋(있으면 톤·후킹·마무리를 이걸로)
     imageStyle?: string; // ★사용자가 고른 아트스타일 id(visualPrompt를 이 스타일에 맞게 생성)
     sceneCount?: number; // ★사용자가 장면(이미지) 수를 직접 지정(0/미지정=길이로 자동). 2~12.
+    orientation?: 'portrait' | 'landscape'; // ★방향 강제(지정되면 길이 무관). 없으면 길이로 자동.
     openaiKey?: string;
     log?: (m: string) => void;
   },
 ): Promise<Storyboard> {
   const duration = opts.duration;
-  // ★화면비: 롱폼(≥90초)=가로 16:9 / 쇼츠=세로 9:16. UI "롱폼" optgroup(90/120/180)과 일치(오프바이원 수정).
-  const landscape = duration >= 90;
+  // ★화면비: orientation이 명시되면 그대로(세로 120초도 세로). 없으면 길이로 자동(롱폼≥90초=가로). 테리: 내가 세로 고르면 길이와 무관히 세로.
+  const landscape = opts.orientation ? opts.orientation === 'landscape' : duration >= 90;
   const format = landscape ? '롱폼' : '쇼츠';
   const orient = landscape ? '가로(16:9, wide)' : '세로(9:16)';
   // 장면 수: 사용자가 직접 지정했으면(2~12) 그걸 쓰고, 아니면 길이로 자동 결정.
