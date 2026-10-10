@@ -413,9 +413,39 @@
     const box = $('hl-history'); if (!box) return;
     try {
       const d = await (await fetch('/api/portfolio', {cache: 'no-store'})).json();
-      histItems = (Array.isArray(d.items) ? d.items : []).filter((it) => it.kind === 'mine' && it.media === 'highlight');
+      const all = Array.isArray(d.items) ? d.items : [];
+      histItems = all.filter((it) => it.kind === 'mine' && it.media === 'highlight');
       renderHistory();
+      // ★재창작(origin=remake) 작업 내역 이원화 — 같은 데이터로 별도 섹션에 렌더(테리: 재창작 내역이 안 남음).
+      renderRemakeHistory(all.filter((it) => it.kind === 'mine' && it.origin === 'remake'));
     } catch { box.innerHTML = '<p class="mini-state">작업 내역을 불러오지 못했어요.</p>'; }
+  }
+  // 영상 크게보기(결과·작업내역 공용).
+  function bigView(id, isLand) {
+    const b = Date.now();
+    modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2>미리보기</h2><button class="ghost-btn" data-x="close">✕</button></div>
+      <video src="/portfolio-item/${id}.mp4?b=${b}" controls autoplay playsinline style="width:100%;max-height:78vh;border-radius:12px;background:#000;${isLand ? '' : 'aspect-ratio:9/16;object-fit:contain'}"></video>`, () => {});
+  }
+  function renderRemakeHistory(items) {
+    const box = $('rm-history'); if (!box) return;
+    if (!items.length) { box.innerHTML = '<p class="mini-state">아직 재창작한 영상이 없어요. 위에서 🎭 재창작으로 만들어보세요.</p>'; return; }
+    box.innerHTML = items.map((it) => {
+      const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
+      const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
+      const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
+      return `<div class="history-item"><span><strong>${esc(it.title)}</strong><small>${esc(when)} · 🎭 재창작${it.motion ? ' · 🎬 영상' : ''}${yt}${ig}</small></span>
+        <span class="hi-actions">
+          <button type="button" class="ghost-btn small rh-big" data-id="${esc(it.id)}" data-land="${it.orientation === 'landscape' ? '1' : ''}">🔍</button>
+          <a class="ghost-btn small" href="${esc(it.video)}" download="${esc(it.title)}.mp4">⬇</a>
+          <button type="button" class="ghost-btn small rh-yt" data-id="${esc(it.id)}">📺</button>
+          <button type="button" class="ghost-btn small rh-ig" data-id="${esc(it.id)}" data-land="${it.orientation === 'landscape' ? '1' : ''}">📷</button>
+          <button type="button" class="ghost-btn small rh-del" data-id="${esc(it.id)}">🗑</button>
+        </span></div>`;
+    }).join('');
+    box.querySelectorAll('.rh-big').forEach((b) => b.onclick = () => bigView(b.dataset.id, !!b.dataset.land));
+    box.querySelectorAll('.rh-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
+    box.querySelectorAll('.rh-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, !!b.dataset.land));
+    box.querySelectorAll('.rh-del').forEach((b) => b.onclick = () => del(b.dataset.id));
   }
   async function del(id) {
     if (!confirm('이 하이라이트를 삭제할까요? (되돌릴 수 없어요)')) return;
@@ -423,6 +453,7 @@
     catch (e) { alert('삭제 실패: ' + e.message); }
   }
   $('hl-history-refresh')?.addEventListener('click', loadHistory);
+  $('rm-history-refresh')?.addEventListener('click', loadHistory);
   loadHistory();
 
   // ── 검색/선택/설정 ──

@@ -19,6 +19,8 @@ export type PortfolioItem = {
   orientation?: 'portrait' | 'landscape'; // 화면비(롱폼=landscape). 없으면 세로 폴백(레거시).
   // ★작업내역 분리: 영상(video) / 카드영상(card) / 카드게시물=캐러셀(card-post) / 유튜브하이라이트(highlight). 없으면 video(레거시).
   kind?: 'video' | 'card' | 'card-post' | 'highlight';
+  // ★작업내역 이원화(탭별): 어느 탭에서 만들었나 — 영상만들기(video)/재창작(remake)/창작(create). 없으면 kind로 폴백.
+  origin?: 'video' | 'remake' | 'create';
   images?: string[]; // card-post: data/studio/{projectId}/{name} PNG 파일명들(캐러셀 순서).
   score?: number; // 하이라이트: AI 바이럴 점수(0~100). 카드 뱃지·정렬에 사용.
   source?: 'search' | 'url' | 'upload' | 'archive'; // 하이라이트 소재 출처(작업내역 탭별 이원화). 없으면 search 폴백.

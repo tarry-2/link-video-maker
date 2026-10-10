@@ -575,6 +575,8 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'web', 'create.html'), 'text/html; charset=utf-8');
   if (p === '/highlight.js')
     return serveFile(res, path.join(ROOT, 'web', 'highlight.js'), 'application/javascript; charset=utf-8');
+  if (p === '/create.js')
+    return serveFile(res, path.join(ROOT, 'web', 'create.js'), 'application/javascript; charset=utf-8');
 
   // ── 정적 ──
   // 루트(/) = 마케팅 랜딩페이지. 앱(대시보드)은 /app 으로. "시작하기"가 /app 으로 보낸다.
@@ -683,6 +685,8 @@ const server = http.createServer(async (req, res) => {
         thumb: isPost ? '' : `/portfolio-thumb/${it.projectId}.png`,
         score: typeof it.score === 'number' ? it.score : undefined, // 하이라이트 바이럴 점수
         source: it.source, // 하이라이트 소재 출처(작업내역 탭별 이원화): search/url/upload/archive
+        // ★작업내역 탭별 이원화: origin(video/remake/create). 레거시(없음)는 category로 폴백.
+        origin: it.origin || (it.category === '🎭 재창작' ? 'remake' : it.category === '✍️ 창작' ? 'create' : 'video'),
         motion: !!it.motion, // 움직이는 영상(Wan)이면 '🎬 영상' 배지
       };
     });
@@ -1636,7 +1640,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
             pid = await registerVideoToPortfolio({
               out: r.out, title: r.title, thumb: r.thumb, imageDir: r.imageDir,
               voice: String(b.voice || '재창작'),
-              category: '🎭 재창작', goal: 'issue',
+              category: '🎭 재창작', goal: 'issue', origin: 'remake',
               orientation, // ★고른 방향 그대로(세로/가로 버그 수정)
               durSec,
               attribution: title ? `원 소재: ${title}` : undefined,
@@ -1718,7 +1722,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         try {
           pid = await registerVideoToPortfolio({
             out: r.out, title: r.title, thumb: r.thumb, imageDir: r.imageDir,
-            voice: String(b.voice || '창작'), category: '✍️ 창작', goal: 'issue',
+            voice: String(b.voice || '창작'), category: '✍️ 창작', goal: 'issue', origin: 'create',
             orientation, durSec, source: 'archive', motion: aiClips > 0, log: (m) => jlog(job, m),
           });
         } catch (e: any) { jlog(job, '[포트폴리오] 등록 실패(영상은 완성됨): ' + (e?.message || e)); }
