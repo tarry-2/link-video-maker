@@ -55,6 +55,22 @@ async function comfyReady(podId: string): Promise<boolean> {
   } catch { return false; }
 }
 
+// ★Wan 모델(UNET)이 실제로 '디스크에 내려받혀' 로드 가능한지 확인한다.
+//   /system_stats(ComfyUI 웹서버 기동)는 56GB 모델이 백그라운드로 다운되는 동안에도 즉시 200을 준다 →
+//   그걸 '준비 완료'로 오판하고 T2V를 제출하면 "모델 없음"으로 전 장면이 터지고 팟만 꺼졌다(테리 "중간에 GPU 꺼짐").
+//   UNETLoader 노드의 unet_name 선택지(=실제 받아진 파일 목록)에 우리 모델이 있어야 진짜 준비된 것.
+//   'ready'=모델 있음 / 'downloading'=목록은 받았는데 모델 아직 / 'unknown'=엔드포인트 신뢰 불가(폴백용).
+async function wanModelsReady(podId: string): Promise<'ready' | 'downloading' | 'unknown'> {
+  try {
+    const r = await fetch(podBase(podId) + '/object_info/UNETLoader', {headers: {'User-Agent': UA}, signal: AbortSignal.timeout(20000)});
+    if (!r.ok) return 'unknown';
+    const j = await r.json().catch(() => null);
+    const opts = j?.UNETLoader?.input?.required?.unet_name?.[0];
+    if (!Array.isArray(opts)) return 'unknown';
+    return (opts.includes(HI_UNET) && opts.includes(LO_UNET)) ? 'ready' : 'downloading';
+  } catch { return 'unknown'; }
+}
+
 // 실행중(runtime 있음)인 wan 팟 찾기.
 export async function findRunningWanPod(key: string): Promise<string | null> {
   const d = await rest(key, '/pods');
@@ -86,13 +102,22 @@ export async function ensureWanPod(key: string, log: (m: string) => void = () =>
     podId = created.id;
     log(`[영상] 팟 ${podId} 생성됨(A40 $0.49/hr). ComfyUI 기동 대기…`);
   }
-  // ComfyUI 준비 대기
+  // ComfyUI 기동 + Wan 모델 다운로드 완료까지 대기(모델 전까진 제출하지 않는다 — 중간에 전 장면 터지는 원인 제거).
   const deadline = Date.now() + 20 * 60 * 1000;
+  let comfyUpAt = 0;
   while (Date.now() < deadline) {
-    if (await comfyReady(podId!)) { log(`[영상] ComfyUI 준비 완료(${podId})`); return podId!; }
+    if (!comfyUpAt) {
+      if (await comfyReady(podId!)) { comfyUpAt = Date.now(); log('[영상] ComfyUI 기동됨 — Wan 모델 다운로드 확인 중(새 팟이면 ~10분 걸릴 수 있어요)…'); }
+    } else {
+      const m = await wanModelsReady(podId!);
+      if (m === 'ready') { log(`[영상] ComfyUI·Wan 모델 준비 완료(${podId})`); return podId!; }
+      // 모델 확인 엔드포인트를 못 믿을 때(응답 이상)만: ComfyUI 기동 90초 뒤 예전 동작으로 폴백(장면별 사진 폴백이 받쳐줌).
+      if (m === 'unknown' && Date.now() - comfyUpAt > 90 * 1000) { log(`[영상] 모델 목록 확인 불가 — ComfyUI 기동 확인만으로 진행(${podId})`); return podId!; }
+      // 'downloading'이면 계속 대기(이게 핵심).
+    }
     await new Promise((r) => setTimeout(r, 10000));
   }
-  throw new Error('RunPod ComfyUI 준비 타임아웃(20분). 팟 상태를 확인하세요.');
+  throw new Error('RunPod ComfyUI/모델 준비 타임아웃(20분). 팟 상태를 확인하세요.');
 }
 
 function buildGraph(prompt: string, o: Required<Pick<WanOpts, 'width' | 'height' | 'length' | 'seed' | 'interpolate' | 'fps'>>) {

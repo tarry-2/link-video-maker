@@ -1687,7 +1687,20 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const episode = Number(b.episode) || undefined;
     const episodesTotal = Number(b.episodesTotal) || undefined;
     const episodeLogline = String(b.episodeLogline || '').trim() || undefined;
-    const brief = `장르: ${genre || '미스터리'}. 핵심 키워드: ${keywords.join(', ') || '반전'}.${extra ? ` 추가 요구: ${extra}.` : ''} 이 장르와 키워드로 시청자의 감정을 뒤흔들고 끝까지 몰입시키는 오리지널 창작 스토리를 만들어라.`;
+    // ★사용자가 직접 쓴 주제(extra)가 있으면 그게 '이야기의 중심 소재'다 — 장르·키워드는 톤일 뿐.
+    //   예전엔 extra를 "추가 요구"로 뒤에 흘려 넣어 AI가 무시 → 주제와 무관한 복수·배신 막장만 나왔다(테리 지적:
+    //   "미지의 세계"를 넣었는데 "그녀의 복수"가 나옴). 주제를 맨 앞·대문자로 못박아 반드시 지키게 한다.
+    const kw = keywords.filter((x) => x && x !== genre); // keywords=genres라 장르와 중복되면 빼고(사용자가 따로 준 키워드만)
+    const brief = extra
+      ? `[★이 영상의 핵심 주제·소재 — 반드시 이걸 중심으로 이야기를 지어내라]
+${extra}
+
+[장르·분위기] ${genre || '미스터리'}${kw.length ? `\n[키워드] ${kw.join(', ')}` : ''}
+
+위 "핵심 주제·소재"가 이 이야기의 중심이자 뼈대다. 장르·분위기는 그 주제를 '어떤 톤으로' 풀지에 대한 것일 뿐, 주제 자체를 바꾸지 마라. 절대 주제를 버리고 흔한 복수·배신·불륜·출생의 비밀 같은 막장 숏드라마 클리셰로 흐르지 마라 — 반드시 위 주제가 그대로 이야기의 소재가 되어야 한다. 이 주제로 시청자의 감정을 뒤흔들고 끝까지 몰입시키는 오리지널 창작 스토리를 만들어라.`
+      : `[장르·분위기] ${genre || '미스터리'}${kw.length ? `\n[키워드] ${kw.join(', ')}` : ''}
+
+이 장르·분위기로 시청자의 감정을 뒤흔들고 끝까지 몰입시키는 오리지널 창작 스토리를 만들어라.`;
     try {
       const sb = await generateStoryboard(k.gemini, brief, {
         duration, orientation, imageStyle, sceneCount, creative: true, seriesBible, episode, episodesTotal, episodeLogline, openaiKey: k.openai,
@@ -1705,11 +1718,10 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const episodes = Math.max(2, Math.min(20, Number(b.episodes) || 3));
     const k = pipelineKeys();
     if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 대본 키(Gemini 또는 OpenAI)를 저장하세요.'});
-    const prompt = `너는 수백만 조회수를 내는 한국 세로 숏드라마(ReelShort·DramaBox 스타일) 시리즈 기획자다. 아래 장르·키워드로 '${episodes}부작' 오리지널 시리즈의 스토리 바이블을 설계하라. 매 편이 60~120초이고, 각 편 끝은 다음 편이 미치도록 궁금한 클리프행어여야 한다. 반전·감정·몰입이 핵심.
-[장르] ${genre || '미스터리'}
-[키워드] ${keywords.join(', ') || '반전, 배신'}
-${extra ? `[추가 요구] ${extra}\n` : ''}
-반드시 아래 JSON만 출력(설명 금지):
+    const bibleKw = keywords.filter((x) => x && x !== genre); // keywords=genres라 장르와 중복이면 제거(사용자 지정 키워드만)
+    const prompt = `너는 수백만 조회수를 내는 한국 장편 시리즈 기획자다(장르 불문 — 드라마·미스터리·SF·판타지·역사 다 쓴다). 아래 의뢰로 '${episodes}부작' 오리지널 시리즈의 스토리 바이블을 설계하라. 매 편이 60~120초이고, 각 편 끝은 다음 편이 미치도록 궁금한 클리프행어여야 한다. 감정·몰입이 핵심.
+${extra ? `[★이 시리즈의 핵심 주제·소재 — 반드시 이걸 중심으로 전체 줄거리를 지어내라]\n${extra}\n★주제를 버리고 흔한 복수·배신·불륜 막장 클리셰로 흐르지 마라. 위 주제가 그대로 시리즈의 소재·세계관이 되어야 한다.\n` : ''}[장르·분위기] ${genre || '미스터리'}
+${bibleKw.length ? `[키워드] ${bibleKw.join(', ')}\n` : ''}반드시 아래 JSON만 출력(설명 금지):
 {"seriesTitle":"시리즈 제목(한국어, 자극적)","world":"세계관·배경 설정 2~3문장","cast":[{"name":"한국어 이름","look":"영어 외형 묘사(얼굴·머리·의상·색, 모든 편에서 똑같이 재사용)","desc":"성격·역할 한국어 한 줄"}],"episodes":[{"n":1,"logline":"이 편에서 벌어지는 핵심 사건 한 줄(클리프행어 포함)"}]}
 cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체가 하나의 큰 줄거리(기승전결)로 이어지되 편마다 긴장이 고조되게.`;
     try {
