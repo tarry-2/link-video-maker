@@ -373,7 +373,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean};
+type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight' | 'remake'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean};
 // ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
 function jlog(job: Job, s: string) {
   const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
@@ -1577,7 +1577,9 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     const orientation: 'portrait' | 'landscape' = b.orientation === 'landscape' ? 'landscape' : 'portrait';
 
     const id = randomUUID().slice(0, 8);
-    const job: Job = {id, logs: [], done: false, kind: 'video'};
+    // ★kind='remake' — 재창작 UI(하이라이트 페이지)가 기기간 실시간 연동에서 이 작업을 붙잡게 하는 핵심.
+    //   예전엔 'video'라서 highlight.js syncCurrentJob('highlight'만 수신)이 통째로 무시 → 재창작만 PC↔모바일 연동 안 됐다(테리 지적).
+    const job: Job = {id, logs: [], done: false, kind: 'remake'};
     jobs.set(id, job);
     currentGenJob = id;
     (async () => {

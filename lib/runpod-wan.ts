@@ -3,19 +3,26 @@
 // ★근거(2026-10-06 실측): hearmeman/comfyui-wan-template v29 번들 워크플로 Wan2.2_T2V.json을
 //   공식소스로 그대로 재구성(ModelSamplingSD3 shift5, lightx2v 4step 로라, negative=ConditioningZeroOut,
 //   8step MoE high/low, RIFE 4x→60fps, VHS h264-mp4). 실사 토끼셰프 480x832 60fps 노이즈0 확인.
-import {writeFile} from 'node:fs/promises';
+import {writeFile, readFile} from 'node:fs/promises';
+import path from 'node:path';
 
 const REST = 'https://rest.runpod.io/v1';
 const UA = 'Mozilla/5.0';
 
-// 템플릿 download_wan22=true가 받는 정확한 파일명(실측).
+// 템플릿 download_wan22=true가 받는 정확한 파일명(T2V는 2026-10-06 실측 확정).
 const HI_UNET = 'wan2.2_t2v_high_noise_14B_fp16.safetensors';
 const LO_UNET = 'wan2.2_t2v_low_noise_14B_fp16.safetensors';
 const HI_LORA = 'wan2.2_t2v_A14b_high_noise_lora_rank64_lightx2v_4step_1217.safetensors';
 const LO_LORA = 'wan2.2_t2v_A14b_low_noise_lora_rank64_lightx2v_4step_1217.safetensors';
+// ★I2V(이미지→영상) 모델/로라 — T2V 명명 규칙 그대로(download_wan22=true가 i2v 모델도 받음). 파일명은 팟 첫 기동 때
+//   번들 워크플로 JSON(Jupyter Contents API, 무과금)으로 확정한 뒤 생성한다(T2V를 그렇게 잠근 것과 동일, 추측 생성 금지).
+const HI_UNET_I2V = 'wan2.2_i2v_high_noise_14B_fp16.safetensors';
+const LO_UNET_I2V = 'wan2.2_i2v_low_noise_14B_fp16.safetensors';
+const HI_LORA_I2V = 'wan2.2_i2v_A14b_high_noise_lora_rank64_lightx2v_4step_1217.safetensors';
+const LO_LORA_I2V = 'wan2.2_i2v_A14b_low_noise_lora_rank64_lightx2v_4step_1217.safetensors';
 
 export type WanOpts = {
-  width?: number;      // 기본 480 (Wan 네이티브 480p)
+  width?: number;      // 기본 480 (Wan 네이티브 480p). 720p 품질은 720×1280(세로)/1280×720(가로).
   height?: number;     // 기본 832 (9:16 세로 쇼츠)
   length?: number;     // 프레임수(기본 81 ≈ 5s@16fps)
   seed?: number;
@@ -127,25 +134,12 @@ async function comfyGet(podId: string, path: string): Promise<Response> {
   return fetch(podBase(podId) + path, {headers: {'User-Agent': UA}, signal: AbortSignal.timeout(60000)});
 }
 
-// 한 클립 생성 → outPath(mp4)에 저장. 팟은 이미 준비됐다고 가정(ensureWanPod).
-export async function wanT2V(podId: string, prompt: string, outPath: string, opts: WanOpts = {}): Promise<void> {
-  const log = opts.log || (() => {});
-  const interpolate = opts.interpolate !== false;
-  const o = {
-    width: opts.width || 480,
-    height: opts.height || 832,
-    length: opts.length || 81,
-    seed: opts.seed ?? Math.floor(Math.random() * 2 ** 50),
-    interpolate,
-    fps: opts.fps || (interpolate ? 60 : 16),
-  };
-  const graph = buildGraph(prompt, o);
+// 그래프 제출 → 완료 폴링 → 출력 mp4를 outPath에 저장(T2V·I2V 공용).
+async function submitAndSave(podId: string, graph: any, outPath: string, label: string, log: (m: string) => void): Promise<void> {
   const clientId = `onvideo-${Math.floor(Math.random() * 1e6)}`;
-  log(`[영상] Wan2.2 제출: "${prompt.slice(0, 48)}…" (${o.width}x${o.height}, ${o.length}f)`);
   const res = await comfyPost(podId, '/prompt', {prompt: graph, client_id: clientId});
   const pid: string = res.prompt_id;
   if (!pid) throw new Error('ComfyUI가 prompt_id를 주지 않았습니다: ' + JSON.stringify(res).slice(0, 200));
-
   const t0 = Date.now();
   while (Date.now() - t0 < 15 * 60 * 1000) {
     await new Promise((r) => setTimeout(r, 6000));
@@ -157,7 +151,7 @@ export async function wanT2V(podId: string, prompt: string, outPath: string, opt
     const st = entry.status || {};
     if (st.status_str === 'error') {
       const msgs = (entry.status?.messages || []).map((m: any) => JSON.stringify(m)).join(' ');
-      throw new Error('Wan 생성 에러: ' + msgs.slice(0, 500));
+      throw new Error(`${label} 생성 에러: ` + msgs.slice(0, 500));
     }
     if (st.completed || st.status_str === 'success') {
       for (const o2 of Object.values<any>(entry.outputs || {})) {
@@ -168,15 +162,94 @@ export async function wanT2V(podId: string, prompt: string, outPath: string, opt
             if (!dr.ok) continue;
             const buf = Buffer.from(await dr.arrayBuffer());
             await writeFile(outPath, buf);
-            log(`[영상] 클립 완료 ${(Date.now() - t0) / 1000 | 0}s · ${(buf.length / 1024) | 0}KB → ${outPath}`);
+            log(`[영상] ${label} 클립 완료 ${(Date.now() - t0) / 1000 | 0}s · ${(buf.length / 1024) | 0}KB → ${outPath}`);
             return;
           }
         }
       }
-      throw new Error('Wan 생성은 끝났으나 출력 파일을 찾지 못했습니다.');
+      throw new Error(`${label} 생성은 끝났으나 출력 파일을 찾지 못했습니다.`);
     }
   }
-  throw new Error('Wan 생성 타임아웃(15분).');
+  throw new Error(`${label} 생성 타임아웃(15분).`);
+}
+
+function resolveOpts(opts: WanOpts) {
+  const interpolate = opts.interpolate !== false;
+  return {
+    width: opts.width || 480,
+    height: opts.height || 832,
+    length: opts.length || 81,
+    seed: opts.seed ?? Math.floor(Math.random() * 2 ** 50),
+    interpolate,
+    fps: opts.fps || (interpolate ? 60 : 16),
+  };
+}
+
+// 한 클립 생성(T2V: 글자→영상) → outPath(mp4). 팟은 이미 준비됐다고 가정(ensureWanPod).
+export async function wanT2V(podId: string, prompt: string, outPath: string, opts: WanOpts = {}): Promise<void> {
+  const log = opts.log || (() => {});
+  const o = resolveOpts(opts);
+  const graph = buildGraph(prompt, o);
+  log(`[영상] Wan2.2 T2V 제출: "${prompt.slice(0, 48)}…" (${o.width}x${o.height}, ${o.length}f)`);
+  await submitAndSave(podId, graph, outPath, 'T2V', log);
+}
+
+// ComfyUI에 시작 이미지 업로드 → {name, subfolder} (LoadImage가 참조할 파일명).
+async function uploadImage(podId: string, imagePath: string, log: (m: string) => void): Promise<{name: string; subfolder: string}> {
+  const buf = await readFile(imagePath);
+  const form = new FormData();
+  form.append('image', new Blob([new Uint8Array(buf)], {type: 'image/jpeg'}), path.basename(imagePath));
+  form.append('overwrite', 'true');
+  const r = await fetch(podBase(podId) + '/upload/image', {method: 'POST', headers: {'User-Agent': UA}, body: form, signal: AbortSignal.timeout(60000)});
+  const txt = await r.text();
+  if (!r.ok) throw new Error(`ComfyUI /upload/image → ${r.status}: ${txt.slice(0, 200)}`);
+  const d = JSON.parse(txt);
+  log(`[영상] 시작 이미지 업로드: ${d.name}`);
+  return {name: d.name, subfolder: d.subfolder || ''};
+}
+
+// I2V 그래프 — flux 스틸(start_image)을 첫 프레임으로 넣어 '그 이미지가 살아 움직이게'(캐릭터·구도 유지, 짜깁기·부자연 해결).
+//   WanImageToVideo 네이티브 노드 사용(Wan2.2 I2V 14B). 배선은 T2V와 동일한 2단 MoE + RIFE + VHS.
+function buildI2VGraph(prompt: string, imageName: string, o: Required<Pick<WanOpts, 'width' | 'height' | 'length' | 'seed' | 'interpolate' | 'fps'>>) {
+  const g: any = {
+    '1': {class_type: 'UNETLoader', inputs: {unet_name: HI_UNET_I2V, weight_dtype: 'default'}},
+    '2': {class_type: 'LoraLoaderModelOnly', inputs: {model: ['1', 0], lora_name: HI_LORA_I2V, strength_model: 1.0}},
+    '3': {class_type: 'ModelSamplingSD3', inputs: {model: ['2', 0], shift: 5.0}},
+    '4': {class_type: 'PathchSageAttentionKJ', inputs: {model: ['3', 0], sage_attention: 'auto'}},
+    '5': {class_type: 'UNETLoader', inputs: {unet_name: LO_UNET_I2V, weight_dtype: 'default'}},
+    '6': {class_type: 'LoraLoaderModelOnly', inputs: {model: ['5', 0], lora_name: LO_LORA_I2V, strength_model: 1.0}},
+    '7': {class_type: 'ModelSamplingSD3', inputs: {model: ['6', 0], shift: 5.0}},
+    '8': {class_type: 'PathchSageAttentionKJ', inputs: {model: ['7', 0], sage_attention: 'auto'}},
+    '9': {class_type: 'CLIPLoader', inputs: {clip_name: 'umt5_xxl_fp8_e4m3fn_scaled.safetensors', type: 'wan', device: 'default'}},
+    '10': {class_type: 'CLIPTextEncode', inputs: {clip: ['9', 0], text: prompt}},
+    '11': {class_type: 'ConditioningZeroOut', inputs: {conditioning: ['10', 0]}},
+    '15': {class_type: 'VAELoader', inputs: {vae_name: 'wan_2.1_vae.safetensors'}},
+    '20': {class_type: 'LoadImage', inputs: {image: imageName}},
+    // WanImageToVideo: start_image를 첫 프레임으로, positive/negative/vae로 조건화 → (positive, negative, latent) 반환.
+    '21': {class_type: 'WanImageToVideo', inputs: {positive: ['10', 0], negative: ['11', 0], vae: ['15', 0], width: o.width, height: o.height, length: o.length, batch_size: 1, start_image: ['20', 0]}},
+    '13': {class_type: 'KSamplerAdvanced', inputs: {add_noise: 'enable', noise_seed: o.seed, steps: 8, cfg: 1.0, sampler_name: 'euler', scheduler: 'simple', start_at_step: 0, end_at_step: 4, return_with_leftover_noise: 'enable', model: ['4', 0], positive: ['21', 0], negative: ['21', 1], latent_image: ['21', 2]}},
+    '14': {class_type: 'KSamplerAdvanced', inputs: {add_noise: 'disable', noise_seed: o.seed, steps: 8, cfg: 1.0, sampler_name: 'euler', scheduler: 'simple', start_at_step: 4, end_at_step: 10000, return_with_leftover_noise: 'disable', model: ['8', 0], positive: ['21', 0], negative: ['21', 1], latent_image: ['13', 0]}},
+    '16': {class_type: 'VAEDecode', inputs: {samples: ['14', 0], vae: ['15', 0]}},
+  };
+  let imagesNode = '16';
+  if (o.interpolate) {
+    g['17'] = {class_type: 'FrameInterpolationModelLoader', inputs: {model_name: 'rife426.pth'}};
+    g['18'] = {class_type: 'FrameInterpolate', inputs: {interp_model: ['17', 0], images: ['16', 0], multiplier: 4}};
+    imagesNode = '18';
+  }
+  g['19'] = {class_type: 'VHS_VideoCombine', inputs: {images: [imagesNode, 0], frame_rate: o.fps, loop_count: 0, filename_prefix: 'onvideo', format: 'video/h264-mp4', pingpong: false, save_output: true}};
+  return g;
+}
+
+// 한 클립 생성(I2V: 이미지→영상). startImagePath=flux로 만든 그 장면 스틸. 팟 준비 가정.
+export async function wanI2V(podId: string, prompt: string, startImagePath: string, outPath: string, opts: WanOpts = {}): Promise<void> {
+  const log = opts.log || (() => {});
+  const o = resolveOpts(opts);
+  const up = await uploadImage(podId, startImagePath, log);
+  const imageRef = up.subfolder ? `${up.subfolder}/${up.name}` : up.name;
+  const graph = buildI2VGraph(prompt, imageRef, o);
+  log(`[영상] Wan2.2 I2V 제출: "${prompt.slice(0, 44)}…" (${o.width}x${o.height}, ${o.length}f, 스틸 기반)`);
+  await submitAndSave(podId, graph, outPath, 'I2V', log);
 }
 
 // 고수준: 팟 확보 + 클립 생성.

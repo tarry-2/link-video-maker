@@ -792,9 +792,12 @@ async function syncCurrentJob() {
     const r = await fetch('/api/jobs/current');
     if (!r.ok) return;
     const d = await r.json();
-    if (d.id) { attachProgress(d.id, true); return; } // 다른 기기(모바일/PC)가 시작한 작업을 그대로 이어 봄
+    // ★이 탭(영상 만들기)이 담당하는 작업만 붙는다 = video/post. 하이라이트·재창작(remake)은 하이라이트 페이지가 담당하므로
+    //   여기서 가로채면 안 된다(가로채면 재창작이 엉뚱한 탭에서 영상카드로 떠버림). 진행·완성 둘 다 kind로 거른다.
+    const mineKind = (k) => !k || k === 'video' || k === 'post';
+    if (d.id && mineKind(d.kind)) { attachProgress(d.id, true); return; } // 다른 기기가 시작한 '영상/게시물' 작업만 이어 봄
     // ★다른 기기에서 방금 완성된 결과를 이 기기에도 표시(PC↔모바일 완성본 연동, 한 번만).
-    if (d.done && d.done.id && d.done.id !== shownDoneId) {
+    if (d.done && d.done.id && d.done.id !== shownDoneId && mineKind(d.done.kind)) {
       shownDoneId = d.done.id;
       if (d.done.kind === 'post') { if (window.showPostResult) window.showPostResult(d.done.title, d.done.images, d.done.zip, d.done.projectId); }
       else if (d.done.file) showResult(d.done.file, d.done.title, d.done.projectId);
@@ -976,7 +979,7 @@ const KEY_META = [
   { k: 'REPLICATE_API_TOKEN', label: 'Replicate (Flux 이미지)', desc: '9:16 이미지 생성용.', link: 'https://replicate.com/account/api-tokens' },
   { k: 'ELEVENLABS_API_KEY', label: 'ElevenLabs (음성·배경음악)', desc: '나레이션과 BGM 생성.', link: 'https://elevenlabs.io/app/settings/api-keys' },
   { k: 'OPENAI_API_KEY', label: 'OpenAI (폴백 대본)', desc: 'Gemini 실패 시 대본 폴백.', link: 'https://platform.openai.com/api-keys' },
-  { k: 'RUNPOD_API_KEY', label: 'RunPod (움직이는 AI 영상)', desc: 'Wan2.2 영상 클립 생성용 클라우드 GPU. "움직이는 AI 영상" 켤 때만 필요.', link: 'https://www.runpod.io/console/user/settings' },
+  { k: 'RUNPOD_API_KEY', label: 'RunPod (움직이는 AI 영상)', desc: 'Wan2.2 영상 클립 생성용 클라우드 GPU. "움직이는 AI 영상" 켤 때만 필요.', link: 'https://www.runpod.io/console/user/settings', topup: 'https://www.runpod.io/console/user/billing' },
 ];
 
 $('settings-btn').onclick = async () => {
@@ -984,7 +987,7 @@ $('settings-btn').onclick = async () => {
   $('key-fields').innerHTML = KEY_META.map((m) => `
     <div class="key-field">
       <label>${m.label}</label>
-      <div class="desc">${m.desc} <a href="${m.link}" target="_blank">키 발급 →</a></div>
+      <div class="desc">${m.desc} <a href="${m.link}" target="_blank">키 발급 →</a>${m.topup ? ` · <a href="${m.topup}" target="_blank">💳 충전 →</a>` : ''}</div>
       <div class="saved-state" data-state="${m.k}"><div class="desc">…</div></div>
       <input class="input" data-key="${m.k}" placeholder="새 키 입력(비우면 유지)" style="margin-top:6px" />
     </div>`).join('');

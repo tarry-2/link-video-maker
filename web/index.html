@@ -441,9 +441,10 @@
           <h3 class="field-label">🎬 움직이는 영상 GPU (RunPod) <span id="runpod-status" class="hint"></span></h3>
           <p class="hint">"움직이는 AI 영상"은 클라우드 GPU에서 만들어요(유료, 시간당 과금). 작업이 끝나면 자동으로 꺼지지만, 혹시 켜져 있으면 아래로 바로 끌 수 있어요.</p>
           <div id="runpod-info" class="hint" style="margin:6px 0">RunPod 키를 저장하면 잔액·상태가 여기 표시됩니다.</div>
-          <div style="display:flex; gap:8px; align-items:center">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
             <button type="button" id="runpod-refresh" class="ghost-btn small">↻ 상태 새로고침</button>
             <button type="button" id="runpod-stop" class="ghost-btn small">⏹ 지금 GPU 끄기</button>
+            <a href="https://www.runpod.io/console/user/billing" target="_blank" rel="noopener" class="ghost-btn small" style="text-decoration:none">💳 GPU 사용량 충전하기 →</a>
           </div>
           <div id="runpod-msg" class="hint" style="margin-top:6px"></div>
         </div>

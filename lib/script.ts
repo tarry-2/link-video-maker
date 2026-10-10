@@ -10,8 +10,14 @@ export type StoryScene = {
   hookAccent: string; // 상단 후킹 2줄(강조색, 펀치)
   accentColor: string; // 이 장면 강조색 hex
   visualPrompt: string; // 이미지 생성용(영어)
+  characters?: string[]; // ★이 장면에 등장하는 cast 이름들(서사형). 캐릭터 시트 참조·일관성에 쓰인다. 없으면 빈 배열.
+  shot?: string; // ★카메라 샷(wide establishing / medium / close-up / dramatic low-angle 등) — 짜깁기 방지·연출 다양화
   comment?: {user: string; text: string; likes: string}; // 인기 쇼츠식 가짜 댓글(선택)
 };
+
+// ★등장인물(cast) — 서사형(동화·드라마·사건 등 사람·캐릭터가 반복 등장)일 때만 채운다. 단일 소재(음식·제품·장소)면 빈 배열.
+//   look=영어 외형 묘사(얼굴·머리·의상·색). '모든 장면에서 똑같은 단어로' 재사용해 캐릭터가 장면마다 딴사람이 되는 것(짜깁기 느낌)을 막는다.
+export type CastMember = {name: string; look: string};
 
 // ★나레이션 끝맺음 정규화: 끝의 쉼표/세미콜론/공백을 정리하고 종결부호가 없으면 마침표를 붙인다.
 // 여운 마무리가 "챙겨보세요," 처럼 쉼표로 끊기던 버그 방지(TTS·자막 둘 다 이 텍스트에서 나오므로 여기서 고침).
@@ -106,7 +112,8 @@ export async function intensifyHooks(
 export type ThumbText = {big: string; small: string; badge: string};
 export type Storyboard = {
   title: string;
-  subject: string; // ★영상 전체의 핵심 소재(영어) — 모든 장면 이미지에 일관 반영(예: "soy sauce fried rice with egg")
+  subject: string; // ★단일 소재형 핵심 소재(영어) — 음식·제품·장소처럼 캐릭터 없는 영상에서 모든 장면에 일관 반영(예: "soy sauce fried rice with egg"). 서사형이면 "".
+  cast?: CastMember[]; // ★서사형 등장인물(없으면 단일 소재형). 난쟁이·새어머니 같은 조연까지 전부 담겨 장면 이미지에 등장한다.
   musicPrompt: string; // BGM 무드(영어)
   thumb?: ThumbText; // 썸네일 전용 시선폭탄 문구(없으면 후킹에서 폴백)
   scenes: StoryScene[];
@@ -199,15 +206,24 @@ ${catLine}
 - hookAccent: 상단 후킹 둘째 줄(강조색, 펀치라인). 10자 이내. 임팩트 있게. ★hookTop에 이미 쓴 단어·표현을 '절대 반복하지 마라'(같은 말을 두 줄에 또 쓰면 촌스럽다). 윗줄이 셋업이면 아랫줄은 '다른 단어'로 결과·반전·감정을 터뜨려라(윗줄=상황, 아랫줄=그 결과/반전). ※이건 형식 규칙일 뿐이니 예시 소재를 실제 주제로 쓰지 말고, 반드시 이 영상 소재로 만들어라.
 - accentColor: 이 장면 강조색 hex 하나. 장면마다 다르게 골라라(${preset ? preset.accentColors.join(', ') : PALETTE}) — 내용 분위기에 맞게.
 - visualPrompt: 이미지 생성용 영어 프롬프트. ${landscape ? '16:9 landscape wide shot(가로 와이드 구도: 풍경·전경·넓은 현장을 담되 핵심 피사체는 중앙~좌우 3분할점에)' : '9:16 세로'}. 나레이션의 핵심 사물·장소·상황·행동을 구체적으로 묘사하라(피사체·구도·배경·조명 분위기). ★★화풍·매체 단어 절대 금지 — 'photo, photograph, realistic, illustration, anime, 3D, render, painting, cartoon, style' 같은 단어를 쓰지 마라. 비주얼 스타일은 렌더 단계에서 사용자가 고른 스타일("${style.name}")이 자동 적용된다. visualPrompt엔 "무엇이 어떻게 보이는지"(내용)만 담아라.
-  ★★핵심 소재 일관성(매우 중요): 모든 장면의 visualPrompt는 반드시 위 [핵심 소재 subject]와 같은 대상을 보여줘야 한다. 예를 들어 주제가 '간장계란볶음밥'이면 모든 장면이 볶음밥이어야 하고, 절대 파스타·면·다른 음식으로 바뀌면 안 된다. 각 visualPrompt 안에 subject를 영어로 명시적으로 포함시켜라.
+  ★★★스펙타클·몰입(매우 중요 — 조회수·체류시간의 핵심): 밋밋한 설명 컷을 그리지 마라. 매 장면이 '한 장만 봐도 멈칫'하는 영화 같은 한 컷이어야 한다. 반드시 (a) 극적인 조명(역광·황금빛·달빛·불빛 등 분위기), (b) 깊이감 있는 구도(전경-중경-배경, 원근), (c) 움직임·긴장이 느껴지는 '순간'(정지된 설명이 아니라 행동 한가운데 — 쫓기는 순간, 사과를 건네는 순간, 문이 열리는 순간)을 담아라. 스케일이 큰 장면(성·숲·군중·폭풍 등)은 광활하게.
+  - shot 필드로 카메라를 장면마다 '다르게' 지정하라(연속 장면이 똑같은 구도면 짜깁기처럼 보인다): "wide establishing shot", "medium shot", "dramatic close-up on face", "low-angle hero shot", "over-the-shoulder" 중 장면 감정에 맞는 것. 1번 장면은 가장 임팩트 강한 샷으로.
+${(wantsPeople || true) ? `  ★★등장인물 일관성(서사형에서 매우 중요): [등장인물 cast]가 있으면, 각 장면 visualPrompt 안에 '그 장면에 나오는 인물'을 cast에 적은 look(외형 묘사)을 '토씨까지 똑같이' 넣어 그려라. 예: 백설공주 이야기면 공주가 나오는 장면엔 매번 "a young princess with pale skin, short black hair, red lips, blue-and-yellow dress"를 반복해 넣어 장면마다 같은 사람으로 보이게. 조연(난쟁이들·새어머니·사냥꾼 등)도 등장하는 장면엔 반드시 그려 넣어라 — 나레이션에서만 언급하고 그림엔 안 나오면 안 된다(테리 지적: 난쟁이가 말로만 나옴). 그 장면에 나온 인물 이름을 characters 배열에 적어라.` : ''}
+  ★단일 소재형(음식·제품·장소처럼 cast가 비어 있는 경우): 모든 장면 visualPrompt에 [핵심 소재 subject]를 영어로 명시해 같은 대상을 보여줘라(간장계란볶음밥이면 매 장면 볶음밥, 다른 음식 금지).
   ${wantsPeople
-    ? '★주제에 어울리는 사람·캐릭터를 장면의 주인공으로 적극 등장시켜라(표정·행동이 드러나게). 상품·체험 주제면 그 사람이 상품을 쓰거나 보여주는 장면으로.'
-    : '★사람(특히 얼굴·군중)은 절제하고 사물·장소·현장·상징물 위주. 사람이 꼭 필요하면 손·뒷모습·실루엣만 작게.'} ★글자·문서·표가 주요 피사체인 장면 금지. no text.
+    ? '★주제에 어울리는 사람·캐릭터를 장면의 주인공으로 적극 등장시켜라(표정·행동이 드러나게).'
+    : '★단일 소재형에서 사람(특히 얼굴·군중)은 절제하고 사물·장소·현장 위주. 단, 위 cast가 있는 서사형이면 인물을 적극 등장시켜라(이 절제 규칙보다 cast가 우선).'} ★글자·문서·표가 주요 피사체인 장면 금지. no text.
+- characters(서사형): 이 장면에 등장하는 cast 이름 배열(예 ["백설공주","난쟁이들"]). 없으면 [].
+- shot: 이 장면 카메라 샷(위 목록에서 하나, 영어).
 - comment(선택): 4~6개 장면 중 딱 1개 장면에만, 인기 쇼츠에 흔한 가짜 시청자 댓글 {"user":"한국이름","text":"공감/놀람 한마디","likes":"4.2천"}.
 
 [전체]
 - title: 클릭하고 싶은 한국어 영상 제목.
-- subject: 이 영상의 핵심 소재를 영어로 명확히(예: "soy sauce fried rice with fried egg"). 모든 장면 이미지가 이 소재를 벗어나면 안 된다.
+- ★★먼저 이 영상이 '서사형'인지 '단일 소재형'인지 판단하라:
+  · 서사형 = 동화·이야기·드라마·역사·사건처럼 사람/캐릭터가 반복 등장(예: 백설공주, 흥부놀부, 실화 사건). → cast를 채우고 subject는 "".
+  · 단일 소재형 = 음식·제품·장소·정보처럼 반복 캐릭터가 없음. → subject를 채우고 cast는 [].
+- cast: 서사형일 때 이 영상에 나오는 '모든' 주요·조연 인물의 목록. 각 {"name":"한국어 이름(예: 백설공주, 난쟁이들, 새어머니)","look":"영어 외형 묘사(얼굴·머리·의상·색·분위기, 장면마다 똑같이 재사용할 고정 묘사)"}. ★주인공만 넣지 말고 이야기에 중요한 조연(난쟁이·사냥꾼 등)을 빠짐없이 — 이들이 장면 그림에 실제로 등장해야 한다.
+- subject: 단일 소재형의 핵심 소재를 영어로(예: "soy sauce fried rice with fried egg"). 서사형이면 "".
 - musicPrompt: 영상 분위기에 맞는 BGM 무드(영어 한 줄).
 - thumb: 썸네일(커버) 전용 문구. 영상 제목보다 훨씬 더 자극적이고 궁금해 미치게 만드는 "시선폭탄" 카피. 반드시 아래 3개:
    · big: 초대형으로 박을 핵심 한 방. 6~10자, 띄어쓰기로 2~3덩어리(예: "이거 먹지 마세요", "월 3만원 공짜", "90%가 모름"). 문장부호 최소, 완성문장 금지. 스크롤을 멈추게 할 가장 센 말.
@@ -215,7 +231,7 @@ ${catLine}
    · badge: 충격 뱃지 한 단어(실화?/충격/경악/소름/대박 중 분위기 맞는 것). 판매성이면 "초특가", 아이용 애니면 빈 문자열.
 
 반드시 아래 JSON만 출력(설명·마크다운 금지):
-{"title":"...","subject":"...","musicPrompt":"...","thumb":{"big":"...","small":"...","badge":"..."},"scenes":[{"narration":"...","hookTop":"...","hookAccent":"...","accentColor":"#FFE24B","visualPrompt":"...","comment":{"user":"...","text":"...","likes":"..."}}]}
+{"title":"...","subject":"...","cast":[{"name":"...","look":"..."}],"musicPrompt":"...","thumb":{"big":"...","small":"...","badge":"..."},"scenes":[{"narration":"...","hookTop":"...","hookAccent":"...","accentColor":"#FFE24B","visualPrompt":"...","characters":["..."],"shot":"...","comment":{"user":"...","text":"...","likes":"..."}}]}
 
 [자료]
 ${source.slice(0, 12000)}`;
@@ -246,6 +262,21 @@ ${source.slice(0, 12000)}`;
     } catch (e: any) { lastErr = e?.message || '대본 JSON 파싱 실패'; opts.log?.(`[대본] JSON 파싱 실패 → 재생성(${attempt + 1}/3)`); }
   }
   if (!sb) throw new Error('대본 생성 실패(재시도 후): ' + lastErr);
+  // ★cast 정규화(서사형) — {name,look} 배열만 남긴다. 없으면 undefined(단일 소재형).
+  if (Array.isArray((sb as any).cast)) {
+    const cast = (sb as any).cast
+      .map((c: any) => ({name: String(c?.name || '').trim(), look: String(c?.look || '').trim()}))
+      .filter((c: CastMember) => c.name && c.look)
+      .slice(0, 8);
+    sb.cast = cast.length ? cast : undefined;
+  } else sb.cast = undefined;
+  // 서사형(cast 있음)이면 subject를 비워 pipeline이 단일-소재 강제를 걸지 않게 한다(난쟁이·조연이 장면에서 사라지던 원인).
+  if (sb.cast && sb.cast.length) sb.subject = '';
+  // 장면별 characters/shot 정규화.
+  for (const s of sb.scenes) {
+    s.characters = Array.isArray(s.characters) ? s.characters.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 6) : [];
+    s.shot = typeof s.shot === 'string' ? s.shot.trim().slice(0, 60) : '';
+  }
   // 자막·후킹·나레이션 이모지 제거(폰트에 없어 깨짐). title은 유튜브용이라 유지.
   for (const s of sb.scenes) { s.hookTop = stripEmoji(s.hookTop || ''); s.hookAccent = stripEmoji(s.hookAccent || ''); s.narration = stripEmoji(s.narration || ''); }
   // ★후킹 중복 가드 — 아랫줄(accent)이 윗줄(top)과 같은 말이면 비운다("했던 말을 또 하는" 꼴 방지, 테리 지적).

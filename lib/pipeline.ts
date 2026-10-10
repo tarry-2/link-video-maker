@@ -1,15 +1,16 @@
 // 전체 파이프라인 — 링크 → 본문 → 대본 → 장면별(이미지+음성+자막타이밍) → Remotion 렌더.
 import {randomUUID} from 'node:crypto';
 import {mkdir, writeFile, rm} from 'node:fs/promises';
+import fs from 'node:fs';
 import path from 'node:path';
 import {generateStoryboard} from './script';
-import {generateImageFlux} from './image';
+import {generateImageFlux, generateImageNano} from './image';
 import {ttsElevenJoined, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {renderVideo, buildRenderPublic} from './render';
 import {getStyle} from './styles';
-import {ensureWanPod, wanT2V, terminatePod} from './runpod-wan';
+import {ensureWanPod, wanT2V, wanI2V, terminatePod} from './runpod-wan';
 import type {SceneData} from '../src/Scene';
 
 const FPS = 30;
@@ -137,6 +138,10 @@ export async function makeVideo(
   //   이미지는 항상 먼저 만들어 폴백/썸네일로 두고, 클립 성공 시 scene.video로 교체(Scene.tsx가 video 우선 렌더).
   const aiClips = Math.max(0, Math.min(sb.scenes.length, Math.floor(opts.aiClips || 0)));
   const style = getStyle(opts.imageStyle);
+  // ★애니 스타일 = nano-banana로 캐릭터 일관성(studio 경로와 동일하게 영상제작·재창작에도 적용 — 테리 지시).
+  //   첫 장면을 '기준 캐릭터'로 저장 → 이후 장면이 참조해 같은 주인공(장면마다 딴 얼굴 방지).
+  const useNano = style.id === 'anime';
+  let charRefAbs = '';
   let wanPod: string | undefined;
   // ★GPU는 '움직이는 영상(aiClips>0)'일 때만 켠다. 이미지영상(aiClips=0)이면 여기 자체를 안 타므로 절대 안 켜진다.
   if (aiClips > 0) {
@@ -156,11 +161,28 @@ export async function makeVideo(
     const imgRel = `${pubRel}/img-${i}.jpg`;
 
     log(`[장면 ${i + 1}/${sb.scenes.length}] 이미지 생성…`);
+    // ★프롬프트 조립(테리: "프롬프트 뽑기도 확실히"):
+    //   · 단일 소재형(subject 있음) = 기존대로 subject 강제(음식·제품 일관성).
+    //   · 서사형(cast 있음, subject="") = 이 장면 등장인물의 고정 외형(look)을 다시 박아 장면마다 같은 캐릭터로(짜깁기 방지).
+    //     visualPrompt에 이미 들어가 있어도 한 번 더 앵커링하면 flux가 덜 흔들린다. + 샷(shot)으로 구도 다양화.
+    const castLook = (sb.cast && s.characters && s.characters.length)
+      ? sb.cast.filter((c) => s.characters!.some((n) => n && (c.name.includes(n) || n.includes(c.name)))).map((c) => c.look).join('; ')
+      : '';
+    const shotCue = s.shot ? `${s.shot}. ` : '';
     const vp = sb.subject
-      ? `${sb.subject}. ${s.visualPrompt}. (main subject must be ${sb.subject})`
-      : s.visualPrompt;
+      ? `${shotCue}${sb.subject}. ${s.visualPrompt}. (main subject must be ${sb.subject})`
+      : castLook
+        ? `${shotCue}${s.visualPrompt}. (consistent characters: ${castLook})`
+        : `${shotCue}${s.visualPrompt}`;
     try {
-      await generateImageFlux(keys.replicate, vp, abs(imgRel), log, opts.quality || 'high', opts.imageStyle || 'real', landscape);
+      if (useNano) {
+        // 애니: 첫 장면=기준 캐릭터(참조 없음) → charRef로 저장. 이후 장면=그 참조로 같은 주인공 유지.
+        const refs = charRefAbs && fs.existsSync(charRefAbs) ? [charRefAbs] : [];
+        await generateImageNano(keys.replicate, vp, abs(imgRel), log, refs, landscape);
+        if (!charRefAbs) { charRefAbs = abs(`${pubRel}/character-ref.jpg`); try { fs.copyFileSync(abs(imgRel), charRefAbs); } catch {} }
+      } else {
+        await generateImageFlux(keys.replicate, vp, abs(imgRel), log, opts.quality || 'high', opts.imageStyle || 'real', landscape);
+      }
     } catch (e: any) {
       log(`[장면 ${i + 1}] ⚠️ 이미지 생성 실패(${e.message}) → 임시 placeholder`);
       const r = await fetch(`https://picsum.photos/seed/ov${id}${i}/${landscape ? '1920/1080' : '1080/1920'}`);
@@ -179,11 +201,17 @@ export async function makeVideo(
         ? 'smooth animated motion, gentle character movement, soft parallax camera, fluid 2D animation'
         : 'natural lifelike motion, subtle cinematic camera movement, smooth and fluid';
       const wanPrompt = `${vp}. ${style.promptAdd}. ${motionCue}`;
+      // ★720p 품질 + I2V: 방금 만든 flux 스틸(imgRel)을 '첫 프레임'으로 넣어 그 이미지가 살아 움직이게 한다
+      //   (캐릭터·구도·스타일 유지 → "짜깁기·부자연" 해결). 스틸이 있으면 I2V, 없으면 T2V 폴백.
+      const wanW = landscape ? 1280 : 720;
+      const wanH = landscape ? 720 : 1280;
       try {
-        log(`[장면 ${i + 1}] 🎬 움직이는 영상 생성…`);
-        await wanT2V(wanPod, wanPrompt, abs(videoRel), {
-          width: landscape ? 832 : 480, height: landscape ? 480 : 832, length: 81, interpolate: true, log,
-        });
+        log(`[장면 ${i + 1}] 🎬 움직이는 영상 생성(I2V, 720p)…`);
+        if (fs.existsSync(abs(imgRel))) {
+          await wanI2V(wanPod, wanPrompt, abs(imgRel), abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+        } else {
+          await wanT2V(wanPod, wanPrompt, abs(videoRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+        }
       } catch (e: any) {
         log(`[장면 ${i + 1}] ⚠️ 움직이는 영상 실패(${e.message}) → 이미지 사용`);
         videoRel = undefined;

@@ -11,7 +11,7 @@ import {ttsEleven, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {getStyle} from './styles';
-import {ensureWanPod, wanT2V, terminatePod} from './runpod-wan';
+import {ensureWanPod, wanT2V, wanI2V, terminatePod} from './runpod-wan';
 import {renderVideo, renderThumbnail} from './render';
 import {resolveProduct, fingerprint} from './studio-model';
 import type {StudioDependencies} from './studio';
@@ -97,11 +97,17 @@ export const studioProviders: StudioDependencies = {
         const file = `clip-${i}-${sig}.mp4`;
         if (s.video?.signature === sig && existsSync(path.join(dir, file))) { log(`[장면 ${i + 1}] 🎬 기존 움직이는 영상 재사용`); continue; }
         const wanPrompt = `${vp}. ${style.promptAdd}. ${motionCue}`;
+        // ★720p + I2V: 이 장면의 flux 스틸을 첫 프레임으로(캐릭터·구도 유지). 스틸 없으면 T2V 폴백.
+        const wanW = landscape ? 1280 : 720;
+        const wanH = landscape ? 720 : 1280;
+        const stillPath = s.image?.file ? path.join(dir, s.image.file) : '';
         try {
-          log(`[장면 ${i + 1}/${n}] 🎬 움직이는 영상 생성…(수 분 걸릴 수 있어요)`);
-          await wanT2V(pod, wanPrompt, path.join(dir, file), {
-            width: landscape ? 832 : 480, height: landscape ? 480 : 832, length: 81, interpolate: true, log,
-          });
+          log(`[장면 ${i + 1}/${n}] 🎬 움직이는 영상 생성(I2V, 720p)…(수 분 걸릴 수 있어요)`);
+          if (stillPath && existsSync(stillPath)) {
+            await wanI2V(pod, wanPrompt, stillPath, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+          } else {
+            await wanT2V(pod, wanPrompt, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+          }
           s.video = {signature: sig, file};
         } catch (e: any) { log(`[장면 ${i + 1}] ⚠️ 움직이는 영상 실패(${e.message}) → 사진 사용`); s.video = undefined; }
       }

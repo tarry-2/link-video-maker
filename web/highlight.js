@@ -138,9 +138,9 @@
           if (resultClips.length) showResults(resultClips, false);
           loadHistory();
         }
-        // 🎭 재창작(kind='video') — 하이라이트와 '똑같은' 결과 카드로(다운로드·유튜브·인스타·그 자리에서).
+        // 🎭 재창작(kind='remake') — 하이라이트와 '똑같은' 결과 카드로(다운로드·유튜브·인스타·그 자리에서).
         //   N편이면 clips 전부, 1편이면 projectId 단일. 포폴 등록돼 showResults가 그대로 쓴다.
-        if (m.kind === 'video' && !m.error) {
+        if (m.kind === 'remake' && !m.error) {
           const clips = (m.clips && m.clips.length) ? m.clips.filter((c) => c.projectId)
             : (m.projectId ? [{projectId: m.projectId, title: m.title}] : []);
           if (clips.length) showResults(clips, false);
@@ -1294,19 +1294,26 @@
       addLog('✅ 제작이 끝났어요 — 완성본은 아래 작업 내역에서 바로 올리거나 다운로드하세요.', 'done');
       try { celebrate(); } catch {}
     }
+    // ★재창작은 다른 기기에서 끝났어도 결과 카드를 바로 띄운다(같은 기기 경험과 동일). projectId만 있으면 showResults가 그대로 렌더.
+    if (done.kind === 'remake' && done.projectId) { try { showResults([{projectId: done.projectId, title: done.title}], false); } catch {} }
     loadHistory();
   }
   async function syncCurrentJob() {
     try {
       const d = await (await fetch('/api/jobs/current', {cache: 'no-store'})).json();
-      if (d && d.id && (!d.kind || d.kind === 'highlight')) {
+      // ★이 페이지가 담당하는 작업 = 하이라이트 + 재창작(remake). 둘 다 받아야 재창작도 기기간 실시간 연동됨(테리 지적).
+      if (d && d.id && (!d.kind || d.kind === 'highlight' || d.kind === 'remake')) {
         if (curJobId) return; // 이미 붙어 진행 보고 있으면 그대로
-        // 다른 기기(또는 새로고침)에서 돌고 있는 하이라이트 작업 — 바로 붙어 실시간 표시.
+        // 붙기 전에 makeMode를 그 작업 종류에 맞춘다(remake면 결과 카드·문구가 재창작용으로 나오게). applyMakeMode로 UI까지 동기화.
+        if (d.kind === 'remake' && makeMode !== 'remake') { makeMode = 'remake'; try { applyMakeMode(); } catch {} }
+        else if (d.kind === 'highlight' && makeMode !== 'clip') { makeMode = 'clip'; try { applyMakeMode(); } catch {} }
+        // 다른 기기(또는 새로고침)에서 돌고 있는 작업 — 바로 붙어 실시간 표시.
         try { const mt = JSON.parse(localStorage.getItem('onvideo-hljob-meta') || 'null');
           if (mt) { if (mt.startTs) startTs = mt.startTs; estTotalText = mt.estTotalText || ''; } } catch {}
         addLog('🔗 진행 중인 제작에 연결했어요(다른 기기에서 시작한 작업도 여기서 실시간으로 보여요).', 'done');
         attachProgress(d.id);
-      } else if (d && d.done && d.done.kind === 'highlight') {
+      } else if (d && d.done && (d.done.kind === 'highlight' || d.done.kind === 'remake')) {
+        if (d.done.kind === 'remake' && makeMode !== 'remake') { makeMode = 'remake'; try { applyMakeMode(); } catch {} }
         // ★끝난 작업 — 진행화면에 붙어 있었든(SSE가 done 놓침) 아니든, 완성 처리로 멈춘 로딩을 닫는다.
         finishFromDone(d.done);
       }
