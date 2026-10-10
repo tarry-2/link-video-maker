@@ -22,6 +22,7 @@ function writeProject(dir: string, proj: any) {
 export type VideoRegister = {
   out: string;               // 완성 mp4 절대경로
   title: string;
+  thumb?: string;            // ★후킹 박힌 전용 썸네일(png) 절대경로 — 있으면 이걸 커버로(없으면 첫 장면 이미지 폴백).
   imageDir?: string;         // 장면 이미지 폴더(img-N.jpg) — 첫 이미지를 썸네일로 쓴다.
   narrations?: string[];     // 장면별 나레이션(유튜브/인스타 설명 생성용). 없으면 제목으로 폴백.
   voice: string;             // 목소리 라벨.
@@ -57,10 +58,14 @@ export async function registerVideoToPortfolio(reg: VideoRegister): Promise<stri
   const outAbs = path.join(dir, output);
   fs.copyFileSync(reg.out, outAbs);
 
-  // 썸네일 = 첫 장면 이미지 복사(AI 생성 이미지라 커버로 적당). 없으면 생략(서빙이 프레임 폴백 처리).
+  // 썸네일 — ①후킹 박힌 전용 썸네일(reg.thumb, png)이 있으면 그걸 커버로(다른 탭과 동일, 미리보기·클릭률↑).
+  //   ②없으면 첫 장면 이미지 복사(폴백). 서빙 라우트는 .png를 기대하므로 전용 썸네일은 thumb.png로 둔다.
   let thumbName: string | undefined;
   try {
-    if (reg.imageDir && fs.existsSync(reg.imageDir)) {
+    if (reg.thumb && fs.existsSync(reg.thumb)) {
+      thumbName = 'thumb.png';
+      fs.copyFileSync(reg.thumb, path.join(dir, thumbName));
+    } else if (reg.imageDir && fs.existsSync(reg.imageDir)) {
       const imgs = fs.readdirSync(reg.imageDir).filter((f) => /img-\d+\.(jpg|png)$/.test(f)).sort();
       if (imgs.length) {
         const ext = path.extname(imgs[0]).toLowerCase() === '.png' ? '.png' : '.jpg';

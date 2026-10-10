@@ -8,7 +8,7 @@ import {generateImageFlux, generateImageNano} from './image';
 import {ttsElevenJoined, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
-import {renderVideo, buildRenderPublic} from './render';
+import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {getStyle} from './styles';
 import {ensureWanPod, wanT2V, wanI2V, terminatePod} from './runpod-wan';
 import type {SceneData} from '../src/Scene';
@@ -75,7 +75,7 @@ export async function makeVideo(
   urls: string[],
   keys: PipelineKeys,
   opts: PipelineOpts,
-): Promise<{out: string; title: string; imageDir: string}> {
+): Promise<{out: string; title: string; imageDir: string; thumb?: string}> {
   const log = opts.log || (() => {});
   // ★중단 체크 — 각 단계 경계에서 호출. 사용자가 중단을 누르면 여기서 멈춘다(렌더 같은 통짜 단계는 끝난 뒤 경계에서).
   const ck = () => { if (opts.isCancelled?.()) throw new Error('사용자가 중단했습니다.'); };
@@ -294,9 +294,24 @@ export async function makeVideo(
   // ★전용 public 폴더로 렌더 — 캐시 번들은 번들 이후 생성한 이 작업의 이미지·음성·BGM을 404로 못 서빙한다
   //   (MediaError). 이 작업 자산만 담은 번들을 새로 만들어 넘긴다(카드·studio 경로와 동일).
   const renderPublic = await buildRenderPublic(pubRel);
+  let thumbPath: string | undefined;
   try {
     await renderVideo(scenes, transitionFrames, out, log, bgmSrc, voiceRel, renderPublic, orientation);
+    // ★후킹 박힌 전용 썸네일(커버) — studio·카드와 동일 디자인. 재창작·영상 만들기도 이제 포트폴리오 미리보기가
+    //   생긴다(테리 지적: 재창작만 썸네일 없음). 첫 장면 이미지 + 대본의 thumb 문구(없으면 후킹에서 폴백).
+    if (scenes[0]) {
+      const s0 = scenes[0];
+      const t = sb.thumb || ({} as {big?: string; small?: string; badge?: string});
+      const big = String(t.big || s0.hookAccent || s0.hookTop || sb.title || '').slice(0, 20);
+      const small = String((t.small ?? (s0.hookAccent ? s0.hookTop : '')) || '').slice(0, 20);
+      const badge = String(t.badge || '').slice(0, 6);
+      const tp = abs(`${pubRel}/thumb.png`);
+      try {
+        await renderThumbnail({image: s0.image, big, small, badge, accentColor: s0.accentColor || '#FFE24B'}, tp, log, renderPublic, orientation);
+        thumbPath = tp;
+      } catch (e: any) { log('[썸네일] 생성 건너뜀(첫 장면 이미지로 폴백): ' + (e?.message || '').slice(0, 80)); }
+    }
   } finally { await rm(renderPublic, {recursive: true, force: true}); }
   log(`[완료] ${out}`);
-  return {out, title: sb.title, imageDir: abs(pubRel)};
+  return {out, title: sb.title, imageDir: abs(pubRel), thumb: thumbPath};
 }

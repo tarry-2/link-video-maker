@@ -1631,7 +1631,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           let pid = '';
           try {
             pid = await registerVideoToPortfolio({
-              out: r.out, title: r.title, imageDir: r.imageDir,
+              out: r.out, title: r.title, thumb: r.thumb, imageDir: r.imageDir,
               voice: String(b.voice || '재창작'),
               category: '🎭 재창작', goal: 'issue',
               orientation, // ★고른 방향 그대로(세로/가로 버그 수정)
