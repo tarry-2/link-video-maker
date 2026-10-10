@@ -162,6 +162,24 @@
               <button type="button" class="seg-btn hl-rmout active" data-out="image">🖼 이미지영상(빠름·저렴)</button>
               <button type="button" class="seg-btn hl-rmout" data-out="wan">🎬 움직이는영상(툴 제작 · 비용↑)</button>
             </div>
+            <!-- 움직이는영상 고를 때만: 몇 장면을 움직이게 할지(임의 지정 + 저장) -->
+            <div id="hl-rm-motion" class="hidden" style="margin-top:10px">
+              <label class="field-label">움직이는 장면 수 <span class="hint">(많을수록 생생·비용↑. 비용 대부분은 GPU 고정비)</span></label>
+              <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+                <button type="button" class="seg-btn hl-rmclip active" data-n="1">1장면</button>
+                <button type="button" class="seg-btn hl-rmclip" data-n="2">2장면</button>
+                <button type="button" class="seg-btn hl-rmclip" data-n="3">3장면</button>
+                <button type="button" class="seg-btn hl-rmclip" data-n="5">5장면</button>
+                <button type="button" class="seg-btn hl-rmclip" data-n="8">8장면</button>
+              </div>
+              <label class="voice-row" style="margin-top:8px">
+                <span class="field-label" style="margin:0">직접 입력</span>
+                <input id="hl-rmclip-custom" class="input" type="number" min="1" max="20" step="1" placeholder="예: 6" style="max-width:110px">
+                <button type="button" id="hl-rmclip-save" class="ghost-btn small">저장</button>
+                <span class="hint">1~20장면</span>
+              </label>
+              <p id="hl-rmclip-saved" class="mini-state" style="color:#2bb673"></p>
+            </div>
           </div>
           <label class="field-label" style="margin-top:14px">③ 화면 방향 <span class="hint">— 쇼츠/릴스는 세로, 유튜브 일반은 가로</span></label>
           <div class="seg" style="margin-top:6px">
@@ -170,7 +188,7 @@
           </div>
 
           <!-- 세로 변환 방식 — 세로일 때만. 영상을 파악해 어울리는 쪽에 ✨추천 뱃지를 동적으로 붙인다. -->
-          <div id="hl-reframe-row" style="margin-top:12px">
+          <div id="hl-reframe-row" class="hl-clip-only" style="margin-top:12px">
             <label class="field-label">세로 변환 방식 <span class="hint">— 가로를 세로로 바꿀 때 (영상을 보고 추천해드려요)</span></label>
             <div class="seg" style="margin-top:6px">
               <button type="button" class="seg-btn hl-rf active" data-rf="track">🔎 인물 꽉채움<span class="rf-badge" data-for="track"></span></button>
@@ -179,8 +197,10 @@
             <p id="hl-rf-advice" class="hint" style="margin-top:4px"><b>인물 꽉채움</b> = 말하는 사람을 따라다니며 화면을 꽉 채워요(1인·인터뷰에 좋아요). <b>전체 보존</b> = 원본 전체를 담고 위아래 블러 여백(여러 명·자막 많은 영상에 좋아요). 영상을 고르면 어울리는 쪽을 추천해드려요.</p>
           </div>
 
-          <label class="field-label" style="margin-top:12px">④ 이 영상으로 몇 편 만들까요 <span id="hl-maxnote" class="hint"></span></label>
-          <div id="hl-count-seg" class="seg" style="margin-top:6px;flex-wrap:wrap"></div>
+          <div class="hl-clip-only">
+            <label class="field-label" style="margin-top:12px">④ 이 영상으로 몇 편 만들까요 <span id="hl-maxnote" class="hint"></span></label>
+            <div id="hl-count-seg" class="seg" style="margin-top:6px;flex-wrap:wrap"></div>
+          </div>
           <label class="field-label" style="margin-top:12px">한 편 길이</label>
           <div class="seg" style="margin-top:6px;flex-wrap:wrap">
             <button type="button" class="seg-btn hl-sec" data-s="15">15초</button>
@@ -200,19 +220,22 @@
           </label>
           <p id="hl-sec-saved" class="mini-state" style="color:#2bb673"></p>
 
-          <label class="field-label" style="margin-top:14px">🎙 해설 넣기 <span class="hint">(수익화 추천 · 기본 켜짐)</span></label>
-          <div class="seg" style="margin-top:6px;flex-wrap:wrap">
-            <button type="button" class="seg-btn hl-cm" data-c="0">원본 그대로</button>
-            <button type="button" class="seg-btn hl-cm active" data-c="1">AI 해설 입히기</button>
+          <div class="hl-clip-only">
+            <label class="field-label" style="margin-top:14px">🎙 해설 넣기 <span class="hint">(수익화 추천 · 기본 켜짐)</span></label>
+            <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+              <button type="button" class="seg-btn hl-cm" data-c="0">원본 그대로</button>
+              <button type="button" class="seg-btn hl-cm active" data-c="1">AI 해설 입히기</button>
+            </div>
           </div>
+          <!-- 목소리 — 하이라이트(해설)·재창작 공용. 재창작은 항상 나레이션이라 상시 표시. -->
           <div id="hl-voice-row" class="voice-row" style="margin-top:8px">
-            <span class="field-label" style="margin:0">해설 목소리</span>
+            <span class="field-label" style="margin:0">목소리</span>
             <select id="hl-voice" class="input" style="max-width:220px"></select>
           </div>
-          <p class="hint" id="hl-cm-note" style="margin-top:4px">원본에 'AI 해설(내 관점)'을 깔면 유튜브가 '리뷰·논평'으로 인정해 재사용 수익화에 유리합니다. 원본 소리는 자동으로 줄어듭니다.</p>
+          <p class="hint hl-clip-only" id="hl-cm-note" style="margin-top:4px">원본에 'AI 해설(내 관점)'을 깔면 유튜브가 '리뷰·논평'으로 인정해 재사용 수익화에 유리합니다. 원본 소리는 자동으로 줄어듭니다.</p>
 
           <!-- 영어 번역 자막(이중 자막) — 해설 켤 때만. 한국어 카라오케 아래 영어 문장 함께 -->
-          <div id="hl-en-row" class="hidden" style="margin-top:12px">
+          <div id="hl-en-row" class="hidden hl-clip-only" style="margin-top:12px">
             <label class="field-label">🌐 영어 자막 함께 <span class="hint">— 해외 시청자용 (한국어 + English)</span></label>
             <div class="seg" style="margin-top:6px;flex-wrap:wrap">
               <button type="button" class="seg-btn hl-en active" data-en="0">한국어만</button>
@@ -221,6 +244,7 @@
             <p class="hint" style="margin-top:4px">AI 해설(한국어)을 영어로 번역해 <b>한국어 자막 아래에 영어 문장</b>을 함께 띄워요. 해외 시청자도 볼 수 있어 도달이 넓어져요. (해설을 켜야 나와요)</p>
           </div>
 
+          <div class="hl-clip-only">
           <!-- 원본 소리 처리 — 완전 제거 시 저작권 '소리 지문' 매칭 회피(통과율↑, 완벽X) -->
           <label class="field-label" style="margin-top:14px">🔊 원본 소리</label>
           <div class="seg" style="margin-top:6px;flex-wrap:wrap">
@@ -277,6 +301,7 @@
               <span class="tpl-name">버블 팝</span>
             </button>
           </div>
+          </div><!-- /hl-clip-only (원본소리~디자인) -->
 
           <!-- 🔤 제목 폰트 — 영상 만들기·카드뉴스와 동일한 선택(모든 탭 공통). '자동'이면 템플릿 폰트. -->
           <label class="field-label" style="margin-top:14px">🔤 제목 폰트 <button type="button" class="ghost-btn small" style="float:right;padding:4px 10px;font-size:12px" onclick="openFontPreview('#hl-font-picker')">🔍 느낌 미리보기</button> <span class="hint">— 후킹 글씨체 (자동=디자인 템플릿 폰트)</span></label>

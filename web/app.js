@@ -805,6 +805,9 @@ syncCurrentJob();
 // ★유휴 상태면 6초마다 서버 진행작업 확인 → 다른 기기에서 시작하면 여기서도 실시간으로 뜬다.
 setInterval(syncCurrentJob, 6000);
 
+// 설정/저장 변경을 로그에 바로 찍는다(테리 요구: 저장이 적용됐는지 하나하나 로그로 확인). 제작 전이라도
+// 진행 블록을 열어 로그를 보여준다 — '저장됨' 상태 텍스트와 교차 확인용.
+function genLog(text, cls) { $('progress-block')?.classList.remove('hidden'); addLog(text, cls); }
 function addLog(text, cls) {
   const line = document.createElement('div');
   if (cls) line.className = cls;
@@ -922,13 +925,24 @@ syncFormat();
 // aiClips 는 숨은 input(값: 0=사진영상, 1~3=움직이는 장면 수). '움직이는 영상'을 골랐을 때만 장면수·자동끄기 노출.
 let lastMotionClips = 1; // 사진영상↔움직이는영상 오갈 때 마지막으로 고른 장면 수 기억
 function setAiClips(n) {
-  n = Number(n) || 0;
+  n = Math.max(0, Math.min(20, Number(n) || 0)); // 1~20 임의 허용(장면수 넘으면 서버가 자동 조정)
   if (n > 0) lastMotionClips = n;
   const hid = $('aiClips'); if (hid) hid.value = String(n);
   $('vtype-photo')?.classList.toggle('active', n === 0);
   $('vtype-motion')?.classList.toggle('active', n > 0);
   $('motion-count-row')?.classList.toggle('hidden', n === 0);
+  // 프리셋 버튼 중 일치하는 것만 active(임의값이면 전부 비활성 → 커스텀 입력이 현재값).
   document.querySelectorAll('.vclip-n').forEach((b) => b.classList.toggle('active', Number(b.dataset.clips) === n));
+  const ci = $('vclip-custom'); if (ci && n > 0 && !document.querySelector('.vclip-n.active')) ci.value = String(n);
+}
+// 움직이는 장면 수 '직접 입력' 저장 — 확실히 적용(값 읽기→setAiClips→폼저장) + '저장됨' 표시 + 로그.
+function saveVclipCustom() {
+  const raw = Number($('vclip-custom')?.value);
+  if (!Number.isFinite(raw) || raw < 1) { const s = $('vclip-saved'); if (s) { s.style.color = '#e0410a'; s.textContent = '1~20 사이 숫자를 넣어주세요.'; } return; }
+  const n = Math.max(1, Math.min(20, Math.round(raw)));
+  setAiClips(n); saveFormState();
+  const s = $('vclip-saved'); if (s) { s.style.color = '#2bb673'; s.textContent = `✅ 저장됨 — 움직이는 장면 ${n}개로 만들어요.`; }
+  genLog(`🎬 움직이는 장면 수 = ${n}개로 저장됨`);
 }
 // 장면(이미지) 수 직접 지정 — 세그먼트 버튼. 0=자동(길이로).
 function setSceneCount(n) {
@@ -946,8 +960,13 @@ function setFont(f) {
 }
 document.querySelectorAll('.font-chip').forEach((b) => b.addEventListener('click', () => { setFont(b.dataset.font); saveFormState(); }));
 
-$('vtype-photo')?.addEventListener('click', () => { setAiClips(0); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); });
-$('vtype-motion')?.addEventListener('click', () => { setAiClips(lastMotionClips); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); });
+$('vtype-photo')?.addEventListener('click', () => { setAiClips(0); saveFormState(); genLog('📷 사진 영상으로 설정됨'); $('duration')?.dispatchEvent(new Event('input')); });
+$('vtype-motion')?.addEventListener('click', () => { setAiClips(lastMotionClips); saveFormState(); genLog(`🎬 움직이는 영상으로 설정됨 (장면 ${lastMotionClips}개)`); $('duration')?.dispatchEvent(new Event('input')); });
+// 움직이는 장면 수 프리셋 버튼 — 누르면 즉시 적용 + 로그.
+document.querySelectorAll('.vclip-n').forEach((b) => b.addEventListener('click', () => { const n = Number(b.dataset.clips) || 1; setAiClips(n); saveFormState(); if ($('vclip-saved')) $('vclip-saved').textContent = ''; genLog(`🎬 움직이는 장면 수 = ${n}개`); }));
+// 직접 입력 저장 — 버튼 + Enter 둘 다(키 안 먹던 문제 방지).
+$('vclip-save')?.addEventListener('click', saveVclipCustom);
+$('vclip-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveVclipCustom(); } });
 document.querySelectorAll('.vclip-n').forEach((b) => b.addEventListener('click', () => { setAiClips(Number(b.dataset.clips)); saveFormState(); $('duration')?.dispatchEvent(new Event('input')); }));
 setAiClips(0);
 

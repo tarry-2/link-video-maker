@@ -277,11 +277,20 @@
           <!-- 움직이는 영상 고르면 몇 장면 만들지 -->
           <div id="motion-count-row" class="hidden" style="margin-top:10px">
             <label class="field-label">움직이는 장면 수 <span class="hint">(많을수록 생생해요. 비용 대부분은 GPU 준비 고정비라 장면 늘려도 조금만 올라요)</span></label>
-            <div class="seg" style="margin-top:6px">
+            <div class="seg" style="margin-top:6px;flex-wrap:wrap">
               <button type="button" class="seg-btn active vclip-n" data-clips="1">첫 장면만<br><span class="hint">약 250원</span></button>
               <button type="button" class="seg-btn vclip-n" data-clips="2">2장면<br><span class="hint">약 300원</span></button>
               <button type="button" class="seg-btn vclip-n" data-clips="3">3장면<br><span class="hint">약 350원</span></button>
+              <button type="button" class="seg-btn vclip-n" data-clips="5">5장면<br><span class="hint">약 450원</span></button>
+              <button type="button" class="seg-btn vclip-n" data-clips="8">8장면<br><span class="hint">약 600원</span></button>
             </div>
+            <label class="voice-row" style="margin-top:8px">
+              <span class="field-label" style="margin:0">직접 입력</span>
+              <input id="vclip-custom" class="input" type="number" min="1" max="20" step="1" placeholder="예: 6" style="max-width:110px">
+              <button type="button" id="vclip-save" class="ghost-btn small">저장</button>
+              <span class="hint">1~20장면(장면 수보다 많으면 자동 조정)</span>
+            </label>
+            <p id="vclip-saved" class="mini-state" style="color:#2bb673"></p>
             <label id="auto-shutdown-row" class="field-label" style="margin-top:10px;display:block"><input type="checkbox" id="auto-shutdown" checked /> 만들고 나면 자동으로 비용 끄기 <span class="hint">(권장 — 켜두면 추가 요금이 계속 나가요)</span></label>
           </div>
         </div>

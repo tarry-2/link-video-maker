@@ -7,6 +7,7 @@ import path from 'node:path';
 import {randomUUID, createHmac, timingSafeEqual} from 'node:crypto';
 import {execFileSync as cpExecFileSync} from 'node:child_process';
 import {makeVideo} from './lib/pipeline';
+import {registerVideoToPortfolio} from './lib/video-portfolio';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
 import {makeHighlights, backfillHighlightProjects, reRenderHighlight} from './lib/youtube-highlight';
@@ -1574,6 +1575,21 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
           log: (m) => jlog(job, m),
           isCancelled: () => !!job.cancelled,
         });
+        // ★포트폴리오 등록 — 유튜브·인스타 업로드·다운로드·삭제 스택이 전부 project.json을 읽으므로, 등록해야
+        //   재창작 영상도 업로드가 된다(테리 지시). orientation은 길이로(롱폼≥90초=가로) makeVideo와 동일 기준.
+        try {
+          const pid = await registerVideoToPortfolio({
+            out: r.out, title: r.title, imageDir: r.imageDir,
+            voice: String(b.voice || '재창작'),
+            category: '🎭 재창작', goal: 'issue',
+            orientation: (Number(b.duration) || 30) >= 90 ? 'landscape' : 'portrait',
+            durSec: Number(b.duration) || 30,
+            attribution: title ? `원 소재: ${title}` : undefined,
+            source: 'archive',
+            log: (m) => jlog(job, m),
+          });
+          job.projectId = pid;
+        } catch (e: any) { jlog(job, '[포트폴리오] 등록 실패(영상은 완성됨): ' + (e?.message || e)); }
         try {
           const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
           const today = new Date().toLocaleDateString('sv-SE');

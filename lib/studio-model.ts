@@ -20,7 +20,7 @@ export const createSchema = z.object({
   font: text(40).default('Black Han Sans'), // 제목·후킹 폰트(Scene.tsx TITLE_FONTS·web UI와 동일 목록). 미등록이면 렌더에서 기본값 폴백.
   imageStyle: z.enum(STYLE_IDS as [string, ...string[]]).default('real'),
   sceneCount: z.number().int().min(0).max(12).default(0), // 장면(이미지) 수 직접 지정(0=길이로 자동, 2~12)
-  aiClips: z.number().int().min(0).max(3).default(0), // 움직이는 AI 영상(Wan) 클립 수(0=사진영상, 1~3=앞 N장면)
+  aiClips: z.number().int().min(0).max(20).default(0), // 움직이는 AI 영상(Wan) 클립 수(0=사진영상, 1~N=앞 N장면). 장면수 넘으면 파이프라인이 자동 조정.
   autoShutdown: z.boolean().default(true), // 클립 생성 끝나면 RunPod 팟 자동 종료(과금 중단)
   music: z.boolean().default(false),
   product: productSchema.nullable().default(null),

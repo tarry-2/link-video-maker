@@ -124,8 +124,8 @@
           if (resultClips.length) showResults(resultClips, false);
           loadHistory();
         }
-        // 🎭 재창작은 단일 영상(kind='video') — /api/video/<file>로 보기·다운로드를 띄운다.
-        if (m.kind === 'video' && m.file && !m.error) showVideoResult(m.file, m.title);
+        // 🎭 재창작은 단일 영상(kind='video') — /api/video/<file>로 보기·다운로드 + 포폴(업로드) 링크.
+        if (m.kind === 'video' && m.file && !m.error) { showVideoResult(m.file, m.title, m.projectId); loadHistory(); }
       }
     };
     es.onerror = () => {
@@ -159,8 +159,8 @@
     if (!resultClips.some((x) => x.projectId === c.projectId)) resultClips.push(c);
     showResults(resultClips, !!curJobId); // 아직 작업 중이면 "나머지 제작 중" 표시
   }
-  // 🎭 재창작 단일 영상 결과 — /api/video/<file>로 미리보기 + 다운로드.
-  function showVideoResult(file, title) {
+  // 🎭 재창작 단일 영상 결과 — 미리보기 + 다운로드 + 포트폴리오(유튜브·인스타 업로드).
+  function showVideoResult(file, title, projectId) {
     const box = $('hl-result-block'); if (!box || !file) return;
     box.classList.remove('hidden');
     const src = '/api/video/' + encodeURIComponent(file);
@@ -169,9 +169,12 @@
       <div class="hl-result-grid"><div class="hl-rcard">
         <video src="${src}" controls playsinline preload="metadata" style="width:100%;border-radius:12px;background:#000"></video>
         <div class="hl-rcard-title">${esc(t)}</div>
-        <a class="ghost-btn small" href="${src}" download="${esc(t)}.mp4">⬇ 다운로드</a>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+          <a class="ghost-btn small" href="${src}" download="${esc(t)}.mp4">⬇ 다운로드</a>
+          <a class="ghost-btn small" href="/voices?tab=pf" target="_blank">📤 포트폴리오에서 유튜브·인스타 올리기</a>
+        </div>
       </div></div>
-      <p class="mini-state" style="margin-top:6px">포트폴리오/업로드는 완성 영상을 내려받아 '영상 만들기' 결과처럼 쓰면 돼요.</p>`;
+      <p class="mini-state" style="margin-top:6px">✅ 포트폴리오에 자동 등록됐어요 — 포트폴리오 탭에서 유튜브·인스타로 바로 올릴 수 있어요.</p>`;
   }
   function showResults(clips, inProgress) {
     const box = $('hl-result-block'); if (!box) return;
@@ -972,15 +975,20 @@
     if ($('hl-sec-saved')) $('hl-sec-saved').textContent = ''; // 값 바꾸면 안내 지움
   });
   // 저장 버튼 — 직접 입력한 길이를 적용·저장하고 "저장되었습니다" 안내.
-  $('hl-sec-save')?.addEventListener('click', () => {
+  function saveSecCustom() {
     const raw = Number($('hl-sec-custom').value) || 0;
-    if (raw < 15 || raw > 600) { alert('15~600초(최대 10분) 사이로 입력하세요.'); return; }
+    const m = $('hl-sec-saved');
+    if (raw < 15 || raw > 600) { if (m) { m.style.color = '#e0410a'; m.textContent = '15~600초(최대 10분) 사이로 입력하세요.'; } return; }
     sec = Math.round(raw);
     document.querySelectorAll('.hl-sec').forEach((x) => x.classList.remove('active'));
     renderCountSeg(); saveState();
-    const m = $('hl-sec-saved'); if (m) { const mm = Math.floor(sec/60), ss = sec%60;
-      m.textContent = `✅ 저장되었습니다 — 한 편 ${sec}초${mm?` (${mm}분 ${ss}초)`:''}`; }
-  });
+    const mm = Math.floor(sec/60), ss = sec%60;
+    if (m) { m.style.color = '#2bb673'; m.textContent = `✅ 저장되었습니다 — 한 편 ${sec}초${mm?` (${mm}분 ${ss}초)`:''}`; }
+    addLog(`⏱ 한 편 길이 = ${sec}초로 저장됨`);
+  }
+  $('hl-sec-save')?.addEventListener('click', saveSecCustom);
+  // Enter로도 저장(버튼만으론 '안 먹을 때가 있다'는 문제 — 입력칸에서 Enter 치면 바로 저장).
+  $('hl-sec-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveSecCustom(); } });
   // 해설 넣기 토글
   document.querySelectorAll('.hl-cm').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-cm').forEach((x) => x.classList.remove('active')); b.classList.add('active');
@@ -1090,17 +1098,51 @@
     $('hl-result-block')?.classList.add('hidden');
     ['hl-stop','hl-resume','hl-reset'].forEach((id) => $(id)?.classList.add('hidden'));
   }
-  // 제작 방식 토글(하이라이트/재창작) — 재창작이면 전용 옵션 노출 + 버튼 문구 변경. 기본=clip(기존 동작 그대로).
+  let rmClips = 1; // 재창작 움직이는영상 장면 수(기본 1)
+  // 제작 방식 토글(하이라이트/재창작) — 재창작이면 전용 옵션 노출 + 하이라이트 전용 옵션 숨김 + 버튼 문구 변경.
   function applyMakeMode() {
+    const remake = makeMode === 'remake';
     document.querySelectorAll('.hl-make').forEach((x) => x.classList.toggle('active', x.dataset.make === makeMode));
-    $('hl-remake-opts')?.classList.toggle('hidden', makeMode !== 'remake');
-    const b = $('hl-generate'); if (b) b.textContent = makeMode === 'remake' ? '🎭 이 내용으로 새 영상 만들기' : '🎬 하이라이트 숏폼 만들기';
+    $('hl-remake-opts')?.classList.toggle('hidden', !remake);
+    // 하이라이트 전용 옵션(세로변환·편수·해설·영어자막·원본소리·무음·b-roll·디자인)은 재창작 땐 숨긴다.
+    document.querySelectorAll('.hl-clip-only').forEach((el) => el.classList.toggle('hidden', remake));
+    // 목소리 행: 재창작은 항상 나레이션이라 상시 표시. 하이라이트는 해설(commentary) 종속으로 복원.
+    $('hl-voice-row')?.classList.toggle('hidden', remake ? false : !commentary);
+    applyRmMotion();
+    const b = $('hl-generate'); if (b) b.textContent = remake ? '🎭 이 내용으로 새 영상 만들기' : '🎬 하이라이트 숏폼 만들기';
   }
-  document.querySelectorAll('.hl-make').forEach((b) => b.addEventListener('click', () => { makeMode = b.dataset.make === 'remake' ? 'remake' : 'clip'; applyMakeMode(); }));
+  // 재창작 '움직이는영상'일 때만 장면수 UI 노출.
+  function applyRmMotion() {
+    $('hl-rm-motion')?.classList.toggle('hidden', !(makeMode === 'remake' && rmOut === 'wan'));
+    document.querySelectorAll('.hl-rmclip').forEach((x) => x.classList.toggle('active', Number(x.dataset.n) === rmClips));
+  }
+  document.querySelectorAll('.hl-make').forEach((b) => b.addEventListener('click', () => {
+    makeMode = b.dataset.make === 'remake' ? 'remake' : 'clip'; applyMakeMode();
+    addLog(makeMode === 'remake' ? '🎭 제작 방식 = 재창작(새로 만들기)' : '✂️ 제작 방식 = 하이라이트(원본 자르기)');
+  }));
   document.querySelectorAll('.hl-rmout').forEach((b) => b.addEventListener('click', () => {
     rmOut = b.dataset.out === 'wan' ? 'wan' : 'image';
     document.querySelectorAll('.hl-rmout').forEach((x) => x.classList.toggle('active', x.dataset.out === rmOut));
+    applyRmMotion();
+    addLog(rmOut === 'wan' ? `🎬 출력 = 움직이는영상 (장면 ${rmClips}개)` : '🖼 출력 = 이미지영상');
   }));
+  // 재창작 장면수 프리셋 버튼.
+  document.querySelectorAll('.hl-rmclip').forEach((b) => b.addEventListener('click', () => {
+    rmClips = Math.max(1, Math.min(20, Number(b.dataset.n) || 1)); applyRmMotion();
+    if ($('hl-rmclip-saved')) $('hl-rmclip-saved').textContent = '';
+    addLog(`🎬 움직이는 장면 수 = ${rmClips}개`);
+  }));
+  // 재창작 장면수 직접 입력 저장 — 확실 적용 + '저장됨' + 로그. 버튼 + Enter 둘 다.
+  function saveRmClip() {
+    const raw = Number($('hl-rmclip-custom')?.value);
+    const s = $('hl-rmclip-saved');
+    if (!Number.isFinite(raw) || raw < 1) { if (s) { s.style.color = '#e0410a'; s.textContent = '1~20 사이 숫자를 넣어주세요.'; } return; }
+    rmClips = Math.max(1, Math.min(20, Math.round(raw))); applyRmMotion();
+    if (s) { s.style.color = '#2bb673'; s.textContent = `✅ 저장됨 — 움직이는 장면 ${rmClips}개로 만들어요.`; }
+    addLog(`🎬 움직이는 장면 수 = ${rmClips}개로 저장됨`);
+  }
+  $('hl-rmclip-save')?.addEventListener('click', saveRmClip);
+  $('hl-rmclip-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveRmClip(); } });
   async function generate(body, endpoint) {
     const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
     resultClips = []; $('hl-result-block')?.classList.add('hidden'); // 새 제작 → 이전 결과 비움
@@ -1120,14 +1162,15 @@
       addLog('──────── 🎭 재창작 시작 ────────', 'done');
       addLog(`• 원본(소재): ${picked.title}`);
       addLog('• 방식: 원본 영상·소리·로고 미사용 → 그 이야기로 완전 새 영상(저작권 걱정 0)');
-      addLog(`• 출력: ${rmOut === 'wan' ? '🎬 움직이는영상(툴 제작)' : '🖼 이미지영상'} · 길이 ${sec}초 · ${orient === 'landscape' ? '가로' : '세로'}`);
+      addLog(`• 출력: ${rmOut === 'wan' ? `🎬 움직이는영상(툴 제작 · 장면 ${rmClips}개)` : '🖼 이미지영상'} · 길이 ${sec}초 · ${orient === 'landscape' ? '가로' : '세로'}`);
+      addLog(`• 목소리: ${$('hl-voice')?.selectedOptions[0]?.textContent || voice || '자동'}`);
       addLog('────────────────────────────');
       startTs = Date.now(); setEnergy(8, '재창작을 시작합니다…'); estTotalText = '약 3~8분';
       try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
       lastBody = {
         title: picked.title, channel: picked.channel || '',
-        duration: sec, orientation: orient, voice,
-        aiClips: rmOut === 'wan' ? 4 : 0, // >0 = 움직이는영상(앞 4장면 Wan), 0 = 이미지영상
+        duration: sec, orientation: orient, voice, font,
+        aiClips: rmOut === 'wan' ? rmClips : 0, // >0 = 움직이는영상(앞 N장면 Wan), 0 = 이미지영상
       };
       lastEndpoint = '/api/generate-remake';
       generate(lastBody, lastEndpoint);
