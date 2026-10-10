@@ -1531,6 +1531,69 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     return json(res, 202, {id});
   }
 
+  // ── 🎭 재창작(리메이크): 인기 영상(서프라이즈 등)의 제목·자막을 '내용 소스'로 받아 우리 이미지·목소리·자막으로
+  //    완전 새 영상을 만든다. 원본 미디어·로고를 안 쓰므로 Content ID/상표에 안 걸린다. /api/generate와 동일 구조 +
+  //    URL 대신 sourceText 주입. 출력=이미지영상(기본) 또는 움직이는영상(aiClips>0). ──
+  if (p === '/api/generate-remake' && req.method === 'POST') {
+    const b = await readBody(req);
+    const title = String(b.title || '').trim();
+    const transcript = String(b.transcript || '').trim();
+    if (!title && transcript.length < 40) return json(res, 400, {error: '재창작할 영상(제목 또는 내용)이 필요합니다.'});
+    const k = pipelineKeys();
+    if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 대본 키(Gemini 또는 OpenAI)를 저장하세요.'});
+    const needsEleven = b.narration !== false || b.bgm !== false;
+    if (needsEleven && !k.elevenlabs) return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다(둘 다 끄면 키 없이 가능).'});
+
+    // 내용 소스(seed) — 자막이 있으면 그 내용을 재구성, 없으면 제목으로 '그 실제 이야기'를 새로 집필하게 지시.
+    //   ★원문 문장 복붙 금지·우리 말로 새로(표현 저작권 회피)를 명시. 사실·전개·훅은 유지(먹히는 구성 계승).
+    const sourceText = transcript.length >= 40
+      ? `아래는 인기 영상의 실제 내용(자막)이다. 이 이야기를 바탕으로 우리만의 새 콘텐츠로 재구성하라. 원문 문장을 그대로 베끼지 말고 우리 말로 새로 쓰되, 사실·전개·몰입 포인트는 유지하라.\n\n[원본 제목] ${title}\n\n[원본 내용]\n${transcript}`
+      : `"${title}" — 이 제목의 실제 미스터리/이야기를 소재로, 시청자를 처음부터 끝까지 몰입시키는 콘텐츠를 새로 집필하라. 실제 사건·전설이면 사실에 기반해 긴장감 있게 전개하고, 반전·여운으로 맺어라.`;
+
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false, kind: 'video'};
+    jobs.set(id, job);
+    currentGenJob = id;
+    (async () => {
+      try {
+        jlog(job, `[재창작] "${title.slice(0, 40)}" 내용을 우리 영상으로 새로 만듭니다(원본 미디어·로고 미사용 → 저작권 free).`);
+        jlog(job, transcript.length >= 40 ? '[재창작] 원본 자막을 각색해 대본을 씁니다.' : '[재창작] 자막이 없어 제목 기반으로 그 이야기를 새로 집필합니다.');
+        const r = await makeVideo([], k, {
+          sourceText,
+          duration: Number(b.duration) || 30,
+          presetId: b.presetId || 'mystery', // 재창작 기본 결=미스터리(서프라이즈 톤). UI에서 바꿀 수 있음.
+          voice: b.voice || undefined,
+          quality: b.quality === 'fast' ? 'fast' : 'high',
+          imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
+          sceneCount: Number(b.sceneCount) || 0,
+          aiClips: Number(b.aiClips) || 0, // >0 = 움직이는영상(Wan), 0 = 이미지영상
+          autoShutdown: b.autoShutdown !== false,
+          narration: b.narration !== false,
+          bgm: b.bgm !== false,
+          font: pickFont(b.font),
+          log: (m) => jlog(job, m),
+          isCancelled: () => !!job.cancelled,
+        });
+        try {
+          const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);
+          const today = new Date().toLocaleDateString('sv-SE');
+          const folder = path.join(os.homedir(), 'Desktop', `온비디오 재창작 ${today}`, safe);
+          fs.mkdirSync(folder, {recursive: true});
+          fs.copyFileSync(r.out, path.join(folder, `${safe}.mp4`));
+          jlog(job, `[완료] 바탕화면에도 저장됨: ${folder}`);
+        } catch { /* Desktop 없는 환경 무시 */ }
+        job.file = path.basename(r.out);
+        job.title = r.title;
+        job.done = true; job.doneAt = Date.now();
+      } catch (e: any) {
+        job.error = e.message;
+        job.done = true; job.doneAt = Date.now();
+        jlog(job, '[실패] ' + e.message);
+      }
+    })();
+    return json(res, 202, {id});
+  }
+
   // ── 수동 모드: 직접 넣은 이미지 + 키워드로 생성 ──
   if (p === '/api/generate-manual' && req.method === 'POST') {
     const b = await readBody(req);

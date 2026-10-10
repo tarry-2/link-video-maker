@@ -61,6 +61,9 @@ export type PipelineOpts = {
   bgm?: boolean; // 배경음악 넣기. 기본 true. false면 음악 없음.
   font?: string; // 제목·후킹 폰트(사용자 선택). 없으면 기본 Black Han Sans. Scene.tsx TITLE_FONTS와 동일 목록.
   transitionFrames?: number;
+  // ★재창작(리메이크): URL을 긁지 않고 '이미 확보한 내용 텍스트'를 소스로 바로 쓴다. 인기 영상(서프라이즈 등)의
+  //   제목·자막을 뽑아 이걸로 넘기면 generateStoryboard가 우리 대본·이미지·목소리로 새 영상을 만든다(저작권 free).
+  sourceText?: string;
   log?: (m: string) => void;
   isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인해서 멈춘다(하이라이트와 동일).
 };
@@ -81,7 +84,10 @@ export async function makeVideo(
   const abs = (rel: string) => path.join(process.cwd(), 'public', rel);
   await mkdir(abs(pubRel), {recursive: true});
 
-  const source = await fetchSource(urls, log);
+  // 재창작이면 넘어온 내용 텍스트를 소스로, 아니면 기존대로 URL을 긁는다(무회귀).
+  const source = opts.sourceText && opts.sourceText.trim().length > 20
+    ? opts.sourceText.trim().slice(0, 40000)
+    : await fetchSource(urls, log);
   ck();
 
   // ★카테고리 프리셋: 있으면 톤·이미지·목소리·BGM을 그 바닥 최적값으로 자동 세팅.

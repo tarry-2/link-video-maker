@@ -149,7 +149,21 @@
         <div id="hl-arc-pager" class="arc-pager hidden"></div>
 
         <div id="hl-options" style="margin-top:14px">
-          <label class="field-label">③ 화면 방향 <span class="hint">— 쇼츠/릴스는 세로, 유튜브 일반은 가로</span></label>
+          <label class="field-label">제작 방식 <span class="hint">— 원본을 자를지, 그 내용으로 새로 만들지</span></label>
+          <div class="seg" style="margin-top:6px">
+            <button type="button" class="seg-btn hl-make active" data-make="clip">✂️ 하이라이트(원본 자르기)</button>
+            <button type="button" class="seg-btn hl-make" data-make="remake">🎭 재창작(새로 만들기)</button>
+          </div>
+          <!-- 재창작 전용 옵션(기본 숨김) — 원본 미디어·로고 안 쓰고 우리 이미지·목소리로 새 영상 = 저작권 free -->
+          <div id="hl-remake-opts" class="hidden" style="margin-top:8px">
+            <p class="hint" style="margin-bottom:6px">🎭 <b>재창작</b> = 원본 영상·소리·로고는 안 쓰고, 그 <b>이야기만</b> 뽑아 우리 이미지·목소리·자막으로 <b>완전 새 영상</b>을 만들어요(저작권 걱정 0). 길이·목소리는 아래 설정을 그대로 써요.</p>
+            <label class="field-label">출력</label>
+            <div class="seg" style="margin-top:6px">
+              <button type="button" class="seg-btn hl-rmout active" data-out="image">🖼 이미지영상(빠름·저렴)</button>
+              <button type="button" class="seg-btn hl-rmout" data-out="wan">🎬 움직이는영상(툴 제작 · 비용↑)</button>
+            </div>
+          </div>
+          <label class="field-label" style="margin-top:14px">③ 화면 방향 <span class="hint">— 쇼츠/릴스는 세로, 유튜브 일반은 가로</span></label>
           <div class="seg" style="margin-top:6px">
             <button type="button" class="seg-btn hl-orient active" data-o="portrait">📱 세로 (쇼츠·릴스·틱톡)</button>
             <button type="button" class="seg-btn hl-orient" data-o="landscape">🖥 가로 (유튜브 일반)</button>

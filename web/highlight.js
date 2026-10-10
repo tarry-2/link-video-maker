@@ -124,6 +124,8 @@
           if (resultClips.length) showResults(resultClips, false);
           loadHistory();
         }
+        // 🎭 재창작은 단일 영상(kind='video') — /api/video/<file>로 보기·다운로드를 띄운다.
+        if (m.kind === 'video' && m.file && !m.error) showVideoResult(m.file, m.title);
       }
     };
     es.onerror = () => {
@@ -156,6 +158,20 @@
     if (!c || !c.projectId) return;
     if (!resultClips.some((x) => x.projectId === c.projectId)) resultClips.push(c);
     showResults(resultClips, !!curJobId); // 아직 작업 중이면 "나머지 제작 중" 표시
+  }
+  // 🎭 재창작 단일 영상 결과 — /api/video/<file>로 미리보기 + 다운로드.
+  function showVideoResult(file, title) {
+    const box = $('hl-result-block'); if (!box || !file) return;
+    box.classList.remove('hidden');
+    const src = '/api/video/' + encodeURIComponent(file);
+    const t = (title || '재창작 영상');
+    box.innerHTML = `<div class="hl-result-head">🎭 재창작 완성!</div>
+      <div class="hl-result-grid"><div class="hl-rcard">
+        <video src="${src}" controls playsinline preload="metadata" style="width:100%;border-radius:12px;background:#000"></video>
+        <div class="hl-rcard-title">${esc(t)}</div>
+        <a class="ghost-btn small" href="${src}" download="${esc(t)}.mp4">⬇ 다운로드</a>
+      </div></div>
+      <p class="mini-state" style="margin-top:6px">포트폴리오/업로드는 완성 영상을 내려받아 '영상 만들기' 결과처럼 쓰면 돼요.</p>`;
   }
   function showResults(clips, inProgress) {
     const box = $('hl-result-block'); if (!box) return;
@@ -412,6 +428,8 @@
   let captionEn = 0; // 영어 번역 자막 함께(0/1, 해설 켤 때만)
   let license = 'cc'; // 영상 범위: cc(안전·재사용 허가만) / all(전체)
   let mode = 'search'; // 소재 가져오는 방법: search(주제로 찾기) / url(영상 URL 붙여넣기)
+  let makeMode = 'clip'; // 제작 방식: clip(원본 자르기=하이라이트) / remake(재창작=내용만 뽑아 새 영상)
+  let rmOut = 'image';   // 재창작 출력: image(이미지영상) / wan(움직이는영상)
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
   const STATE_KEY = 'onvideo-hl-state';
@@ -1048,7 +1066,7 @@
   renderCountSeg(); // 편수 버튼을 처음부터 보이게(영상 고르기 전에도)
 
   // ── 생성 ──
-  let lastBody = null;
+  let lastBody = null, lastEndpoint = '/api/generate-highlights'; // '이어서 다시'가 올바른 엔드포인트로 가게 기억
   // 작업이 끝/중단/실패했을 때: 중단버튼 숨기고 '이어서 다시'(설정 그대로) + '취소하고 새 영상'을 보여준다.
   function showStopped() {
     $('hl-stop')?.classList.add('hidden');
@@ -1072,20 +1090,49 @@
     $('hl-result-block')?.classList.add('hidden');
     ['hl-stop','hl-resume','hl-reset'].forEach((id) => $(id)?.classList.add('hidden'));
   }
-  async function generate(body) {
+  // 제작 방식 토글(하이라이트/재창작) — 재창작이면 전용 옵션 노출 + 버튼 문구 변경. 기본=clip(기존 동작 그대로).
+  function applyMakeMode() {
+    document.querySelectorAll('.hl-make').forEach((x) => x.classList.toggle('active', x.dataset.make === makeMode));
+    $('hl-remake-opts')?.classList.toggle('hidden', makeMode !== 'remake');
+    const b = $('hl-generate'); if (b) b.textContent = makeMode === 'remake' ? '🎭 이 내용으로 새 영상 만들기' : '🎬 하이라이트 숏폼 만들기';
+  }
+  document.querySelectorAll('.hl-make').forEach((b) => b.addEventListener('click', () => { makeMode = b.dataset.make === 'remake' ? 'remake' : 'clip'; applyMakeMode(); }));
+  document.querySelectorAll('.hl-rmout').forEach((b) => b.addEventListener('click', () => {
+    rmOut = b.dataset.out === 'wan' ? 'wan' : 'image';
+    document.querySelectorAll('.hl-rmout').forEach((x) => x.classList.toggle('active', x.dataset.out === rmOut));
+  }));
+  async function generate(body, endpoint) {
     const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
     resultClips = []; $('hl-result-block')?.classList.add('hidden'); // 새 제작 → 이전 결과 비움
     ['hl-resume','hl-reset'].forEach((id) => $(id)?.classList.add('hidden'));
     try {
-      const d = await (await fetch('/api/generate-highlights', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
+      const d = await (await fetch(endpoint || '/api/generate-highlights', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
       if (d.error) { addLog('[실패] ' + d.error, 'fail'); showStopped(); alert(d.error); return; }
       if (d.id) attachProgress(d.id);
     } catch (e) { addLog('[실패] 시작 실패: ' + e.message, 'fail'); showStopped(); alert('시작 실패: ' + e.message); }
-    finally { btn.disabled = false; btn.textContent = '🎬 하이라이트 숏폼 만들기'; }
+    finally { btn.disabled = false; applyMakeMode(); }
   }
   $('hl-generate')?.addEventListener('click', () => {
     if (!picked) { alert('먼저 영상을 고르세요.'); return; }
     if (curJobId) { alert('이미 제작이 진행 중이에요. 끝나거나 중단한 뒤에 다시 시작하세요.'); return; } // 중복 생성 방지
+    // 🎭 재창작 — 원본을 자르지 않고 그 '내용'으로 우리 이미지·목소리·자막의 새 영상을 만든다(저작권 free).
+    if (makeMode === 'remake') {
+      addLog('──────── 🎭 재창작 시작 ────────', 'done');
+      addLog(`• 원본(소재): ${picked.title}`);
+      addLog('• 방식: 원본 영상·소리·로고 미사용 → 그 이야기로 완전 새 영상(저작권 걱정 0)');
+      addLog(`• 출력: ${rmOut === 'wan' ? '🎬 움직이는영상(툴 제작)' : '🖼 이미지영상'} · 길이 ${sec}초 · ${orient === 'landscape' ? '가로' : '세로'}`);
+      addLog('────────────────────────────');
+      startTs = Date.now(); setEnergy(8, '재창작을 시작합니다…'); estTotalText = '약 3~8분';
+      try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
+      lastBody = {
+        title: picked.title, channel: picked.channel || '',
+        duration: sec, orientation: orient, voice,
+        aiClips: rmOut === 'wan' ? 4 : 0, // >0 = 움직이는영상(앞 4장면 Wan), 0 = 이미지영상
+      };
+      lastEndpoint = '/api/generate-remake';
+      generate(lastBody, lastEndpoint);
+      return;
+    }
     // ★저작권 주의·아카이브(둘리·영화·가요 등 원저작권자 따로) 영상 처리. 테리 실측:
     //   1~3분 쇼츠는 Content ID 걸리면 "전세계 차단". 59초 미만이면 그 차단을 피한다(길이가 핵심).
     //   ※ 길이는 '사용자가 고른 값'을 그대로 존중한다 — 예전엔 60초 이상이면 confirm으로 59초로 강제
@@ -1119,9 +1166,10 @@
     // 소재 출처(작업내역 탭별 이원화) — 내 영상 업로드면 upload, 그 외는 현재 모드(search/url/archive).
     const src = picked.mine ? 'upload' : (['url', 'archive'].includes(mode) ? mode : 'search');
     lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, font, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, captionEn: !!captionEn, source: src, voice, isCc: picked.isCc !== false};
-    generate(lastBody);
+    lastEndpoint = '/api/generate-highlights';
+    generate(lastBody, lastEndpoint);
   });
-  $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody); });
+  $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody, lastEndpoint); });
   // 🗑 취소하고 새 영상 — 로그·진행·결과 싹 비우고 처음부터(다른 영상/설정으로).
   $('hl-reset')?.addEventListener('click', () => {
     if (curJobId && !confirm('진행 중인 제작을 멈추고 전부 비울까요?')) return;
