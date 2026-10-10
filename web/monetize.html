@@ -95,6 +95,29 @@
     .foot { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12.5px; }
     .foot a { color: var(--teal); }
     .theme-btn { margin-left: auto; flex: 0 0 auto; border: 1px solid var(--line); background: var(--card2); color: var(--text); border-radius: 999px; padding: 8px 12px; font-size: 14px; cursor: pointer; }
+
+    /* 서브탭(저작권 / 쇼핑쇼츠) */
+    .subtabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .subtab { flex: 0 0 auto; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-weight: 800; font-size: 14.5px; padding: 10px 18px; border-radius: 999px; }
+    .subtab.active { color: #fff; background: linear-gradient(120deg, var(--teal), var(--purple)); border-color: transparent; }
+
+    /* ★핵심 강조 박스 — 팔레트(틸·퍼플·핑크)와 확 다른 골드/오렌지로 눈에 띄게 */
+    .keybox { margin-top: 16px; border-radius: 18px; padding: 20px 20px; color: #3a2a00;
+      background: linear-gradient(135deg, #ffe259, #ffa751); border: 2.5px solid #ff8c00;
+      box-shadow: 0 14px 36px -14px rgba(255,140,0,.65); }
+    .keybox .kb-tag { display: inline-block; font-weight: 900; font-size: 12px; letter-spacing: .03em;
+      background: #e0410a; color: #fff; padding: 4px 11px; border-radius: 999px; margin-bottom: 10px; }
+    .keybox h3 { margin: 0 0 6px; font-size: 18px; font-weight: 900; color: #7a2b00; }
+    .keybox b { color: #b23c00; }
+    .keybox p { margin: 8px 0 0; font-size: 14.5px; font-weight: 600; }
+    .keybox .sub { font-size: 13.5px; color: #6a4a10; font-weight: 600; }
+
+    .plats { display: grid; gap: 10px; margin-top: 4px; }
+    .plat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 13px 15px; font-size: 14.5px; }
+    .plat b { font-weight: 800; }
+    .plat.direct b { color: var(--teal); } .plat.extra b { color: var(--purple); } .plat.else b { color: var(--pink); }
+    .plat span { color: var(--muted); font-size: 13.5px; }
+
     @media (max-width: 620px) { .tldr, .branch { grid-template-columns: 1fr; } .hero h1 { font-size: 24px; } }
   </style>
 </head>
@@ -108,6 +131,12 @@
   </nav>
 
   <div class="wrap">
+    <div class="subtabs">
+      <button class="subtab active" data-pane="copyright">⚖️ 저작권 · 클레임</button>
+      <button class="subtab" data-pane="shopping">🛒 쇼핑쇼츠로 팔기</button>
+    </div>
+
+    <div id="pane-copyright">
     <div class="hero">
       <div class="eyebrow">ONVIDEO · 저작권 & 수익화 완전정리</div>
       <h1>클레임은 '벌'이 아니다.<br/>조건일 뿐이다.</h1>
@@ -221,6 +250,111 @@
       출처: YouTube 고객센터(Content ID claims / claimed content 제거), TrademarkEngine(claim vs strike).<br/>
       <b>OnVideo</b> — 링크 하나로 영상.
     </div>
+    </div><!-- /pane-copyright -->
+
+    <!-- ═══════════ 쇼핑쇼츠 ═══════════ -->
+    <div id="pane-shopping" hidden>
+      <div class="hero" style="background:linear-gradient(130deg,#6b4cf0 0%,#12a998 70%,#ffa751 130%)">
+        <div class="eyebrow">ONVIDEO · 쇼핑쇼츠 & 유튜브 쇼핑 완전정리</div>
+        <h1>쇼츠로 파는 법 —<br/>지금 되는 것 / 안 되는 것</h1>
+        <p>쇼츠에서 "바로 클릭 구매"는 유튜브가 막아놨다. 진짜 되는 건 딱 정해져 있다. 온종일팜 기준으로 정리.</p>
+        <div class="chips">
+          <span class="chip">🔗 쇼츠 설명란 링크 클릭 ❌</span>
+          <span class="chip">🏷 쇼핑태그 = YPP 필요</span>
+          <span class="chip">🛒 자사몰도 머천트센터로 연결 ✅</span>
+        </div>
+      </div>
+
+      <div class="tldr">
+        <div class="box"><b>한 줄 요약 ①</b><span>쇼츠는 '바로 결제' 기계가 아니라 '브랜드 검색·방문 만드는' 기계다. 즉시 클릭 판매는 쇼핑태그밖에 없다.</span></div>
+        <div class="box p"><b>한 줄 요약 ②</b><span>온종일팜 자체몰도 구글 머천트센터로 유튜브 쇼핑 연결 가능 — 카페24 필수 아님. 남은 벽은 YPP 자격 하나뿐.</span></div>
+      </div>
+
+      <!-- S1 -->
+      <section>
+        <div class="sec-h"><div class="num">1</div><h2>"클릭 → 바로 판매" 되나?</h2></div>
+        <div class="sec-sub">표면별로 되는 게 다르다. 쇼츠가 제일 빡세다.</div>
+        <div class="card">
+          <table class="cmp">
+            <thead><tr><th>표면</th><th class="c-claim">클릭 되나</th><th class="c-strike">현실</th></tr></thead>
+            <tbody>
+              <tr><td>쇼츠 설명란·댓글 링크</td><td><span class="tag-bad">❌ 안 됨</span></td><td>스팸방지로 막힘. 복붙해야 열림(거의 안 함).</td></tr>
+              <tr><td>일반영상(롱폼)·커뮤니티 게시물</td><td><span class="tag-ok">✅ 됨</span></td><td>링크 클릭 되지만 쇼츠보다 도달이 약함.</td></tr>
+              <tr><td>QR코드 영상에 박기</td><td><span class="tag-bad">❌ 쇼츠엔 무의미</span></td><td>폰으로 쇼츠 보는 중엔 그 폰으로 못 찍음(화면 하나).</td></tr>
+              <tr><td>쇼핑 태그(상품칩)</td><td><span class="tag-ok">✅ 됨</span></td><td>쇼츠에서 유일하게 화면 보고 바로 구매. 단 YPP 자격 필요.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- S2 -->
+      <section>
+        <div class="sec-h"><div class="num">2</div><h2>쇼핑 태그 자격 기준</h2></div>
+        <div class="sec-sub">구독자 수만으론 안 된다. 시청시간/조회가 같이 필요.</div>
+        <div class="card">
+          <ul class="check">
+            <li><b>제휴(남의 상품 태그)</b> = 구독 500명 + YPP (2026.3월 1만 → 500으로 완화).</li>
+            <li><b>자사몰(내 상품 = 온종일팜)</b> = YPP 가입이 조건.</li>
+            <li><b>YPP 기준</b> = 구독 <b>500명</b> <b>그리고</b> (최근 12개월 공개영상 시청 <b>3,000시간</b> <u>또는</u> 쇼츠 90일 <b>300만 조회</b>). <b>구독만으론 안 됨.</b></li>
+            <li>수수료: 유튜브 플랫폼 수수료 <b>0원</b>(연동 플랫폼 자체 월정액·수수료는 별도).</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- S3 -->
+      <section>
+        <div class="sec-h"><div class="num">3</div><h2>쇼핑 태그 연동 가능 플랫폼</h2></div>
+        <div class="sec-sub">아무 쇼핑몰이나 되는 게 아니다. 종류별로 절차가 다름.</div>
+        <div class="plats">
+          <div class="plat direct"><b>직접 연동</b> — 카페24, 마플샵 <span>· 스토어 연결 버튼에서 바로. 별도 신청·승인 없음.</span></div>
+          <div class="plat extra"><b>별도 절차</b> — 네이버 스마트스토어 <span>· 신청·승인 한 단계 거친 뒤 연동.</span></div>
+          <div class="plat else"><b>그 외 지원(주로 제휴)</b> — 쿠팡, 11번가, 지그재그, 에이블리, 브랜디, 아임웹, 메이크샵 <span>· 쿠팡파트너스처럼 남의 상품 태그 → 수수료.</span></div>
+        </div>
+      </section>
+
+      <!-- S4 -->
+      <section>
+        <div class="sec-h"><div class="num">4</div><h2>쇼핑 태그 연동 절차</h2></div>
+        <div class="sec-sub">YouTube 스튜디오에서 5단계.</div>
+        <div class="steps">
+          <div class="step"><div class="dot">1</div><div><b>YouTube 스튜디오 접속</b></div></div>
+          <div class="step"><div class="dot">2</div><div><b>수익 창출</b> 메뉴</div></div>
+          <div class="step"><div class="dot">3</div><div><b>쇼핑</b> 탭</div></div>
+          <div class="step"><div class="dot">4</div><div><b>스토어 연결</b> → 플랫폼 선택(또는 머천트센터)</div></div>
+          <div class="step"><div class="dot">5</div><div><b>영상에 상품 태그</b> → 상품칩 노출</div></div>
+        </div>
+      </section>
+
+      <!-- S5 -->
+      <section>
+        <div class="sec-h"><div class="num">5</div><h2>쇼핑 태그 없이 '지금' 할 수 있는 것</h2></div>
+        <div class="sec-sub">YPP 자격 전까지의 현실. 즉시 클릭 판매는 안 되고, '검색·방문'을 만든다.</div>
+        <div class="card">
+          <ul class="check">
+            <li><b>브랜드 검색 유도(메인)</b> — 쇼츠마다 "온종일팜" 이름·로고 각인 + "온종일팜 검색👆". 보는 사람이 네이버·유튜브에 검색 → 자사몰 방문. OnVideo가 매 쇼츠에 자동 삽입.</li>
+            <li><b>채널 프로필 링크</b> — 폰에서 유일하게 클릭되는 표면. 온종일팜 링크 1회 걸어둠(최대 14개).</li>
+            <li><b>하이브리드 퍼널</b> — 쇼츠 끝에 "자세한 건 채널 영상" → 롱폼영상(거긴 설명란 링크 클릭됨)으로 유도.</li>
+          </ul>
+          <div class="warn"><b>솔직히:</b> 쇼핑태그·YPP 없이 쇼츠에서 '바로 사게' 하는 방법은 존재하지 않는다. 위 3개는 전부 '검색·방문 만들기'의 변주다.</div>
+        </div>
+      </section>
+
+      <!-- ★KEY -->
+      <section>
+        <div class="keybox">
+          <span class="kb-tag">★ 가장 중요 · 결론</span>
+          <h3>온종일팜 자체몰도 유튜브 쇼핑에 연결된다 — 카페24 필수 아님</h3>
+          <p>자체 사이트도 <b>구글 머천트센터(Merchant Center)에 상품 피드를 올리면</b> 유튜브 쇼핑에 직접 연결할 수 있다(유튜브 공식). "지원 플랫폼(카페24·Shopify 등)이 아니면 Merchant Center에 직접 올려 연결하라"고 명시돼 있다. <b>→ 남은 벽은 YPP 자격(구독 500 + 시청시간) 하나뿐.</b></p>
+          <p class="sub">※ 유료 광고(Demand Gen)는 YPP 없이 머천트센터만으로 shoppable 가능하지만, <b>쇼츠는 아직 상품피드 미지원</b>(스마트TV만) → 쇼츠 즉시판매엔 아직 안 맞음.</p>
+        </div>
+      </section>
+
+      <div class="foot">
+        2026-10-10 정리 · 테리 ↔ 클로드 리서치 기준.<br/>
+        출처: YouTube 고객센터(Shopping on YouTube / store data sources), Google Merchant Center Help, Google Ads(Demand Gen 상품피드), 카페24 유튜브쇼핑, PPC.land(제휴 500명 완화).<br/>
+        <b>OnVideo</b> — 링크 하나로 영상.
+      </div>
+    </div><!-- /pane-shopping -->
   </div>
 
   <script>
@@ -238,6 +372,23 @@
         else { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem(k, 'dark'); }
         sync();
       });
+    })();
+
+    // 서브탭(저작권 / 쇼핑쇼츠) — ?tab=shopping 딥링크 지원.
+    (function () {
+      var tabs = document.querySelectorAll('.subtab');
+      var panes = { copyright: document.getElementById('pane-copyright'), shopping: document.getElementById('pane-shopping') };
+      function show(name) {
+        if (!panes[name]) name = 'copyright';
+        panes.copyright.hidden = name !== 'copyright';
+        panes.shopping.hidden = name !== 'shopping';
+        tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.pane === name); });
+        try { history.replaceState(null, '', name === 'shopping' ? '?tab=shopping' : location.pathname); } catch (e) {}
+        window.scrollTo(0, 0);
+      }
+      tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.pane); }); });
+      var p = new URLSearchParams(location.search).get('tab');
+      if (p === 'shopping') show('shopping');
     })();
   </script>
 </body>
