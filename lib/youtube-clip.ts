@@ -89,18 +89,28 @@ export async function searchArchiveChannel(
   const end = offset + want;
   // ★채널 내 검색(/search)을 먼저 시도하고, 결과가 없으면 전체 목록(/videos)으로 폴백.
   //   일부 채널(한글 핸들·일부 아카이브)은 /search가 비어서, 검색어 유무와 무관하게 /videos를 긁어야 한다.
+  // ★긁기 실패 사유를 조용히 삼키지 말고 남긴다(테리 진단 규칙) — 빈 목록이 '진짜 없음'인지 '긁기 실패'인지
+  //   구분 못 하면 "결과 없음"만 뜨고 원인(프록시 터널·봇차단·타임아웃)을 못 본다.
+  let lastErr = '';
   const fetchFrom = async (path: string): Promise<any[]> => {
     const url = base + path;
     try {
       const out = await run(YTDLP, [...flat, '--flat-playlist', '--playlist-start', String(start), '--playlist-end', String(end), '-J', url], () => {}, 60000);
       const data = JSON.parse(out);
       return Array.isArray(data?.entries) ? data.entries : [];
-    } catch { return []; }
+    } catch (e: any) { lastErr = (e?.message || '').replace(/\s+/g, ' ').slice(-220); return []; }
   };
   log(`[아카이브] "${channel}"에서 "${query || '최신'}" 가져오는 중…${offset ? ` (${start}~${end}번째)` : ''}`);
   let entries: any[] = [];
   if (query && query.trim()) entries = await fetchFrom(`/search?query=${encodeURIComponent(query)}`);
   if (!entries.length) entries = await fetchFrom('/videos'); // 검색 안 되는 채널·검색어 없음 → 전체 목록
+  // 긁기 자체가 실패(에러)였는데 0개면 '없음'이 아니라 '실패' — 사유를 올려 UI가 진짜 원인을 보여주게.
+  if (!entries.length && lastErr) {
+    const botBlocked = /not a bot|Sign in to confirm|cookies|consent|Tunnel connection|proxy/i.test(lastErr);
+    throw new Error(botBlocked
+      ? `목록을 가져오지 못했어요(프록시/봇차단 추정): ${lastErr}`
+      : `목록을 가져오지 못했어요: ${lastErr}`);
+  }
   const list = entries.filter((e) => e && e.id).map((e): ArchiveVideo => ({
     id: e.id,
     title: e.title || '(제목 없음)',
