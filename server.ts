@@ -1773,6 +1773,32 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     return json(res, 202, {id});
   }
 
+  // ── 📥 완성 영상 가져오기: 외부/로컬에서 만든 mp4(+썸네일)를 포트폴리오에 등록. 유튜브·인스타·다운로드 재활용. ──
+  if (p === '/api/portfolio/import' && req.method === 'POST') {
+    const b = await readBody(req);
+    const title = String(b.title || '').trim() || '가져온 영상';
+    const mp4 = String(b.mp4 || ''); // base64(프리픽스 없음)
+    if (!mp4) return json(res, 400, {error: 'mp4(base64)가 필요합니다.'});
+    const origin: 'video' | 'remake' | 'create' = ['video', 'remake', 'create'].includes(b.origin) ? b.origin : 'video';
+    const orientation: 'portrait' | 'landscape' = b.orientation === 'landscape' ? 'landscape' : 'portrait';
+    const tmp = path.join(os.tmpdir(), 'imp-' + randomUUID().slice(0, 8));
+    try {
+      fs.mkdirSync(tmp, {recursive: true});
+      const outPath = path.join(tmp, 'v.mp4');
+      fs.writeFileSync(outPath, Buffer.from(mp4, 'base64'));
+      let thumbPath: string | undefined;
+      if (b.thumb) { thumbPath = path.join(tmp, 't.png'); fs.writeFileSync(thumbPath, Buffer.from(String(b.thumb), 'base64')); }
+      const cat = String(b.category || (origin === 'remake' ? '🎭 재창작' : origin === 'create' ? '✍️ 창작' : '🎬 영상'));
+      const pid = await registerVideoToPortfolio({
+        out: outPath, thumb: thumbPath, title, voice: String(b.voice || '가져옴'),
+        category: cat, goal: 'issue', origin, orientation, durSec: Number(b.durSec) || 30,
+        source: 'upload', motion: !!b.motion,
+      });
+      return json(res, 200, {ok: true, projectId: pid});
+    } catch (e: any) { return json(res, 500, {error: '가져오기 실패: ' + (e?.message || e)}); }
+    finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch {} }
+  }
+
   // ── 수동 모드: 직접 넣은 이미지 + 키워드로 생성 ──
   if (p === '/api/generate-manual' && req.method === 'POST') {
     const b = await readBody(req);
