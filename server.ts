@@ -654,6 +654,7 @@ const server = http.createServer(async (req, res) => {
         thumb: isPost ? '' : `/portfolio-thumb/${it.projectId}.png`,
         score: typeof it.score === 'number' ? it.score : undefined, // 하이라이트 바이럴 점수
         source: it.source, // 하이라이트 소재 출처(작업내역 탭별 이원화): search/url/upload/archive
+        motion: !!it.motion, // 움직이는 영상(Wan)이면 '🎬 영상' 배지
       };
     });
     const sampleYt = loadSampleYouTube();
@@ -1586,6 +1587,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
             durSec: Number(b.duration) || 30,
             attribution: title ? `원 소재: ${title}` : undefined,
             source: 'archive',
+            motion: (Number(b.aiClips) || 0) > 0, // 움직이는영상(Wan)이면 작업내역 '🎬 영상' 배지
             log: (m) => jlog(job, m),
           });
           job.projectId = pid;

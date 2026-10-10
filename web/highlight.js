@@ -421,6 +421,7 @@
   let mode = 'search'; // 소재 가져오는 방법: search(주제로 찾기) / url(영상 URL 붙여넣기)
   let makeMode = 'clip'; // 제작 방식: clip(원본 자르기=하이라이트) / remake(재창작=내용만 뽑아 새 영상)
   let rmOut = 'image';   // 재창작 출력: image(이미지영상) / wan(움직이는영상)
+  let rmClips = 1;       // 재창작 움직이는영상 장면 수(기본 1) — restoreState 전에 선언(TDZ 방지)
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
   const STATE_KEY = 'onvideo-hl-state';
@@ -428,6 +429,7 @@
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
         region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, captionEn, voice, font, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
+        makeMode, rmOut, rmClips, // 재창작 설정도 저장(탭 나갔다 와도 유지 — 테리 지시)
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -466,6 +468,11 @@
     $('hl-voice-row')?.classList.toggle('hidden', !commentary);
     $('hl-en-row')?.classList.toggle('hidden', !commentary);
     document.querySelectorAll('.hl-en').forEach((b) => b.classList.toggle('active', Number(b.dataset.en) === captionEn));
+    // 재창작 설정 복원(탭 나갔다 와도 유지). applyMakeMode가 clip-only 숨김·버튼문구·목소리행까지 다시 맞춘다.
+    makeMode = s.makeMode === 'remake' ? 'remake' : 'clip';
+    rmOut = s.rmOut === 'wan' ? 'wan' : 'image';
+    rmClips = Math.max(1, Math.min(20, Number(s.rmClips) || 1));
+    applyMakeMode();
     // 버튼 활성 복원
     document.querySelectorAll('.hl-region').forEach((b) => b.classList.toggle('active', b.dataset.region === region));
     document.querySelectorAll('.hl-order').forEach((b) => b.classList.toggle('active', b.dataset.order === order));
@@ -1086,7 +1093,6 @@
     $('hl-result-block')?.classList.add('hidden');
     ['hl-stop','hl-resume','hl-reset'].forEach((id) => $(id)?.classList.add('hidden'));
   }
-  let rmClips = 1; // 재창작 움직이는영상 장면 수(기본 1)
   // 제작 방식 토글(하이라이트/재창작) — 재창작이면 전용 옵션 노출 + 하이라이트 전용 옵션 숨김 + 버튼 문구 변경.
   function applyMakeMode() {
     const remake = makeMode === 'remake';

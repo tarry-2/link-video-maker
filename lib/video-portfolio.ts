@@ -31,6 +31,7 @@ export type VideoRegister = {
   durSec?: number;
   attribution?: string;      // 출처 표기(재창작 소재).
   source?: 'search' | 'url' | 'upload' | 'archive';
+  motion?: boolean;          // 움직이는 영상(Wan)인지 — 작업내역 '🎬 영상' 배지.
   log?: (m: string) => void;
 };
 
@@ -88,11 +89,13 @@ export async function registerVideoToPortfolio(reg: VideoRegister): Promise<stri
   }
 
   writeProject(dir, proj);
+  if (reg.motion) proj.motion = true;
   addPortfolio({
     projectId: id, title: reg.title, output,
     voice: reg.voice, category: reg.category, goal: reg.goal || 'issue',
     createdAt: proj.createdAt, orientation: reg.orientation || 'portrait',
     kind: 'video', source: reg.source || 'archive', attribution: reg.attribution,
+    motion: !!reg.motion,
   });
   log('[완료] 포트폴리오에 등록됐습니다 — 유튜브·인스타 업로드·다운로드 가능.');
   return id;

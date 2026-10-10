@@ -61,6 +61,7 @@
       .pf-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); opacity: .92; }
       .pf-yt-badge { position: absolute; top: 8px; right: 8px; background: #ff0000; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-ig-badge { position: absolute; top: 8px; left: 8px; background: linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
+      .pf-motion-badge { position: absolute; bottom: 8px; left: 8px; background: linear-gradient(120deg,#6b4cf0,#12a998); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-ig-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #dc2743; text-decoration: none; }
       /* 📊 성과 패널 */
       .yt-stats { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; margin-bottom: 18px; }
@@ -337,7 +338,7 @@
           fig.dataset.idx = i;
           const thumbBox = isPost
             ? `<div class="pf-thumb post"><img src="${esc(it.thumb || (it.images && it.images[0]) || '')}" alt="" loading="lazy">${(it.images && it.images.length) ? `<span class="pf-card-count">🎴 ${it.images.length}장</span>` : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>`
-            : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>`;
+            : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.motion ? '<span class="pf-motion-badge">🎬 영상</span>' : ''}${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>`;
           const madeTxt = it.createdAt ? new Date(it.createdAt).toLocaleDateString('ko-KR', {year: 'numeric', month: 'long', day: 'numeric'}) : '';
           fig.innerHTML = `${thumbBox}
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${esc(it.title)}</h3>${madeTxt ? `<p class="pf-made">📅 ${esc(madeTxt)} 제작</p>` : ''}</figcaption>`;
