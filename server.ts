@@ -1788,6 +1788,17 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       fs.writeFileSync(outPath, Buffer.from(mp4, 'base64'));
       let thumbPath: string | undefined;
       if (b.thumb) { thumbPath = path.join(tmp, 't.png'); fs.writeFileSync(thumbPath, Buffer.from(String(b.thumb), 'base64')); }
+      else {
+        // 썸네일 미제공 → 영상 첫 프레임을 ffmpeg로 뽑아 커버로(최소한 미리보기는 뜨게).
+        try {
+          const { execFile } = await import('node:child_process');
+          const { promisify } = await import('node:util');
+          const ff = process.env.FFMPEG_PATH || 'ffmpeg';
+          const tp = path.join(tmp, 't.png');
+          await promisify(execFile)(ff, ['-y', '-ss', '1', '-i', outPath, '-frames:v', '1', tp], {timeout: 60000});
+          if (fs.existsSync(tp)) thumbPath = tp;
+        } catch { /* 썸네일 추출 실패 시 무시(첫프레임 폴백 없이 등록) */ }
+      }
       const cat = String(b.category || (origin === 'remake' ? '🎭 재창작' : origin === 'create' ? '✍️ 창작' : '🎬 영상'));
       const pid = await registerVideoToPortfolio({
         out: outPath, thumb: thumbPath, title, voice: String(b.voice || '가져옴'),
