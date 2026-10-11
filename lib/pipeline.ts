@@ -239,10 +239,10 @@ export async function makeVideo(
       const clipRel = `${pubRel}/clip-${i}.mp4`;
       // 모션 큐는 스타일 결에 맞게(실사=사실적, 일러스트=부드러운 애니, 고전=아날로그 필름).
       const motionCue = style.id === 'classic'
-        ? 'gentle period-film motion, soft vintage camera pan, subtle flicker and film grain, smooth and fluid'
+        ? 'lively period-film motion, the character moves and gestures expressively, cinematic camera, subtle film grain'
         : style.illustration
-        ? 'smooth animated motion, gentle character movement, soft parallax camera, fluid 2D animation'
-        : 'natural lifelike motion, subtle cinematic camera movement, smooth and fluid';
+        ? 'energetic animated motion, the character runs, jumps, gestures and talks expressively, dynamic 2D animation'
+        : 'lively realistic motion, the person walks, gestures and talks with clear visible movement, dynamic cinematic camera';
       try {
         if (!fs.existsSync(abs(imgRel))) throw new Error('시작 이미지가 없음');
         const secs = (wantNarration && sceneRanges[i]) ? Math.max(4, Math.min(10, Math.round((sceneRanges[i][1] - sceneRanges[i][0]) || 5))) : 5;

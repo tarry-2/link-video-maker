@@ -41,11 +41,11 @@ function cameraFor(shot?: string): string {
 //   i2v는 스틸이 피사체·룩을 이미 주므로 '바뀔 것(동작·카메라)'만. 정적 금지→미세동작. 샷당 카메라 1개.
 export function seedancePrompt(opts: {motion?: string; characterLook?: string; shot?: string} = {}): string {
   const parts: string[] = [];
-  parts.push(opts.motion && opts.motion.trim() ? opts.motion.trim() : 'the subject moves subtly and naturally');
-  parts.push('subtle lifelike micro-motion: slow breathing, a slight natural head turn, eyes blinking, hair and clothing drifting gently');
-  parts.push(`${cameraFor(opts.shot)}, slow and smooth`);
+  parts.push(opts.motion && opts.motion.trim() ? opts.motion.trim() : 'the subject moves naturally and energetically');
+  parts.push('lively, dynamic full-body motion: the character walks, moves through the scene, gestures with hands, and talks with clear lip and facial movement — full of life and energy like a real movie shot (NOT a still photo, NOT just subtle breathing)');
+  parts.push(`${cameraFor(opts.shot)}, cinematic and dynamic`);
   if (opts.characterLook && opts.characterLook.trim()) parts.push(`the person is ${opts.characterLook.trim()}; keep this exact same person`);
-  parts.push('keep the character identity perfectly consistent for the whole shot — same face, same hairstyle, same clothing; do NOT change, morph, swap, duplicate, or age the character');
+  parts.push('keep the SAME face, hairstyle and clothing throughout the shot (do NOT change, morph or swap the identity), but let the body, pose, gestures and facial expression move freely and vividly');
   parts.push(SEEDANCE_CINE);
   return parts.join('. ');
 }

@@ -84,10 +84,10 @@ export const studioProviders: StudioDependencies = {
     const aspect: '16:9' | '9:16' = landscape ? '16:9' : '9:16';
     const style = getStyle(p.input.imageStyle);
     const motionCue = style.id === 'classic'
-      ? 'gentle period-film motion, soft vintage camera pan, subtle flicker and film grain, smooth and fluid'
+      ? 'lively period-film motion, the character moves and gestures expressively, cinematic camera, subtle film grain'
       : style.illustration
-      ? 'smooth animated motion, gentle character movement, soft parallax camera, fluid 2D animation'
-      : 'natural lifelike motion, subtle cinematic camera movement, smooth and fluid';
+      ? 'energetic animated motion, the character runs, jumps, gestures and talks expressively, dynamic 2D animation'
+      : 'lively realistic motion, the person walks, gestures and talks with clear visible movement, dynamic cinematic camera';
 
     // ★영화 엔진 라우팅(테리 2026-10-11): 스튜디오(영상만들기)는 장면에 인물 정보가 없어 '풍경 취급' —
     //   RunPod Wan(충전 크레딧) 먼저 쓰고, 소진·실패 시 Replicate Seedance로 자동 전환. 런팟 없으면 바로 Replicate.
