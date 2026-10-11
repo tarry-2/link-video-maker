@@ -63,6 +63,11 @@ export type Word = {t: string; s: number; e: number}; // s,e = 프레임
 // 자막(화면)에는 원문 그대로 두고, ★음성으로 보낼 때만 부호를 부드럽게 바꾼다.
 function speakable(text: string): string {
   return text
+    // ★TTS 안전망: 혹시 남은 화면 지문·효과음을 음성에서 제거(대사만 읽히게). script.ts가 1차로 거르는 2중 방어.
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/（[^）]*）/g, ' ')
+    .replace(/【[^】]*】/g, ' ')
     .replace(/[!]+/g, ',') // 느낌표 → 쉼표(자연스러운 짧은 쉼, 억양 안 튐)
     .replace(/[?]{2,}/g, '?') // 물음표 연발 정리
     .replace(/~+/g, '') // 물결은 음성에선 무의미 → 제거

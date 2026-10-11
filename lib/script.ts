@@ -29,6 +29,22 @@ export function normalizeEnding(text: string): string {
   return t;
 }
 
+// ★화면 지문·효과음 제거 — narration은 '귀로 들려줄 말(대사·나레이션)'만 담아야 한다.
+//   "(문이 천천히 열린다)", "[효과음: 쾅]", "효과음: ~", "지문: ~" 같은 게 섞이면 TTS가 그대로 읽어
+//   "대사 아닌 효과·상황까지 읽는" 문제가 된다(테리 핵심 지적). 음성·자막 둘 다 narration을 쓰므로 여기서 정제.
+//   ※괄호 없는 상황 서술("문이 열린다")은 여기서 못 잡으니 대본 프롬프트에서 막는다(상호 보완).
+export function stripStageDirections(text: string): string {
+  return (text || '')
+    .replace(/\([^)]*\)/g, ' ')      // (지문)
+    .replace(/\[[^\]]*\]/g, ' ')     // [지문]
+    .replace(/（[^）]*）/g, ' ')      // 전각 ( )
+    .replace(/【[^】]*】/g, ' ')      // 전각 [ ]
+    // 줄머리 지문 레이블(효과음:/지문:/나레이션:/해설: 등) 제거
+    .replace(/^\s*(효과음|음향|음악|배경음|BGM|SFX|지문|나레이션|내레이션|해설|자막|대사|장면|컷|씬|scene|sfx)\s*[:：]\s*/gim, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 // ★영상 자막·후킹·나레이션의 이모지 제거 — Remotion 폰트(Noto Sans KR/Black Han Sans)엔
 //   이모지 글리프가 없어 두부(네모 ⊠)로 깨진다. 자막엔 이모지 금지(제목은 유튜브용이라 유지).
 export function stripEmoji(text: string): string {
@@ -235,7 +251,7 @@ ${opts.creative ? `[★★★이야기 설계 — 가장 중요: '하나의 일�
 - ${endingRule}
 
 [각 장면 필드]
-- narration: 나레이션 한국어. ★장면당 약 ${perScene}자(공백 포함, 이 글자수를 꼭 지켜라 — 영상이 목표 ${duration}초에 맞아야 한다. 훨씬 짧거나 길면 안 됨). 정보를 빠르게 착착 밀어붙이는 다큐 나레이션 톤(지루할 틈 없이). 구어체, 몰입감. 숫자·핵심은 또렷하게.
+- narration: 나레이션 한국어. ★★★절대규칙(가장 중요): narration엔 '소리내어 읽을 말(대사·나레이션)'만 써라. 괄호()·대괄호[]로 효과음·상황·동작·지문을 절대 넣지 마라("(문이 천천히 열린다)"·"[효과음: 쾅]"·"효과음:"·"지문:" 류 전부 금지). narration은 글자 그대로 TTS로 읽히므로, 지문을 넣으면 그 글자까지 전부 읽어버려 영상이 망가진다. ★장면당 약 ${perScene}자(공백 포함, 이 글자수를 꼭 지켜라 — 영상이 목표 ${duration}초에 맞아야 한다. 훨씬 짧거나 길면 안 됨). 정보를 빠르게 착착 밀어붙이는 다큐 나레이션 톤(지루할 틈 없이). 구어체, 몰입감. 숫자·핵심은 또렷하게.
   ★★내용의 질(매우 중요): 매 문장에 알맹이가 있어야 한다. 뻔한 말·빈말·같은 말 반복·당연한 소리 금지. 구체적인 숫자·방법·근거·실제 예시로 "오 이건 몰랐네" 싶게 만들어라. 두루뭉술("건강에 좋아요")하지 말고 구체적("하루 10분, 2주면 혈압이 눈에 띄게 떨어집니다")으로. 각 장면 끝은 다음이 궁금하게 끊어 완주율을 높여라.
   ★자연스럽게 이어 읽히게 써라(TTS가 로봇처럼 끊지 않도록): 느낌표(!)를 남발하지 마라(장면당 최대 1개). 짧은 단어를 "휘!휘!"처럼 느낌표로 뚝뚝 끊지 말고, "휘휘 돌려주면" 또는 "휘~ 휘~ 돌려주면"처럼 자연스러운 흐름으로. 의성어·의태어는 물결(~)이나 쉼표로 부드럽게 잇고, 딱딱한 감탄사 나열 금지.
   ★★★화면 중계 절대 금지(블록버스터 영화의 원칙 — 특히 서사/드라마형): 나레이션으로 '화면에 보이는 것·효과·동작'을 말로 설명하지 마라. "바위가 둥둥 떠오른다", "손잡이를 천천히 돌린다", "빛이 번진다", "문이 열린다" 같은 건 영상이 이미 보여준다 — 말로 또 하면 싸구려 해설이 되고 몰입이 깨진다. 대신 그 순간 인물의 '대사(직접 하는 말)·속마음·감정·결심·그 상황의 의미'를 말하라(그림이 못 하는 것만). 예: (❌)"문이 천천히 열린다" → (⭕)"이 문을 열면, 다신 못 돌아와." / (❌)"그녀가 뒤돌아본다" → (⭕)"제발… 가지 마." 영화 대사·독백처럼 써라. (단, 음식·정보 같은 단일 소재형은 정보 전달 나레이션이 맞으니 이 규칙은 서사/드라마형에 적용.)
@@ -375,8 +391,8 @@ ${draftJson}`;
     const strong = await intensifyHooks(geminiKeys, sb.scenes.map((s) => ({hookTop: s.hookTop, hookAccent: s.hookAccent, context: s.narration || ''})), opts.log);
     sb.scenes.forEach((s, i) => { if (strong[i]) { s.hookTop = strong[i].hookTop; s.hookAccent = strong[i].hookAccent; } });
   } catch (e: any) { opts.log?.('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
-  // ★모든 장면 나레이션 끝맺음 정규화(쉼표로 끊기는 버그 방지 — 음성·자막 둘 다 반영)
-  for (const s of sb.scenes) s.narration = normalizeEnding(s.narration);
+  // ★화면 지문·효과음 제거(대사 아닌 걸 TTS가 읽는 문제) → 끝맺음 정규화. 음성·자막 둘 다 반영.
+  for (const s of sb.scenes) s.narration = normalizeEnding(stripStageDirections(s.narration));
   // 썸네일 전용 문구 이모지 제거(폰트 깨짐 방지).
   if (sb.thumb) sb.thumb = {big: stripEmoji(String(sb.thumb.big || '')), small: stripEmoji(String(sb.thumb.small || '')), badge: stripEmoji(String(sb.thumb.badge || ''))};
   return sb;
