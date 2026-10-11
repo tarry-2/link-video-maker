@@ -111,6 +111,11 @@
         <div class="cr-chips" id="cr-genres"></div>
         <div class="cr-field">
           <input id="cr-brief" class="input" placeholder="(선택) 자유롭게 한 줄 — 예: 비 오는 밤, 복수를 결심한 형사" />
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <button id="cr-topic-btn" type="button" class="ghost-btn small">🔥 핫한 주제 추천받기</button>
+            <span id="cr-topic-state" class="mini-state"></span>
+          </div>
+          <div id="cr-topic-list" style="margin-top:8px;display:flex;flex-direction:column;gap:6px"></div>
         </div>
         <h2 class="block-title" style="margin-top:14px"><span class="st-no">02</span> 설정</h2>
         <div class="cr-field"><span class="field-label">편 수 <span style="color:var(--teal)">(여러 편 = 시리즈)</span></span><div class="seg" id="cr-eps"></div>

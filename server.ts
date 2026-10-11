@@ -1406,6 +1406,41 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     return json(res, 502, {error: '주제 추천 실패(재시도 후): ' + lastErr});
   }
 
+  // ── ✍️ 창작 전용 주제 추천: 장르(미스터리·복수·사랑 등)에 맞는 '지금 조회수 터지는 숏드라마·썰' 주제 ──
+  if (p === '/api/create-topics' && req.method === 'GET') {
+    const genres = (u.searchParams.get('genres') || '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 5);
+    const k = pipelineKeys();
+    if (!k.gemini.length && !k.openai) return json(res, 400, {error: '키 설정에서 Gemini 또는 OpenAI 키를 저장하세요.'});
+    const genreLine = genres.length ? genres.join('·') : '미스터리·반전·사랑·복수·감동';
+    const prompt = `너는 전 세계 세로 숏드라마(ReelShort·DramaBox)와 한국 '썰' 쇼츠에서 조회수·완주율 최상위를 뽑는 기획자다.
+지금 사람들이 끝까지 보고 공유하는 '${genreLine}' 결의 **오리지널 창작 이야기 주제** 8개를 제안하라(실제 뉴스·실화 아님, 지어낼 이야기의 '씨앗').
+[원칙]
+- 첫 3초에 스크롤을 멈추는 강한 후킹이 제목에 담겨야 한다(궁금증 갭·반전 예고·충격 설정·금지된 비밀).
+- 한 줄로 '누가 어떤 위기·비밀·반전에 빠지는지'가 그려지는 구체적인 설정. 막연·뻔한 클리셰(흔한 삼각관계·단순 복수) 금지, 신선한 훅.
+- 60~120초 세로 영상 1편으로 기승전결이 완결되는 규모.
+- 정치·종교·과한 선정성·혐오 제외.
+JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·설정 한 줄","why":"왜 터지는지 10자 이내"}]}`;
+    const clean = (s: any) => String(s || '').replace(/\*+/g, '').replace(/^\s*[-#>]+\s*/, '').replace(/`/g, '').trim();
+    const extract = (raw: string): {title: string; why: string}[] | null => {
+      let s = String(raw || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+      const m = s.match(/\{[\s\S]*\}/); if (!m) return null;
+      const data = JSON.parse(m[0]);
+      return (Array.isArray(data.topics) ? data.topics : []).slice(0, 8).map((t: any) => ({title: clean(t.title), why: clean(t.why)})).filter((t: any) => t.title);
+    };
+    let lastErr = '빈 응답';
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        let raw = '';
+        if (k.gemini.length) { try { raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 1024, temperature: attempt === 0 ? 1.15 : 0.8}); } catch (e: any) { lastErr = e?.message || '생성 실패'; } }
+        if (!raw && k.openai) raw = await openaiJson(k.openai, prompt, 1024);
+        const topics = extract(raw);
+        if (topics && topics.length) return json(res, 200, {topics});
+        lastErr = raw ? 'JSON 파싱 실패' : lastErr;
+      } catch (e: any) { lastErr = e?.message || 'JSON 파싱 실패'; }
+    }
+    return json(res, 502, {error: '주제 추천 실패(재시도 후): ' + lastErr});
+  }
+
   // ── 카테고리 목록 ──
   if (p === '/api/categories')
     return json(res, 200, {

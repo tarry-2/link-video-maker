@@ -423,6 +423,24 @@
     rd.readAsDataURL(f);
   };
 
+  // ── 🔥 핫한 주제 추천(선택한 장르 기반) — 클릭하면 brief에 넣기, 재생성, 직접입력은 그대로 ──
+  async function loadTopics() {
+    const btn = $('cr-topic-btn'), st = $('cr-topic-state'), box = $('cr-topic-list');
+    if (!btn) return;
+    btn.disabled = true; if (st) st.textContent = '🔥 지금 터지는 주제 뽑는 중…';
+    try {
+      const qs = genres.length ? '?genres=' + encodeURIComponent(genres.join(',')) : '';
+      const d = await (await fetch('/api/create-topics' + qs)).json();
+      if (!d.topics || !d.topics.length) throw new Error(d.error || '추천 실패');
+      if (box) box.innerHTML = d.topics.map((t) => `<button type="button" class="ghost-btn small cr-topic-pick" style="text-align:left;width:100%;white-space:normal;line-height:1.5" data-t="${esc(t.title)}">${esc(t.title)}${t.why ? ` <span style="color:var(--teal)">· ${esc(t.why)}</span>` : ''}</button>`).join('');
+      if (box) box.querySelectorAll('.cr-topic-pick').forEach((b) => b.onclick = () => { $('cr-brief').value = b.dataset.t; save(); if (st) st.textContent = '✅ 주제를 넣었어요 — 아래에서 시나리오를 만드세요.'; });
+      if (st) st.innerHTML = '마음에 드는 걸 누르면 위 칸에 들어가요 · <a href="#" id="cr-topic-regen" style="color:var(--teal)">↻ 다시 추천</a>';
+      const rg = $('cr-topic-regen'); if (rg) rg.onclick = (e) => { e.preventDefault(); loadTopics(); };
+    } catch (e) { if (st) st.textContent = '⚠️ ' + e.message; }
+    btn.disabled = false;
+  }
+  $('cr-topic-btn')?.addEventListener('click', loadTopics);
+
   // ── 제작 ──
   $('cr-make').onclick = async () => {
     syncTableToScenario();
