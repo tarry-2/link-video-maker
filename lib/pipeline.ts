@@ -4,14 +4,15 @@ import {mkdir, writeFile, rm} from 'node:fs/promises';
 import fs from 'node:fs';
 import path from 'node:path';
 import {generateStoryboard, type Storyboard} from './script';
-import {generateImageFlux, generateImageNano} from './image';
+import {generateImageFlux, generateImageNano, generateImageSmart} from './image';
 import {ttsElevenJoined, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {getStyle} from './styles';
 import {ensureWanPod, wanT2V, wanI2V, terminatePod} from './runpod-wan';
-import {seedanceI2V, seedancePrompt} from './seedance';
+import {seedancePrompt} from './seedance';
+import {seedanceReplicateI2V} from './replicate-video';
 import type {SceneData} from '../src/Scene';
 
 const FPS = 30;
@@ -46,7 +47,7 @@ export type PipelineKeys = {
   openai?: string;
   elevenlabs: string;
   replicate: string;
-  runpod?: string; // RunPod 키(움직이는 AI 영상 — 풍경 컷, 선택)
+  runpod?: string; // RunPod 키(영화 — 풍경 컷, 선택)
   fal?: string; // fal.ai 키(Seedance 고급 영상 — 인물 컷, 선택)
   falAdmin?: string; // fal.ai admin 키(잔액 조회, 선택)
 };
@@ -59,8 +60,8 @@ export type PipelineOpts = {
   quality?: 'fast' | 'high'; // 이미지 화질(fast=schnell 싸게 / high=dev 실사)
   imageStyle?: string; // 이미지 스타일 id(레지스트리 lib/styles.ts. real·anime·chalkboard 등)
   sceneCount?: number; // ★장면(이미지) 수 직접 지정(0/미지정=길이로 자동). 2~12.
-  aiClips?: number; // 움직이는 AI 영상(Wan2.2) 클립 개수(0=안씀, 기본 0). 앞에서부터 N개 장면에 적용.
-  autoShutdown?: boolean; // 움직이는 영상 작업이 끝나면 RunPod 팟을 자동 종료(과금 중단). 기본 true.
+  aiClips?: number; // 영화(Wan2.2) 클립 개수(0=안씀, 기본 0). 앞에서부터 N개 장면에 적용.
+  autoShutdown?: boolean; // 영화 작업이 끝나면 RunPod 팟을 자동 종료(과금 중단). 기본 true.
   narration?: boolean; // 나레이션(AI 음성) 넣기. 기본 true. false면 음성·단어자막 없이 영상만.
   bgm?: boolean; // 배경음악 넣기. 기본 true. false면 음악 없음.
   font?: string; // 제목·후킹 폰트(사용자 선택). 없으면 기본 Black Han Sans. Scene.tsx TITLE_FONTS와 동일 목록.
@@ -73,6 +74,9 @@ export type PipelineOpts = {
   storyboard?: Storyboard;
   // ★화면 방향 강제 — 지정하면 길이와 무관하게 이 방향으로(재창작은 길이·방향을 따로 고르므로 필수). 없으면 길이로 자동.
   orientation?: 'portrait' | 'landscape';
+  // ★본인 얼굴: 사용자가 올린 사진 경로. 있으면 이 얼굴을 '기준 캐릭터'로 전 장면 스틸을 nano-banana로 생성
+  //   → 모든 컷이 그 얼굴(Seedance가 그대로 움직임). 장르·스타일 무관 적용.
+  faceRef?: string;
   log?: (m: string) => void;
   isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인해서 멈춘다(하이라이트와 동일).
 };
@@ -146,44 +150,47 @@ export async function makeVideo(
   }
   ck();
 
-  // ★움직이는 AI 영상(Wan2.2) — 앞에서부터 aiClips개 장면을 RunPod에서 영상 클립으로 만든다.
+  // ★영화(Wan2.2) — 앞에서부터 aiClips개 장면을 RunPod에서 영상 클립으로 만든다.
   //   이미지는 항상 먼저 만들어 폴백/썸네일로 두고, 클립 성공 시 scene.video로 교체(Scene.tsx가 video 우선 렌더).
   const aiClips = Math.max(0, Math.min(sb.scenes.length, Math.floor(opts.aiClips || 0)));
   const style = getStyle(opts.imageStyle);
   // ★캐릭터 일관성(테리 최우선): 등장인물이 반복되는 '서사형'(cast 있음)은 애니든 실사든 nano-banana로 생성한다.
   //   첫 장면을 '기준 캐릭터'로 저장 → 이후 장면이 그 얼굴을 참조해 '컷마다 딴 얼굴' 방지(Seedance는 그 스틸을 그대로 움직임).
   //   애니=nano 기본 룩, 실사·시네마 등은 그 스타일의 promptAdd를 nano에 넘겨 사진 같은 룩 유지.
+  const hasFace = !!(opts.faceRef && fs.existsSync(opts.faceRef)); // 본인 얼굴 업로드됨
   const hasCast = !!(sb.cast && sb.cast.length);
-  const useNano = style.id === 'anime' || hasCast;
+  const useNano = style.id === 'anime' || hasCast || hasFace;
   const nanoStyleAdd = style.id === 'anime' ? undefined : style.promptAdd;
-  if (hasCast && style.id !== 'anime') log(`[이미지] 🎭 서사형 — 등장인물을 '같은 얼굴'로 고정해 생성합니다(컷마다 얼굴이 바뀌지 않게).`);
-  let charRefAbs = '';
+  if (hasFace) log(`[이미지] 🧑 올린 얼굴을 '기준'으로 전 장면을 그 얼굴로 생성합니다(모든 컷 동일 인물).`);
+  else if (hasCast && style.id !== 'anime') log(`[이미지] 🎭 서사형 — 등장인물을 '같은 얼굴'로 고정해 생성합니다(컷마다 얼굴이 바뀌지 않게).`);
+  // ★본인 얼굴이 있으면 그걸 '기준 캐릭터'로 못박아 전 장면이 참조(scene0으로 덮어쓰지 않음).
+  let charRefAbs = hasFace ? opts.faceRef! : '';
   let wanPod: string | undefined;
-  let clipsDone = 0; // 실제로 완성된 움직이는 클립 수(완성/목표를 로그에 보여줘 테리가 헷갈리지 않게)
+  let clipsDone = 0; // 실제로 완성된 영화 클립 수(완성/목표를 로그에 보여줘 테리가 헷갈리지 않게)
   let seedUsd = 0; // Seedance 추정 비용 누적(USD)
   const wonOf = (usd: number) => Math.round(usd * 1400);
   const aspect: '16:9' | '9:16' = landscape ? '16:9' : '9:16';
-  // ★2번 라우팅: 앞 aiClips개 장면 중 '인물 있는 장면'=Seedance(고급 사람 모션) / '풍경·사물 장면'=런팟 Wan(크레딧 소진).
-  //   fal만 있으면 풍경도 Seedance, 런팟만 있으면 인물도 Wan, 둘 다 없으면 이미지.
-  const engineFor = (i: number): 'seedance' | 'wan' | 'none' => {
+  // ★영화 엔진 라우팅(테리 2026-10-11 확정): 인물 장면=Replicate Seedance(바로) / 풍경 장면=RunPod Wan(충전 크레딧 먼저)
+  //   → RunPod 실패·크레딧 소진 시 Replicate Seedance로 자동 전환(돈 안 버림). fal은 영상에 안 씀(이미지 전용).
+  const engineFor = (i: number): 'replicate' | 'wan' | 'none' => {
     const hasPeople = Array.isArray(sb.scenes[i].characters) && sb.scenes[i].characters!.length > 0;
-    if (hasPeople && keys.fal) return 'seedance';
-    if (!hasPeople && keys.runpod) return 'wan';
-    if (keys.fal) return 'seedance';
+    if (hasPeople && keys.replicate) return 'replicate'; // 인물 = Replicate Seedance 바로
+    if (!hasPeople && keys.runpod) return 'wan';          // 풍경 = 런팟 크레딧 먼저
+    if (keys.replicate) return 'replicate';               // 런팟 없으면 풍경도 Replicate
     if (keys.runpod) return 'wan';
     return 'none';
   };
-  // ★GPU는 '움직이는 영상(aiClips>0)'이고 '풍경 장면이 런팟으로 갈 때'만 켠다. 전부 Seedance면 런팟 안 켜짐(과금 0).
+  // ★GPU(RunPod)는 '풍경 장면이 런팟으로 갈 때'만 켠다(크레딧 소진용). 인물뿐이면 안 켜짐(과금 0).
   if (aiClips > 0) {
     const plan = Array.from({length: aiClips}, (_, i) => engineFor(i));
-    const seedN = plan.filter((e) => e === 'seedance').length;
+    const repN = plan.filter((e) => e === 'replicate').length;
     const wanN = plan.filter((e) => e === 'wan').length;
-    if (plan.every((e) => e === 'none')) log('[영상] Seedance(fal)·RunPod 키가 모두 없어 움직이는 영상을 건너뜁니다(이미지로 진행). 키 설정에서 저장하세요.');
+    if (plan.every((e) => e === 'none')) log('[영화] Replicate·RunPod 키가 모두 없어 영화(움직임)를 건너뜁니다(이미지로 진행). 키 설정에서 저장하세요.');
     else {
-      log(`[영상] 🔀 라우팅 — 🎭 인물 장면 ${seedN}개=Seedance(고급) · 🏞 풍경 장면 ${wanN}개=런팟(크레딧 소진)`);
+      log(`[영화] 🔀 라우팅 — 🎭 인물 ${repN}개=Replicate Seedance · 🏞 풍경 ${wanN}개=런팟 크레딧(소진 시 Replicate 자동)`);
       if (wanN > 0) {
         try { wanPod = await ensureWanPod(keys.runpod!, log); }
-        catch (e: any) { log(`[영상] ⚠️ 런팟 준비 실패(${e.message}) → 풍경 장면은 이미지로 진행`); }
+        catch (e: any) { log(`[영화] ⚠️ 런팟 준비 실패(${e.message}) → 풍경도 Replicate로 진행`); }
       }
     }
   }
@@ -217,7 +224,7 @@ export async function makeVideo(
         await generateImageNano(keys.replicate, vp, abs(imgRel), log, refs, landscape, nanoStyleAdd);
         if (!charRefAbs) { charRefAbs = abs(`${pubRel}/character-ref.jpg`); try { fs.copyFileSync(abs(imgRel), charRefAbs); } catch {} }
       } else {
-        await generateImageFlux(keys.replicate, vp, abs(imgRel), log, opts.quality || 'high', opts.imageStyle || 'real', landscape);
+        await generateImageSmart({fal: keys.fal, replicate: keys.replicate}, vp, abs(imgRel), log, opts.quality || 'high', opts.imageStyle || 'real', landscape);
       }
     } catch (e: any) {
       log(`[장면 ${i + 1}] ⚠️ 이미지 생성 실패(${e.message}) → 임시 placeholder`);
@@ -225,7 +232,7 @@ export async function makeVideo(
       await writeFile(abs(imgRel), Buffer.from(await r.arrayBuffer()));
     }
 
-    // 앞 N개 장면: 움직이는 영상 클립 — 인물=Seedance(고급) / 풍경=런팟 Wan. 실패하면 조용히 이미지 유지.
+    // 앞 N개 장면: 영화 클립 — 인물=Seedance(고급) / 풍경=런팟 Wan. 실패하면 조용히 이미지 유지.
     let videoRel: string | undefined;
     if (i < aiClips) {
       const engine = engineFor(i);
@@ -237,24 +244,35 @@ export async function makeVideo(
         ? 'smooth animated motion, gentle character movement, soft parallax camera, fluid 2D animation'
         : 'natural lifelike motion, subtle cinematic camera movement, smooth and fluid';
       try {
-        if (engine === 'seedance') {
-          if (!fs.existsSync(abs(imgRel))) throw new Error('시작 이미지가 없음');
-          log(`[장면 ${i + 1}] 🎭 Seedance 고급 영상 생성(인물·${aspect})…`);
-          const secs = (wantNarration && sceneRanges[i]) ? Math.max(4, Math.min(10, Math.round((sceneRanges[i][1] - sceneRanges[i][0]) || 5))) : 5;
-          const motionPrompt = seedancePrompt({shot: s.shot, motion: motionCue, characterLook: castLook});
-          const {costUsd} = await seedanceI2V(keys.fal!, motionPrompt, abs(imgRel), abs(clipRel), {resolution: '720p', aspectRatio: aspect, duration: secs, log});
+        if (!fs.existsSync(abs(imgRel))) throw new Error('시작 이미지가 없음');
+        const secs = (wantNarration && sceneRanges[i]) ? Math.max(4, Math.min(10, Math.round((sceneRanges[i][1] - sceneRanges[i][0]) || 5))) : 5;
+        const motionPrompt = seedancePrompt({shot: s.shot, motion: motionCue, characterLook: castLook});
+        const refImgs = charRefAbs && fs.existsSync(charRefAbs) ? [charRefAbs] : []; // 캐릭터 일관성(기준 얼굴)
+        if (engine === 'replicate') {
+          log(`[장면 ${i + 1}] 🎭 Replicate Seedance 영화 생성(인물·${aspect})…`);
+          const {costUsd} = await seedanceReplicateI2V(keys.replicate, motionPrompt, abs(imgRel), abs(clipRel), {resolution: '720p', aspectRatio: aspect, duration: secs, model: 'mini', refImagePaths: refImgs, log});
           seedUsd += costUsd; videoRel = clipRel; clipsDone++;
-          log(`[장면 ${i + 1}] ✅ Seedance 완성 — 이번 컷 추정 ₩${wonOf(costUsd)} ($${costUsd}) · ${clipsDone}/${aiClips}`);
-        } else if (engine === 'wan' && wanPod) {
+          log(`[장면 ${i + 1}] ✅ 영화 완성 — 이번 컷 추정 ₩${wonOf(costUsd)} ($${costUsd}) · ${clipsDone}/${aiClips}`);
+        } else if (engine === 'wan') {
           const wanPrompt = `${vp}. ${style.promptAdd}. ${motionCue}`;
           const wanW = landscape ? 832 : 480, wanH = landscape ? 480 : 832;
-          log(`[장면 ${i + 1}] 🏞 런팟 Wan 영상 생성(풍경·크레딧 소진)…`);
-          await wanT2V(wanPod, wanPrompt, abs(clipRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
-          videoRel = clipRel; clipsDone++;
-          log(`[영상] 🎬 ${clipsDone}/${aiClips}개 완성 (장면 ${i + 1}).`);
+          try {
+            if (!wanPod) throw new Error('런팟 미준비');
+            log(`[장면 ${i + 1}] 🏞 런팟 Wan 영화 생성(풍경·크레딧)…`);
+            await wanT2V(wanPod, wanPrompt, abs(clipRel), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+            videoRel = clipRel; clipsDone++;
+            log(`[영화] 🎬 ${clipsDone}/${aiClips}개 완성 (장면 ${i + 1}).`);
+          } catch (wanErr: any) {
+            if (keys.replicate) { // 풍경: 런팟 실패/크레딧 소진 → Replicate Seedance 자동 전환(돈 안 버림)
+              log(`[장면 ${i + 1}] 🏞 런팟 실패(${String(wanErr?.message || '').slice(0, 40)}) → Replicate로 자동 전환…`);
+              const {costUsd} = await seedanceReplicateI2V(keys.replicate, motionPrompt, abs(imgRel), abs(clipRel), {resolution: '720p', aspectRatio: aspect, duration: secs, model: 'mini', refImagePaths: refImgs, log});
+              seedUsd += costUsd; videoRel = clipRel; clipsDone++;
+              log(`[장면 ${i + 1}] ✅ 영화 완성(Replicate 폴백) — ₩${wonOf(costUsd)} · ${clipsDone}/${aiClips}`);
+            } else { throw wanErr; }
+          }
         }
       } catch (e: any) {
-        log(`[장면 ${i + 1}] ⚠️ 움직이는 영상 실패(${e.message}) → 이 장면은 사진으로 대체합니다(진행 계속).`);
+        log(`[장면 ${i + 1}] ⚠️ 영화 실패(${e.message}) → 이 장면은 사진으로 대체합니다(진행 계속).`);
         videoRel = undefined;
       }
     }
@@ -296,13 +314,13 @@ export async function makeVideo(
 
   if (seedUsd > 0) log(`[영상] 💳 Seedance 이번 작업 추정 비용 합계 ≈ ₩${wonOf(seedUsd)} ($${seedUsd.toFixed(2)}) · 고급 클립 ${clipsDone}개`);
   } finally {
-    // ★움직이는 영상 클립을 다 뽑았거나(정상) 중간에 에러/중단이 났어도 RunPod 팟을 반드시 종료한다(렌더는
+    // ★영화 클립을 다 뽑았거나(정상) 중간에 에러/중단이 났어도 RunPod 팟을 반드시 종료한다(렌더는
     //   Railway에서 하므로 팟 불필요). autoShutdown=false면 켜둔다(다음 작업 빠르게 — 대신 과금 계속). 종료 실패 시
     //   한 번 더 재시도(과금 방지 최우선).
     if (wanPod) {
-      // ★왜 지금 GPU를 끄는지 또렷이 — 테리: "GPU 꺼진 게 왜 꺼졌는지 모르겠다". 움직이는 클립은 GPU가 필요하고,
+      // ★왜 지금 GPU를 끄는지 또렷이 — 테리: "GPU 꺼진 게 왜 꺼졌는지 모르겠다". 영화 클립은 GPU가 필요하고,
       //   이후 단계(자막·음악·합성)는 GPU가 전혀 필요 없으므로 여기서 끄는 게 '정상'이고 돈을 아끼는 거다.
-      log(`[영상] ✅ 움직이는 클립 ${clipsDone}/${aiClips}개 다 만들었어요. GPU는 '움직이는 영상'에만 필요하고, 다음 단계(배경음악·자막·최종 합성)는 GPU 없이 하니 지금 끄는 게 맞아요(여기서 꺼야 돈이 안 나가요).`);
+      log(`[영상] ✅ 영화 클립 ${clipsDone}/${aiClips}개 다 만들었어요. GPU는 '영화'에만 필요하고, 다음 단계(배경음악·자막·최종 합성)는 GPU 없이 하니 지금 끄는 게 맞아요(여기서 꺼야 돈이 안 나가요).`);
     }
     if (wanPod && opts.autoShutdown !== false) {
       try { await terminatePod(keys.runpod!, wanPod); log('[영상] ✅ RunPod GPU 종료 완료 — 이제부터 GPU 과금은 0원입니다.'); }

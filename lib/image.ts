@@ -99,6 +99,120 @@ async function fluxOnce(
   log?.(`[이미지] Flux ${landscape ? '16:9' : '9:16'} 생성 완료`);
 }
 
+// ── fal flux 이미지 생성 (충전액 소진용 — 이미지는 fal을 먼저 쓰고, 소진되면 Replicate로 폴백) ──
+// fal queue API(seedance.ts와 동일 패턴): POST → status_url 폴링 → response_url. 모델 id = fal-ai/flux/{dev|schnell}.
+// image_size: portrait_16_9=세로 9:16 / landscape_16_9=가로 16:9 (fal 공식 프리셋). 결과는 images[0].url.
+const FAL_QUEUE = 'https://queue.fal.run';
+
+// ★크레딧 소진/권한 등 '재시도해도 안 되는' fal 에러인지 — 이러면 즉시 Replicate로 폴백(돈 한 푼도 안 버림).
+export function isFalExhausted(msg: string): boolean {
+  return /402|403|balance|exhaust|insufficient|credit|quota|payment|forbidden/i.test(msg || '');
+}
+
+export async function generateImageFal(
+  key: string,
+  prompt: string,
+  outPath: string,
+  log?: (m: string) => void,
+  quality: 'fast' | 'high' = 'high',
+  style: ImageStyle = 'real',
+  landscape = false,
+): Promise<void> {
+  let lastErr: any;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try { return await falFluxOnce(key, prompt, outPath, log, quality, style, landscape); }
+    catch (e: any) {
+      const m = String(e?.message || '');
+      if (isFalExhausted(m)) throw e; // 크레딧 소진류는 재시도 무의미 → 던져서 Replicate 폴백
+      lastErr = e;
+      log?.(`[이미지] fal 생성 실패(${m}) — 재시도 ${attempt}/3`);
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
+  }
+  throw lastErr;
+}
+
+async function falFluxOnce(
+  key: string,
+  prompt: string,
+  outPath: string,
+  log: ((m: string) => void) | undefined,
+  quality: 'fast' | 'high',
+  style: ImageStyle,
+  landscape: boolean,
+): Promise<void> {
+  const st = getStyle(style);
+  const styleStr = st.promptAdd + st.peopleAdd;
+  const model = quality === 'fast' ? 'fal-ai/flux/schnell' : 'fal-ai/flux/dev';
+  const input: Record<string, unknown> = {
+    prompt: prompt + styleStr + NEG_TEXT,
+    image_size: landscape ? 'landscape_16_9' : 'portrait_16_9', // 세로 쇼츠=portrait_16_9(9:16)
+    num_images: 1,
+    output_format: 'jpeg',
+  };
+  if (quality !== 'fast') { input.num_inference_steps = 32; input.guidance_scale = st.guidance; }
+
+  // 제출 → request_id·status_url·response_url(네임스페이스 모델은 응답이 주는 URL을 그대로 써야 함, seedance.ts 교훈)
+  const sub = await fetch(`${FAL_QUEUE}/${model}`, {
+    method: 'POST',
+    headers: {Authorization: `Key ${key}`, 'Content-Type': 'application/json'},
+    body: JSON.stringify(input),
+    signal: AbortSignal.timeout(30000),
+  });
+  const subTxt = await sub.text();
+  if (!sub.ok) throw new Error(`fal flux 실패(${sub.status}): ${subTxt.slice(0, 150)}`);
+  const sd: any = JSON.parse(subTxt);
+  const reqId = sd.request_id || sd.requestId;
+  const statusUrl = sd.status_url || `${FAL_QUEUE}/${model}/requests/${reqId}/status`;
+  const responseUrl = sd.response_url || `${FAL_QUEUE}/${model}/requests/${reqId}`;
+
+  // 폴링(이미지는 보통 수 초, 최대 2분)
+  const started = Date.now();
+  let status = '';
+  while (Date.now() - started < 120000) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const stp = await fetch(statusUrl, {headers: {Authorization: `Key ${key}`}, signal: AbortSignal.timeout(20000)});
+    const spd: any = await stp.json().catch(() => ({}));
+    status = spd.status || '';
+    if (status === 'COMPLETED') break;
+    if (status === 'FAILED' || status === 'ERROR') throw new Error('fal flux 생성 실패(FAILED)');
+  }
+  if (status !== 'COMPLETED') throw new Error('fal flux 생성 시간 초과');
+
+  const res = await fetch(responseUrl, {headers: {Authorization: `Key ${key}`}, signal: AbortSignal.timeout(30000)});
+  const rd: any = await res.json();
+  const url: string | undefined = rd?.images?.[0]?.url || rd?.image?.url;
+  if (!url) throw new Error('fal flux 결과 URL 없음');
+  const img = await fetch(url, {signal: AbortSignal.timeout(60000)});
+  if (!img.ok) throw new Error('fal flux 이미지 다운로드 실패');
+  await writeFile(outPath, Buffer.from(await img.arrayBuffer()));
+  log?.(`[이미지] fal flux ${landscape ? '16:9' : '9:16'} 생성 완료`);
+}
+
+// ── 통합 이미지 생성(폴백) — 모든 진입점이 이걸 쓴다(반쪽 패치 방지). ──
+// fal 키 있으면 fal(충전액) 먼저 → 실패/크레딧 소진이면 Replicate flux로 자동 전환(돈 안 버림).
+// fal 키 없으면 바로 Replicate. 캐릭터 일관성(nano-banana)은 fal 동등 모델이 없어 별도(Replicate 유지).
+export async function generateImageSmart(
+  keys: {fal?: string; replicate: string},
+  prompt: string,
+  outPath: string,
+  log?: (m: string) => void,
+  quality: 'fast' | 'high' = 'high',
+  style: ImageStyle = 'real',
+  landscape = false,
+): Promise<void> {
+  if (keys.fal) {
+    try {
+      await generateImageFal(keys.fal, prompt, outPath, log, quality, style, landscape);
+      return;
+    } catch (e: any) {
+      const m = String(e?.message || '');
+      log?.(`[이미지] fal → Replicate 폴백(${isFalExhausted(m) ? '크레딧 소진' : '실패'}): ${m.slice(0, 60)}`);
+    }
+  }
+  await generateImageFlux(keys.replicate, prompt, outPath, log, quality, style, landscape);
+}
+
 // ── nano-banana(google, Replicate): 애니 캐릭터 일관성 생성 ──
 // refPaths(기준 캐릭터 이미지들)를 참조로 넣으면 같은 캐릭터를 다른 장면/포즈로 그려준다.
 // 참조가 없으면(첫 캐릭터) 텍스트만으로 생성 → 그 결과가 이후 장면들의 기준이 된다.

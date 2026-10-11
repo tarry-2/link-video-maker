@@ -384,13 +384,13 @@ const jobs = new Map<string, Job>();
 // ★모바일↔PC 실시간 동기화: 현재 진행 중인 생성 작업 id. 어느 기기든 로드 시 이걸 받아 같은 SSE에 붙는다.
 let currentGenJob = '';
 
-// 지금 '움직이는 영상(GPU)'을 쓰는 작업이 실제로 돌고 있는지 — 유휴 팟 자동종료 워치독의 판단 근거.
+// 지금 '영화(GPU)'을 쓰는 작업이 실제로 돌고 있는지 — 유휴 팟 자동종료 워치독의 판단 근거.
 function anyGpuJobRunning(): boolean {
   for (const j of jobs.values()) if (!j.done && !j.cancelled) return true;
   return false;
 }
 // ★GPU 유휴 자동종료 워치독 — 작업이 하나도 안 도는데 RunPod 팟이 떠 있으면(자동종료 실패·크래시 잔재) 자동으로
-//   끈다. 과금은 '움직이는 영상 쓸 때만, 그리고 끝나면 반드시 꺼짐'을 서버가 최종 보장(테리 지시). 2분마다.
+//   끈다. 과금은 '영화 쓸 때만, 그리고 끝나면 반드시 꺼짐'을 서버가 최종 보장(테리 지시). 2분마다.
 let gpuIdleSince = 0;
 async function gpuIdleWatchdog() {
   try {
@@ -687,7 +687,7 @@ const server = http.createServer(async (req, res) => {
         source: it.source, // 하이라이트 소재 출처(작업내역 탭별 이원화): search/url/upload/archive
         // ★작업내역 탭별 이원화: origin(video/remake/create). 레거시(없음)는 category로 폴백.
         origin: it.origin || (it.category === '🎭 재창작' ? 'remake' : it.category === '✍️ 창작' ? 'create' : 'video'),
-        motion: !!it.motion, // 움직이는 영상(Wan)이면 '🎬 영상' 배지
+        motion: !!it.motion, // 영화(Wan)이면 '🎬 영상' 배지
       };
     });
     const sampleYt = loadSampleYouTube();
@@ -1465,7 +1465,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     return json(res, 200, {ok: true});
   }
 
-  // ── RunPod 현황(움직이는 영상 GPU) — 잔액 + 실행 중 팟. 설정 화면에서 조회. ──
+  // ── RunPod 현황(영화 GPU) — 잔액 + 실행 중 팟. 설정 화면에서 조회. ──
   if (p === '/api/runpod/status' && req.method === 'GET') {
     const e = loadEnv();
     if (!e.RUNPOD_API_KEY) return json(res, 200, {configured: false});
@@ -1595,7 +1595,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
 
   // ── 🎭 재창작(리메이크): 인기 영상(서프라이즈 등)의 제목·자막을 '내용 소스'로 받아 우리 이미지·목소리·자막으로
   //    완전 새 영상을 만든다. 원본 미디어·로고를 안 쓰므로 Content ID/상표에 안 걸린다. /api/generate와 동일 구조 +
-  //    URL 대신 sourceText 주입. 출력=이미지영상(기본) 또는 움직이는영상(aiClips>0). ──
+  //    URL 대신 sourceText 주입. 출력=이미지영상(기본) 또는 영화(aiClips>0). ──
   if (p === '/api/generate-remake' && req.method === 'POST') {
     const b = await readBody(req);
     const title = String(b.title || '').trim();
@@ -1652,7 +1652,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
             quality: 'high', // 재창작은 항상 고퀄 이미지(테리 지적: 이미지 퀄 약함)
             imageStyle,
             sceneCount: Number(b.sceneCount) || 0,
-            aiClips, // >0 = 움직이는영상(Wan), 0 = 이미지영상
+            aiClips, // >0 = 영화(Wan), 0 = 이미지영상
             autoShutdown: b.autoShutdown !== false,
             narration: b.narration !== false,
             bgm: b.bgm !== false,
@@ -1671,7 +1671,7 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
               durSec,
               attribution: title ? `원 소재: ${title}` : undefined,
               source: 'archive',
-              motion: aiClips > 0, // 움직이는영상(Wan)이면 작업내역 '🎬 영상' 배지
+              motion: aiClips > 0, // 영화(Wan)이면 작업내역 '🎬 영상' 배지
               log: (m) => jlog(job, m),
             });
           } catch (e: any) { jlog(job, '[포트폴리오] 등록 실패(영상은 완성됨): ' + (e?.message || e)); }
@@ -1812,7 +1812,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     if (needsEleven && !k.elevenlabs) return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다(둘 다 끄면 키 없이 가능).'});
     const orientation: 'portrait' | 'landscape' = b.orientation === 'landscape' ? 'landscape' : 'portrait';
     const durSec = Math.max(15, Math.min(180, Number(b.duration) || 60));
-    const aiClips = Math.max(0, Math.min(20, Number(b.aiClips) || 0)); // 0=이미지영상 / N=움직이는영상(앞 N장면)
+    const aiClips = Math.max(0, Math.min(20, Number(b.aiClips) || 0)); // 0=이미지영상 / N=영화(앞 N장면)
     const imageStyle = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false, kind: 'create'}; // 창작 전용 kind — create 페이지만 이 작업에 연동(다른 탭이 안 가로채게)
@@ -1820,9 +1820,20 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     currentGenJob = id;
     (async () => {
       try {
-        jlog(job, `[창작] "${storyboard.title || '오리지널'}" 시나리오로 영상을 제작합니다(${aiClips > 0 ? '움직이는 영상' : '이미지 영상'}).`);
+        jlog(job, `[창작] "${storyboard.title || '오리지널'}" 시나리오로 영상을 제작합니다(${aiClips > 0 ? '영화' : '이미지 영상'}).`);
+        // ★본인 얼굴: 업로드한 사진(base64)을 파일로 저장 → faceRef로 넘기면 전 장면을 그 얼굴로.
+        let faceRef: string | undefined;
+        if (b.faceImage) {
+          try {
+            const fdir = path.join(os.tmpdir(), 'onvideo-face-' + id);
+            fs.mkdirSync(fdir, {recursive: true});
+            faceRef = path.join(fdir, 'face.jpg');
+            fs.writeFileSync(faceRef, Buffer.from(String(b.faceImage).replace(/^data:image\/\w+;base64,/, ''), 'base64'));
+            jlog(job, '[이미지] 🧑 올린 얼굴을 받았어요 — 전 장면을 이 얼굴로 만듭니다.');
+          } catch { faceRef = undefined; }
+        }
         const r = await makeVideo([], k, {
-          storyboard, duration: durSec, orientation, imageStyle, aiClips,
+          storyboard, duration: durSec, orientation, imageStyle, aiClips, faceRef,
           autoShutdown: b.autoShutdown !== false, narration: b.narration !== false, bgm: b.bgm !== false,
           voice: b.voice || undefined, font: pickFont(b.font),
           log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
@@ -2296,7 +2307,7 @@ JSON만: {"hookTop":"...","hookAccent":"..."}`;
         sentClips++;
         wrote = true;
       }
-      // ★heartbeat — 움직이는 AI 영상(RunPod 팟 부팅) 등으로 새 로그 없이 몇 분씩 조용할 때
+      // ★heartbeat — 영화(RunPod 팟 부팅) 등으로 새 로그 없이 몇 분씩 조용할 때
       //   연결이 idle로 끊기지 않게 15초마다 주석 핑을 보낸다(EventSource는 ':' 줄 무시).
       if (wrote) lastWrite = Date.now();
       else if (Date.now() - lastWrite > 15000) { res.write(': ping\n\n'); lastWrite = Date.now(); }

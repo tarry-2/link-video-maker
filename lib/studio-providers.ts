@@ -6,13 +6,14 @@ import {pipelineKeys} from './keys';
 import {fetchSource} from './pipeline';
 import {generateStoryboard} from './script';
 import {generateManualDraft} from './manual';
-import {generateImageFlux, generateImageNano} from './image';
+import {generateImageFlux, generateImageNano, generateImageSmart} from './image';
 import {ttsEleven, alignToWords, VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {getStyle} from './styles';
 import {ensureWanPod, wanT2V, wanI2V, terminatePod} from './runpod-wan';
-import {seedanceI2V, seedancePrompt} from './seedance';
+import {seedancePrompt} from './seedance';
+import {seedanceReplicateI2V} from './replicate-video';
 import {renderVideo, renderThumbnail} from './render';
 import {resolveProduct, fingerprint} from './studio-model';
 import type {StudioDependencies} from './studio';
@@ -51,7 +52,7 @@ export const studioProviders: StudioDependencies = {
         try { await fs.copyFile(file, path.join(dir, cref)); p.characterRef = cref; } catch {}
       }
     } else {
-      await generateImageFlux(k.replicate, prompt, file, log, p.input.quality, p.input.imageStyle, landscape);
+      await generateImageSmart({fal: k.fal, replicate: k.replicate}, prompt, file, log, p.input.quality, p.input.imageStyle, landscape);
     }
   },
   async voice(p, s, file) {
@@ -71,7 +72,7 @@ export const studioProviders: StudioDependencies = {
     const ms = p.scenes.reduce((n, s) => n + (s.voice?.frames || 0), 0) / 30 * 1000;
     await generateBgm(k.elevenlabs, p.musicPrompt, ms, file, log);
   },
-  // ★움직이는 AI 영상 — 2번 라우팅: 인물 있는 장면(대사·hero)=Seedance(고급, fal), 풍경·사물 장면=런팟 Wan(크레딧 소진).
+  // ★영화 — 2번 라우팅: 인물 있는 장면(대사·hero)=Seedance(고급, fal), 풍경·사물 장면=런팟 Wan(크레딧 소진).
   //   이미지는 이미 만들어져 있으니(폴백·썸네일용) 클립 실패 시 그대로 사진영상으로 진행한다.
   async clips(p, dir, log) {
     const n = Math.max(0, Math.min(p.scenes.length, Math.floor(p.input.aiClips || 0)));
@@ -88,22 +89,22 @@ export const studioProviders: StudioDependencies = {
       ? 'smooth animated motion, gentle character movement, soft parallax camera, fluid 2D animation'
       : 'natural lifelike motion, subtle cinematic camera movement, smooth and fluid';
 
-    // 라우팅 결정: 인물 장면 → Seedance(fal 키 있을 때), 풍경 장면 → 런팟 Wan(런팟 키 있을 때).
-    //   fal만 있으면 풍경도 Seedance, 런팟만 있으면 인물도 Wan, 둘 다 없으면 사진.
-    // 스튜디오 경로의 장면 타입엔 인물(characters) 정보가 없어, fal 있으면 Seedance(고급) 우선 / 없으면 런팟 Wan.
-    type Plan = {i: number; engine: 'seedance' | 'wan' | 'none'};
+    // ★영화 엔진 라우팅(테리 2026-10-11): 스튜디오(영상만들기)는 장면에 인물 정보가 없어 '풍경 취급' —
+    //   RunPod Wan(충전 크레딧) 먼저 쓰고, 소진·실패 시 Replicate Seedance로 자동 전환. 런팟 없으면 바로 Replicate.
+    //   fal은 영상에 안 씀(이미지 전용).
+    type Plan = {i: number; engine: 'replicate' | 'wan' | 'none'};
     const plan: Plan[] = [];
     for (let i = 0; i < n; i++) {
-      const engine: Plan['engine'] = k.fal ? 'seedance' : k.runpod ? 'wan' : 'none';
+      const engine: Plan['engine'] = k.runpod ? 'wan' : k.replicate ? 'replicate' : 'none';
       plan.push({i, engine});
     }
-    const seedCount = plan.filter((x) => x.engine === 'seedance').length;
+    const repCount = plan.filter((x) => x.engine === 'replicate').length;
     const wanCount = plan.filter((x) => x.engine === 'wan').length;
     if (plan.every((x) => x.engine === 'none')) {
-      log('[영상] Seedance(fal)·RunPod 키가 모두 없어 움직이는 영상을 건너뜁니다(사진영상). 키 설정에서 저장하세요.');
+      log('[영화] Replicate·RunPod 키가 모두 없어 영화(움직임)를 건너뜁니다(사진). 키 설정에서 저장하세요.');
       for (const s of p.scenes) s.video = undefined; return;
     }
-    log(`[영상] 🔀 라우팅 — 🎭 인물 장면 ${seedCount}개=Seedance(고급) · 🏞 풍경 장면 ${wanCount}개=런팟(크레딧 소진)`);
+    log(`[영화] 🔀 라우팅 — 🏞 런팟 크레딧 ${wanCount}개(소진 시 Replicate 자동) · 🎭 Replicate Seedance ${repCount}개`);
 
     // RunPod 팟은 풍경 장면이 있을 때만 준비.
     let pod: string | undefined;
@@ -119,30 +120,41 @@ export const studioProviders: StudioDependencies = {
         const vp = p.subject ? `${p.subject}. ${s.visualPrompt}. (main subject must be ${p.subject})` : s.visualPrompt;
         const sig = fingerprint([vp, p.input.imageStyle, landscape, engine]);
         const file = `clip-${i}-${sig}.mp4`;
-        if (s.video?.signature === sig && existsSync(path.join(dir, file))) { log(`[장면 ${i + 1}] 🎬 기존 움직이는 영상 재사용(과금 없음)`); continue; }
+        if (s.video?.signature === sig && existsSync(path.join(dir, file))) { log(`[장면 ${i + 1}] 🎬 기존 영화 재사용(과금 없음)`); continue; }
         const stillPath = s.image?.file ? path.join(dir, s.image.file) : '';
         const secs = s.voice?.frames ? Math.max(4, Math.min(10, Math.round(s.voice.frames / 30))) : 5;
         try {
-          if (engine === 'seedance') {
+          if (engine === 'replicate') {
             if (!stillPath || !existsSync(stillPath)) throw new Error('시작 이미지가 없음');
-            log(`[장면 ${i + 1}/${n}] 🎭 Seedance 고급 영상 생성(인물·${aspect})…`);
+            log(`[장면 ${i + 1}/${n}] 🎭 Replicate Seedance 영화 생성(${aspect})…`);
             const motionPrompt = seedancePrompt({motion: motionCue});
-            const {costUsd} = await seedanceI2V(k.fal, motionPrompt, stillPath, path.join(dir, file), {resolution: '720p', aspectRatio: aspect, duration: secs, log});
+            const {costUsd} = await seedanceReplicateI2V(k.replicate, motionPrompt, stillPath, path.join(dir, file), {resolution: '720p', aspectRatio: aspect, duration: secs, model: 'mini', log});
             totalUsd += costUsd;
-            log(`[장면 ${i + 1}] ✅ Seedance 완성 — 이번 컷 추정 ₩${won(costUsd)} (약 $${costUsd})`);
+            log(`[장면 ${i + 1}] ✅ 영화 완성 — 이번 컷 추정 ₩${won(costUsd)} (약 $${costUsd})`);
             s.video = {signature: sig, file};
-          } else if (engine === 'wan' && pod) {
+          } else if (engine === 'wan') {
             const wanPrompt = `${vp}. ${style.promptAdd}. ${motionCue}`;
             const wanW = landscape ? 832 : 480, wanH = landscape ? 480 : 832;
-            log(`[장면 ${i + 1}/${n}] 🏞 런팟 Wan 영상 생성(풍경·크레딧 소진)…(수 분)`);
-            await wanT2V(pod, wanPrompt, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
-            s.video = {signature: sig, file};
+            try {
+              if (!pod) throw new Error('런팟 미준비');
+              log(`[장면 ${i + 1}/${n}] 🏞 런팟 Wan 영화 생성(풍경·크레딧)…(수 분)`);
+              await wanT2V(pod, wanPrompt, path.join(dir, file), {width: wanW, height: wanH, length: 81, interpolate: true, log});
+              s.video = {signature: sig, file};
+            } catch (wanErr: any) {
+              if (k.replicate && stillPath && existsSync(stillPath)) { // 런팟 실패/크레딧 소진 → Replicate 자동 전환
+                log(`[장면 ${i + 1}] 🏞 런팟 실패(${String(wanErr?.message || '').slice(0, 40)}) → Replicate로 자동 전환…`);
+                const motionPrompt = seedancePrompt({motion: motionCue});
+                const {costUsd} = await seedanceReplicateI2V(k.replicate, motionPrompt, stillPath, path.join(dir, file), {resolution: '720p', aspectRatio: aspect, duration: secs, model: 'mini', log});
+                totalUsd += costUsd; s.video = {signature: sig, file};
+                log(`[장면 ${i + 1}] ✅ 영화 완성(Replicate 폴백) — ₩${won(costUsd)}`);
+              } else { throw wanErr; }
+            }
           } else {
-            log(`[장면 ${i + 1}] 움직이는 영상 불가(해당 엔진 키 없음) → 사진 사용`); s.video = undefined;
+            log(`[장면 ${i + 1}] 영화 불가(엔진 키 없음) → 사진 사용`); s.video = undefined;
           }
-        } catch (e: any) { log(`[장면 ${i + 1}] ⚠️ 움직이는 영상 실패(${e.message}) → 사진 사용`); s.video = undefined; }
+        } catch (e: any) { log(`[장면 ${i + 1}] ⚠️ 영화 실패(${e.message}) → 사진 사용`); s.video = undefined; }
       }
-      if (seedCount > 0) log(`[영상] 💳 Seedance 이번 작업 추정 비용 합계 ≈ ₩${won(totalUsd)} ($${totalUsd.toFixed(2)})`);
+      if (totalUsd > 0) log(`[영화] 💳 이번 작업 추정 비용 합계 ≈ ₩${won(totalUsd)} ($${totalUsd.toFixed(2)})`);
     } finally {
       // 클립을 다 뽑았으면 팟 종료(렌더는 Railway에서 하므로 팟 불필요). autoShutdown=false면 켜둔다(과금 계속).
       if (pod && p.input.autoShutdown !== false) {
@@ -169,7 +181,7 @@ export const studioProviders: StudioDependencies = {
       for (const name of names) await fs.copyFile(path.join(dir, name), path.join(mediaDir, name));
       const scenes = p.scenes.map((s, i) => ({
         image: `${prefix}/${s.image!.file}`, voiceSrc: `${prefix}/${s.voice!.file}`,
-        video: s.video ? `${prefix}/${s.video.file}` : undefined, // 움직이는 영상 클립(있으면 Scene.tsx가 이미지 대신 렌더)
+        video: s.video ? `${prefix}/${s.video.file}` : undefined, // 영화 클립(있으면 Scene.tsx가 이미지 대신 렌더)
         hookTop: resolveProduct(s.hookTop, p.input.product), hookAccent: resolveProduct(s.hookAccent, p.input.product),
         accentColor: s.accentColor, words: s.voice!.words || [], durationInFrames: s.voice!.frames!,
         font: p.input.font, // 사용자가 고른 제목 폰트(없으면 Scene에서 기본 Black Han Sans)

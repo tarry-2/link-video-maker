@@ -20,7 +20,7 @@
         <span class="ver-badge"><span class="live-dot"></span><span id="ver">v–</span></span>
       </div>
       <div style="display:flex; gap:8px; align-items:center">
-        <button id="gpu-badge" class="gpu-badge off" type="button" title="움직이는 영상 GPU 상태">● GPU 확인중…</button>
+        <button id="gpu-badge" class="gpu-badge off" type="button" title="영화 GPU 상태">● GPU 확인중…</button>
         <button id="theme-btn" class="ghost-btn small" title="밝게/어둡게">🌙</button>
         <a href="/app" class="ghost-btn small">✏️ 영상 만들기</a>
       </div>
@@ -161,9 +161,9 @@
             <label class="field-label">출력</label>
             <div class="seg" style="margin-top:6px">
               <button type="button" class="seg-btn hl-rmout active" data-out="image">🖼 이미지영상(빠름·저렴)</button>
-              <button type="button" class="seg-btn hl-rmout" data-out="wan">🎬 움직이는영상(툴 제작 · 비용↑)</button>
+              <button type="button" class="seg-btn hl-rmout" data-out="wan">🎬 영화(툴 제작 · 비용↑)</button>
             </div>
-            <!-- 몇 편 만들지 — 같은 소재로 서로 다른 N편(각 편 각색이 달라짐). 움직이는영상은 편당 비용·시간↑ -->
+            <!-- 몇 편 만들지 — 같은 소재로 서로 다른 N편(각 편 각색이 달라짐). 영화은 편당 비용·시간↑ -->
             <label class="field-label" style="margin-top:10px">몇 편 만들까요 <span class="hint">— 같은 소재로 서로 다르게 여러 편</span></label>
             <div class="seg" style="margin-top:6px;flex-wrap:wrap">
               <button type="button" class="seg-btn hl-rmcount active" data-c="1">1편</button>
@@ -172,7 +172,7 @@
               <button type="button" class="seg-btn hl-rmcount" data-c="5">5편</button>
             </div>
             <p id="hl-rmcount-note" class="hint" style="margin-top:4px"></p>
-            <!-- 그림 스타일 — 이미지영상·움직이는영상 둘 다 적용(실사/애니 등) -->
+            <!-- 그림 스타일 — 이미지영상·영화 둘 다 적용(실사/애니 등) -->
             <label class="field-label" style="margin-top:10px">🎨 그림 스타일 <span class="hint">— 영상 분위기(실사·애니 등)</span></label>
             <div class="seg" style="margin-top:6px;flex-wrap:wrap">
               <button type="button" class="seg-btn hl-rmstyle active" data-style="real">📷 실사</button>
@@ -180,9 +180,9 @@
               <button type="button" class="seg-btn hl-rmstyle" data-style="cinema">🎞️ 시네마</button>
               <button type="button" class="seg-btn hl-rmstyle" data-style="classic">🏛️ 고전</button>
             </div>
-            <!-- 움직이는영상 고를 때만: 몇 장면을 움직이게 할지(임의 지정 + 저장) -->
+            <!-- 영화 고를 때만: 몇 장면을 움직이게 할지(임의 지정 + 저장) -->
             <div id="hl-rm-motion" class="hidden" style="margin-top:10px">
-              <label class="field-label">움직이는 장면 수 <span class="hint">(많을수록 생생·비용↑. 비용 대부분은 GPU 고정비)</span></label>
+              <label class="field-label">영화 장면 수 <span class="hint">(많을수록 생생·비용↑. 비용 대부분은 GPU 고정비)</span></label>
               <div class="seg" style="margin-top:6px;flex-wrap:wrap">
                 <button type="button" class="seg-btn hl-rmclip active" data-n="1">1장면</button>
                 <button type="button" class="seg-btn hl-rmclip" data-n="2">2장면</button>

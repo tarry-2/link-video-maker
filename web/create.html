@@ -81,7 +81,7 @@
         <span class="ver-badge"><span class="live-dot"></span><span id="ver">v–</span></span>
       </div>
       <div style="display:flex; gap:8px; align-items:center">
-        <button id="gpu-badge" class="gpu-badge off" type="button" title="움직이는 영상 GPU 상태">● GPU 확인중…</button>
+        <button id="gpu-badge" class="gpu-badge off" type="button" title="영화 GPU 상태">● GPU 확인중…</button>
         <button id="theme-btn" class="ghost-btn small" title="밝게/어둡게">🌙</button>
         <a href="/app" class="ghost-btn small">✏️ 영상 만들기</a>
       </div>
@@ -127,6 +127,10 @@
         </div>
         <div class="cr-field"><span class="field-label">화면</span><div class="seg" id="cr-orient"></div></div>
         <div class="cr-field"><span class="field-label">그림체</span><div class="seg" id="cr-style"></div></div>
+        <div class="cr-field"><span class="field-label">🧑 본인 얼굴 <span style="color:var(--teal)">(선택 — 올리면 모든 장면 주인공이 이 얼굴로)</span></span>
+          <input id="cr-face" type="file" accept="image/*" class="input" style="padding:8px" />
+          <div id="cr-face-preview" style="margin-top:8px"></div>
+        </div>
         <div class="cr-field"><span class="field-label">대본 AI 엔진 <span style="color:var(--teal)">(글만 — 영상 GPU·제작비와 무관)</span></span>
           <div class="seg" id="cr-engine"></div>
           <div class="hint" id="cr-engine-note" style="line-height:1.65;margin-top:8px"></div>
@@ -161,13 +165,13 @@
         <h2 class="block-title"><span class="st-no">04</span> 어떻게 만들까</h2>
         <div class="cr-field"><span class="field-label">출력</span><div class="seg" id="cr-out"></div></div>
         <div class="cr-field hidden" id="cr-clip-row">
-          <span class="field-label">움직이는 장면 수 <span style="color:var(--teal)">(초 아님, 장면 개수)</span></span><div class="seg" id="cr-clips"></div>
+          <span class="field-label">영화 장면 수 <span style="color:var(--teal)">(초 아님, 장면 개수)</span></span><div class="seg" id="cr-clips"></div>
           <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
             <input id="cr-clip-custom" class="input" type="number" min="1" max="20" placeholder="직접 입력(개)" style="max-width:150px" />
             <button id="cr-clip-save" type="button" class="ghost-btn small">💾 저장</button>
             <span id="cr-clip-saved" class="mini-state"></span>
           </div>
-          <p class="hint" id="cr-clip-note">영상은 길이에 따라 여러 '장면'으로 나뉘어요. 그중 <b>앞에서부터 고른 개수만큼</b>만 실제로 움직이는 영상(GPU)으로 만들고, 나머지는 사진이에요. 숫자가 클수록 GPU 과금이 커져요.</p>
+          <p class="hint" id="cr-clip-note">영상은 길이에 따라 여러 '장면'으로 나뉘어요. 그중 <b>앞에서부터 고른 개수만큼</b>만 실제로 영화(GPU)으로 만들고, 나머지는 사진이에요. 숫자가 클수록 GPU 과금이 커져요.</p>
         </div>
         <div class="cr-field" style="display:flex;gap:16px;flex-wrap:wrap">
           <label class="hint"><input type="checkbox" id="cr-narr" checked /> 나레이션(음성)</label>

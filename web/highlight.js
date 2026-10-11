@@ -43,10 +43,10 @@
   $('gpu-badge')?.addEventListener('click', async () => {
     try {
       const d = await (await fetch('/api/runpod/status', {cache: 'no-store'})).json();
-      if (!d.configured) { alert('RunPod 키가 설정 안 돼 있어요(움직이는 영상 미사용).'); return; }
+      if (!d.configured) { alert('RunPod 키가 설정 안 돼 있어요(영화 미사용).'); return; }
       const running = (d.pods || []).filter((p) => p.status === 'RUNNING');
       if (!running.length) { alert('✅ 켜진 GPU가 없어요 — 과금되지 않고 있어요.'); refreshGpu(); return; }
-      if (!confirm(`움직이는 영상 GPU ${running.length}대가 켜져 있어요(과금 중).\n지금 끌까요? (진행 중인 영상 작업이 있으면 실패할 수 있어요)`)) return;
+      if (!confirm(`영화 GPU ${running.length}대가 켜져 있어요(과금 중).\n지금 끌까요? (진행 중인 영상 작업이 있으면 실패할 수 있어요)`)) return;
       const r = await (await fetch('/api/runpod/stop', {method: 'POST'})).json();
       alert(r.stopped && r.stopped.length ? `GPU ${r.stopped.length}대 껐습니다 — 과금이 멈췄어요.` : '끄기 완료.');
       refreshGpu();
@@ -467,9 +467,9 @@
   let license = 'cc'; // 영상 범위: cc(안전·재사용 허가만) / all(전체)
   let mode = 'search'; // 소재 가져오는 방법: search(주제로 찾기) / url(영상 URL 붙여넣기)
   let makeMode = 'clip'; // 제작 방식: clip(원본 자르기=하이라이트) / remake(재창작=내용만 뽑아 새 영상)
-  let rmOut = 'image';   // 재창작 출력: image(이미지영상) / wan(움직이는영상)
-  let rmClips = 1;       // 재창작 움직이는영상 장면 수(기본 1) — restoreState 전에 선언(TDZ 방지)
-  let rmStyle = 'real';  // 재창작 그림 스타일(real/anime/cinema/classic) — 이미지·움직이는영상 둘 다 적용
+  let rmOut = 'image';   // 재창작 출력: image(이미지영상) / wan(영화)
+  let rmClips = 1;       // 재창작 영화 장면 수(기본 1) — restoreState 전에 선언(TDZ 방지)
+  let rmStyle = 'real';  // 재창작 그림 스타일(real/anime/cinema/classic) — 이미지·영화 둘 다 적용
   let rmCount = 1;       // 재창작 편수(같은 소재로 서로 다른 N편)
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
@@ -1161,7 +1161,7 @@
     applyRmMotion();
     const b = $('hl-generate'); if (b) b.textContent = remake ? '🎭 이 내용으로 새 영상 만들기' : '🎬 하이라이트 숏폼 만들기';
   }
-  // 재창작 '움직이는영상'일 때만 장면수 UI 노출.
+  // 재창작 '영화'일 때만 장면수 UI 노출.
   function applyRmMotion() {
     $('hl-rm-motion')?.classList.toggle('hidden', !(makeMode === 'remake' && rmOut === 'wan'));
     document.querySelectorAll('.hl-rmclip').forEach((x) => x.classList.toggle('active', Number(x.dataset.n) === rmClips));
@@ -1175,13 +1175,13 @@
     rmOut = b.dataset.out === 'wan' ? 'wan' : 'image';
     document.querySelectorAll('.hl-rmout').forEach((x) => x.classList.toggle('active', x.dataset.out === rmOut));
     applyRmMotion();
-    addLog(rmOut === 'wan' ? `🎬 출력 = 움직이는영상 (장면 ${rmClips}개)` : '🖼 출력 = 이미지영상');
+    addLog(rmOut === 'wan' ? `🎬 출력 = 영화 (장면 ${rmClips}개)` : '🖼 출력 = 이미지영상');
   }));
   // 재창작 장면수 프리셋 버튼.
   document.querySelectorAll('.hl-rmclip').forEach((b) => b.addEventListener('click', () => {
     rmClips = Math.max(1, Math.min(20, Number(b.dataset.n) || 1)); applyRmMotion();
     if ($('hl-rmclip-saved')) $('hl-rmclip-saved').textContent = '';
-    addLog(`🎬 움직이는 장면 수 = ${rmClips}개`);
+    addLog(`🎬 영화 장면 수 = ${rmClips}개`);
   }));
   // 재창작 장면수 직접 입력 저장 — 확실 적용 + '저장됨' + 로그. 버튼 + Enter 둘 다.
   function saveRmClip() {
@@ -1189,8 +1189,8 @@
     const s = $('hl-rmclip-saved');
     if (!Number.isFinite(raw) || raw < 1) { if (s) { s.style.color = '#e0410a'; s.textContent = '1~20 사이 숫자를 넣어주세요.'; } return; }
     rmClips = Math.max(1, Math.min(20, Math.round(raw))); applyRmMotion();
-    if (s) { s.style.color = '#2bb673'; s.textContent = `✅ 저장됨 — 움직이는 장면 ${rmClips}개로 만들어요.`; }
-    addLog(`🎬 움직이는 장면 수 = ${rmClips}개로 저장됨`);
+    if (s) { s.style.color = '#2bb673'; s.textContent = `✅ 저장됨 — 영화 장면 ${rmClips}개로 만들어요.`; }
+    addLog(`🎬 영화 장면 수 = ${rmClips}개로 저장됨`);
   }
   $('hl-rmclip-save')?.addEventListener('click', saveRmClip);
   $('hl-rmclip-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveRmClip(); } });
@@ -1200,10 +1200,10 @@
     document.querySelectorAll('.hl-rmstyle').forEach((x) => x.classList.toggle('active', x.dataset.style === rmStyle));
     saveState(); addLog(`🎨 그림 스타일 = ${b.textContent.trim()}`);
   }));
-  // 재창작 편수 선택 + 움직이는영상일 때 비용/시간 경고.
+  // 재창작 편수 선택 + 영화일 때 비용/시간 경고.
   function applyRmCountNote() {
     const n = $('hl-rmcount-note'); if (!n) return;
-    if (rmCount > 1 && rmOut === 'wan') n.innerHTML = `⚠️ 움직이는영상 ${rmCount}편은 편당 GPU 비용·시간이 크게 늘어요(편당 수분~십수분). 비용을 아끼려면 이미지영상을 권장해요.`;
+    if (rmCount > 1 && rmOut === 'wan') n.innerHTML = `⚠️ 영화 ${rmCount}편은 편당 GPU 비용·시간이 크게 늘어요(편당 수분~십수분). 비용을 아끼려면 이미지영상을 권장해요.`;
     else if (rmCount > 1) n.textContent = `같은 소재로 ${rmCount}편을 서로 다르게 만들어요(각 편 각색이 달라져요).`;
     else n.textContent = '';
   }
@@ -1231,7 +1231,7 @@
       addLog('──────── 🎭 재창작 시작 ────────', 'done');
       addLog(`• 원본(소재): ${picked.title}`);
       addLog('• 방식: 원본 영상·소리·로고 미사용 → 그 이야기로 완전 새 영상(저작권 걱정 0)');
-      addLog(`• 출력: ${rmOut === 'wan' ? `🎬 움직이는영상(툴 제작 · 장면 ${rmClips}개)` : '🖼 이미지영상'} · 길이 ${sec}초 · ${orient === 'landscape' ? '가로' : '세로'}`);
+      addLog(`• 출력: ${rmOut === 'wan' ? `🎬 영화(툴 제작 · 장면 ${rmClips}개)` : '🖼 이미지영상'} · 길이 ${sec}초 · ${orient === 'landscape' ? '가로' : '세로'}`);
       addLog(`• 목소리: ${$('hl-voice')?.selectedOptions[0]?.textContent || voice || '자동'}`);
       addLog(`• 그림 스타일: ${document.querySelector('.hl-rmstyle.active')?.textContent.trim() || rmStyle}`);
       addLog('────────────────────────────');
@@ -1241,7 +1241,7 @@
         title: picked.title, channel: picked.channel || '',
         videoId: picked.videoId || '', // ★원본 실제 내용(자막/음성STT) 확보용 — 서버가 이걸로 전사해 충실히 각색
         duration: sec, orientation: orient, voice, font, imageStyle: rmStyle, count: rmCount,
-        aiClips: rmOut === 'wan' ? rmClips : 0, // >0 = 움직이는영상(앞 N장면 Wan), 0 = 이미지영상
+        aiClips: rmOut === 'wan' ? rmClips : 0, // >0 = 영화(앞 N장면 Wan), 0 = 이미지영상
       };
       lastEndpoint = '/api/generate-remake';
       generate(lastBody, lastEndpoint);

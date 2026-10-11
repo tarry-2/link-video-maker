@@ -9,6 +9,9 @@ const QUEUE = 'https://queue.fal.run';
 // Fast = 최저가(테리 지정). fast가 없으면 표준으로 폴백.
 const ENDPOINTS_FAST = ['bytedance/seedance-2.0/fast/image-to-video', 'bytedance/seedance-2.0/image-to-video'];
 const ENDPOINTS_STD = ['bytedance/seedance-2.0/image-to-video'];
+const ENDPOINTS_25 = ['bytedance/seedance-2.5/image-to-video']; // 2.5 고급(비쌈·최대30초·립싱크·매프레임 레퍼런스)
+// ★fal 실제 단가(USD/초, 720p) — 2.0 Standard=최상 품질, 2.5=고급. (fast $0.242는 품질↓라 2.0은 Standard 사용)
+const USD_PER_SEC: Record<string, number> = {'2.0': 0.3024, '2.5': 0.473};
 
 // 블록버스터 시네마 품질 꼬리표(스타일만 — 피사체 재설명 금지).
 export const SEEDANCE_CINE = 'cinematic blockbuster film quality, dramatic movie lighting, shallow depth of field, filmic grain, Hollywood production grade, ultra detailed';
@@ -18,21 +21,39 @@ export const SEEDANCE_CINE = 'cinematic blockbuster film quality, dramatic movie
 //   · 정적 동사(서 있다/앉아 있다)는 거의 안 움직임 → 미세 동작(숨쉬기·고개 살짝·머리카락·옷 흔들림)으로 모션 활성화.
 //   · 카메라는 느리고 부드럽게(영화는 느리다), 최대 1~2개.
 //   · ★캐릭터 일관성(테리 최우선): "같은 인물, [외형 고정특징], 얼굴·머리·옷 바꾸지 마"를 명시해 컷마다 안 변하게.
+// 샷 타입 → '카메라 무브 1개'(Seedance 공식: 샷당 primary 무브 하나, 느리게). 블록버스터 카메라 언어.
+function cameraFor(shot?: string): string {
+  const s = (shot || '').toLowerCase();
+  if (s.includes('wide') || s.includes('establish')) return 'slow dolly-in from a wide establishing shot';
+  if (s.includes('extreme close')) return 'a very gentle slow push-in on the eyes';
+  if (s.includes('close')) return 'a gentle slow push-in on the face';
+  if (s.includes('over-the-shoulder') || s.includes('over the shoulder')) return 'steady over-the-shoulder framing with a subtle push-in';
+  if (s.includes('low-angle') || s.includes('low angle') || s.includes('hero')) return 'a slow rising low-angle hero shot';
+  if (s.includes('track') || s.includes('follow')) return 'a smooth tracking shot that follows the subject, keeping distance';
+  if (s.includes('aerial') || s.includes('drone') || s.includes('bird')) return 'a slow descending aerial drone shot';
+  if (s.includes('orbit') || s.includes('arc')) return 'a slow orbit arc around the subject';
+  if (s.includes('pov') || s.includes('point of view')) return 'a steady point-of-view shot';
+  if (s.includes('medium')) return 'a steady medium shot with a subtle push-in';
+  return 'a slow cinematic push-in';
+}
+
+// Seedance i2v 프롬프트 — 공식 베스트프랙티스: [카메라 1개] + [미세 동작] + [정체성 고정] + [시네마 품질].
+//   i2v는 스틸이 피사체·룩을 이미 주므로 '바뀔 것(동작·카메라)'만. 정적 금지→미세동작. 샷당 카메라 1개.
 export function seedancePrompt(opts: {motion?: string; characterLook?: string; shot?: string} = {}): string {
   const parts: string[] = [];
-  if (opts.shot) parts.push(opts.shot);
   parts.push(opts.motion && opts.motion.trim() ? opts.motion.trim() : 'the subject moves subtly and naturally');
-  parts.push('subtle lifelike micro-motion (slow breathing, a slight head turn, hair and clothing drifting gently)');
-  parts.push('slow smooth cinematic camera movement (gentle push-in or subtle dolly)');
+  parts.push('subtle lifelike micro-motion: slow breathing, a slight natural head turn, eyes blinking, hair and clothing drifting gently');
+  parts.push(`${cameraFor(opts.shot)}, slow and smooth`);
   if (opts.characterLook && opts.characterLook.trim()) parts.push(`the person is ${opts.characterLook.trim()}; keep this exact same person`);
-  parts.push('keep the character identity perfectly consistent across the shot — same face, same hairstyle, same clothing; do NOT change, morph, swap, or age the character');
+  parts.push('keep the character identity perfectly consistent for the whole shot — same face, same hairstyle, same clothing; do NOT change, morph, swap, duplicate, or age the character');
   parts.push(SEEDANCE_CINE);
   return parts.join('. ');
 }
 
 export type SeedanceOpts = {
   resolution?: '480p' | '720p';
-  duration?: number; // 초(4~15). 미지정=auto.
+  duration?: number; // 초. 2.0=최대15, 2.5=최대30.
+  model?: '2.0' | '2.5'; // 품질 토글(기본 2.0=쌈). 2.5=고급(비쌈·30초·립싱크).
   aspectRatio?: '9:16' | '16:9' | '1:1' | 'auto';
   seed?: number;
   fast?: boolean; // 기본 true(최저가 Fast)
@@ -70,14 +91,15 @@ export async function seedanceI2V(key: string, prompt: string, startImagePath: s
     resolution: opts.resolution || '720p',
     generate_audio: false, // 우리 TTS·자막을 얹으므로 네이티브 오디오 끔
   };
-  const dur = opts.duration ? Math.max(4, Math.min(15, Math.round(opts.duration))) : 0;
+  const model = opts.model === '2.5' ? '2.5' : '2.0';
+  const maxDur = model === '2.5' ? 30 : 15;
+  const dur = opts.duration ? Math.max(4, Math.min(maxDur, Math.round(opts.duration))) : 0;
   if (dur) input.duration = String(dur);
   if (opts.aspectRatio) input.aspect_ratio = opts.aspectRatio;
   if (opts.seed != null) input.seed = opts.seed;
 
-  // 제출(Fast 우선, 404면 표준 폴백). ★제출 응답이 주는 status_url·response_url을 '그대로' 쓴다
-  //   (네임스페이스 모델은 직접 조립한 경로가 안 맞아 폴링이 헛돈다 — fal 공식 큐 API 규약).
-  const endpoints = opts.fast === false ? ENDPOINTS_STD : ENDPOINTS_FAST;
+  // 제출. ★제출 응답이 주는 status_url·response_url을 '그대로' 쓴다(네임스페이스 모델은 조립 경로가 안 맞아 폴링 헛돎).
+  const endpoints = model === '2.5' ? ENDPOINTS_25 : ENDPOINTS_STD; // 2.0=Standard(최상 품질, 720p)
   let reqId = '', endpoint = '', statusUrl = '', responseUrl = '', lastErr = '';
   for (const ep of endpoints) {
     const sub = await fetch(`${QUEUE}/${ep}`, {
@@ -124,7 +146,7 @@ export async function seedanceI2V(key: string, prompt: string, startImagePath: s
   await writeFile(outPath, vbuf);
 
   const seconds = dur || 5;
-  const costUsd = Number((seconds * SEEDANCE_USD_PER_SEC).toFixed(3)); // 추정(요율 상수는 아래)
+  const costUsd = Number((seconds * (USD_PER_SEC[model] || 0.3)).toFixed(3));
   log(`[영상] Seedance 완성(${(vbuf.length / 1e6).toFixed(1)}MB · 약 ${seconds}초)`);
   return {seconds, costUsd};
 }

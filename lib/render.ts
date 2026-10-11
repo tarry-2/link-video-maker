@@ -101,12 +101,12 @@ export async function renderVideo(
   );
   if (memGB < 4)
     log?.(`[렌더] ⚠️ 컨테이너 메모리 한계가 ${memGB.toFixed(1)}GB로 작습니다. Railway 서비스 메모리를 4GB 이상으로 올리면 안정적입니다.`);
-  // ★GPU는 이 단계에서 안 쓴다(움직이는 클립은 이미 다 뽑음) — 추가 과금 없음을 명시(테리: GPU 꺼진 게 불안).
+  // ★GPU는 이 단계에서 안 쓴다(영화 클립은 이미 다 뽑음) — 추가 과금 없음을 명시(테리: GPU 꺼진 게 불안).
   log?.(`[렌더] 이제부터는 GPU 없이 CPU로 영상을 합칩니다(추가 과금 없음). 총 ${totalFrames}프레임을 한 장씩 그려서 합쳐요 — 멈춘 게 아니라 프레임 수가 계속 올라가면 정상이에요.`);
   const renderStart = Date.now();
   let lastPct = -1, lastAt = 0;
   // ★OffthreadVideo 캐시 — 작으면(150MB) 렌더 20~30%에서 'cache pruned'로 기어가듯 느려진다(Remotion #3070).
-  //   컨테이너 메모리의 20%(0.3~2GB)로 넉넉히 잡아 움직이는 클립이 섞인 영상도 끝까지 일정 속도로 렌더되게 한다.
+  //   컨테이너 메모리의 20%(0.3~2GB)로 넉넉히 잡아 영화 클립이 섞인 영상도 끝까지 일정 속도로 렌더되게 한다.
   const cacheBytes = Math.round(Math.min(2, Math.max(0.3, memGB * 0.2)) * 1024 ** 3);
   // ★멈춤 감시(watchdog) — 90초 동안 진행률이 '1도' 안 오르면 멈춘 것으로 보고 렌더를 취소한다. blur 수정으로
   //   애초에 멈추지 않지만, 어떤 이유로든 또 걸려도 테리가 15분씩 기다리지 않고 바로 에러로 끝나 다시 시도할 수 있다.
@@ -115,7 +115,7 @@ export async function renderVideo(
   const watchdog = setInterval(() => {
     if (Date.now() - lastProgressAt > 90000) {
       watchdogFired = true;
-      log?.('[렌더] 🔴 90초 동안 진행이 멈춰 중단합니다 — 서버 과부하이거나 영상이 너무 무거워요(움직이는 장면 수를 줄이거나 잠시 후 다시 시도하세요).');
+      log?.('[렌더] 🔴 90초 동안 진행이 멈춰 중단합니다 — 서버 과부하이거나 영상이 너무 무거워요(영화 장면 수를 줄이거나 잠시 후 다시 시도하세요).');
       try { cancel(); } catch {}
     }
   }, 5000);
@@ -156,7 +156,7 @@ export async function renderVideo(
   } finally {
     clearInterval(watchdog); // throw(취소·에러) 나도 반드시 인터벌 정리
   }
-  if (watchdogFired) throw new Error('렌더가 90초 이상 멈춰 중단했어요. 서버 과부하이거나 영상이 무거워요 — 움직이는 장면 수를 줄이거나 잠시 후 다시 시도하세요.');
+  if (watchdogFired) throw new Error('렌더가 90초 이상 멈춰 중단했어요. 서버 과부하이거나 영상이 무거워요 — 영화 장면 수를 줄이거나 잠시 후 다시 시도하세요.');
   log?.(`[렌더] ✅ 합성 완료(${Math.round((Date.now() - renderStart) / 1000)}초) → 파일 저장 중…`);
   } finally {
     if (publicDir) await rm(serveUrl, {recursive: true, force: true});

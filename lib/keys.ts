@@ -10,7 +10,7 @@ export type StoredKeys = {
   ELEVENLABS_API_KEY?: string;
   REPLICATE_API_TOKEN?: string;
   RUNPOD_API_KEY?: string;
-  FAL_KEY?: string; // Seedance(움직이는영상) 생성용
+  FAL_KEY?: string; // Seedance(영화) 생성용
   FAL_ADMIN_KEY?: string; // Seedance 잔액 조회용(admin 권한, 선택)
 };
 

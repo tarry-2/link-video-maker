@@ -59,8 +59,8 @@
   const DURS = [30, 60, 90, 120];
   const ORIENTS = [['portrait', '세로'], ['landscape', '가로']];
   const STYLES = [['real', '실사'], ['anime', '애니'], ['cinema', '시네마'], ['classic', '고전']];
-  const OUTS = [['image', '🖼 이미지영상'], ['wan', '🎬 움직이는영상']];
-  // ★'움직이는 장면 수' = 몇 '개'의 장면을 실제 움직이는 영상(GPU)으로 만들지. 예전엔 seg() 기본 포맷이 '초'를 붙여
+  const OUTS = [['image', '🖼 이미지영상'], ['wan', '🎬 영화']];
+  // ★'영화 장면 수' = 몇 '개'의 장면을 실제 영화(GPU)으로 만들지. 예전엔 seg() 기본 포맷이 '초'를 붙여
   //   "4초"처럼 보여 테리가 '길이(초)'로 오해함 → 명시적으로 '개' 라벨을 준다(초 아님).
   const CLIPS = [[1, '1개'], [2, '2개'], [3, '3개'], [4, '4개'], [6, '6개']];
   const EPS = [[1, '단편 1개'], [3, '3부작'], [5, '5부작'], [10, '10부작']];
@@ -123,14 +123,14 @@
   function totalScenes() { return (scenario && Array.isArray(scenario.scenes)) ? scenario.scenes.length : 0; }
   function updatePlan() {
     const T = totalScenes();
-    // 움직이는 장면 = 고른 개수와 총 장면 중 작은 값(서버 pipeline도 scenes.length로 클램프). 이미지영상이면 0.
+    // 영화 장면 = 고른 개수와 총 장면 중 작은 값(서버 pipeline도 scenes.length로 클램프). 이미지영상이면 0.
     const moving = out === 'wan' ? Math.min(clips, T || clips) : 0;
     // step04 안내 문구 — 총 장면을 모르면 '시나리오 먼저', 알면 정확한 분배를 보여준다.
     const note = $('cr-clip-note');
     if (note) {
       note.innerHTML = !T
-        ? '시나리오를 먼저 만들면 <b>총 장면 수</b>가 정해져요. 그중 <b>앞에서부터 고른 개수</b>만 움직이는 영상(GPU)으로, 나머지는 사진으로 만들어요. 숫자가 클수록 GPU 과금이 커져요.'
-        : `이 시나리오는 총 <b>${T}장면</b>이에요 → 앞 <b>${moving}장면</b>은 🎬 움직이는 영상(GPU 과금), 나머지 <b>${T - moving}장면</b>은 🖼 사진이에요.`;
+        ? '시나리오를 먼저 만들면 <b>총 장면 수</b>가 정해져요. 그중 <b>앞에서부터 고른 개수</b>만 영화(GPU)으로, 나머지는 사진으로 만들어요. 숫자가 클수록 GPU 과금이 커져요.'
+        : `이 시나리오는 총 <b>${T}장면</b>이에요 → 앞 <b>${moving}장면</b>은 🎬 영화(GPU 과금), 나머지 <b>${T - moving}장면</b>은 🖼 사진이에요.`;
     }
     // 제작 요약(몇 편인지 = 테리가 가장 궁금해한 것).
     const sum = $('cr-make-summary');
@@ -151,7 +151,7 @@
       const numCell = tr.querySelector('.cr-scene-num');
       if (!numCell) return;
       numCell.innerHTML = out === 'wan'
-        ? `${i + 1}<span class="cr-mv" title="${i < moving ? '움직이는 영상(GPU)' : '사진'}">${i < moving ? '🎬' : '🖼'}</span>`
+        ? `${i + 1}<span class="cr-mv" title="${i < moving ? '영화(GPU)' : '사진'}">${i < moving ? '🎬' : '🖼'}</span>`
         : `${i + 1}`;
     });
   }
@@ -164,7 +164,7 @@
   $('cr-out').addEventListener('click', (e) => { const b = e.target.closest('[data-out]'); if (!b) return; out = b.dataset.out; renderSegs(); save(); });
   $('cr-clips').addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; clips = Number(b.dataset.c); if ($('cr-clip-saved')) $('cr-clip-saved').textContent = ''; renderSegs(); save(); });
   $('cr-engine').addEventListener('click', (e) => { const b = e.target.closest('[data-eng]'); if (!b) return; engine = b.dataset.eng; renderSegs(); save(); });
-  // 움직이는 장면 수 직접 입력 + 저장 — 프리셋(1~6) 말고 원하는 수(1~20)를 넣고 '저장' 누르면 '저장되었습니다'.
+  // 영화 장면 수 직접 입력 + 저장 — 프리셋(1~6) 말고 원하는 수(1~20)를 넣고 '저장' 누르면 '저장되었습니다'.
   function saveClips() {
     const raw = Number($('cr-clip-custom')?.value);
     const s = $('cr-clip-saved');
@@ -172,7 +172,7 @@
     clips = Math.max(1, Math.min(20, Math.round(raw)));
     renderSegs(); // 프리셋 버튼 활성/요약·표 아이콘 갱신
     const T = totalScenes();
-    if (s) { s.style.color = '#2bb673'; s.textContent = T && clips > T ? `✅ 저장되었습니다 — 단, 총 ${T}장면뿐이라 ${T}장면까지만 움직여요.` : `✅ 저장되었습니다 — 움직이는 장면 ${clips}개로 만들어요.`; }
+    if (s) { s.style.color = '#2bb673'; s.textContent = T && clips > T ? `✅ 저장되었습니다 — 단, 총 ${T}장면뿐이라 ${T}장면까지만 움직여요.` : `✅ 저장되었습니다 — 영화 장면 ${clips}개로 만들어요.`; }
     save();
   }
   $('cr-clip-save')?.addEventListener('click', saveClips);
@@ -372,6 +372,21 @@
     });
   }
 
+  // ── 본인 얼굴 업로드(선택) — 올리면 전 장면을 이 얼굴로(server가 faceRef로 받아 pipeline이 처리) ──
+  let faceImage = '';
+  const faceEl = $('cr-face');
+  if (faceEl) faceEl.onchange = () => {
+    const f = faceEl.files && faceEl.files[0];
+    if (!f) { faceImage = ''; $('cr-face-preview').innerHTML = ''; return; }
+    const rd = new FileReader();
+    rd.onload = () => {
+      faceImage = String(rd.result || '');
+      $('cr-face-preview').innerHTML = `<img src="${faceImage}" alt="얼굴" style="height:72px;border-radius:10px;border:1.5px solid var(--edline);vertical-align:middle"/> <button type="button" id="cr-face-clear" class="ghost-btn small">✕ 제거</button>`;
+      const c = $('cr-face-clear'); if (c) c.onclick = () => { faceImage = ''; faceEl.value = ''; $('cr-face-preview').innerHTML = ''; };
+    };
+    rd.readAsDataURL(f);
+  };
+
   // ── 제작 ──
   $('cr-make').onclick = async () => {
     syncTableToScenario();
@@ -383,7 +398,7 @@
     $('cr-phase').textContent = '제작 준비'; startTs = Date.now(); startTick();
     try {
       const r = await fetch('/api/create-produce', {method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({storyboard: scenario, duration: dur, orientation: orient, imageStyle: style, aiClips: out === 'wan' ? clips : 0, narration: narr, bgm})});
+        body: JSON.stringify({storyboard: scenario, duration: dur, orientation: orient, imageStyle: style, aiClips: out === 'wan' ? clips : 0, narration: narr, bgm, faceImage: faceImage || undefined})});
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || '제작 실패');
       attach(d.id);

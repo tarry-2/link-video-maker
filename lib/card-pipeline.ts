@@ -5,7 +5,7 @@ import path from 'node:path';
 import {mkdir, rm} from 'node:fs/promises';
 import {generateCardStoryboard, type CardPlan, type CardStoryboard} from './cards';
 import {getPreset} from './presets';
-import {generateImageFlux} from './image';
+import {generateImageFlux, generateImageSmart} from './image';
 import {ttsElevenJoined, alignToWords} from './tts';
 import {VOICES, pickVoice, DEFAULT_VOICE} from './tts';
 import type {CharAlign} from './tts';
@@ -19,7 +19,7 @@ import {registerCardDeck} from './card-portfolio';
 
 const FPS = 30;
 
-export type CardKeys = {gemini: string[]; openai?: string; elevenlabs?: string; replicate?: string};
+export type CardKeys = {gemini: string[]; openai?: string; elevenlabs?: string; replicate?: string; fal?: string};
 export type CardBg = 'ai' | 'solid' | 'upload';
 export type CardOutput = 'video' | 'post';
 export type CardOpts = {
@@ -107,7 +107,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
       const vp = sb.subject
         ? `${sb.subject}. ${card.visualPrompt || opts.topic}. (main subject must be ${sb.subject})`
         : (card.visualPrompt || opts.topic);
-      try { await generateImageFlux(keys.replicate, vp, abs(rel), log, 'high', opts.imageStyle || 'real', false); bgRel.push(`${pubRel}/bg-${i}.jpg`); }
+      try { await generateImageSmart({fal: keys.fal, replicate: keys.replicate!}, vp, abs(rel), log, 'high', opts.imageStyle || 'real', false); bgRel.push(`${pubRel}/bg-${i}.jpg`); }
       catch (e: any) { log(`[배경 ${i + 1}] ⚠️ 실패(${e.message}) → 단색 배경`); bgRel.push(undefined); }
     } else if (bgMode === 'upload') {
       bgRel.push(opts.uploads?.[i] || opts.uploads?.[opts.uploads.length - 1]);

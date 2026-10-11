@@ -1,4 +1,4 @@
-// RunPod Wan2.2 T2V — OnVideo "움직이는 AI 영상" 엔진.
+// RunPod Wan2.2 T2V — OnVideo "영화" 엔진.
 // OnVideo는 Railway(GPU없음)라 생성은 RunPod A40 팟의 ComfyUI로 위임한다.
 // ★근거(2026-10-06 실측): hearmeman/comfyui-wan-template v29 번들 워크플로 Wan2.2_T2V.json을
 //   공식소스로 그대로 재구성(ModelSamplingSD3 shift5, lightx2v 4step 로라, negative=ConditioningZeroOut,

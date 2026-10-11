@@ -16,7 +16,7 @@ import {intensifyHooks} from './script';
 import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
 import {geminiGenerate} from './gemini';
-import {generateImageFlux} from './image';
+import {generateImageFlux, generateImageSmart} from './image';
 import {ttsElevenJoined, alignToWords, pickVoice, VOICES, type Word} from './tts';
 import type {SceneData} from '../src/Scene';
 import {pickHlTemplate, getHlTemplate} from '../src/highlight-templates';
@@ -147,7 +147,7 @@ JSON만 출력: {"commentary":"..."}`;
 // 클립의 내용(제목·후킹·대사)에 어울리는 '시각 소재' 이미지를 1~2장 flux로 만들어, 렌더 때 화면 중앙에
 // 잠깐 떴다 사라지는 팝업으로 얹는다(지루함 제거 — OpusClip b-roll의 저비용 버전). 비용=이미지 1~2장뿐.
 async function genBroll(
-  geminiKeys: string[], replicateKey: string, title: string, transcript: string, hook: string,
+  geminiKeys: string[], replicateKey: string, falKey: string | undefined, title: string, transcript: string, hook: string,
   durSec: number, pubClipDir: string, jobRel: string, log: (m: string) => void,
 ): Promise<{path: string; start: number; end: number}[]> {
   // ★90초 미만=1장, 90초 이상=2장(테리 결정). 짧은 쇼츠(대부분 59초)는 1장으로 비용·시간 절약,
@@ -173,7 +173,7 @@ Give ${n} vivid ENGLISH image prompt(s) for B-roll illustrations that visually m
     const abs = path.join(pubClipDir, `broll-${i}.jpg`);
     try {
       log(`[B-roll] ${i + 1}/${prompts.length} 이미지 생성…`);
-      await generateImageFlux(replicateKey, prompts[i] + ', no text, no watermark, high detail', abs, log, 'fast', 'real', true);
+      await generateImageSmart({fal: falKey, replicate: replicateKey}, prompts[i] + ', no text, no watermark, high detail', abs, log, 'fast', 'real', true);
       if (fs.existsSync(abs)) {
         const start = Math.max(0.5, Math.min(durSec - 3, slot * (i + 1) - 1.3));
         out.push({path: abs, start, end: Math.min(durSec - 0.3, start + 2.8)});
@@ -382,7 +382,7 @@ export async function makeHighlights(
     // ── AI B-roll 팝업(선택) — 관련 이미지를 화면 중앙에 잠깐 띄웠다 사라지게. replicate 키 있을 때만(비용 발생). ──
     let brollCuts: {path: string; start: number; end: number}[] = [];
     if (opts.broll && k.replicate) {
-      try { brollCuts = await genBroll(k.gemini, k.replicate, meta.title, c.transcript || '', c.hookTop || '', durSec, pubClipDir, jobRel, log); } catch (e: any) { log('[B-roll] 생성 건너뜀: ' + (e?.message || '').slice(0, 60)); }
+      try { brollCuts = await genBroll(k.gemini, k.replicate, k.fal, meta.title, c.transcript || '', c.hookTop || '', durSec, pubClipDir, jobRel, log); } catch (e: any) { log('[B-roll] 생성 건너뜀: ' + (e?.message || '').slice(0, 60)); }
     } else if (opts.broll && !k.replicate) {
       log('[B-roll] 이미지 생성 키(Replicate)가 없어 b-roll 없이 진행합니다.');
     }

@@ -719,8 +719,8 @@ function attachProgress(id, freshLog) {
       if (recv > logCount) { // 새 줄만 추가(로그 유실·중복 둘 다 방지)
         addLog(m.log, m.log.includes('[완료]') ? 'done' : m.log.includes('[실패]') ? 'fail' : '');
         cardEnergyFromLog(m.log);
-        // 움직이는영상 GPU가 켜지거나(생성 시작) 꺼질 때(팟 종료) 상단 배지를 바로 갱신해 과금상태를 눈에 보이게.
-        if (/움직이는 영상|GPU|팟/.test(m.log)) refreshRunpod();
+        // 영화 GPU가 켜지거나(생성 시작) 꺼질 때(팟 종료) 상단 배지를 바로 갱신해 과금상태를 눈에 보이게.
+        if (/영화|GPU|팟/.test(m.log)) refreshRunpod();
         logCount = recv;
       }
     }
@@ -925,8 +925,8 @@ syncFormat();
 
 
 // 영상 종류 = 버튼(세그먼트)으로 고른다. 네이티브 select가 일부 브라우저에서 안 열려서 버튼으로 교체.
-// aiClips 는 숨은 input(값: 0=사진영상, 1~3=움직이는 장면 수). '움직이는 영상'을 골랐을 때만 장면수·자동끄기 노출.
-let lastMotionClips = 1; // 사진영상↔움직이는영상 오갈 때 마지막으로 고른 장면 수 기억
+// aiClips 는 숨은 input(값: 0=사진영상, 1~3=영화 장면 수). '영화'을 골랐을 때만 장면수·자동끄기 노출.
+let lastMotionClips = 1; // 사진영상↔영화 오갈 때 마지막으로 고른 장면 수 기억
 function setAiClips(n) {
   n = Math.max(0, Math.min(20, Number(n) || 0)); // 1~20 임의 허용(장면수 넘으면 서버가 자동 조정)
   if (n > 0) lastMotionClips = n;
@@ -938,14 +938,14 @@ function setAiClips(n) {
   document.querySelectorAll('.vclip-n').forEach((b) => b.classList.toggle('active', Number(b.dataset.clips) === n));
   const ci = $('vclip-custom'); if (ci && n > 0 && !document.querySelector('.vclip-n.active')) ci.value = String(n);
 }
-// 움직이는 장면 수 '직접 입력' 저장 — 확실히 적용(값 읽기→setAiClips→폼저장) + '저장됨' 표시 + 로그.
+// 영화 장면 수 '직접 입력' 저장 — 확실히 적용(값 읽기→setAiClips→폼저장) + '저장됨' 표시 + 로그.
 function saveVclipCustom() {
   const raw = Number($('vclip-custom')?.value);
   if (!Number.isFinite(raw) || raw < 1) { const s = $('vclip-saved'); if (s) { s.style.color = '#e0410a'; s.textContent = '1~20 사이 숫자를 넣어주세요.'; } return; }
   const n = Math.max(1, Math.min(20, Math.round(raw)));
   setAiClips(n); saveFormState();
-  const s = $('vclip-saved'); if (s) { s.style.color = '#2bb673'; s.textContent = `✅ 저장됨 — 움직이는 장면 ${n}개로 만들어요.`; }
-  genLog(`🎬 움직이는 장면 수 = ${n}개로 저장됨`);
+  const s = $('vclip-saved'); if (s) { s.style.color = '#2bb673'; s.textContent = `✅ 저장됨 — 영화 장면 ${n}개로 만들어요.`; }
+  genLog(`🎬 영화 장면 수 = ${n}개로 저장됨`);
 }
 // 장면(이미지) 수 직접 지정 — 세그먼트 버튼. 0=자동(길이로).
 function setSceneCount(n) {
@@ -964,9 +964,9 @@ function setFont(f) {
 document.querySelectorAll('.font-chip').forEach((b) => b.addEventListener('click', () => { setFont(b.dataset.font); saveFormState(); }));
 
 $('vtype-photo')?.addEventListener('click', () => { setAiClips(0); saveFormState(); genLog('📷 사진 영상으로 설정됨'); $('duration')?.dispatchEvent(new Event('input')); });
-$('vtype-motion')?.addEventListener('click', () => { setAiClips(lastMotionClips); saveFormState(); genLog(`🎬 움직이는 영상으로 설정됨 (장면 ${lastMotionClips}개)`); $('duration')?.dispatchEvent(new Event('input')); });
-// 움직이는 장면 수 프리셋 버튼 — 누르면 즉시 적용 + 로그.
-document.querySelectorAll('.vclip-n').forEach((b) => b.addEventListener('click', () => { const n = Number(b.dataset.clips) || 1; setAiClips(n); saveFormState(); if ($('vclip-saved')) $('vclip-saved').textContent = ''; genLog(`🎬 움직이는 장면 수 = ${n}개`); }));
+$('vtype-motion')?.addEventListener('click', () => { setAiClips(lastMotionClips); saveFormState(); genLog(`🎬 영화으로 설정됨 (장면 ${lastMotionClips}개)`); $('duration')?.dispatchEvent(new Event('input')); });
+// 영화 장면 수 프리셋 버튼 — 누르면 즉시 적용 + 로그.
+document.querySelectorAll('.vclip-n').forEach((b) => b.addEventListener('click', () => { const n = Number(b.dataset.clips) || 1; setAiClips(n); saveFormState(); if ($('vclip-saved')) $('vclip-saved').textContent = ''; genLog(`🎬 영화 장면 수 = ${n}개`); }));
 // 직접 입력 저장 — 버튼 + Enter 둘 다(키 안 먹던 문제 방지).
 $('vclip-save')?.addEventListener('click', saveVclipCustom);
 $('vclip-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveVclipCustom(); } });
@@ -976,12 +976,12 @@ setAiClips(0);
 // ── 키 설정 모달 ──
 const KEY_META = [
   { k: 'GEMINI_KEYS', label: 'Google Gemini (대본·이미지)', desc: '여러 개는 콤마로. 하나 소진되면 자동으로 다음 키 사용.', link: 'https://aistudio.google.com/apikey' },
-  { k: 'REPLICATE_API_TOKEN', label: 'Replicate (Flux 이미지)', desc: '9:16 이미지 생성용.', link: 'https://replicate.com/account/api-tokens' },
+  { k: 'REPLICATE_API_TOKEN', label: 'Replicate (영화 + 이미지 · 핵심)', desc: '영화(Seedance)와 이미지(Flux)를 둘 다 만들어요. fal/RunPod 충전 크레딧이 소진되면 자동으로 여기로 전환돼요(종량제).', link: 'https://replicate.com/account/api-tokens' },
   { k: 'ELEVENLABS_API_KEY', label: 'ElevenLabs (음성·배경음악)', desc: '나레이션과 BGM 생성.', link: 'https://elevenlabs.io/app/settings/api-keys' },
   { k: 'OPENAI_API_KEY', label: 'OpenAI (폴백 대본)', desc: 'Gemini 실패 시 대본 폴백.', link: 'https://platform.openai.com/api-keys' },
-  { k: 'FAL_KEY', label: 'fal.ai / Seedance (고급 움직이는 영상)', desc: '사람이 자연스럽게 움직이는 ReelShort급 영상(인물 컷). "움직이는 AI 영상"을 켜면 인물 장면에 자동 사용돼요.', link: 'https://fal.ai/dashboard/keys', topup: 'https://fal.ai/dashboard/billing', balance: true },
+  { k: 'FAL_KEY', label: 'fal.ai (이미지 생성 — 충전액 먼저)', desc: '이미지 생성에 먼저 쓰여요(충전해둔 fal 크레딧 소진까지). 소진되면 Replicate로 자동 전환돼요. 영화(움직임)는 Replicate/RunPod가 맡아요.', link: 'https://fal.ai/dashboard/keys', topup: 'https://fal.ai/dashboard/billing', balance: true },
   { k: 'FAL_ADMIN_KEY', label: 'fal.ai Admin 키 (잔액 조회용·선택)', desc: '아래 「잔액확인」이 "권한 없음"이면, fal에서 Admin 권한 키를 하나 더 만들어 여기에 넣으세요.', link: 'https://fal.ai/dashboard/keys' },
-  { k: 'RUNPOD_API_KEY', label: 'RunPod (움직이는 영상 — 풍경 컷)', desc: 'Wan2.2 영상 클립용 클라우드 GPU. 풍경·사물 장면에 쓰여요(인물은 Seedance). "움직이는 AI 영상" 켤 때만 필요.', link: 'https://www.runpod.io/console/user/settings', topup: 'https://www.runpod.io/console/user/billing' },
+  { k: 'RUNPOD_API_KEY', label: 'RunPod (영화 — 풍경 컷 GPU)', desc: 'Wan2.2 영상 클립용 클라우드 GPU. 풍경 장면에 크레딧 소진까지 쓰여요(소진되면 Replicate로 자동 전환). 인물 장면은 Replicate Seedance.', link: 'https://www.runpod.io/console/user/settings', topup: 'https://www.runpod.io/console/user/billing' },
 ];
 
 $('settings-btn').onclick = async () => {
@@ -1031,7 +1031,7 @@ async function checkFalBalance() {
   } catch { span.textContent = '조회 실패'; }
 }
 
-// ── RunPod(움직이는 영상 GPU) 현황: 잔액 + 실행 중 팟 + 지금 끄기 ──
+// ── RunPod(영화 GPU) 현황: 잔액 + 실행 중 팟 + 지금 끄기 ──
 // 상단 배지(gpu-badge)는 항상, 설정 모달 안 정보(runpod-info/status)는 열렸을 때 함께 갱신한다.
 function setGpuBadge(state, label) {
   const b = $('gpu-badge'); if (!b) return;
@@ -1073,7 +1073,7 @@ setInterval(refreshRunpod, 60000);
 $('runpod-refresh')?.addEventListener('click', refreshRunpod);
 $('runpod-stop')?.addEventListener('click', async () => {
   const msg = $('runpod-msg');
-  if (!confirm('실행 중인 움직이는-영상 GPU를 모두 끌까요? (진행 중인 영상 작업이 있으면 실패할 수 있어요)')) return;
+  if (!confirm('실행 중인 영화 GPU를 모두 끌까요? (진행 중인 영상 작업이 있으면 실패할 수 있어요)')) return;
   if (msg) msg.textContent = '끄는 중…';
   try {
     const d = await (await fetch('/api/runpod/stop', {method:'POST'})).json();
