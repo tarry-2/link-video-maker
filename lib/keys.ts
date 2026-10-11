@@ -10,6 +10,8 @@ export type StoredKeys = {
   ELEVENLABS_API_KEY?: string;
   REPLICATE_API_TOKEN?: string;
   RUNPOD_API_KEY?: string;
+  FAL_KEY?: string; // Seedance(움직이는영상) 생성용
+  FAL_ADMIN_KEY?: string; // Seedance 잔액 조회용(admin 권한, 선택)
 };
 
 const KEY_NAMES = [
@@ -18,6 +20,8 @@ const KEY_NAMES = [
   'ELEVENLABS_API_KEY',
   'REPLICATE_API_TOKEN',
   'RUNPOD_API_KEY',
+  'FAL_KEY',
+  'FAL_ADMIN_KEY',
 ];
 
 export function loadEnv(): Record<string, string> {
@@ -65,6 +69,8 @@ export function pipelineKeys() {
     elevenlabs: env.ELEVENLABS_API_KEY || '',
     replicate: env.REPLICATE_API_TOKEN || '',
     runpod: env.RUNPOD_API_KEY || '',
+    fal: env.FAL_KEY || '',
+    falAdmin: env.FAL_ADMIN_KEY || '',
   };
 }
 

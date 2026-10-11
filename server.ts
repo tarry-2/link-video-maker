@@ -1441,6 +1441,8 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
         elevenlabs: !!e.ELEVENLABS_API_KEY,
         replicate: !!e.REPLICATE_API_TOKEN,
         runpod: !!e.RUNPOD_API_KEY,
+        fal: !!e.FAL_KEY,
+        falAdmin: !!e.FAL_ADMIN_KEY,
       },
       geminiCount: (e.GEMINI_KEYS || '').split(/[,\n]+/).filter(Boolean).length,
     });
@@ -1453,6 +1455,8 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
       ELEVENLABS_API_KEY: maskKey(e.ELEVENLABS_API_KEY),
       REPLICATE_API_TOKEN: maskKey(e.REPLICATE_API_TOKEN),
       RUNPOD_API_KEY: maskKey(e.RUNPOD_API_KEY),
+      FAL_KEY: maskKey(e.FAL_KEY),
+      FAL_ADMIN_KEY: maskKey(e.FAL_ADMIN_KEY),
     });
   }
   if (p === '/api/settings' && req.method === 'POST') {
@@ -1467,6 +1471,15 @@ JSON만 출력: {"topics":[{"title":"...","why":"왜 터지는지 10자 이내"}
     if (!e.RUNPOD_API_KEY) return json(res, 200, {configured: false});
     const st = await runpodStatus(e.RUNPOD_API_KEY);
     return json(res, 200, {configured: true, balance: st.balance, pods: st.pods});
+  }
+  // ── Seedance(fal) 잔액 조회 — 설정 화면 '잔액확인' 버튼. admin 키가 있으면 그걸로, 없으면 일반 키로 시도. ──
+  if (p === '/api/fal/balance' && req.method === 'GET') {
+    const e = loadEnv();
+    const key = e.FAL_ADMIN_KEY || e.FAL_KEY;
+    if (!key) return json(res, 200, {configured: false});
+    const {falBalance} = await import('./lib/seedance');
+    const r = await falBalance(key);
+    return json(res, 200, {configured: true, ...r, usedAdmin: !!e.FAL_ADMIN_KEY});
   }
   // 수동 "지금 끄기" — 실행 중인 모든 움직이는-영상 팟 종료(과금 중단).
   if (p === '/api/runpod/stop' && req.method === 'POST') {

@@ -979,7 +979,9 @@ const KEY_META = [
   { k: 'REPLICATE_API_TOKEN', label: 'Replicate (Flux 이미지)', desc: '9:16 이미지 생성용.', link: 'https://replicate.com/account/api-tokens' },
   { k: 'ELEVENLABS_API_KEY', label: 'ElevenLabs (음성·배경음악)', desc: '나레이션과 BGM 생성.', link: 'https://elevenlabs.io/app/settings/api-keys' },
   { k: 'OPENAI_API_KEY', label: 'OpenAI (폴백 대본)', desc: 'Gemini 실패 시 대본 폴백.', link: 'https://platform.openai.com/api-keys' },
-  { k: 'RUNPOD_API_KEY', label: 'RunPod (움직이는 AI 영상)', desc: 'Wan2.2 영상 클립 생성용 클라우드 GPU. "움직이는 AI 영상" 켤 때만 필요.', link: 'https://www.runpod.io/console/user/settings', topup: 'https://www.runpod.io/console/user/billing' },
+  { k: 'FAL_KEY', label: 'fal.ai / Seedance (고급 움직이는 영상)', desc: '사람이 자연스럽게 움직이는 ReelShort급 영상(인물 컷). "움직이는 AI 영상"을 켜면 인물 장면에 자동 사용돼요.', link: 'https://fal.ai/dashboard/keys', topup: 'https://fal.ai/dashboard/billing', balance: true },
+  { k: 'FAL_ADMIN_KEY', label: 'fal.ai Admin 키 (잔액 조회용·선택)', desc: '아래 「잔액확인」이 "권한 없음"이면, fal에서 Admin 권한 키를 하나 더 만들어 여기에 넣으세요.', link: 'https://fal.ai/dashboard/keys' },
+  { k: 'RUNPOD_API_KEY', label: 'RunPod (움직이는 영상 — 풍경 컷)', desc: 'Wan2.2 영상 클립용 클라우드 GPU. 풍경·사물 장면에 쓰여요(인물은 Seedance). "움직이는 AI 영상" 켤 때만 필요.', link: 'https://www.runpod.io/console/user/settings', topup: 'https://www.runpod.io/console/user/billing' },
 ];
 
 $('settings-btn').onclick = async () => {
@@ -987,10 +989,12 @@ $('settings-btn').onclick = async () => {
   $('key-fields').innerHTML = KEY_META.map((m) => `
     <div class="key-field">
       <label>${m.label}</label>
-      <div class="desc">${m.desc} <a href="${m.link}" target="_blank">키 발급 →</a>${m.topup ? ` · <a href="${m.topup}" target="_blank">💳 충전 →</a>` : ''}</div>
+      <div class="desc">${m.desc} <a href="${m.link}" target="_blank">키 발급 →</a>${m.topup ? ` · <a href="${m.topup}" target="_blank">💳 충전하기 →</a>` : ''}</div>
       <div class="saved-state" data-state="${m.k}"><div class="desc">…</div></div>
       <input class="input" data-key="${m.k}" placeholder="새 키 입력(비우면 유지)" style="margin-top:6px" />
+      ${m.balance ? '<div style="margin-top:6px"><button type="button" class="ghost-btn small" id="fal-bal-btn">💰 잔액확인</button> <span id="fal-bal" class="desc"></span></div>' : ''}
     </div>`).join('');
+  const fbBtn = $('fal-bal-btn'); if (fbBtn) fbBtn.onclick = checkFalBalance;
   $('settings-msg').textContent = '';
   if ($('yt-msg')) $('yt-msg').textContent = '';
   $('settings-modal').classList.remove('hidden');
@@ -1012,6 +1016,20 @@ $('settings-btn').onclick = async () => {
   }
 };
 $('settings-close').onclick = () => $('settings-modal').classList.add('hidden');
+
+// Seedance(fal) 잔액확인 — admin 키가 있으면 그걸로, 없으면 일반 키로 시도(권한 없으면 안내).
+async function checkFalBalance() {
+  const span = $('fal-bal'); if (!span) return;
+  span.textContent = '조회 중…';
+  try {
+    const d = await (await fetch('/api/fal/balance')).json();
+    if (!d.configured) { span.textContent = 'fal 키 미설정'; return; }
+    if (!d.ok) { span.innerHTML = `⚠️ 조회 실패(${d.error || ''}) — Admin 키를 넣으면 돼요(위 Admin 키 칸).`; return; }
+    span.innerHTML = (typeof d.credits === 'number')
+      ? `<b style="color:var(--teal)">잔액 $${d.credits.toFixed(2)}</b>${d.usedAdmin ? '' : ' (일반 키로 조회됨)'}`
+      : '잔액 숫자를 못 읽었어요 — fal 대시보드에서 확인하세요.';
+  } catch { span.textContent = '조회 실패'; }
+}
 
 // ── RunPod(움직이는 영상 GPU) 현황: 잔액 + 실행 중 팟 + 지금 끄기 ──
 // 상단 배지(gpu-badge)는 항상, 설정 모달 안 정보(runpod-info/status)는 열렸을 때 함께 갱신한다.
