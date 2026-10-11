@@ -39,6 +39,13 @@ export const VOICES: Record<string, VoiceInfo> = {
   bokdeok: {label: 'Bokdeok · 맑은 누나', id: 'PjmtdeplRoyIlaqlTeS3', note: '맑고 밝은 누나 톤', tip: '🎨 애니·키즈에. 깨끗하고 또렷하게 동화 읽어줄 때', gender: '여', use: ['anime', 'heal'], anime: true, cat: '🎨 애니·동화'},
   taek: {label: 'Taek · 친근 소년', id: 'rCm09Tf1yMYbOyCRLDyB', note: '친근하고 동적인 소년 톤', tip: '🎨 애니·모험·동화에. 주인공 소년처럼 신나게', gender: '남', use: ['anime', 'info'], anime: true, cat: '🎨 애니·동화'},
   deoksu: {label: 'Deoksu · 귀여운 캐릭', id: 'IAETYMYM3nJvjnlkVTKI', note: '통통하고 귀여운 캐릭터 남성', tip: '🎨 애니·코믹에. 엉뚱하고 귀여운 캐릭터로', gender: '남', use: ['anime', 'sell'], anime: true, cat: '🎨 애니·동화'},
+
+  // ── 🧒 어린이 목소리(실제 아이 톤) — ElevenLabs 라이브러리 kid 보이스. 한국어도 읽힘(다국어 모델).
+  //   ※진짜 '유아(아기)' 목소리는 ElevenLabs에 없음(미성년 음성 제한) → '어린이' 톤이 최선.
+  kidGudiya: {label: 'Gudiya · 순수한 여자아이', id: 'e3FEEanj39p8QCSMe8iV', note: '순수하고 맑은 여자아이', tip: '🧒 어린이 주인공·동화 나레이션에. 천진하게', gender: '여', use: ['anime', 'heal'], anime: true, cat: '🧒 어린이'},
+  kidPiku: {label: 'Piku · 발랄한 여자아이', id: 'EeQEodFZVtBkjtgK3HBc', note: '표현력 풍부한 여자아이', tip: '🧒 어린이 캐릭터·신나는 동화에. 생동감 있게', gender: '여', use: ['anime', 'sell'], anime: true, cat: '🧒 어린이'},
+  kidJohnny: {label: 'Johnny · 차분한 남자아이', id: '8JVbfL6oEdmuxKn5DK2C', note: '차분하고 진지한 남자아이', tip: '🧒 어린이 주인공·잔잔한 동화에. 또렷하게', gender: '남', use: ['anime', 'info'], anime: true, cat: '🧒 어린이'},
+  kidLeo: {label: 'Leo · 귀여운 꼬마', id: '1tDEBGOo8EqEPApM49eJ', note: '밝고 에너지 넘치는 꼬마', tip: '🧒 어린이 모험·코믹 동화에. 신나고 귀엽게', gender: '남', use: ['anime', 'sell'], anime: true, cat: '🧒 어린이'},
 };
 
 // 애니 스타일 기본 목소리(사용자가 목소리 직접 안 고르면 이걸로 추천).
