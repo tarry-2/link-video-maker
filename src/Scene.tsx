@@ -101,12 +101,11 @@ export const Scene: React.FC<SceneData> = ({
         hlSubTop: 858, hlSubH: 200,
       }
     : {
-        // 세로 1080×1920.
-        imgW: '92%', imgH: 900,
+        // 세로 1080×1920. ★영상 높이 900→1200(화면 47%→63%) — 영상이 작아 '폰 속 영상' 같은 디테일이
+        //   안 보이던 문제(테리 지적). 1200이면 영상 y360~1560 → 후킹(위)·자막(y1750)과 안 겹치는 안전 최대치.
+        imgW: '92%', imgH: 1200,
         hookTop: 110, hookPad: '0 70px', fsHookTop: 88, fsHookAccent: 104,
-        // ★자막을 하단 safe zone 위로(170→340). 유튜브 쇼츠·인스타 릴스는 하단 ≈300~400px를 플랫폼 UI
-        //   (채널명·좋아요·댓글·공유·설명)가 덮어 자막이 묻히고 영상도 가려 보였다(테리 지적) → UI 위로 올림.
-        subBottom: 340, subBottomOverlay: 430, subPad: '0 70px', subGap: '14px 20px', fsSub: 62,
+        subBottom: 170, subBottomOverlay: 360, subPad: '0 70px', subGap: '14px 20px', fsSub: 62,
         prodBottom: 45, prodSide: 65, fsProdName: 36, fsProdBenefit: 28, fsProdUrl: 22,
         cmtBottom: 140, cmtSide: 60, cmtAvatar: 76, fsCmtName: 34, fsCmtText: 38, fsCmtLikes: 30,
         // ★하이라이트 전용 — 세로는 원본 영상이 중앙 밴드(y≈656~1264)라 원본 자막이 그 하단(≈y1150~1250).
