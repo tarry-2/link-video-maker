@@ -60,7 +60,7 @@
   const ORIENTS = [['portrait', '세로'], ['landscape', '가로']];
   const STYLES = [['real', '실사'], ['anime', '애니'], ['cinema', '시네마'], ['classic', '고전']];
   const OUTS = [['image', '🖼 이미지영상'], ['wan', '🎬 영화']];
-  // ★'영화 장면 수' = 몇 '개'의 장면을 실제 영화(GPU)으로 만들지. 예전엔 seg() 기본 포맷이 '초'를 붙여
+  // ★'영화 장면 수' = 몇 '개'의 장면을 실제 영화로 만들지. 예전엔 seg() 기본 포맷이 '초'를 붙여
   //   "4초"처럼 보여 테리가 '길이(초)'로 오해함 → 명시적으로 '개' 라벨을 준다(초 아님).
   const CLIPS = [[1, '1개'], [2, '2개'], [3, '3개'], [4, '4개'], [6, '6개']];
   const EPS = [[1, '단편 1개'], [3, '3부작'], [5, '5부작'], [10, '10부작']];
@@ -70,7 +70,7 @@
   // ── 상태 ──
   let genres = ['미스터리'];
   let dur = 60, orient = 'portrait', style = 'real';
-  let out = 'image', clips = 2, narr = true, bgm = true;
+  let out = 'image', clips = 2, narr = true, bgm = true, voice = '';
   let engine = 'free'; // 대본 AI 엔진(free=무료 Gemini / gpt=고급 GPT)
   let scenario = null;
   let curJobId = null, curES = null, startTs = 0, tickTimer = null, lastLogAt = 0;
@@ -129,8 +129,8 @@
     const note = $('cr-clip-note');
     if (note) {
       note.innerHTML = !T
-        ? '시나리오를 먼저 만들면 <b>총 장면 수</b>가 정해져요. 그중 <b>앞에서부터 고른 개수</b>만 영화(GPU)으로, 나머지는 사진으로 만들어요. 숫자가 클수록 GPU 과금이 커져요.'
-        : `이 시나리오는 총 <b>${T}장면</b>이에요 → 앞 <b>${moving}장면</b>은 🎬 영화(GPU 과금), 나머지 <b>${T - moving}장면</b>은 🖼 사진이에요.`;
+        ? '시나리오를 먼저 만들면 <b>총 장면 수</b>가 정해져요. 그중 <b>앞에서부터 고른 개수</b>만 영화로, 나머지는 사진으로 만들어요. 영화 장면이 많을수록 비용이 커져요.'
+        : `이 시나리오는 총 <b>${T}장면</b>이에요 → 앞 <b>${moving}장면</b>은 🎬 영화(과금), 나머지 <b>${T - moving}장면</b>은 🖼 사진이에요.`;
     }
     // 제작 요약(몇 편인지 = 테리가 가장 궁금해한 것).
     const sum = $('cr-make-summary');
@@ -140,7 +140,7 @@
       const sceneLabel = T
         ? (out === 'wan' ? `편당 총 <b>${T}장면</b> = 🎬 움직임 ${moving} + 🖼 사진 ${T - moving}` : `편당 총 <b>${T}장면</b> (🖼 전부 사진)`)
         : '장면 수는 시나리오를 만들면 정해져요';
-      sum.innerHTML = `🎬 <b>만들 결과</b> — ${orient === 'landscape' ? '가로' : '세로'} ${dur}초 영상 ${epLabel}<br>· ${sceneLabel}<br>· 나레이션 ${narr ? '켜짐' : '끔'} · 배경음악 ${bgm ? '켜짐' : '끔'}${moving ? ' · <b style="color:#e8612b">GPU 사용(과금)</b>' : ''}`;
+      sum.innerHTML = `🎬 <b>만들 결과</b> — ${orient === 'landscape' ? '가로' : '세로'} ${dur}초 영상 ${epLabel}<br>· ${sceneLabel}<br>· 나레이션 ${narr ? '켜짐' : '끔'} · 배경음악 ${bgm ? '켜짐' : '끔'}${moving ? ' · <b style="color:#e8612b">영화 제작(과금)</b>' : ''}`;
     }
     markTableMoving(moving);
   }
@@ -151,7 +151,7 @@
       const numCell = tr.querySelector('.cr-scene-num');
       if (!numCell) return;
       numCell.innerHTML = out === 'wan'
-        ? `${i + 1}<span class="cr-mv" title="${i < moving ? '영화(GPU)' : '사진'}">${i < moving ? '🎬' : '🖼'}</span>`
+        ? `${i + 1}<span class="cr-mv" title="${i < moving ? '영화' : '사진'}">${i < moving ? '🎬' : '🖼'}</span>`
         : `${i + 1}`;
     });
   }
@@ -206,7 +206,7 @@
   // ── 상태 저장/복원(탭 이동·새로고침·기기 바꿔도 유지) ──
   const KEY = 'onvideo-create-state';
   function save() {
-    try { syncTableToScenario(); localStorage.setItem(KEY, JSON.stringify({genres, dur, orient, style, out, clips, narr, bgm, engine, brief: $('cr-brief').value, scenario, eps, bible, epScenarios, epProduced, curEp})); } catch {}
+    try { syncTableToScenario(); localStorage.setItem(KEY, JSON.stringify({genres, dur, orient, style, out, clips, narr, bgm, voice, engine, brief: $('cr-brief').value, scenario, eps, bible, epScenarios, epProduced, curEp})); } catch {}
   }
   function restore() {
     let s; try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch {}
@@ -214,12 +214,37 @@
     genres = Array.isArray(s.genres) && s.genres.length ? s.genres : genres;
     dur = s.dur || dur; orient = s.orient || orient; style = s.style || style;
     out = s.out === 'wan' ? 'wan' : 'image'; clips = s.clips || clips;
-    narr = s.narr !== false; bgm = s.bgm !== false; engine = s.engine === 'gpt' ? 'gpt' : 'free';
+    narr = s.narr !== false; bgm = s.bgm !== false; voice = s.voice || ''; engine = s.engine === 'gpt' ? 'gpt' : 'free';
     eps = s.eps || 1; bible = s.bible || null; epScenarios = Array.isArray(s.epScenarios) ? s.epScenarios : []; epProduced = Array.isArray(s.epProduced) ? s.epProduced : []; curEp = s.curEp || 0;
     $('cr-brief').value = s.brief || ''; $('cr-narr').checked = narr; $('cr-bgm').checked = bgm;
     renderGenres(); renderSegs(); // 복원된 장르·편수·길이를 칩/세그/직접입력칸에 반영(안 하면 기본값으로 보였다)
     if (eps > 1 && bible) { renderSeriesBar(); scenario = epScenarios[curEp] || null; if (scenario) renderTable(); }
     else if (s.scenario && s.scenario.scenes) { scenario = s.scenario; renderTable(); }
+  }
+
+  // ── 목소리 목록 로드(영상만들기와 동일 /api/categories) → 창작 select 채움 ──
+  async function loadVoices() {
+    try {
+      const res = await fetch('/api/categories');
+      if (!res.ok) return;
+      const d = await res.json();
+      if (!Array.isArray(d.voices)) return;
+      window.__voices = d.voices;
+      const useName = { issue: '📰 이슈·미스터리', info: '💡 정보·건강', sell: '🛍️ 판매·리뷰', heal: '🌿 힐링·음식·여행', anime: '🎨 애니·동화·키즈' };
+      const grouped = {};
+      for (const v of d.voices) (grouped[v.use[0]] = grouped[v.use[0]] || []).push(v);
+      let html = '<option value="">🎯 카테고리 자동 추천</option>';
+      for (const key of ['issue', 'info', 'sell', 'heal', 'anime']) {
+        if (!grouped[key]) continue;
+        html += `<optgroup label="${useName[key]}">` + grouped[key].map((v) => `<option value="${v.id}">${v.label} (${v.gender})</option>`).join('') + '</optgroup>';
+      }
+      const sel = $('cr-voice'); if (!sel) return;
+      sel.innerHTML = html;
+      sel.value = voice || '';
+      const showTip = () => { const v = (window.__voices || []).find((x) => x.id === voice); if ($('cr-voice-state')) $('cr-voice-state').textContent = v ? v.tip : ''; };
+      sel.onchange = () => { voice = sel.value; showTip(); save(); };
+      showTip();
+    } catch {}
   }
 
   // ── 시나리오 생성(단편/시리즈) ──
@@ -398,7 +423,7 @@
     $('cr-phase').textContent = '제작 준비'; startTs = Date.now(); startTick();
     try {
       const r = await fetch('/api/create-produce', {method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({storyboard: scenario, duration: dur, orientation: orient, imageStyle: style, aiClips: out === 'wan' ? clips : 0, narration: narr, bgm, faceImage: faceImage || undefined})});
+        body: JSON.stringify({storyboard: scenario, duration: dur, orientation: orient, imageStyle: style, aiClips: out === 'wan' ? clips : 0, narration: narr, bgm, voice: voice || undefined, faceImage: faceImage || undefined})});
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || '제작 실패');
       attach(d.id);
@@ -587,6 +612,6 @@
   }
 
   // 초기화
-  renderGenres(); renderSegs(); restore(); loadHistory();
+  renderGenres(); renderSegs(); restore(); loadVoices(); loadHistory();
   syncCurrentJob(); setInterval(syncCurrentJob, 4000);
 })();
