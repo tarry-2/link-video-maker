@@ -150,9 +150,13 @@ export async function makeVideo(
   //   이미지는 항상 먼저 만들어 폴백/썸네일로 두고, 클립 성공 시 scene.video로 교체(Scene.tsx가 video 우선 렌더).
   const aiClips = Math.max(0, Math.min(sb.scenes.length, Math.floor(opts.aiClips || 0)));
   const style = getStyle(opts.imageStyle);
-  // ★애니 스타일 = nano-banana로 캐릭터 일관성(studio 경로와 동일하게 영상제작·재창작에도 적용 — 테리 지시).
-  //   첫 장면을 '기준 캐릭터'로 저장 → 이후 장면이 참조해 같은 주인공(장면마다 딴 얼굴 방지).
-  const useNano = style.id === 'anime';
+  // ★캐릭터 일관성(테리 최우선): 등장인물이 반복되는 '서사형'(cast 있음)은 애니든 실사든 nano-banana로 생성한다.
+  //   첫 장면을 '기준 캐릭터'로 저장 → 이후 장면이 그 얼굴을 참조해 '컷마다 딴 얼굴' 방지(Seedance는 그 스틸을 그대로 움직임).
+  //   애니=nano 기본 룩, 실사·시네마 등은 그 스타일의 promptAdd를 nano에 넘겨 사진 같은 룩 유지.
+  const hasCast = !!(sb.cast && sb.cast.length);
+  const useNano = style.id === 'anime' || hasCast;
+  const nanoStyleAdd = style.id === 'anime' ? undefined : style.promptAdd;
+  if (hasCast && style.id !== 'anime') log(`[이미지] 🎭 서사형 — 등장인물을 '같은 얼굴'로 고정해 생성합니다(컷마다 얼굴이 바뀌지 않게).`);
   let charRefAbs = '';
   let wanPod: string | undefined;
   let clipsDone = 0; // 실제로 완성된 움직이는 클립 수(완성/목표를 로그에 보여줘 테리가 헷갈리지 않게)
@@ -210,7 +214,7 @@ export async function makeVideo(
       if (useNano) {
         // 애니: 첫 장면=기준 캐릭터(참조 없음) → charRef로 저장. 이후 장면=그 참조로 같은 주인공 유지.
         const refs = charRefAbs && fs.existsSync(charRefAbs) ? [charRefAbs] : [];
-        await generateImageNano(keys.replicate, vp, abs(imgRel), log, refs, landscape);
+        await generateImageNano(keys.replicate, vp, abs(imgRel), log, refs, landscape, nanoStyleAdd);
         if (!charRefAbs) { charRefAbs = abs(`${pubRel}/character-ref.jpg`); try { fs.copyFileSync(abs(imgRel), charRefAbs); } catch {} }
       } else {
         await generateImageFlux(keys.replicate, vp, abs(imgRel), log, opts.quality || 'high', opts.imageStyle || 'real', landscape);

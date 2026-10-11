@@ -112,10 +112,11 @@ export async function generateImageNano(
   log?: (m: string) => void,
   refPaths: string[] = [],
   landscape = false,
+  styleAdd?: string, // ★비우면 애니 기본(NANO_STYLE). 실사·시네마 등 서사형 캐릭터 일관성용으로 그 스타일의 promptAdd를 넘긴다.
 ): Promise<void> {
   let lastErr: any;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    try { return await nanoOnce(key, prompt, outPath, log, refPaths, landscape); }
+    try { return await nanoOnce(key, prompt, outPath, log, refPaths, landscape, styleAdd); }
     catch (e: any) {
       lastErr = e;
       log?.(`[이미지] 애니 생성 실패(${e.message}) — 재시도 ${attempt}/3`);
@@ -132,13 +133,14 @@ async function nanoOnce(
   log: ((m: string) => void) | undefined,
   refPaths: string[],
   landscape: boolean,
+  styleAdd?: string,
 ): Promise<void> {
   // 참조 캐릭터를 강조하는 지시(동일 인물 유지). 참조 유무로 프롬프트가 달라진다.
   const keepLine = refPaths.length
     ? 'Keep the EXACT same character(s) from the reference image — identical face, hairstyle, outfit and colors. Only change the pose, action and background as described. '
     : '';
   const input: Record<string, unknown> = {
-    prompt: keepLine + prompt + NANO_STYLE + NEG_TEXT,
+    prompt: keepLine + prompt + (styleAdd || NANO_STYLE) + NEG_TEXT,
     aspect_ratio: landscape ? '16:9' : '9:16',
     output_format: 'jpg',
   };
@@ -170,5 +172,5 @@ async function nanoOnce(
   const img = await fetch(url);
   if (!img.ok) throw new Error('nano-banana 이미지 다운로드 실패');
   await writeFile(outPath, Buffer.from(await img.arrayBuffer()));
-  log?.(`[이미지] 애니 캐릭터 ${landscape ? '16:9' : '9:16'}${refs.length ? ' (참조 유지)' : ' (기준 생성)'} 완료`);
+  log?.(`[이미지] 캐릭터 일관 생성 ${landscape ? '16:9' : '9:16'}${refs.length ? ' (기준 얼굴 유지)' : ' (기준 캐릭터 생성)'} 완료`);
 }
