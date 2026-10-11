@@ -11,7 +11,7 @@ import {getPreset} from './presets';
 import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {getStyle} from './styles';
 import {ensureWanPod, wanT2V, wanI2V, terminatePod} from './runpod-wan';
-import {seedanceI2V} from './seedance';
+import {seedanceI2V, seedancePrompt} from './seedance';
 import type {SceneData} from '../src/Scene';
 
 const FPS = 30;
@@ -237,7 +237,8 @@ export async function makeVideo(
           if (!fs.existsSync(abs(imgRel))) throw new Error('시작 이미지가 없음');
           log(`[장면 ${i + 1}] 🎭 Seedance 고급 영상 생성(인물·${aspect})…`);
           const secs = (wantNarration && sceneRanges[i]) ? Math.max(4, Math.min(10, Math.round((sceneRanges[i][1] - sceneRanges[i][0]) || 5))) : 5;
-          const {costUsd} = await seedanceI2V(keys.fal!, `${s.visualPrompt}. ${motionCue}`, abs(imgRel), abs(clipRel), {resolution: '720p', aspectRatio: aspect, duration: secs, log});
+          const motionPrompt = seedancePrompt({shot: s.shot, motion: motionCue, characterLook: castLook});
+          const {costUsd} = await seedanceI2V(keys.fal!, motionPrompt, abs(imgRel), abs(clipRel), {resolution: '720p', aspectRatio: aspect, duration: secs, log});
           seedUsd += costUsd; videoRel = clipRel; clipsDone++;
           log(`[장면 ${i + 1}] ✅ Seedance 완성 — 이번 컷 추정 ₩${wonOf(costUsd)} ($${costUsd}) · ${clipsDone}/${aiClips}`);
         } else if (engine === 'wan' && wanPod) {

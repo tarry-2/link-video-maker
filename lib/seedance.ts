@@ -10,6 +10,26 @@ const QUEUE = 'https://queue.fal.run';
 const ENDPOINTS_FAST = ['bytedance/seedance-2.0/fast/image-to-video', 'bytedance/seedance-2.0/image-to-video'];
 const ENDPOINTS_STD = ['bytedance/seedance-2.0/image-to-video'];
 
+// 블록버스터 시네마 품질 꼬리표(스타일만 — 피사체 재설명 금지).
+export const SEEDANCE_CINE = 'cinematic blockbuster film quality, dramatic movie lighting, shallow depth of field, filmic grain, Hollywood production grade, ultra detailed';
+
+// ★Seedance i2v 프롬프트 빌더 — 공식 베스트프랙티스(온라인 다수 리뷰/가이드 교차확인):
+//   · i2v는 시작 스틸에 '인물·구도·룩'이 이미 있으므로, 프롬프트는 '바뀔 것 = 동작 + 카메라'만 묘사(장면 재설명 금지).
+//   · 정적 동사(서 있다/앉아 있다)는 거의 안 움직임 → 미세 동작(숨쉬기·고개 살짝·머리카락·옷 흔들림)으로 모션 활성화.
+//   · 카메라는 느리고 부드럽게(영화는 느리다), 최대 1~2개.
+//   · ★캐릭터 일관성(테리 최우선): "같은 인물, [외형 고정특징], 얼굴·머리·옷 바꾸지 마"를 명시해 컷마다 안 변하게.
+export function seedancePrompt(opts: {motion?: string; characterLook?: string; shot?: string} = {}): string {
+  const parts: string[] = [];
+  if (opts.shot) parts.push(opts.shot);
+  parts.push(opts.motion && opts.motion.trim() ? opts.motion.trim() : 'the subject moves subtly and naturally');
+  parts.push('subtle lifelike micro-motion (slow breathing, a slight head turn, hair and clothing drifting gently)');
+  parts.push('slow smooth cinematic camera movement (gentle push-in or subtle dolly)');
+  if (opts.characterLook && opts.characterLook.trim()) parts.push(`the person is ${opts.characterLook.trim()}; keep this exact same person`);
+  parts.push('keep the character identity perfectly consistent across the shot — same face, same hairstyle, same clothing; do NOT change, morph, swap, or age the character');
+  parts.push(SEEDANCE_CINE);
+  return parts.join('. ');
+}
+
 export type SeedanceOpts = {
   resolution?: '480p' | '720p';
   duration?: number; // 초(4~15). 미지정=auto.
@@ -55,9 +75,10 @@ export async function seedanceI2V(key: string, prompt: string, startImagePath: s
   if (opts.aspectRatio) input.aspect_ratio = opts.aspectRatio;
   if (opts.seed != null) input.seed = opts.seed;
 
-  // 제출(Fast 우선, 404면 표준 폴백)
+  // 제출(Fast 우선, 404면 표준 폴백). ★제출 응답이 주는 status_url·response_url을 '그대로' 쓴다
+  //   (네임스페이스 모델은 직접 조립한 경로가 안 맞아 폴링이 헛돈다 — fal 공식 큐 API 규약).
   const endpoints = opts.fast === false ? ENDPOINTS_STD : ENDPOINTS_FAST;
-  let reqId = '', endpoint = '', lastErr = '';
+  let reqId = '', endpoint = '', statusUrl = '', responseUrl = '', lastErr = '';
   for (const ep of endpoints) {
     const sub = await fetch(`${QUEUE}/${ep}`, {
       method: 'POST',
@@ -66,19 +87,25 @@ export async function seedanceI2V(key: string, prompt: string, startImagePath: s
       signal: AbortSignal.timeout(30000),
     });
     const txt = await sub.text();
-    if (sub.ok) { const d = JSON.parse(txt); reqId = d.request_id || d.requestId; endpoint = ep; break; }
+    if (sub.ok) {
+      const d = JSON.parse(txt);
+      reqId = d.request_id || d.requestId; endpoint = ep;
+      statusUrl = d.status_url || `${QUEUE}/${ep}/requests/${reqId}/status`;
+      responseUrl = d.response_url || `${QUEUE}/${ep}/requests/${reqId}`;
+      break;
+    }
     lastErr = `${sub.status}: ${txt.slice(0, 180)}`;
     if (sub.status !== 404) break; // 404(엔드포인트 없음)만 다음 후보로
   }
-  if (!reqId) throw new Error(`Seedance 제출 실패(${lastErr})`);
-  log(`[영상] Seedance 생성 시작(${endpoint.includes('fast') ? 'Fast·최저가' : '표준'}) — 보통 30~90초`);
+  if (!reqId || !statusUrl) throw new Error(`Seedance 제출 실패(${lastErr})`);
+  log(`[영상] Seedance 생성 시작(${endpoint.includes('fast') ? 'Fast·최저가' : '표준'}) — 보통 30~120초`);
 
-  // 폴링(최대 8분)
+  // 폴링(최대 8분) — 제출이 돌려준 status_url 사용.
   const started = Date.now();
   let status = '';
   while (Date.now() - started < 8 * 60 * 1000) {
     await new Promise((r) => setTimeout(r, 4000));
-    const st = await fetch(`${QUEUE}/${endpoint}/requests/${reqId}/status`, {headers: {Authorization: `Key ${key}`}, signal: AbortSignal.timeout(20000)});
+    const st = await fetch(statusUrl, {headers: {Authorization: `Key ${key}`}, signal: AbortSignal.timeout(20000)});
     const sd: any = await st.json().catch(() => ({}));
     status = sd.status || '';
     if (status === 'COMPLETED') break;
@@ -86,8 +113,8 @@ export async function seedanceI2V(key: string, prompt: string, startImagePath: s
   }
   if (status !== 'COMPLETED') throw new Error('Seedance 생성 시간 초과(8분)');
 
-  // 결과 → 영상 URL
-  const res = await fetch(`${QUEUE}/${endpoint}/requests/${reqId}`, {headers: {Authorization: `Key ${key}`}, signal: AbortSignal.timeout(30000)});
+  // 결과 → 영상 URL (response_url 그대로 사용)
+  const res = await fetch(responseUrl, {headers: {Authorization: `Key ${key}`}, signal: AbortSignal.timeout(30000)});
   const rd: any = await res.json();
   const videoUrl = rd?.video?.url || rd?.videos?.[0]?.url;
   if (!videoUrl) throw new Error('Seedance 결과에 영상 URL이 없습니다.');

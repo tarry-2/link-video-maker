@@ -12,7 +12,7 @@ import {generateBgm} from './music';
 import {getPreset} from './presets';
 import {getStyle} from './styles';
 import {ensureWanPod, wanT2V, wanI2V, terminatePod} from './runpod-wan';
-import {seedanceI2V} from './seedance';
+import {seedanceI2V, seedancePrompt} from './seedance';
 import {renderVideo, renderThumbnail} from './render';
 import {resolveProduct, fingerprint} from './studio-model';
 import type {StudioDependencies} from './studio';
@@ -126,7 +126,7 @@ export const studioProviders: StudioDependencies = {
           if (engine === 'seedance') {
             if (!stillPath || !existsSync(stillPath)) throw new Error('시작 이미지가 없음');
             log(`[장면 ${i + 1}/${n}] 🎭 Seedance 고급 영상 생성(인물·${aspect})…`);
-            const motionPrompt = `${s.visualPrompt}. ${motionCue}`;
+            const motionPrompt = seedancePrompt({motion: motionCue});
             const {costUsd} = await seedanceI2V(k.fal, motionPrompt, stillPath, path.join(dir, file), {resolution: '720p', aspectRatio: aspect, duration: secs, log});
             totalUsd += costUsd;
             log(`[장면 ${i + 1}] ✅ Seedance 완성 — 이번 컷 추정 ₩${won(costUsd)} (약 $${costUsd})`);

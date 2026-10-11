@@ -90,11 +90,13 @@ export async function ttsEleven(
         // ★eleven_v4 = 최신·가장 자연스럽고 감정 풍부(테리 청취 확정 2026-09-30). 한국어+타임스탬프 지원.
         model_id: 'eleven_v4',
         voice_settings: {
-          // ★감정 살아있게: style 0=관심없는 낭독 → 0.35로 올려 몰입감. stability 0.4(너무 높으면 로봇).
-          stability: 0.4,
-          similarity_boost: 0.8,
-          style: 0.35,
-          use_speaker_boost: true,
+          // ★영화급 깨끗함: 목소리 갈라짐·울림(아티팩트)은 'style 높고 stability 낮을 때' 생긴다(ElevenLabs 알려진 거).
+          //   → stability 0.55로 올려 흔들림·갈라짐 제거, style 0.2로 낮춰 과장 아티팩트 제거(감정은 유지).
+          //   speaker_boost는 공명(울림)을 키울 수 있어 끈다 → 또렷하고 안정적인 내레이션.
+          stability: 0.55,
+          similarity_boost: 0.85,
+          style: 0.2,
+          use_speaker_boost: false,
         },
       }),
       signal: AbortSignal.timeout(120000),

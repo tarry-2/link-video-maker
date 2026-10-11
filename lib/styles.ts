@@ -144,9 +144,9 @@ export const STYLES: ArtStyle[] = [
     desc: '얕은 심도·영화 색감·분위기 조명. 몰입감 있는 감성 — 감성 스토리·브랜드·여행에.',
     group: '실사·시네마틱',
     promptAdd:
-      ', cinematic film still, shallow depth of field, anamorphic lens look, moody cinematic color grade, atmospheric volumetric lighting, movie-like composition, filmic grain',
-    peopleAdd: ', if a person appears keep them cinematic and atmospheric, often silhouette or back view',
-    guidance: 3, illustration: false,
+      ', cinematic blockbuster film still, shot on ARRI Alexa with anamorphic lenses, shallow depth of field with creamy bokeh, dramatic volumetric lighting, subtle lens flare, rich filmic color grade, epic atmospheric mood, Hollywood movie production quality, hyper-detailed, sharp hero subject, filmic grain, award-winning cinematography',
+    peopleAdd: ', people are welcome as cinematic characters with real emotion on their faces, lit dramatically like a movie scene',
+    guidance: 3, illustration: false, peopleWelcome: true,
   },
 
   // ── 3D·입체 / 재미·감성(3차) ──
