@@ -45,6 +45,25 @@ export function stripStageDirections(text: string): string {
     .trim();
 }
 
+// ★★행동 중계 '수식어' 결정적 필터(테리: 프롬프트 부탁 말고 코드 로직으로 확실히) — 서사형 narration에서
+//   영상이 이미 보여주는 '동작 수식 부사·관용구'를 잘라낸다. 문장 뼈대·핵심 정보·대사는 보존(안전).
+//   예: "노인이 조용히 종이를 내민다. 나는 순간 멈칫, 조심스럽게 받는다" → "노인이 종이를 내민다. 받는다"
+//   ※ "노인이 종이를 내민다" 같은 문장 전체 제거는 자연어라 100% 불가(스토리 깨질 위험) → 수식어만 결정적으로.
+const ACTION_MODIFIERS = new RegExp(
+  '(' + [
+    '순간\\s*멈칫[,\\s]*', '멈칫[,\\s]*', '조심스럽게\\s*', '조심스레\\s*', '천천히\\s*', '조용히\\s*',
+    '가만히\\s*', '슬그머니\\s*', '슬쩍\\s*', '살며시\\s*', '살짝\\s*', '힐끗\\s*', '힐끔\\s*',
+    '황급히\\s*', '재빨리\\s*', '지그시\\s*', '가늘게\\s*', '물끄러미\\s*', '멍하니\\s*',
+    '숨을?\\s*(삼키며|죽이며|죽이고|멈추고|고르며)\\s*', '숨죽여\\s*', '숨죽이며\\s*',
+    '고개를\\s*(끄덕이며|저으며|떨구며|들며|숙이며)\\s*', '눈을\\s*(감고|크게\\s*뜨고|질끈\\s*감고)\\s*',
+    '손을\\s*(뻗어|떨며|모으고)\\s*', '입술을\\s*(깨물며|떨며)\\s*', '어깨를\\s*(움츠리며|들썩이며)\\s*',
+  ].join('|') + ')', 'g');
+export function stripActionModifiers(text: string): string {
+  let t = (text || '').replace(ACTION_MODIFIERS, '');
+  t = t.replace(/\s{2,}/g, ' ').replace(/\s+([,.!?…])/g, '$1').replace(/([,.])\s*\1+/g, '$1').replace(/^[\s,.]+/, '').trim();
+  return t;
+}
+
 // ★영상 자막·후킹·나레이션의 이모지 제거 — Remotion 폰트(Noto Sans KR/Black Han Sans)엔
 //   이모지 글리프가 없어 두부(네모 ⊠)로 깨진다. 자막엔 이모지 금지(제목은 유튜브용이라 유지).
 export function stripEmoji(text: string): string {
@@ -464,7 +483,13 @@ ${draftJson}`;
     sb.scenes.forEach((s, i) => { if (strong[i]) { s.hookTop = strong[i].hookTop; s.hookAccent = strong[i].hookAccent; } });
   } catch (e: any) { opts.log?.('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
   // ★화면 지문·효과음 제거(대사 아닌 걸 TTS가 읽는 문제) → 끝맺음 정규화. 음성·자막 둘 다 반영.
-  for (const s of sb.scenes) s.narration = normalizeEnding(stripStageDirections(s.narration));
+  // ★서사형(창작·cast 있음)만 행동 수식어 결정적 필터 적용(정보형은 행동 서술이 없어 불필요·부작용 방지).
+  const isNarrative = !!opts.creative || !!(sb.cast && sb.cast.length);
+  for (const s of sb.scenes) {
+    let nar = stripStageDirections(s.narration);
+    if (isNarrative) nar = stripActionModifiers(nar);
+    s.narration = normalizeEnding(nar);
+  }
   // 썸네일 전용 문구 이모지 제거(폰트 깨짐 방지).
   if (sb.thumb) sb.thumb = {big: stripEmoji(String(sb.thumb.big || '')), small: stripEmoji(String(sb.thumb.small || '')), badge: stripEmoji(String(sb.thumb.badge || ''))};
   return sb;
