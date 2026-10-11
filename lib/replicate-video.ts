@@ -55,10 +55,13 @@ export async function seedanceReplicateI2V(
     generate_audio: false, // 우리 TTS·자막을 얹으므로 네이티브 오디오 끔
   };
   if (opts.seed != null) input.seed = opts.seed;
-  if (opts.refImagePaths?.length) {
+  // ★Seedance 규칙(E006): image(시작 프레임)와 reference_images는 '동시 사용 불가'.
+  //   i2v는 시작 이미지가 이미 얼굴·구도를 고정하므로 reference_images는 생략(캐릭터 일관성은 시작 이미지가 담당).
+  //   → image가 없을 때(t2v)만 reference를 쓴다. 지금 파이프라인은 항상 image(i2v)라 reference는 자동 생략됨.
+  if (opts.refImagePaths?.length && !input.image) {
     const refs: string[] = [];
     for (const rp of opts.refImagePaths) { const u = await toDataUri(rp); if (u) refs.push(u); }
-    if (refs.length) input.reference_images = refs; // 캐릭터 일관성
+    if (refs.length) input.reference_images = refs;
   }
 
   log(`[영화] Replicate Seedance(${tier === 'standard' ? '고품질' : 'Mini·저가'}) 생성 시작 — 보통 1~3분`);

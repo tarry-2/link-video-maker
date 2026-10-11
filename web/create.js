@@ -75,6 +75,7 @@
   let scenario = null;
   let curJobId = null, curES = null, startTs = 0, tickTimer = null, lastLogAt = 0;
   let shownResultId = null, resultTimer = null; // 완성 결과카드: 같은 완성작 중복표시 방지 + 5분 뒤 자동 정리
+  let lastJobId = null; // ★완료 후에도 서버에서 로그를 다시 꺼내볼 작업 id(제작 끝나면 로그 사라짐 해결)
   // 시리즈 상태
   let eps = 1;              // 편 수(1=단편)
   let bible = null;         // 스토리 바이블(JSON) — 시리즈일 때
@@ -432,7 +433,7 @@
   $('cr-stop').onclick = async () => { if (curJobId) { try { await fetch('/api/generate/cancel', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: curJobId})}); } catch {} addLog('중단 요청…'); } };
 
   function attach(id) {
-    curJobId = id;
+    curJobId = id; lastJobId = id;
     if (curES) { try { curES.close(); } catch {} }
     try { localStorage.setItem('onvideo-create-job', id); } catch {}
     const es = new EventSource('/api/progress?id=' + id); curES = es; let n = 0;
@@ -468,6 +469,17 @@
     es.onerror = () => { es.close(); if (curES === es) curES = null; };
   }
 
+  // 완료된 작업 로그를 서버에서 다시 꺼내 모달로 보여준다(제작 끝나도·새로고침해도 로그 유지 — 테리 지적 버그 해결).
+  async function viewServerLog(jobId) {
+    if (!jobId) { alert('이 작업의 로그 id가 없어요(새로고침 전 작업).'); return; }
+    try {
+      const d = await (await fetch('/api/job-logs/' + encodeURIComponent(jobId))).json();
+      const txt = (d.logs || []).join('\n') || '(로그가 비어 있어요)';
+      if ($('cr-log-big')) $('cr-log-big').textContent = txt;
+      if ($('cr-log-modal')) $('cr-log-modal').classList.remove('hidden');
+    } catch { alert('로그를 불러오지 못했어요(서버 재시작 시 사라질 수 있어요).'); }
+  }
+
   // ── 결과 카드(크게보기·다운로드·유튜브·인스타) ──
   function showResult(projectId, title) {
     const box = $('cr-result-block'); if (!box) return;
@@ -489,12 +501,14 @@
             <a class="ghost-btn small" href="/portfolio-item/${projectId}.mp4" download="${esc(title || 'onvideo')}.mp4">⬇ 다운로드</a>
             <button type="button" class="ghost-btn small cr-yt" data-id="${projectId}">📺 유튜브</button>
             <button type="button" class="ghost-btn small cr-ig" data-id="${projectId}" data-land="${orient === 'landscape' ? '1' : ''}">📷 인스타</button>
+            <button type="button" class="ghost-btn small cr-logview" data-job="${lastJobId || ''}">📋 제작 로그</button>
           </div>
         </div>
       </div></div>`;
     box.querySelector('.cr-big').onclick = (e) => bigView(e.target.dataset.id, !!e.target.dataset.land);
     box.querySelector('.cr-yt').onclick = (e) => uploadYouTube(e.target, e.target.dataset.id);
     box.querySelector('.cr-ig').onclick = (e) => uploadInstagram(e.target, e.target.dataset.id, !!e.target.dataset.land);
+    const lv = box.querySelector('.cr-logview'); if (lv) lv.onclick = (e) => viewServerLog(e.target.dataset.job);
     box.scrollIntoView({behavior: 'smooth', block: 'start'});
     // ★껍데기 5분 뒤 자동 정리 — 영상은 이미 포폴·작업 내역에 저장됐으니, 이 결과카드는 5분만 유지하고 비운다.
     //   (5분 동안은 재생·다운로드·업로드 전부 멀쩡히 동작. 중복표시 가드 덕에 이 타이머는 리셋되지 않는다.)
@@ -606,10 +620,26 @@
       const local = localStorage.getItem('onvideo-create-job');
       const d = await (await fetch('/api/jobs/current', {cache: 'no-store'})).json();
       if (d && d.id && d.kind === 'create') { $('cr-progress').classList.remove('hidden'); addLog('🔗 진행 중인 창작 작업에 연결했어요(다른 기기에서 시작한 것도 여기서 보여요).'); attach(d.id); }
-      else if (d && d.done && d.done.kind === 'create') { showResult(d.done.projectId, d.done.title); loadHistory(); }
+      else if (d && d.done && d.done.kind === 'create') { lastJobId = d.doneId || d.done.id || lastJobId; showResult(d.done.projectId, d.done.title); loadHistory(); }
       else if (local) { try { localStorage.removeItem('onvideo-create-job'); } catch {} }
     } catch {}
   }
+
+  // 🔆 작업 중 화면 꺼짐 방지(Screen Wake Lock) — 창작 제작 진행 중(curJobId)이면 화면을 켜둔다(다른 탭과 동일).
+  //   wake lock은 백그라운드 가면 자동 해제되므로 3초마다 + 복귀 시 상태를 맞춘다. 단일 소스=curJobId.
+  let _wakeLock = null;
+  async function _wakeSync() {
+    try {
+      if (curJobId && !_wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+        _wakeLock = await navigator.wakeLock.request('screen');
+        _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+      } else if (!curJobId && _wakeLock) {
+        await _wakeLock.release(); _wakeLock = null;
+      }
+    } catch { _wakeLock = null; }
+  }
+  setInterval(_wakeSync, 3000);
+  document.addEventListener('visibilitychange', _wakeSync);
 
   // 초기화
   renderGenres(); renderSegs(); restore(); loadVoices(); loadHistory();

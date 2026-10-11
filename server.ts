@@ -2279,7 +2279,15 @@ JSON만: {"hookTop":"...","hookAccent":"..."}`;
     return json(res, 200, {
       id: null,
       done: fresh && !j.error ? {id: j.id, file: j.file, title: j.title, projectId: j.projectId, kind: j.kind, images: j.images, zip: j.zip} : null,
+      doneId: fresh ? j.id : undefined, // ★완료돼도 이 작업 로그를 /api/job-logs/{doneId}로 다시 볼 수 있게(로그 사라짐 버그 해결)
     });
+  }
+  // ── 작업 로그 조회(완료된 작업도 메모리에 남아 있어 '제작 끝나면 로그 사라짐'을 해결) ──
+  if (p.startsWith('/api/job-logs/') && req.method === 'GET') {
+    const id = decodeURIComponent(p.slice('/api/job-logs/'.length));
+    const j = jobs.get(id);
+    if (!j) return json(res, 404, {error: '작업 로그를 찾을 수 없습니다(서버 재시작 시 사라질 수 있어요).'});
+    return json(res, 200, {logs: j.logs || [], done: j.done, error: j.error || null, title: j.title || ''});
   }
   // ── 진행 로그(SSE) ──
   if (p === '/api/progress') {
