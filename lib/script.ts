@@ -168,6 +168,37 @@ export async function generateStoryboard(
     : (duration <= 30 ? 4 : duration <= 60 ? 6 : Math.min(10, Math.ceil(duration / 12)));
   const perScene = Math.round((duration * 5.6) / n); // ★실측보정 5.6: dry-run으로 목표길이에 중심 맞춤(v4 통짜 rate 6.0자/초). "약 N자"만 지시(문장수 지시 금지=폭주). Gemini가 ±25% 널뛰어도 평균은 목표에 근접.
 
+  // ★★0패스(창작 전용) — 재창작은 '완성된 줄거리(실제 인기영상 자막)'를 소스로 받아 기승전결이 탄탄한데,
+  //   창작은 장르·키워드 한 줄뿐이라 LLM이 맨땅에서 지어내다 '주제를 못 끌고 가고 기승전결이 무너진다'(테리 지적).
+  //   → 창작도 재창작처럼 되게: 장면을 쓰기 전에 '완성된 줄거리(로그라인+기승전결 비트)'를 먼저 설계해 소스로 박는다.
+  let workSource = source;
+  const gk0 = geminiKeys.filter(Boolean);
+  if (opts.creative && !opts.seriesBible && (gk0.length || (opts.preferOpenAI && opts.openaiKey))) {
+    try {
+      opts.log?.('[대본] 0패스 — 기승전결 줄거리부터 설계…');
+      const outlinePrompt = `너는 한국 쇼츠 이야기 작가다. 아래 '창작 의뢰(장르·키워드)'로 ${duration}초 분량 ${n}장면짜리 영상의 '완성된 줄거리'를 설계하라. 지금은 대사·장면이 아니라 '뼈대'만 쓴다.
+[반드시]
+- 로그라인 1줄: "누가(주인공 1명) + 무엇을 원하는데 + 무슨 장애물로 + 어떤 위기"
+- 그 로그라인 하나로 끝까지 간다. 의뢰의 핵심 주제·소재를 절대 벗어나지 마라.
+- 장면 ${n}개를 기-승-전-결로 배치. 각 장면은 '앞 장면의 결과'로 이어지고(인과), 매 장면 새 진전이 있어야 한다(같은 상황 반복 금지).
+- '전(轉)'에 예상을 뒤집는 반전 1개. 그 반전은 앞 장면에 깔아둔 복선으로 납득되게(갑툭 금지).
+- '결'은 1번 장면에서 던진 질문·수수께끼에 반드시 답하며 감정으로 닫는다(뜬금없는 새 떡밥으로 끝내기 금지).
+출력 JSON만: {"logline":"...","beats":["1장면: 한 줄","2장면: 한 줄", ... 정확히 ${n}개]}
+
+[창작 의뢰]
+${source.slice(0, 2000)}`;
+      let raw0 = '';
+      if (opts.preferOpenAI && opts.openaiKey) { try { raw0 = await openaiJson(opts.openaiKey, outlinePrompt, 1200, 'gpt-4.1'); } catch {} }
+      if (!raw0 && gk0.length) raw0 = await geminiGenerate(gk0, outlinePrompt, {json: true, maxTokens: 1200, temperature: 0.9, log: opts.log});
+      const m0 = raw0.match(/\{[\s\S]*\}/);
+      const d0: any = m0 ? JSON.parse(m0[0]) : null;
+      if (d0?.logline && Array.isArray(d0.beats) && d0.beats.length) {
+        workSource = `${source}\n\n[이 줄거리를 '그대로' 따라 시나리오를 써라 — 로그라인과 장면 비트를 벗어나지 마라]\n로그라인: ${d0.logline}\n${d0.beats.map((b: any, i: number) => `${i + 1}. ${String(b).replace(/^\d+\s*장면\s*[:.]?\s*/, '')}`).join('\n')}`;
+        opts.log?.('[대본] 0패스 완성 — 이 줄거리로 집필합니다.');
+      }
+    } catch (e: any) { opts.log?.('[대본] 0패스 건너뜀: ' + (e?.message || '').slice(0, 50)); }
+  }
+
   const preset = opts.preset;
   const style = getStyle(opts.imageStyle); // 사용자가 고른 아트스타일(visualPrompt를 여기에 맞춤)
   const wantsPeople = stylePeopleWelcome(style); // 실사·시네마=절제 / 애니·칠판·UGC 등=사람·캐릭터 허용
@@ -285,7 +316,7 @@ ${(wantsPeople || true) ? `  ★★등장인물 일관성(서사형에서 매우
 {"title":"...","subject":"...","cast":[{"name":"...","look":"..."}],"musicPrompt":"...","thumb":{"big":"...","small":"...","badge":"..."},"scenes":[{"narration":"...","hookTop":"...","hookAccent":"...","accentColor":"#FFE24B","visualPrompt":"...","characters":["..."],"shot":"...","comment":{"user":"...","text":"...","likes":"..."}}]}
 
 [${opts.creative ? '창작 의뢰(이 장르·키워드로 오리지널 스토리를 지어내라)' : '자료'}]
-${source.slice(0, 12000)}`;
+${workSource.slice(0, 12000)}`;
 
   // ★우선순위 Gemini(키 폴백+모델 폴백), 없거나 전부 실패하면 OpenAI 폴백.
   //   ★LLM이 고온도에서 가끔 깨진 JSON을 뱉으면 영상 제작 '전체'가 실패하던 문제 → 파싱 실패 시 조용히

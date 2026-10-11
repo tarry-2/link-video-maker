@@ -58,7 +58,7 @@
   const GENRES = ['미스터리', '공포', '귀신', '사랑', '배신', '복수', '교훈', '감동', '운명', '반전', '스릴러', '판타지', '코미디', '실화풍'];
   const DURS = [30, 60, 90, 120];
   const ORIENTS = [['portrait', '세로'], ['landscape', '가로']];
-  const STYLES = [['real', '실사'], ['anime', '애니'], ['cinema', '시네마'], ['classic', '고전']];
+  let STYLES = [['real', '실사'], ['anime', '애니'], ['cinema', '시네마'], ['classic', '고전']]; // 초기값 — loadVoices가 서버 전체 16종으로 교체
   const OUTS = [['image', '🖼 이미지영상'], ['wan', '🎬 영화']];
   // ★'영화 장면 수' = 몇 '개'의 장면을 실제 영화로 만들지. 예전엔 seg() 기본 포맷이 '초'를 붙여
   //   "4초"처럼 보여 테리가 '길이(초)'로 오해함 → 명시적으로 '개' 라벨을 준다(초 아님).
@@ -161,7 +161,7 @@
   $('cr-eps').addEventListener('click', (e) => { const b = e.target.closest('[data-e]'); if (!b) return; eps = Number(b.dataset.e); renderSegs(); save(); });
   $('cr-dur').addEventListener('click', (e) => { const b = e.target.closest('[data-d]'); if (!b) return; dur = Number(b.dataset.d); renderSegs(); save(); });
   $('cr-orient').addEventListener('click', (e) => { const b = e.target.closest('[data-o]'); if (!b) return; orient = b.dataset.o; renderSegs(); save(); });
-  $('cr-style').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; style = b.dataset.s; renderSegs(); save(); });
+  $('cr-style').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; style = b.dataset.s; renderSegs(); if (window.__crStyleTip) window.__crStyleTip(); save(); });
   $('cr-out').addEventListener('click', (e) => { const b = e.target.closest('[data-out]'); if (!b) return; out = b.dataset.out; renderSegs(); save(); });
   $('cr-clips').addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; clips = Number(b.dataset.c); if ($('cr-clip-saved')) $('cr-clip-saved').textContent = ''; renderSegs(); save(); });
   $('cr-engine').addEventListener('click', (e) => { const b = e.target.closest('[data-eng]'); if (!b) return; engine = b.dataset.eng; renderSegs(); save(); });
@@ -245,6 +245,16 @@
       const showTip = () => { const v = (window.__voices || []).find((x) => x.id === voice); if ($('cr-voice-state')) $('cr-voice-state').textContent = v ? v.tip : ''; };
       sel.onchange = () => { voice = sel.value; showTip(); save(); };
       showTip();
+      // ★그림체: 서버의 전체 스타일(16종 — Pixar 3D·클레이·수채·하프톤 등)로 교체(기존 4개 하드코딩 → 영상만들기와 동급).
+      if (Array.isArray(d.styles) && d.styles.length) {
+        STYLES = d.styles.map((s) => [s.id, `${s.emoji || ''} ${s.name}`.trim()]);
+        if (!STYLES.some((x) => x[0] === style)) style = STYLES[0][0];
+        renderSegs();
+        const stState = $('cr-style-state');
+        const showStTip = () => { const s = (d.styles || []).find((x) => x.id === style); if (stState) stState.textContent = s ? (s.desc || '') : ''; };
+        showStTip();
+        window.__crStyleTip = showStTip;
+      }
     } catch {}
   }
 
