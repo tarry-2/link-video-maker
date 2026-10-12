@@ -227,6 +227,8 @@
           <label class="field-label" style="margin-top:8px">강조 문구 <span class="hint">(아랫줄·색강조)</span></label>
           <input id="ed-acc" class="input" maxlength="20" value="${esc(info.hookAccent || '')}">
           <button id="ed-ai" class="ghost-btn small" type="button" style="margin-top:8px">✨ AI로 후킹 다시 추천</button>
+          ${info.hasNarration ? `<label class="field-label" style="margin-top:12px">🎙 나레이션(해설) <span class="hint">— 틀린 내용·인물 이름을 직접 고치면 음성도 다시 만들어요(TTS 재생성)</span></label>
+          <textarea id="ed-narr" class="input" rows="4" maxlength="2000">${esc(info.narration || '')}</textarea>` : ''}
           <label class="field-label" style="margin-top:12px">🎨 디자인 템플릿 <span class="hint">— 미리보기를 보고 골라요</span></label>
           <div id="ed-tpl" class="tpl-grid">
             ${TPLS.map(([v,l]) => `<button type="button" class="tpl-card ed-tpl-b ${v===curTpl?'active':''}" data-t="${v}"><span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/${v}.png" alt="${l} 미리보기" loading="lazy"></span><span class="tpl-name">${l}</span></button>`).join('')}
@@ -255,6 +257,9 @@
           const btn = ev.target; btn.disabled = true; btn.textContent = '저장 중…';
           try {
             const body = {projectId, hookTop: box.querySelector('#ed-top').value, hookAccent: box.querySelector('#ed-acc').value, template: tpl};
+            // 나레이션을 실제로 바꿨을 때만 전송(안 바꾸면 TTS 재생성 안 함 = 비용·시간 절약).
+            const narrEl = box.querySelector('#ed-narr');
+            if (narrEl && narrEl.value.trim() && narrEl.value.trim() !== (info.narration || '').trim()) body.narration = narrEl.value.trim();
             const d = await (await fetch('/api/highlight/re-render', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
             if (d.error) throw new Error(d.error);
             close();

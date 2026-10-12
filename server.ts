@@ -2295,6 +2295,8 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       hookTop: typeof b.hookTop === 'string' ? b.hookTop : undefined,
       hookAccent: typeof b.hookAccent === 'string' ? b.hookAccent : undefined,
       template: typeof b.template === 'string' ? b.template : undefined,
+      narration: typeof b.narration === 'string' ? b.narration : undefined, // ★나레이션 직접 수정(TTS 재생성)
+      voice: typeof b.voice === 'string' ? b.voice : undefined,
     };
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
@@ -2320,7 +2322,8 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
       const e = proj.hlEdit;
       if (!e) return json(res, 200, {editable: false});
-      return json(res, 200, {editable: true, hookTop: e.hookTop || '', hookAccent: e.hookAccent || '', template: e.template || 'variety'});
+      const narration = (proj.scenes && proj.scenes[0] && typeof proj.scenes[0].narration === 'string') ? proj.scenes[0].narration : '';
+      return json(res, 200, {editable: true, hookTop: e.hookTop || '', hookAccent: e.hookAccent || '', template: e.template || 'variety', narration, hasNarration: !!e.hasNarration});
     } catch { return json(res, 500, {error: 'edit-info 실패'}); }
   }
   // AI 후킹 재추천(편집 모달 ✨) — 제목·현재 후킹 기반으로 더 터지는 후킹 제안.

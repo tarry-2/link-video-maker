@@ -659,7 +659,7 @@ async function fetchToTmp(r2Key: string | undefined, volPath: string | undefined
 //   보존해뒀다가 후킹 문구·강조·디자인 템플릿만 바꿔 새로 렌더→output·썸네일 교체→project.json 갱신.
 export async function reRenderHighlight(
   projectId: string,
-  overrides: {hookTop?: string; hookAccent?: string; template?: string},
+  overrides: {hookTop?: string; hookAccent?: string; template?: string; narration?: string; voice?: string},
   log: (m: string) => void = () => {},
 ): Promise<{output: string}> {
   const studioDir = path.join(DATA_DIR, 'studio', projectId);
@@ -680,7 +680,24 @@ export async function reRenderHighlight(
   const gotClip = await fetchToTmp(proj.sourceR2, proj.source && path.join(studioDir, proj.source), clipAbs);
   if (!gotClip) { await fsp.rm(pubClipDir, {recursive: true, force: true}); throw new Error('편집용 원본 영상을 찾지 못했어요.'); }
   let voiceRel: string | undefined;
-  if (e.hasNarration) {
+  let newWords: Word[] | undefined; // 나레이션을 새로 생성했으면 그 타이밍(기존 e.words 대체)
+  // ★나레이션 수정 — 사용자가 새 해설 텍스트를 주면 TTS 재생성(저장된 깨끗한 클립에 새로 입힘).
+  const narrText = typeof overrides.narration === 'string' ? overrides.narration.trim() : '';
+  if (narrText) {
+    const ek = pipelineKeys().elevenlabs;
+    if (ek) {
+      log('[편집] 나레이션을 새로 만드는 중(TTS)…');
+      try {
+        const narrAbs = path.join(pubClipDir, 'narration.mp3');
+        const voiceId = (VOICES[pickVoice(overrides.voice || proj.input?.voice, undefined)] || VOICES[pickVoice(undefined, undefined)]).id;
+        const {align} = await ttsElevenJoined(ek, [narrText], narrAbs, voiceId);
+        newWords = alignToWords(align, FPS);
+        voiceRel = `${jobRel}/narration.mp3`;
+      } catch (err: any) { log('[편집] 나레이션 생성 실패 → 기존 유지: ' + (err?.message || '').slice(0, 60)); }
+    } else log('[편집] ElevenLabs 키가 없어 나레이션은 기존대로 둡니다.');
+  }
+  // 새로 안 만들었고 기존 나레이션이 있으면 그걸 재사용(후킹만 고친 경우 = 무회귀).
+  if (!voiceRel && e.hasNarration) {
     const narrAbs = path.join(pubClipDir, 'narration.mp3');
     if (await fetchToTmp(proj.narrationR2, proj.narration && path.join(studioDir, proj.narration), narrAbs)) voiceRel = `${jobRel}/narration.mp3`;
   }
@@ -690,11 +707,15 @@ export async function reRenderHighlight(
   const orientation: 'portrait' | 'landscape' = e.orientation === 'landscape' ? 'landscape' : 'portrait';
   const hookTop = (overrides.hookTop !== undefined ? overrides.hookTop : e.hookTop || '').slice(0, 40);
   const hookAccent = (overrides.hookAccent !== undefined ? overrides.hookAccent : e.hookAccent || '').slice(0, 20);
+  const words = newWords ?? (Array.isArray(e.words) ? e.words : []);
+  const durFrames = (newWords && newWords.length)
+    ? newWords[newWords.length - 1].e + 15 // 새 나레이션 길이에 맞춤(끝 0.5초 여운)
+    : (e.durFrames || Math.round((Number(proj.input?.duration) || 30) * FPS));
   const scene: SceneData = {
     image: `${jobRel}/clip.mp4`, video: `${jobRel}/clip.mp4`, fullBleed: true,
     template: tpl.id, hookTop, hookAccent, accentColor: tpl.accentColor,
-    words: Array.isArray(e.words) ? e.words : [], duckAudio: !!voiceRel, muteOriginal: !!e.muteOriginal,
-    durationInFrames: e.durFrames || Math.round((Number(proj.input?.duration) || 30) * FPS),
+    words, duckAudio: !!voiceRel, muteOriginal: !!e.muteOriginal,
+    durationInFrames: durFrames,
   };
 
   // 3) 렌더(새 output) + 썸네일.
@@ -722,6 +743,12 @@ export async function reRenderHighlight(
       } catch {}
     }
     if (!thumbOk) { try { thumbOk = await extractThumb(outAbs, thumbAbs, 1.0); } catch {} }
+    // 나레이션을 새로 만들었으면 R2/볼륨에 갱신(pubClipDir 삭제 전 — 다음 편집·업로드가 새 나레이션을 씀).
+    if (newWords && voiceRel) {
+      const narrSrc = path.join(pubClipDir, 'narration.mp3');
+      if (r2Enabled()) { try { const nk = videoKey(projectId, 'narration.mp3'); if (await uploadFile(nk, narrSrc, 'audio/mpeg')) proj.narrationR2 = nk; } catch {} }
+      else { try { fs.copyFileSync(narrSrc, path.join(studioDir, 'narration.mp3')); proj.narration = 'narration.mp3'; } catch {} }
+    }
   } finally {
     await fsp.rm(publicDir, {recursive: true, force: true});
     await fsp.rm(pubClipDir, {recursive: true, force: true});
@@ -736,7 +763,12 @@ export async function reRenderHighlight(
   const epSuffix = epM ? ' ' + epM[1] : '';
   const newBase = (hookTop || (proj.title || '').replace(/\s\d+편\s*$/, '') || e.baseTitle || '하이라이트').slice(0, 74);
   proj.title = (newBase + epSuffix).slice(0, 80);
-  proj.hlEdit = {...e, hookTop, hookAccent, template: tpl.id};
+  proj.hlEdit = {...e, hookTop, hookAccent, template: tpl.id, ...(newWords ? {words: newWords, hasNarration: true, durFrames} : {})};
+  if (narrText && newWords) {
+    // edit-info가 돌려줄 '현재 나레이션'을 갱신(다음에 또 열면 수정한 텍스트가 보이게).
+    if (!Array.isArray(proj.scenes) || !proj.scenes.length) proj.scenes = [{}];
+    proj.scenes[0] = {...proj.scenes[0], narration: narrText, voice: {frames: durFrames}};
+  }
   if (r2Enabled()) {
     try {
       const key = videoKey(projectId, output);
