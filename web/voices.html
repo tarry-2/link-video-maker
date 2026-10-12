@@ -67,6 +67,7 @@
       .pf-motion-badge { position: absolute; bottom: 8px; left: 8px; background: linear-gradient(120deg,#6b4cf0,#12a998); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-ig-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #dc2743; text-decoration: none; }
       .pf-fb-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #1877f2; text-decoration: none; }
+      .pf-num { display: inline-block; font-weight: 800; color: var(--teal); background: color-mix(in srgb, var(--teal) 14%, transparent); padding: 0 6px; border-radius: 6px; margin-right: 2px; }
       /* 📊 성과 패널 */
       .yt-stats { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; margin-bottom: 18px; }
       .yt-stats-head { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; margin-bottom: 14px; letter-spacing: -.3px; }
@@ -312,6 +313,8 @@
           const d = await (await fetch('/api/portfolio')).json();
           allItems = Array.isArray(d.items) ? d.items : [];
         } catch { allItems = []; }
+        // 과거부터 순번(제일 오래된 작업물=1번). createdAt 있는 내 작업물만 오름차순으로 번호 매김.
+        allItems.slice().filter(it => it.createdAt).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).forEach((it, i) => { it.num = i + 1; });
         applyFilter(keepIdx);
       }
       // 작업내역 분리: 영상/카드 필터 적용 후 드롭다운·그리드·스테이지 갱신.
@@ -339,7 +342,7 @@
           return;
         }
         $('pf-select').innerHTML = myItems.map((it, i) =>
-          `<option value="${i}">${it.kind === 'sample' ? '🔹 ' : (it.media === 'card-post' ? '🎴 ' : it.media === 'card' ? '🎞 ' : '')}${esc(it.title)} — ${esc(it.voice)}</option>`).join('');
+          `<option value="${i}">${it.kind === 'sample' ? '🔹 ' : (it.media === 'card-post' ? '🎴 ' : it.media === 'card' ? '🎞 ' : '')}${it.num ? '#' + it.num + ' ' : ''}${esc(it.title)} — ${esc(it.voice)}</option>`).join('');
         myShown = 0; $('mypf-grid').innerHTML = ''; showMore();
         curIdx = Math.min(keepIdx ?? 0, myItems.length - 1);
         $('pf-select').value = curIdx;
@@ -367,7 +370,7 @@
             : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.motion ? '<span class="pf-motion-badge">🎬 영상</span>' : ''}${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}</div>`;
           const madeTxt = it.createdAt ? new Date(it.createdAt).toLocaleDateString('ko-KR', {year: 'numeric', month: 'long', day: 'numeric'}) : '';
           fig.innerHTML = `${thumbBox}
-            <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${esc(it.title)}</h3>${madeTxt ? `<p class="pf-made">📅 ${esc(madeTxt)} 제작</p>` : ''}</figcaption>`;
+            <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${it.num ? `<span class="pf-num">#${it.num}</span> ` : ''}${esc(it.title)}</h3>${madeTxt ? `<p class="pf-made">📅 ${esc(madeTxt)} 제작</p>` : ''}</figcaption>`;
           grid.appendChild(fig);
           if (!isPost) {
             // 썸네일 박스 비율도 실제 영상 비율 우선(저장된 orientation 틀려도 정확히 표시).
@@ -413,7 +416,7 @@
              ${canDel ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}`;
         $('pf-stage-info').innerHTML = `
           <span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span>
-          <h3 class="pf-stage-title">${esc(it.title)}${canDel ? ` <button class="pf-edit-title" data-id="${esc(it.id)}" title="제목 수정" style="border:none;background:none;cursor:pointer;font-size:16px;vertical-align:middle">✏️</button>` : ''}</h3>
+          <h3 class="pf-stage-title">${it.num ? `<span class="pf-num">#${it.num}</span> ` : ''}${esc(it.title)}${canDel ? ` <button class="pf-edit-title" data-id="${esc(it.id)}" title="제목 수정" style="border:none;background:none;cursor:pointer;font-size:16px;vertical-align:middle">✏️</button>` : ''}</h3>
           <p class="pf-voice-note">${isPost ? '🎴 ' + ((it.images || []).length) + '장 카드뉴스' : '🎙 ' + esc(it.voice)}</p>
           <p class="pf-clip">${createdTxt}</p>
           ${(() => { const st = (window.__ytStats || {})[it.id]; return st && (st.views || st.likes || st.comments || st.shares) ? `<div class="pf-stage-stats"><div class="pf-stat"><b>${fmtNum(st.views)}</b><span>조회수</span></div><div class="pf-stat"><b>${fmtNum(st.likes)}</b><span>좋아요</span></div><div class="pf-stat"><b>${fmtNum(st.comments)}</b><span>댓글</span></div>${st.shares ? `<div class="pf-stat"><b>${fmtNum(st.shares)}</b><span>공유</span></div>` : ''}</div>` : ''; })()}
