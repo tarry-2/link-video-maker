@@ -228,8 +228,12 @@
           <label class="field-label" style="margin-top:8px">강조 문구 <span class="hint">(아랫줄·색강조)</span></label>
           <input id="ed-acc" class="input" maxlength="20" value="${esc(info.hookAccent || '')}">
           <button id="ed-ai" class="ghost-btn small" type="button" style="margin-top:8px">✨ AI로 후킹 다시 추천</button>
-          <label class="field-label" style="margin-top:12px">🎙 나레이션(해설 내용) <span class="hint">— ${info.hasNarration ? '틀린 내용·인물 이름을 직접 고치면 음성도 다시 만들어요(TTS 재생성)' : '여기에 입력하면 해설 음성을 새로 넣어요'}</span></label>
-          <textarea id="ed-narr" class="input" rows="5" maxlength="2000" placeholder="해설 내용을 입력하세요">${esc(info.narration || '')}</textarea>
+          <label class="field-label" style="margin-top:12px">🎙 나레이션(해설 내용) <span class="hint">— ${info.hasNarration ? '고치면 음성도 다시 만들어요(TTS)' : '비어 있으면 AI가 영상 보고 채워줘요'}</span> <button id="ed-narr-ai" class="ghost-btn small" type="button" style="float:right">✨ AI가 영상 보고 작성</button></label>
+          <textarea id="ed-narr" class="input" rows="5" maxlength="2000" placeholder="해설 내용을 입력하세요(비우면 AI가 영상 보고 작성)">${esc(info.narration || '')}</textarea>
+          <label class="field-label" style="margin-top:12px">🖼 썸네일 큰 글자 <span class="hint">— 비우면 제목 사용</span></label>
+          <input id="ed-thbig" class="input" maxlength="40" placeholder="(비우면 제목 사용)" value="${esc(info.thumbBig || '')}">
+          <label class="field-label" style="margin-top:8px">🖼 썸네일 뱃지 <span class="hint">— 작은 강조(예: 충격)</span></label>
+          <input id="ed-thbadge" class="input" maxlength="20" value="${esc(info.thumbBadge || '')}">
           <label class="field-label" style="margin-top:12px">🎨 디자인 템플릿 <span class="hint">— 미리보기를 보고 골라요</span></label>
           <div id="ed-tpl" class="tpl-grid">
             ${TPLS.map(([v,l]) => `<button type="button" class="tpl-card ed-tpl-b ${v===curTpl?'active':''}" data-t="${v}"><span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/${v}.png" alt="${l} 미리보기" loading="lazy"></span><span class="tpl-name">${l}</span></button>`).join('')}
@@ -254,10 +258,23 @@
           } catch { box.querySelector('#ed-msg').textContent = 'AI 추천 실패 — 직접 입력하세요.'; }
           finally { btn.disabled = false; btn.textContent = o; }
         };
+        // AI가 영상 보고 나레이션 작성(빈칸이면 모달 열 때 자동 1회)
+        async function edAiNarr(auto) {
+          const b2 = box.querySelector('#ed-narr-ai'); const msg = box.querySelector('#ed-msg');
+          b2.disabled = true; const o = b2.textContent; b2.textContent = '✨ 영상 보는 중…';
+          try { const d = await (await fetch('/api/highlight/narration-suggest/' + encodeURIComponent(projectId))).json();
+            if (d.error) throw new Error(d.error);
+            if (d.narration) { box.querySelector('#ed-narr').value = d.narration; msg.textContent = '✅ AI가 영상을 보고 나레이션을 작성했어요. 확인·수정 후 저장하세요.'; }
+          } catch (e) { if (!auto) box.querySelector('#ed-msg').textContent = 'AI 작성 실패: ' + e.message; }
+          finally { b2.disabled = false; b2.textContent = o; }
+        }
+        box.querySelector('#ed-narr-ai').onclick = () => edAiNarr(false);
+        if (!(info.narration || '').trim()) edAiNarr(true);
         box.querySelector('#ed-save').onclick = async (ev) => {
           const btn = ev.target; btn.disabled = true; btn.textContent = '저장 중…';
           try {
-            const body = {projectId, hookTop: box.querySelector('#ed-top').value, hookAccent: box.querySelector('#ed-acc').value, template: tpl};
+            const body = {projectId, hookTop: box.querySelector('#ed-top').value, hookAccent: box.querySelector('#ed-acc').value, template: tpl,
+              thumbBig: box.querySelector('#ed-thbig').value, thumbBadge: box.querySelector('#ed-thbadge').value};
             // 나레이션을 실제로 바꿨을 때만 전송(안 바꾸면 TTS 재생성 안 함 = 비용·시간 절약).
             const narrEl = box.querySelector('#ed-narr');
             if (narrEl && narrEl.value.trim() && narrEl.value.trim() !== (info.narration || '').trim()) body.narration = narrEl.value.trim();

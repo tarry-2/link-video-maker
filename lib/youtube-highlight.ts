@@ -12,7 +12,7 @@ import {pipelineKeys} from './keys';
 import {extractHighlights} from './youtube-clip';
 import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {renderHighlightFast} from './highlight-fast';
-import {intensifyHooks} from './script';
+import {intensifyHooks, autoSpace} from './script';
 import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream, head as r2Head} from './storage';
 import {geminiGenerate, GeminiImage} from './gemini';
@@ -697,11 +697,39 @@ export async function loadHlProject(projectId: string): Promise<{proj: any; dir:
 }
 function srcKeyToOutput(projectId: string, output: string): string { return videoKey(projectId, output); }
 
+// ★AI가 '영상 화면'을 보고 나레이션(해설)을 직접 써준다 — 나레이션 텍스트가 날아간 영상(테리 H.O.T)도
+//   빈칸으로 두지 않고 화면 기준으로 복원·재작성. 인물 이름 단정 금지(로직센터 RULE은 writeCommentary가 적용).
+export async function suggestNarration(projectId: string, log: (m: string) => void = () => {}): Promise<string> {
+  const loaded = await loadHlProject(projectId);
+  if (!loaded) throw new Error('이 영상은 원본(클립)이 없어 나레이션을 만들 수 없어요. 새로 만들어 주세요.');
+  const {proj} = loaded;
+  const e = proj.hlEdit || {};
+  const k = pipelineKeys();
+  if (!k.gemini.length) throw new Error('키 설정에서 Gemini 키를 저장하세요.');
+  const work = path.join(os.tmpdir(), `hl-narr-${projectId}-${Date.now()}`);
+  await fsp.mkdir(work, {recursive: true});
+  try {
+    // 깨끗한 클립 확보(R2/볼륨) → 화면 프레임 추출.
+    const clipAbs = path.join(work, 'clip.mp4');
+    const got = await fetchToTmp(proj.sourceR2, proj.source && path.join(loaded.dir, proj.source), clipAbs);
+    const durSec = Math.max(5, (e.durFrames ? e.durFrames / FPS : (Number(proj.input?.duration) || 30)));
+    const frames = got ? await clipVisionFrames(clipAbs, durSec, work).catch(() => []) : [];
+    if (frames.length) log(`[나레이션] 화면 ${frames.length}장 분석 — 보이는 것 기준으로 작성(없는 인물 이름 방지)`);
+    else log('[나레이션] 화면을 못 불러와 제목·대사 기준으로 작성합니다.');
+    const title = e.baseTitle || proj.title || '';
+    const transcript = e.transcript || '';
+    const hook = e.hookTop || '';
+    const text = await writeCommentary(k.gemini, title, transcript, hook, Math.round(durSec), log, frames);
+    if (!text) throw new Error('나레이션 생성에 실패했어요. 다시 시도해 주세요.');
+    return await autoSpace(k.gemini, text);
+  } finally { await fsp.rm(work, {recursive: true, force: true}).catch(() => {}); }
+}
+
 // ★하이라이트 한 편을 '편집'해서 그 클립만 다시 렌더한다('✏️ 편집' 저장). 깨끗한 소스(source.mp4)+나레이션을
 //   보존해뒀다가 후킹 문구·강조·디자인 템플릿만 바꿔 새로 렌더→output·썸네일 교체→project.json 갱신.
 export async function reRenderHighlight(
   projectId: string,
-  overrides: {hookTop?: string; hookAccent?: string; template?: string; narration?: string; voice?: string},
+  overrides: {hookTop?: string; hookAccent?: string; template?: string; narration?: string; voice?: string; thumbBig?: string; thumbBadge?: string},
   log: (m: string) => void = () => {},
 ): Promise<{output: string}> {
   const studioDir = path.join(DATA_DIR, 'studio', projectId);
@@ -726,7 +754,9 @@ export async function reRenderHighlight(
   let voiceRel: string | undefined;
   let newWords: Word[] | undefined; // 나레이션을 새로 생성했으면 그 타이밍(기존 e.words 대체)
   // ★나레이션 수정 — 사용자가 새 해설 텍스트를 주면 TTS 재생성(저장된 깨끗한 클립에 새로 입힘).
-  const narrText = typeof overrides.narration === 'string' ? overrides.narration.trim() : '';
+  //   저장 전에 띄어쓰기·맞춤법 자동 교정(테리 요구 — 내용은 안 바뀜).
+  let narrText = typeof overrides.narration === 'string' ? overrides.narration.trim() : '';
+  if (narrText) { try { narrText = await autoSpace(pipelineKeys().gemini, narrText); } catch {} }
   if (narrText) {
     const ek = pipelineKeys().elevenlabs;
     if (ek) {
@@ -782,7 +812,10 @@ export async function reRenderHighlight(
     if (!fast) await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
     if (bgOk) {
       try {
-        await renderThumbnail({image: `${jobRel}/${bgName}`, big: (hookTop || e.baseTitle || '').slice(0, 18), small: '', badge: (hookAccent || '').slice(0, 8), accentColor: tpl.accentColor}, thumbAbs, log, publicDir, orientation);
+        // 썸네일 문구 — 사용자가 썸네일칸을 직접 고쳤으면 그걸, 아니면 후킹으로 자동.
+        const thBig = (overrides.thumbBig !== undefined && overrides.thumbBig.trim() ? overrides.thumbBig : (hookTop || e.baseTitle || '')).slice(0, 18);
+        const thBadge = (overrides.thumbBadge !== undefined ? overrides.thumbBadge : (hookAccent || '')).slice(0, 8);
+        await renderThumbnail({image: `${jobRel}/${bgName}`, big: thBig, small: '', badge: thBadge, accentColor: tpl.accentColor}, thumbAbs, log, publicDir, orientation);
         thumbOk = fs.existsSync(thumbAbs);
       } catch {}
     }
@@ -807,7 +840,10 @@ export async function reRenderHighlight(
   const epSuffix = epM ? ' ' + epM[1] : '';
   const newBase = (hookTop || (proj.title || '').replace(/\s\d+편\s*$/, '') || e.baseTitle || '하이라이트').slice(0, 74);
   proj.title = (newBase + epSuffix).slice(0, 80);
-  proj.hlEdit = {...e, hookTop, hookAccent, template: tpl.id, ...(newWords ? {words: newWords, hasNarration: true, durFrames} : {})};
+  proj.hlEdit = {...e, hookTop, hookAccent, template: tpl.id,
+    ...(overrides.thumbBig !== undefined ? {thumbBig: overrides.thumbBig.slice(0, 40)} : {}),
+    ...(overrides.thumbBadge !== undefined ? {thumbBadge: overrides.thumbBadge.slice(0, 20)} : {}),
+    ...(newWords ? {words: newWords, hasNarration: true, durFrames} : {})};
   if (narrText && newWords) {
     // edit-info가 돌려줄 '현재 나레이션'을 갱신(다음에 또 열면 수정한 텍스트가 보이게).
     if (!Array.isArray(proj.scenes) || !proj.scenes.length) proj.scenes = [{}];
@@ -830,7 +866,7 @@ export async function reRenderHighlight(
   try {
     const items = listPortfolio();
     const it = items.find((x) => x.projectId === projectId);
-    if (it) { it.title = proj.title; const fp = path.join(DATA_DIR, 'portfolio.json'); fs.writeFileSync(fp + '.tmp', JSON.stringify(items)); fs.renameSync(fp + '.tmp', fp); }
+    if (it) { it.title = proj.title; it.editV = Date.now(); /* 썸네일 캐시버스터 — 수정하면 새 썸네일이 바로 보이게 */ const fp = path.join(DATA_DIR, 'portfolio.json'); fs.writeFileSync(fp + '.tmp', JSON.stringify(items)); fs.renameSync(fp + '.tmp', fp); }
   } catch {}
   log('[편집] ✅ 다시 렌더 완료!');
   return {output};

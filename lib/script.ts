@@ -30,6 +30,21 @@ export function normalizeEnding(text: string): string {
   return t;
 }
 
+// ★띄어쓰기·맞춤법 자동 교정(Gemini) — 사용자가 직접 입력한 나레이션/후킹의 띄어쓰기를 자연스럽게.
+//   내용은 절대 바꾸지 않고 '띄어쓰기·맞춤법만' 손본다. 키 없거나 실패하면 원문 그대로(무해).
+export async function autoSpace(geminiKeys: string[], text: string): Promise<string> {
+  const t = (text || '').trim();
+  if (!t || !geminiKeys.length || t.length > 2000) return t;
+  try {
+    const raw = await geminiGenerate(geminiKeys,
+      `아래 한국어 문장의 '띄어쓰기와 맞춤법만' 자연스럽게 교정해라. ★단어·내용·순서·의미는 절대 바꾸지 마라(새 내용 추가/삭제 금지). 교정한 문장만 그대로 출력(설명·따옴표 없이).\n\n${t}`,
+      {maxTokens: 1200, temperature: 0.1});
+    const out = (raw || '').replace(/^["'\s]+|["'\s]+$/g, '').trim();
+    // 안전장치: 길이가 크게 달라지면(내용 변형 의심) 원문 유지.
+    return (out && Math.abs(out.length - t.length) <= t.length * 0.4) ? out : t;
+  } catch { return t; }
+}
+
 // ★화면 지문·효과음 제거 — narration은 '귀로 들려줄 말(대사·나레이션)'만 담아야 한다.
 //   "(문이 천천히 열린다)", "[효과음: 쾅]", "효과음: ~", "지문: ~" 같은 게 섞이면 TTS가 그대로 읽어
 //   "대사 아닌 효과·상황까지 읽는" 문제가 된다(테리 핵심 지적). 음성·자막 둘 다 narration을 쓰므로 여기서 정제.

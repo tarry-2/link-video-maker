@@ -11,7 +11,7 @@ import {generateStoryboard, type Storyboard} from './lib/script';
 import {registerVideoToPortfolio} from './lib/video-portfolio';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
-import {makeHighlights, backfillHighlightProjects, reRenderHighlight, loadHlProject} from './lib/youtube-highlight';
+import {makeHighlights, backfillHighlightProjects, reRenderHighlight, loadHlProject, suggestNarration} from './lib/youtube-highlight';
 import {searchArchiveChannel, sampleForAnalysis, fetchSourceTranscript} from './lib/youtube-clip';
 import {analyzeReframe} from './lib/reframe';
 import {getTrends} from './lib/trends';
@@ -682,7 +682,8 @@ const server = http.createServer(async (req, res) => {
         video: isPost ? '' : `/portfolio-item/${it.projectId}.mp4`,
         images: isPost ? (it.images || []).map((_, i) => `/portfolio-card/${it.projectId}/${i + 1}.png`) : undefined,
         // ★영상 항목은 항상 썸네일 URL 발급(서빙이 R2에서 결정적으로 찾음). <video poster>라 404여도 깨짐 없음.
-        thumb: isPost ? '' : `/portfolio-thumb/${it.projectId}.png`,
+        //   ?v=editV — 수정(재렌더)하면 값이 바뀌어 브라우저 캐시(하루)를 무효화 → 새 썸네일이 바로 보임(테리: 썸네일 그대로 버그).
+        thumb: isPost ? '' : `/portfolio-thumb/${it.projectId}.png${it.editV ? `?v=${it.editV}` : ''}`,
         score: typeof it.score === 'number' ? it.score : undefined, // 하이라이트 바이럴 점수
         source: it.source, // 하이라이트 소재 출처(작업내역 탭별 이원화): search/url/upload/archive
         // ★작업내역 탭별 이원화: origin(video/remake/create). 레거시(없음)는 category로 폴백.
@@ -2297,6 +2298,8 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       template: typeof b.template === 'string' ? b.template : undefined,
       narration: typeof b.narration === 'string' ? b.narration : undefined, // ★나레이션 직접 수정(TTS 재생성)
       voice: typeof b.voice === 'string' ? b.voice : undefined,
+      thumbBig: typeof b.thumbBig === 'string' ? b.thumbBig : undefined, // ★썸네일 큰 글자 직접 수정
+      thumbBadge: typeof b.thumbBadge === 'string' ? b.thumbBadge : undefined, // ★썸네일 뱃지
     };
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
@@ -2326,16 +2329,17 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       // 후킹이 비어 저장됐으면(옛 버전 등) 제목에서 복원 — 모달에 '현재 후킹'이 반드시 채워지게(테리: 빈칸이면 안 됨).
       const titleHook = String(proj.title || '').replace(/\s\d+편\s*$/, '').trim();
       const narration = (proj.scenes && proj.scenes[0] && typeof proj.scenes[0].narration === 'string') ? proj.scenes[0].narration : '';
-      return json(res, 200, {editable: true, hookTop: e.hookTop || titleHook, hookAccent: e.hookAccent || '', template: e.template || 'variety', narration, hasNarration: !!e.hasNarration});
+      return json(res, 200, {editable: true, hookTop: e.hookTop || titleHook, hookAccent: e.hookAccent || '', template: e.template || 'variety', narration, hasNarration: !!e.hasNarration, thumbBig: e.thumbBig || '', thumbBadge: e.thumbBadge || ''});
     } catch { return json(res, 500, {error: 'edit-info 실패'}); }
   }
   // AI 후킹 재추천(편집 모달 ✨) — 제목·현재 후킹 기반으로 더 터지는 후킹 제안.
   if (p.startsWith('/api/highlight/hook-suggest/') && req.method === 'GET') {
     const projectId = p.slice('/api/highlight/hook-suggest/'.length);
     try {
-      const pj = path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json');
-      if (!fs.existsSync(pj)) return json(res, 404, {error: 'not found'});
-      const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+      // project.json이 날아갔어도 R2/포폴+source로 복구(H.O.T 영상도 추천 가능).
+      const loaded = await loadHlProject(projectId);
+      if (!loaded) return json(res, 404, {error: 'not found'});
+      const proj = loaded.proj;
       const e = proj.hlEdit || {};
       const k = pipelineKeys();
       if (!k.gemini?.length) return json(res, 200, {hookTop: '', hookAccent: ''});
@@ -2356,6 +2360,14 @@ JSON만: {"hookTop":"...","hookAccent":"..."}`;
       const j = m ? JSON.parse(m[0]) : {};
       return json(res, 200, {hookTop: String(j.hookTop || '').slice(0, 24), hookAccent: String(j.hookAccent || '').slice(0, 12), basedOn: transcript ? 'transcript' : 'title'});
     } catch (e: any) { return json(res, 500, {error: 'hook-suggest 실패: ' + (e?.message || e)}); }
+  }
+  // ★AI가 영상 화면을 보고 나레이션(해설)을 직접 작성 — 나레이션이 날아간 영상도 빈칸 대신 채워준다(테리 요구).
+  if (p.startsWith('/api/highlight/narration-suggest/') && req.method === 'GET') {
+    const projectId = p.slice('/api/highlight/narration-suggest/'.length);
+    try {
+      const text = await suggestNarration(projectId, () => {});
+      return json(res, 200, {narration: text});
+    } catch (e: any) { return json(res, 500, {error: (e?.message || 'narration-suggest 실패')}); }
   }
 
   // ── 현재 진행 중 작업(모바일↔PC 공유) — 어느 기기든 이걸 받아 같은 SSE에 붙어 실시간으로 같이 본다 ──
