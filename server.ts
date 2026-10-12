@@ -11,7 +11,7 @@ import {generateStoryboard, type Storyboard} from './lib/script';
 import {registerVideoToPortfolio} from './lib/video-portfolio';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo} from './lib/card-pipeline';
-import {makeHighlights, backfillHighlightProjects, reRenderHighlight} from './lib/youtube-highlight';
+import {makeHighlights, backfillHighlightProjects, reRenderHighlight, loadHlProject} from './lib/youtube-highlight';
 import {searchArchiveChannel, sampleForAnalysis, fetchSourceTranscript} from './lib/youtube-clip';
 import {analyzeReframe} from './lib/reframe';
 import {getTrends} from './lib/trends';
@@ -2317,11 +2317,12 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
   if (p.startsWith('/api/highlight/edit-info/') && req.method === 'GET') {
     const projectId = p.slice('/api/highlight/edit-info/'.length);
     try {
-      const pj = path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json');
-      if (!fs.existsSync(pj)) return json(res, 404, {error: 'not found'});
-      const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+      // ★project.json이 날아갔어도 R2/포폴+source로 복구(테리 H.O.T 영상 빈 모달 사고 근본 수정).
+      const loaded = await loadHlProject(projectId);
+      if (!loaded) return json(res, 200, {editable: false, reason: '이 영상은 원본이 없어 수정할 수 없어요 — 다시 만들어 주세요.'});
+      const proj = loaded.proj;
       const e = proj.hlEdit;
-      if (!e) return json(res, 200, {editable: false});
+      if (!e) return json(res, 200, {editable: false, reason: '이 영상은 창작/재창작이거나 옛 버전이라 아직 수정을 지원하지 않아요.'});
       // 후킹이 비어 저장됐으면(옛 버전 등) 제목에서 복원 — 모달에 '현재 후킹'이 반드시 채워지게(테리: 빈칸이면 안 됨).
       const titleHook = String(proj.title || '').replace(/\s\d+편\s*$/, '').trim();
       const narration = (proj.scenes && proj.scenes[0] && typeof proj.scenes[0].narration === 'string') ? proj.scenes[0].narration : '';

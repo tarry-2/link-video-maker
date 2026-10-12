@@ -14,7 +14,7 @@ import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {renderHighlightFast} from './highlight-fast';
 import {intensifyHooks} from './script';
 import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
-import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
+import {r2Enabled, videoKey, uploadFile, getStream, head as r2Head} from './storage';
 import {geminiGenerate, GeminiImage} from './gemini';
 import {RULE, contentStrategy} from './prompt-rules'; // ★로직 센터 — 소재유형·화면진실·답/정보·오보금지 단일 출처
 import {generateImageFlux, generateImageSmart} from './image';
@@ -538,6 +538,8 @@ export async function makeHighlights(
       const pjPath = path.join(studioDir, 'project.json');
       fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
       fs.renameSync(pjPath + '.tmp', pjPath);
+      // ★project.json도 R2에 백업 — 볼륨이 정리/재생성돼도 재편집 메타(hlEdit·words)가 안 날아가게(테리: 수정 모달 빈칸 사고).
+      if (r2Enabled()) { try { await uploadFile(videoKey(projectId, 'project.json'), pjPath, 'application/json'); } catch {} }
     } catch (e: any) { log('[하이라이트] project.json 저장 실패: ' + (e?.message || '')); }
 
     // 포트폴리오 등록 → voices.html 카드 + 유튜브/인스타 자동 업로드 재사용.
@@ -655,6 +657,46 @@ async function fetchToTmp(r2Key: string | undefined, volPath: string | undefined
   return false;
 }
 
+// ★하이라이트 project.json 복구 로더 — 디스크 → R2 백업 → 포폴+R2 source로 최소 재구성 순.
+//   볼륨이 정리돼 project.json이 날아가도(테리 H.O.T 영상 사고) source.mp4만 R2에 살아있으면 재편집 가능하게.
+//   반환: {proj, restored} 또는 null(원본 자체가 없어 복구 불가).
+export async function loadHlProject(projectId: string): Promise<{proj: any; dir: string} | null> {
+  const dir = path.join(DATA_DIR, 'studio', projectId);
+  const pjPath = path.join(dir, 'project.json');
+  // 1) 디스크
+  if (fs.existsSync(pjPath)) {
+    try { return {proj: JSON.parse(fs.readFileSync(pjPath, 'utf8')), dir}; } catch {}
+  }
+  if (!r2Enabled()) return null;
+  await fsp.mkdir(dir, {recursive: true}).catch(() => {});
+  // 2) R2에 백업된 project.json 복원
+  if (await fetchToTmp(videoKey(projectId, 'project.json'), undefined, pjPath)) {
+    try { return {proj: JSON.parse(fs.readFileSync(pjPath, 'utf8')), dir}; } catch {}
+  }
+  // 3) project.json이 R2에도 없음 — source.mp4가 R2에 살아있으면 포폴 메타로 '최소 재구성'(옛 영상 구제)
+  const srcKey = videoKey(projectId, 'source.mp4');
+  const srcAlive = await r2Head(srcKey).catch(() => null);
+  if (!srcAlive) return null; // 원본 클립조차 없으면 재편집 불가
+  const item = listPortfolio().find((x) => x.projectId === projectId);
+  const narrAlive = await r2Head(videoKey(projectId, 'narration.mp3')).catch(() => null);
+  const title = (item?.title || '하이라이트');
+  const baseTitle = title.replace(/\s\d+편\s*$/, '').trim();
+  const orientation = item?.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const proj: any = {
+    id: projectId, title, status: 'completed', orientation,
+    output: item?.output, outputR2: item?.output ? srcKeyToOutput(projectId, item.output) : undefined,
+    sourceR2: srcKey, narrationR2: narrAlive ? videoKey(projectId, 'narration.mp3') : undefined,
+    scenes: [{narration: '', voice: {frames: 0}}],
+    input: {duration: 30},
+    kind: 'highlight',
+    // 메타는 날아갔으니 기본값 — 사용자가 후킹·나레이션을 직접 입력해 재렌더한다.
+    hlEdit: {hookTop: baseTitle.slice(0, 40), hookAccent: '', template: 'variety', words: [],
+      durFrames: 0, muteOriginal: false, hasNarration: !!narrAlive, orientation, baseTitle},
+  };
+  return {proj, dir};
+}
+function srcKeyToOutput(projectId: string, output: string): string { return videoKey(projectId, output); }
+
 // ★하이라이트 한 편을 '편집'해서 그 클립만 다시 렌더한다('✏️ 편집' 저장). 깨끗한 소스(source.mp4)+나레이션을
 //   보존해뒀다가 후킹 문구·강조·디자인 템플릿만 바꿔 새로 렌더→output·썸네일 교체→project.json 갱신.
 export async function reRenderHighlight(
@@ -664,8 +706,10 @@ export async function reRenderHighlight(
 ): Promise<{output: string}> {
   const studioDir = path.join(DATA_DIR, 'studio', projectId);
   const pjPath = path.join(studioDir, 'project.json');
-  if (!fs.existsSync(pjPath)) throw new Error('이 하이라이트의 정보를 찾을 수 없어요.');
-  const proj: any = JSON.parse(fs.readFileSync(pjPath, 'utf8'));
+  // ★project.json이 날아갔어도 R2 백업/포폴+source로 복구(테리 H.O.T 영상 사고 근본 수정).
+  const loaded = await loadHlProject(projectId);
+  if (!loaded) throw new Error('이 영상은 원본(클립)이 없어 다시 만들 수 없어요. 새로 만들어 주세요.');
+  const proj: any = loaded.proj;
   const e = proj.hlEdit;
   if (!e) throw new Error('이 하이라이트는 편집 소스가 없어요(옛 버전). 새로 만든 하이라이트부터 편집할 수 있어요.');
 
@@ -780,6 +824,8 @@ export async function reRenderHighlight(
   proj.thumb = thumbOk ? 'thumb.png' : proj.thumb;
   fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
   fs.renameSync(pjPath + '.tmp', pjPath);
+  // ★project.json도 R2 백업(볼륨 날아가도 재편집 메타 보존).
+  if (r2Enabled()) { try { await uploadFile(videoKey(projectId, 'project.json'), pjPath, 'application/json'); } catch {} }
   // 포트폴리오 제목 동기화.
   try {
     const items = listPortfolio();

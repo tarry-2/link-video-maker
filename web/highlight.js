@@ -214,7 +214,8 @@
   async function openEditModal(projectId) {
     let info = {};
     try { info = await (await fetch('/api/highlight/edit-info/' + encodeURIComponent(projectId))).json(); } catch {}
-    if (info && info.editable === false) { alert('이 하이라이트는 옛 버전이라 편집 소스가 없어요. 새로 만든 하이라이트부터 편집할 수 있어요.'); return; }
+    // editable:true가 명시적으로 아니면 모달 금지(error·not found 포함 → 빈 모달 방지).
+    if (!info || info.editable !== true) { alert(info && info.reason ? info.reason : '이 하이라이트는 편집 소스가 없어요. 새로 만든 하이라이트부터 편집할 수 있어요.'); return; }
     const curTpl = info.template || 'variety';
     modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h2>✏️ 하이라이트 편집</h2><button class="ghost-btn" data-x="close">✕</button></div>
       <div style="display:flex;gap:16px;flex-wrap:wrap">

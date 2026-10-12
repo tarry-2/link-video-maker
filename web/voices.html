@@ -473,7 +473,8 @@
       async function openEditModalPf(projectId) {
         let info = {};
         try { info = await (await fetch('/api/highlight/edit-info/' + encodeURIComponent(projectId))).json(); } catch {}
-        if (!info || info.editable === false) { alert('이 영상은 아직 수정(재렌더)을 지원하지 않아요. 하이라이트·아카이브 영상부터 후킹·나레이션을 고쳐 다시 만들 수 있어요.'); return; }
+        // editable:true가 '명시적으로' 아니면 모달 금지(error·not found·editable:false 다 포함 → 빈 모달 방지).
+        if (!info || info.editable !== true) { alert(info && info.reason ? info.reason : '이 영상은 아직 수정(재렌더)을 지원하지 않아요. 하이라이트·아카이브 영상부터 후킹·나레이션을 고쳐 다시 만들 수 있어요.'); return; }
         const box = document.createElement('div');
         box.style.cssText = 'position:fixed;inset:0;background:rgba(8,8,12,.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60';
         box.innerHTML = `<div style="background:var(--card,#fff);color:var(--text,#111);border-radius:18px;padding:20px;max-width:460px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.5)">
