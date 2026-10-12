@@ -396,7 +396,7 @@
              ${canDel ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}`;
         $('pf-stage-info').innerHTML = `
           <span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span>
-          <h3 class="pf-stage-title">${esc(it.title)}</h3>
+          <h3 class="pf-stage-title">${esc(it.title)}${canDel ? ` <button class="pf-edit-title" data-id="${esc(it.id)}" title="제목 수정" style="border:none;background:none;cursor:pointer;font-size:16px;vertical-align:middle">✏️</button>` : ''}</h3>
           <p class="pf-voice-note">${isPost ? '🎴 ' + ((it.images || []).length) + '장 카드뉴스' : '🎙 ' + esc(it.voice)}</p>
           <p class="pf-clip">${createdTxt}</p>
           ${(() => { const st = (window.__ytStats || {})[it.id]; return st && (st.views || st.likes || st.comments || st.shares) ? `<div class="pf-stage-stats"><div class="pf-stat"><b>${fmtNum(st.views)}</b><span>조회수</span></div><div class="pf-stat"><b>${fmtNum(st.likes)}</b><span>좋아요</span></div><div class="pf-stat"><b>${fmtNum(st.comments)}</b><span>댓글</span></div>${st.shares ? `<div class="pf-stat"><b>${fmtNum(st.shares)}</b><span>공유</span></div>` : ''}</div>` : ''; })()}
@@ -413,7 +413,23 @@
         if (card) selectVideo(Number(card.dataset.idx), true);
       };
       // 큰 미리보기 액션(크게보기/유튜브/삭제) 위임
-      $('pf-stage-info').onclick = e => {
+      $('pf-stage-info').onclick = async e => {
+        const et = e.target.closest('.pf-edit-title');
+        if (et) {
+          const cur = myItems[curIdx]; if (!cur) return;
+          const nt = prompt('새 제목을 입력하세요', cur.title);
+          if (nt && nt.trim() && nt.trim() !== cur.title) {
+            try {
+              const r = await fetch('/api/portfolio/' + encodeURIComponent(et.dataset.id), {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title: nt.trim()})});
+              const d = await r.json();
+              if (!r.ok) throw new Error(d.error || '수정 실패');
+              const oldT = cur.title; cur.title = d.title;
+              const o = $('pf-select').options[curIdx]; if (o) o.text = o.text.replace(oldT, d.title);
+              selectVideo(curIdx, false);
+            } catch (err) { alert('제목 수정 실패: ' + err.message); }
+          }
+          return;
+        }
         if (e.target.closest('.pf-zoom')) { openVideoModal(myItems[curIdx]); return; }
         const yt = e.target.closest('.pf-yt'); if (yt) { uploadToYouTube(yt); return; }
         const ig = e.target.closest('.pf-ig');

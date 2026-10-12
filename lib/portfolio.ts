@@ -114,6 +114,16 @@ export function removePortfolio(projectId: string) {
   save(listPortfolio().filter((x) => x.projectId !== projectId));
 }
 
+// 포트폴리오 항목 제목 수정(사용자가 포트폴리오에서 직접 편집). 자체 파일만 고치고 project.json은 건드리지 않음.
+export function updatePortfolioTitle(projectId: string, title: string): boolean {
+  const items = listPortfolio();
+  const it = items.find((x) => x.projectId === projectId);
+  if (!it) return false;
+  it.title = title.trim().slice(0, 200);
+  save(items);
+  return true;
+}
+
 // 기본 샘플(데모) 영상 — public/portfolio/에 고정 존재. 포트폴리오 목록에 항상 포함(삭제 불가).
 export type SampleItem = {file: string; title: string; voice: string; category: string; goal: 'issue' | 'info' | 'sell' | 'heal'; orientation?: 'portrait' | 'landscape'};
 export const SAMPLES: SampleItem[] = [

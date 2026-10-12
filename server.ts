@@ -23,7 +23,7 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
-import {listPortfolio, removePortfolio, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
+import {listPortfolio, removePortfolio, updatePortfolioTitle, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getChannelVideos, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys, head as r2Head} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
@@ -1052,6 +1052,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── 포트폴리오 삭제(관리, 로그인 필요) ──
+  if (p.startsWith('/api/portfolio/') && req.method === 'PATCH') {
+    const id = p.slice('/api/portfolio/'.length);
+    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '잘못된 요청'});
+    const b = await readBody(req);
+    const title = String(b.title || '').trim();
+    if (!title) return json(res, 400, {error: '제목을 입력하세요.'});
+    const ok = updatePortfolioTitle(id, title);
+    if (!ok) return json(res, 404, {error: '영상을 찾을 수 없습니다.'});
+    return json(res, 200, {ok: true, title: title.slice(0, 200)});
+  }
   if (p.startsWith('/api/portfolio/') && req.method === 'DELETE') {
     const id = p.slice('/api/portfolio/'.length);
     if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '잘못된 요청'});
