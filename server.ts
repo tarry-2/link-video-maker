@@ -327,10 +327,9 @@ async function ensureThumbJpegUrl(id: string): Promise<string> {
   try { proj = JSON.parse(fs.readFileSync(pjPath, 'utf8')); } catch {}
   // ★project.json이 깨졌어도(ENOSPC 등) 결정적 R2 키로 우리 커버를 찾는다.
   //   이게 없으면 인스타가 영상 중간의 흐릿한 레터박스 프레임을 자동 표지로 잡아 미리보기가 뿌옇게 나온다(테리 실측).
-  // 1) 이미 만든 JPEG 커버(project.json 캐시 or R2 결정적 키) 있으면 바로 presign.
-  const jpgKey = proj.thumbJpgR2 || videoKey(id, 'cover.jpg');
-  if (await r2Head(jpgKey)) return (await presignGet(jpgKey, 3600)) || '';
-  // 2) PNG 썸네일(로컬 or R2 결정적)에서 JPEG 생성.
+  // ★cover.jpg 캐시를 재사용하지 않는다 — 썸네일을 수정(재렌더)했는데 인스타에 옛 커버가 나오던 버그(테리 H.O.T→구피).
+  //   인스타 업로드는 빈도가 낮으므로 매번 '현재 thumb.png'에서 새로 만들어 항상 최신 커버가 나가게 한다.
+  // PNG 썸네일(로컬 or R2 결정적)에서 JPEG 생성.
   const tmpPng = path.join(os.tmpdir(), `cover-${id}.png`);
   const localPng = proj.thumb ? path.join(dir, proj.thumb) : '';
   let pngR2 = proj.thumbR2 || '';
@@ -2300,6 +2299,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       voice: typeof b.voice === 'string' ? b.voice : undefined,
       thumbBig: typeof b.thumbBig === 'string' ? b.thumbBig : undefined, // ★썸네일 큰 글자 직접 수정
       thumbBadge: typeof b.thumbBadge === 'string' ? b.thumbBadge : undefined, // ★썸네일 뱃지
+      narrationOff: b.narrationOff === true, // ★나레이션 끄기(해설 없이 원본 소리만)
     };
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};

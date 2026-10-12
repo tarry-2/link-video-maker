@@ -14,7 +14,7 @@ import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {renderHighlightFast} from './highlight-fast';
 import {intensifyHooks, autoSpace} from './script';
 import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
-import {r2Enabled, videoKey, uploadFile, getStream, head as r2Head} from './storage';
+import {r2Enabled, videoKey, uploadFile, getStream, head as r2Head, deleteKey as deleteR2Key} from './storage';
 import {geminiGenerate, GeminiImage} from './gemini';
 import {RULE, contentStrategy} from './prompt-rules'; // ★로직 센터 — 소재유형·화면진실·답/정보·오보금지 단일 출처
 import {generateImageFlux, generateImageSmart} from './image';
@@ -729,7 +729,7 @@ export async function suggestNarration(projectId: string, log: (m: string) => vo
 //   보존해뒀다가 후킹 문구·강조·디자인 템플릿만 바꿔 새로 렌더→output·썸네일 교체→project.json 갱신.
 export async function reRenderHighlight(
   projectId: string,
-  overrides: {hookTop?: string; hookAccent?: string; template?: string; narration?: string; voice?: string; thumbBig?: string; thumbBadge?: string},
+  overrides: {hookTop?: string; hookAccent?: string; template?: string; narration?: string; voice?: string; thumbBig?: string; thumbBadge?: string; narrationOff?: boolean},
   log: (m: string) => void = () => {},
 ): Promise<{output: string}> {
   const studioDir = path.join(DATA_DIR, 'studio', projectId);
@@ -753,9 +753,11 @@ export async function reRenderHighlight(
   if (!gotClip) { await fsp.rm(pubClipDir, {recursive: true, force: true}); throw new Error('편집용 원본 영상을 찾지 못했어요.'); }
   let voiceRel: string | undefined;
   let newWords: Word[] | undefined; // 나레이션을 새로 생성했으면 그 타이밍(기존 e.words 대체)
+  // ★나레이션 끄기(설정) — 해설 없이 원본 소리만. 켜진 기존 나레이션도 제거.
+  const narrationOff = !!overrides.narrationOff;
   // ★나레이션 수정 — 사용자가 새 해설 텍스트를 주면 TTS 재생성(저장된 깨끗한 클립에 새로 입힘).
   //   저장 전에 띄어쓰기·맞춤법 자동 교정(테리 요구 — 내용은 안 바뀜).
-  let narrText = typeof overrides.narration === 'string' ? overrides.narration.trim() : '';
+  let narrText = (!narrationOff && typeof overrides.narration === 'string') ? overrides.narration.trim() : '';
   if (narrText) { try { narrText = await autoSpace(pipelineKeys().gemini, narrText); } catch {} }
   if (narrText) {
     const ek = pipelineKeys().elevenlabs;
@@ -770,25 +772,27 @@ export async function reRenderHighlight(
       } catch (err: any) { log('[편집] 나레이션 생성 실패 → 기존 유지: ' + (err?.message || '').slice(0, 60)); }
     } else log('[편집] ElevenLabs 키가 없어 나레이션은 기존대로 둡니다.');
   }
-  // 새로 안 만들었고 기존 나레이션이 있으면 그걸 재사용(후킹만 고친 경우 = 무회귀).
-  if (!voiceRel && e.hasNarration) {
+  // 새로 안 만들었고 기존 나레이션이 있으면 그걸 재사용(후킹만 고친 경우 = 무회귀). ★나레이션 끄기면 재사용 안 함.
+  if (!voiceRel && !narrationOff && e.hasNarration) {
     const narrAbs = path.join(pubClipDir, 'narration.mp3');
     if (await fetchToTmp(proj.narrationR2, proj.narration && path.join(studioDir, proj.narration), narrAbs)) voiceRel = `${jobRel}/narration.mp3`;
   }
+  if (narrationOff) log('[편집] 나레이션 끄기 — 해설 없이 원본 소리로 만듭니다.');
 
   // 2) 장면 재구성 — 저장된 메타 + 사용자 오버라이드(후킹·템플릿).
   const tpl = getHlTemplate(overrides.template && overrides.template !== 'auto' ? overrides.template : e.template);
   const orientation: 'portrait' | 'landscape' = e.orientation === 'landscape' ? 'landscape' : 'portrait';
   const hookTop = (overrides.hookTop !== undefined ? overrides.hookTop : e.hookTop || '').slice(0, 40);
   const hookAccent = (overrides.hookAccent !== undefined ? overrides.hookAccent : e.hookAccent || '').slice(0, 20);
-  const words = newWords ?? (Array.isArray(e.words) ? e.words : []);
+  // 나레이션 끄면 자막(words)도 비우고, 원본 소리를 살린다(muteOriginal 강제 해제 — 무음 방지).
+  const words = narrationOff ? [] : (newWords ?? (Array.isArray(e.words) ? e.words : []));
   const durFrames = (newWords && newWords.length)
     ? newWords[newWords.length - 1].e + 15 // 새 나레이션 길이에 맞춤(끝 0.5초 여운)
     : (e.durFrames || Math.round((Number(proj.input?.duration) || 30) * FPS));
   const scene: SceneData = {
     image: `${jobRel}/clip.mp4`, video: `${jobRel}/clip.mp4`, fullBleed: true,
     template: tpl.id, hookTop, hookAccent, accentColor: tpl.accentColor,
-    words, duckAudio: !!voiceRel, muteOriginal: !!e.muteOriginal,
+    words, duckAudio: !!voiceRel, muteOriginal: narrationOff ? false : !!e.muteOriginal,
     durationInFrames: durFrames,
   };
 
@@ -840,10 +844,11 @@ export async function reRenderHighlight(
   const epSuffix = epM ? ' ' + epM[1] : '';
   const newBase = (hookTop || (proj.title || '').replace(/\s\d+편\s*$/, '') || e.baseTitle || '하이라이트').slice(0, 74);
   proj.title = (newBase + epSuffix).slice(0, 80);
-  proj.hlEdit = {...e, hookTop, hookAccent, template: tpl.id,
+  proj.hlEdit = {...e, hookTop, hookAccent, template: tpl.id, muteOriginal: scene.muteOriginal,
     ...(overrides.thumbBig !== undefined ? {thumbBig: overrides.thumbBig.slice(0, 40)} : {}),
     ...(overrides.thumbBadge !== undefined ? {thumbBadge: overrides.thumbBadge.slice(0, 20)} : {}),
-    ...(newWords ? {words: newWords, hasNarration: true, durFrames} : {})};
+    ...(narrationOff ? {words: [], hasNarration: false, durFrames} : (newWords ? {words: newWords, hasNarration: true, durFrames} : {}))};
+  if (narrationOff && Array.isArray(proj.scenes) && proj.scenes[0]) proj.scenes[0].narration = '';
   if (narrText && newWords) {
     // edit-info가 돌려줄 '현재 나레이션'을 갱신(다음에 또 열면 수정한 텍스트가 보이게).
     if (!Array.isArray(proj.scenes) || !proj.scenes.length) proj.scenes = [{}];
@@ -855,6 +860,10 @@ export async function reRenderHighlight(
       if (await uploadFile(key, outAbs, 'video/mp4')) { proj.outputR2 = key; fs.rmSync(outAbs, {force: true}); }
       else { fs.copyFileSync(outAbs, path.join(studioDir, output)); fs.rmSync(outAbs, {force: true}); delete proj.outputR2; }
       if (thumbOk && fs.existsSync(thumbAbs)) { const tk = videoKey(projectId, 'thumb.png'); if (await uploadFile(tk, thumbAbs, 'image/png')) proj.thumbR2 = tk; }
+      // ★인스타 커버(cover.jpg) 캐시 무효화 — 썸네일 바꿨는데 인스타에 옛 커버가 나오던 버그(테리 H.O.T→구피).
+      //   ensureThumbJpegUrl이 cover.jpg가 있으면 그대로 재사용하므로, 재렌더 시 삭제해 새 썸네일로 다시 만들게 한다.
+      try { await deleteR2Key(videoKey(projectId, 'cover.jpg')); } catch {}
+      delete proj.thumbJpgR2;
     } catch (e2: any) { log('[편집] R2 갱신 실패(로컬 보관): ' + (e2?.message || '')); try { fs.copyFileSync(outAbs, path.join(studioDir, output)); fs.rmSync(outAbs, {force: true}); delete proj.outputR2; } catch {} }
   }
   proj.thumb = thumbOk ? 'thumb.png' : proj.thumb;
@@ -865,8 +874,14 @@ export async function reRenderHighlight(
   // 포트폴리오 제목 동기화.
   try {
     const items = listPortfolio();
-    const it = items.find((x) => x.projectId === projectId);
-    if (it) { it.title = proj.title; it.editV = Date.now(); /* 썸네일 캐시버스터 — 수정하면 새 썸네일이 바로 보이게 */ const fp = path.join(DATA_DIR, 'portfolio.json'); fs.writeFileSync(fp + '.tmp', JSON.stringify(items)); fs.renameSync(fp + '.tmp', fp); }
+    const idx = items.findIndex((x) => x.projectId === projectId);
+    if (idx >= 0) {
+      const it = items[idx];
+      it.title = proj.title; it.editV = Date.now(); // 썸네일 캐시버스터 — 수정하면 새 썸네일이 바로 보이게
+      // ★수정한 영상을 맨 앞으로(테리: 수정하면 포폴 맨 앞에 뜨게). 포폴은 앞이 최신.
+      items.splice(idx, 1); items.unshift(it);
+      const fp = path.join(DATA_DIR, 'portfolio.json'); fs.writeFileSync(fp + '.tmp', JSON.stringify(items)); fs.renameSync(fp + '.tmp', fp);
+    }
   } catch {}
   log('[편집] ✅ 다시 렌더 완료!');
   return {output};

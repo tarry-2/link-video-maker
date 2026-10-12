@@ -177,6 +177,8 @@
           <button data-media="card">🎴 카드</button>
           <button data-media="highlight">🎬 하이라이트</button>
         </div>
+        <!-- 포폴 검색(제목) — 많아지면 찾기 쉽게 -->
+        <div style="margin:0 0 14px"><input id="pf-search" class="input" type="search" placeholder="🔍 제목으로 검색" style="width:100%"></div>
 
         <!-- 📊 성과(올린 영상의 조회수·반응 집계) -->
         <div id="yt-stats" class="yt-stats" hidden></div>
@@ -230,8 +232,10 @@
       };
       let curAudio = null, curCard = null;
 
+      let VOICE_LIST = []; // 수정 모달의 목소리 선택용(id·label)
       async function load() {
         const d = await (await fetch('/api/categories')).json();
+        VOICE_LIST = d.voices || [];
         const groups = {};
         for (const v of d.voices) {
           // 첫 용도를 대표 그룹으로
@@ -320,6 +324,9 @@
           : mediaFilter === 'create' ? isCreate(it)
           : mediaFilter === 'remake' ? isRemake(it)
           : isVideo(it));
+        // 제목 검색(포폴 많아지면 찾기 쉽게) — 공백 무시 부분일치.
+        const q = (($('pf-search') && $('pf-search').value) || '').trim().toLowerCase().replace(/\s+/g, '');
+        if (q) myItems = myItems.filter(it => String(it.title || '').toLowerCase().replace(/\s+/g, '').includes(q));
         if (!myItems.length) {
           $('pf-select').innerHTML = '';
           $('mypf-grid').innerHTML = '<p class="pf-sub" style="padding:24px 4px">이 분류엔 아직 없어요.</p>';
@@ -340,6 +347,9 @@
         [...$('pf-filter').children].forEach(c => c.classList.toggle('on', c === b));
         applyFilter(0);
       };
+      // 제목 검색 — 입력할 때마다 필터(가벼운 디바운스).
+      let pfSearchT = null;
+      $('pf-search') && $('pf-search').addEventListener('input', () => { clearTimeout(pfSearchT); pfSearchT = setTimeout(() => applyFilter(0), 200); });
       function showMore() {
         const grid = $('mypf-grid');
         for (let i = myShown; i < Math.min(myShown + PAGE, myItems.length); i++) {
@@ -484,14 +494,19 @@
           <input id="pfe-top" class="input" maxlength="40" value="${esc(info.hookTop || '')}">
           <label class="field-label" style="margin-top:8px">소제목(강조 아랫줄)</label>
           <input id="pfe-acc" class="input" maxlength="20" value="${esc(info.hookAccent || '')}">
-          <label class="field-label" style="margin-top:10px">🎙 나레이션(해설 내용) <span class="hint">— ${info.hasNarration ? '고치면 음성도 다시 만들어요(TTS)' : '비어 있으면 AI가 영상 보고 채워줘요'}</span>
+          <label class="toggle" style="margin-top:12px;display:flex;align-items:center;gap:8px;font-weight:700"><input type="checkbox" id="pfe-narr-on" ${info.hasNarration !== false ? 'checked' : ''}> 🎙 나레이션(해설) 넣기 <span class="hint">— 끄면 해설 없이 원본 소리만</span></label>
+          <div id="pfe-narr-box">
+          <label class="field-label" style="margin-top:8px">🎙 목소리 <span class="hint">— 나레이션 음성</span>
             <button id="pfe-ai" type="button" class="ghost-btn small" style="float:right">✨ AI가 영상 보고 작성</button></label>
+          <select id="pfe-voice" class="input" style="margin-bottom:6px">${VOICE_LIST.map(v => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join('')}</select>
           <textarea id="pfe-narr" class="input" rows="5" maxlength="2000" placeholder="해설 내용을 입력하세요(비우면 AI가 영상 보고 작성)">${esc(info.narration || '')}</textarea>
+          </div>
           <label class="field-label" style="margin-top:10px">🖼 썸네일 큰 글자 <span class="hint">— 비우면 제목을 자동 사용</span></label>
           <input id="pfe-thbig" class="input" maxlength="40" placeholder="(비우면 제목 사용)" value="${esc(info.thumbBig || '')}">
           <label class="field-label" style="margin-top:8px">🖼 썸네일 뱃지 <span class="hint">— 작은 강조(예: 충격/실화)</span></label>
           <input id="pfe-thbadge" class="input" maxlength="20" value="${esc(info.thumbBadge || '')}">
           <button id="pfe-save" class="primary-btn" style="margin-top:14px;width:100%">💾 저장하고 다시 만들기</button>
+          <div id="pfe-energy-wrap" style="display:none;margin-top:12px"><div style="height:12px;border-radius:8px;background:rgba(0,0,0,.08);overflow:hidden"><div id="pfe-energy" style="height:100%;width:6%;border-radius:8px;background:linear-gradient(90deg,var(--teal,#12a998),var(--purple,#7c5cff));transition:width .4s"></div></div><p id="pfe-energy-label" class="mini-state" style="margin-top:6px"></p></div>
           <p id="pfe-msg" class="mini-state"></p></div>`;
         document.body.appendChild(box);
         const close = () => box.remove();
@@ -508,27 +523,70 @@
           finally { btn.disabled = false; btn.textContent = o; }
         }
         box.querySelector('#pfe-ai').onclick = () => aiNarr(false);
-        // 나레이션이 비어 있으면 모달 열 때 자동으로 1회 AI 작성(테리: 못 살리면 AI가 채워라).
-        if (!(info.narration || '').trim()) aiNarr(true);
+        // 나레이션 토글 — 끄면 해설칸 숨김.
+        const narrOn = box.querySelector('#pfe-narr-on'); const narrBox = box.querySelector('#pfe-narr-box');
+        const syncNarr = () => { narrBox.style.display = narrOn.checked ? 'block' : 'none'; };
+        narrOn.addEventListener('change', syncNarr); syncNarr();
+        // 나레이션 켜져 있고 비어 있으면 모달 열 때 자동으로 1회 AI 작성(테리: 못 살리면 AI가 채워라).
+        if (narrOn.checked && !(info.narration || '').trim()) aiNarr(true);
         box.querySelector('#pfe-save').onclick = async (ev) => {
           const btn = ev.target; btn.disabled = true; btn.textContent = '저장 중…';
           try {
             const body = {projectId, hookTop: box.querySelector('#pfe-top').value, hookAccent: box.querySelector('#pfe-acc').value,
               thumbBig: box.querySelector('#pfe-thbig').value, thumbBadge: box.querySelector('#pfe-thbadge').value};
-            const ne = box.querySelector('#pfe-narr');
-            if (ne && ne.value.trim() && ne.value.trim() !== (info.narration || '').trim()) body.narration = ne.value.trim();
+            if (!narrOn.checked) { body.narrationOff = true; }
+            else {
+              body.voice = box.querySelector('#pfe-voice').value;
+              const ne = box.querySelector('#pfe-narr');
+              if (ne && ne.value.trim() && ne.value.trim() !== (info.narration || '').trim()) body.narration = ne.value.trim();
+            }
             const d = await (await fetch('/api/highlight/re-render', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
             if (d.error) throw new Error(d.error);
-            box.querySelector('#pfe-msg').textContent = '✅ 다시 만드는 중이에요(1~3분)… 완성되면 알려드릴게요.';
-            if (d.id) pollReRender(d.id, close);
+            box.querySelector('#pfe-energy-wrap').style.display = 'block';
+            box.querySelector('#pfe-msg').textContent = '';
+            if (d.id) pollReRender(d.id, close, box);
           } catch (e) { box.querySelector('#pfe-msg').textContent = '실패: ' + e.message; btn.disabled = false; btn.textContent = '💾 저장하고 다시 만들기'; }
         };
       }
-      function pollReRender(id, closeModal) {
+      // 재렌더 로그 → 진행률(수정 전용 에너지바). 단계별 가중치 + [빠른렌더] N%.
+      function editEnergy(box, line) {
+        const set = (pct, label) => { const f = box.querySelector('#pfe-energy'); if (f) f.style.width = Math.min(99, pct) + '%'; const l = box.querySelector('#pfe-energy-label'); if (l) l.textContent = Math.round(Math.min(99, pct)) + '% · ' + (label || ''); };
+        const cur = () => parseFloat((box.querySelector('#pfe-energy') || {}).style?.width) || 0;
+        const rm = line.match(/\[빠른렌더\]\s*(\d+)%/);
+        if (rm) set(Math.max(cur(), 60 + Number(rm[1]) * 0.35), '🎬 영상 합치는 중…');
+        else if (/원본 소스 불러오/.test(line)) set(Math.max(cur(), 12), '원본 불러오는 중…');
+        else if (/나레이션을 새로 만드/.test(line)) set(Math.max(cur(), 35), '🎙 나레이션 음성 만드는 중…');
+        else if (/다시 렌더|합성 중/.test(line)) set(Math.max(cur(), 58), '🎬 영상 합치는 중…');
+        else if (/썸네일/.test(line)) set(Math.max(cur(), 92), '🖼 썸네일 만드는 중…');
+        else set(Math.max(cur() + 1, 10), '다시 만드는 중…');
+      }
+      function celebratePf() {
+        const c = document.createElement('div');
+        c.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden';
+        const colors = ['#12a998','#7c5cff','#ff8abf','#ffd84d','#4fe0d0'];
+        for (let i = 0; i < 80; i++) {
+          const p = document.createElement('div');
+          const sz = 6 + Math.random() * 8;
+          p.style.cssText = `position:absolute;top:-10px;left:${Math.random()*100}%;width:${sz}px;height:${sz}px;background:${colors[i%colors.length]};border-radius:${Math.random()>.5?'50%':'2px'};opacity:.95;transform:rotate(${Math.random()*360}deg);animation:pfFall ${1.4+Math.random()*1.4}s ${Math.random()*0.4}s ease-in forwards`;
+          c.appendChild(p);
+        }
+        if (!document.getElementById('pf-confetti-style')) { const st = document.createElement('style'); st.id = 'pf-confetti-style'; st.textContent = '@keyframes pfFall{to{top:105%;transform:translateX(' + (Math.random()>.5?'':'-') + '40px) rotate(720deg);opacity:0}}'; document.head.appendChild(st); }
+        document.body.appendChild(c); setTimeout(() => c.remove(), 3200);
+      }
+      function pollReRender(id, closeModal, box) {
         const es = new EventSource('/api/progress?id=' + id);
         es.onmessage = (ev) => {
           let m; try { m = JSON.parse(ev.data); } catch { return; }
-          if (m.done) { es.close(); if (m.error) alert('재렌더 실패: ' + m.error); else { if (closeModal) closeModal(); alert('✅ 수정 완료! 새 영상으로 바뀌었어요.'); location.reload(); } }
+          if (m.log && box) editEnergy(box, m.log);
+          if (m.done) {
+            es.close();
+            if (m.error) { if (box) { box.querySelector('#pfe-msg').textContent = '실패: ' + m.error; const s = box.querySelector('#pfe-save'); if (s) { s.disabled = false; s.textContent = '💾 저장하고 다시 만들기'; } } else alert('재렌더 실패: ' + m.error); }
+            else {
+              if (box) { const f = box.querySelector('#pfe-energy'); if (f) f.style.width = '100%'; const l = box.querySelector('#pfe-energy-label'); if (l) l.textContent = '100% · 완성! 🎉'; }
+              celebratePf();
+              setTimeout(() => { if (closeModal) closeModal(); location.reload(); }, 1600);
+            }
+          }
         };
         es.onerror = () => es.close();
       }

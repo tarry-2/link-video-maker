@@ -211,6 +211,7 @@
 
   // ── 편집 모달 — 후킹 문구 + 디자인 템플릿 바꿔 그 클립만 다시 렌더(Phase3b) ──
   const TPLS = [['variety','예능 자막'],['impact','임팩트 레드'],['cinema','감성 시네마'],['neon','네온 힙'],['magazine','매거진 다큐'],['pop','버블 팝']];
+  let EDIT_VOICE_LIST = []; // 수정 모달 목소리 선택용(id·label)
   async function openEditModal(projectId) {
     let info = {};
     try { info = await (await fetch('/api/highlight/edit-info/' + encodeURIComponent(projectId))).json(); } catch {}
@@ -228,8 +229,12 @@
           <label class="field-label" style="margin-top:8px">강조 문구 <span class="hint">(아랫줄·색강조)</span></label>
           <input id="ed-acc" class="input" maxlength="20" value="${esc(info.hookAccent || '')}">
           <button id="ed-ai" class="ghost-btn small" type="button" style="margin-top:8px">✨ AI로 후킹 다시 추천</button>
-          <label class="field-label" style="margin-top:12px">🎙 나레이션(해설 내용) <span class="hint">— ${info.hasNarration ? '고치면 음성도 다시 만들어요(TTS)' : '비어 있으면 AI가 영상 보고 채워줘요'}</span> <button id="ed-narr-ai" class="ghost-btn small" type="button" style="float:right">✨ AI가 영상 보고 작성</button></label>
+          <label class="toggle" style="margin-top:12px;display:flex;align-items:center;gap:8px;font-weight:700"><input type="checkbox" id="ed-narr-on" ${info.hasNarration !== false ? 'checked' : ''}> 🎙 나레이션(해설) 넣기 <span class="hint">— 끄면 원본 소리만</span></label>
+          <div id="ed-narr-box">
+          <label class="field-label" style="margin-top:8px">🎙 목소리 <button id="ed-narr-ai" class="ghost-btn small" type="button" style="float:right">✨ AI가 영상 보고 작성</button></label>
+          <select id="ed-voice" class="input" style="margin-bottom:6px">${EDIT_VOICE_LIST.map(v => `<option value="${esc(v.id)}">${esc(v.label)}</option>`).join('')}</select>
           <textarea id="ed-narr" class="input" rows="5" maxlength="2000" placeholder="해설 내용을 입력하세요(비우면 AI가 영상 보고 작성)">${esc(info.narration || '')}</textarea>
+          </div>
           <label class="field-label" style="margin-top:12px">🖼 썸네일 큰 글자 <span class="hint">— 비우면 제목 사용</span></label>
           <input id="ed-thbig" class="input" maxlength="40" placeholder="(비우면 제목 사용)" value="${esc(info.thumbBig || '')}">
           <label class="field-label" style="margin-top:8px">🖼 썸네일 뱃지 <span class="hint">— 작은 강조(예: 충격)</span></label>
@@ -269,15 +274,22 @@
           finally { b2.disabled = false; b2.textContent = o; }
         }
         box.querySelector('#ed-narr-ai').onclick = () => edAiNarr(false);
-        if (!(info.narration || '').trim()) edAiNarr(true);
+        // 나레이션 토글 — 끄면 해설칸 숨김.
+        const edNarrOn = box.querySelector('#ed-narr-on'); const edNarrBox = box.querySelector('#ed-narr-box');
+        const edSyncNarr = () => { edNarrBox.style.display = edNarrOn.checked ? 'block' : 'none'; };
+        edNarrOn.addEventListener('change', edSyncNarr); edSyncNarr();
+        if (edNarrOn.checked && !(info.narration || '').trim()) edAiNarr(true);
         box.querySelector('#ed-save').onclick = async (ev) => {
           const btn = ev.target; btn.disabled = true; btn.textContent = '저장 중…';
           try {
             const body = {projectId, hookTop: box.querySelector('#ed-top').value, hookAccent: box.querySelector('#ed-acc').value, template: tpl,
               thumbBig: box.querySelector('#ed-thbig').value, thumbBadge: box.querySelector('#ed-thbadge').value};
-            // 나레이션을 실제로 바꿨을 때만 전송(안 바꾸면 TTS 재생성 안 함 = 비용·시간 절약).
-            const narrEl = box.querySelector('#ed-narr');
-            if (narrEl && narrEl.value.trim() && narrEl.value.trim() !== (info.narration || '').trim()) body.narration = narrEl.value.trim();
+            if (!edNarrOn.checked) { body.narrationOff = true; }
+            else {
+              body.voice = box.querySelector('#ed-voice').value;
+              const narrEl = box.querySelector('#ed-narr');
+              if (narrEl && narrEl.value.trim() && narrEl.value.trim() !== (info.narration || '').trim()) body.narration = narrEl.value.trim();
+            }
             const d = await (await fetch('/api/highlight/re-render', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
             if (d.error) throw new Error(d.error);
             close();
@@ -1074,6 +1086,7 @@
   (async () => {
     try {
       const d = await (await fetch('/api/categories')).json();
+      EDIT_VOICE_LIST = d.voices || []; // 수정 모달 목소리 선택용
       const sel = $('hl-voice'); if (!sel || !d.voices) return;
       // ★용도 카테고리(스릴러·시사·힐링 등)로 묶어 보여준다(테리 지시) — <optgroup>. cat 순서는 첫 등장 순.
       const groups = [];
