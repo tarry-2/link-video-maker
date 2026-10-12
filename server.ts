@@ -2322,8 +2322,10 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
       const e = proj.hlEdit;
       if (!e) return json(res, 200, {editable: false});
+      // 후킹이 비어 저장됐으면(옛 버전 등) 제목에서 복원 — 모달에 '현재 후킹'이 반드시 채워지게(테리: 빈칸이면 안 됨).
+      const titleHook = String(proj.title || '').replace(/\s\d+편\s*$/, '').trim();
       const narration = (proj.scenes && proj.scenes[0] && typeof proj.scenes[0].narration === 'string') ? proj.scenes[0].narration : '';
-      return json(res, 200, {editable: true, hookTop: e.hookTop || '', hookAccent: e.hookAccent || '', template: e.template || 'variety', narration, hasNarration: !!e.hasNarration});
+      return json(res, 200, {editable: true, hookTop: e.hookTop || titleHook, hookAccent: e.hookAccent || '', template: e.template || 'variety', narration, hasNarration: !!e.hasNarration});
     } catch { return json(res, 500, {error: 'edit-info 실패'}); }
   }
   // AI 후킹 재추천(편집 모달 ✨) — 제목·현재 후킹 기반으로 더 터지는 후킹 제안.

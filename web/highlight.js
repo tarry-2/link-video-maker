@@ -227,8 +227,8 @@
           <label class="field-label" style="margin-top:8px">강조 문구 <span class="hint">(아랫줄·색강조)</span></label>
           <input id="ed-acc" class="input" maxlength="20" value="${esc(info.hookAccent || '')}">
           <button id="ed-ai" class="ghost-btn small" type="button" style="margin-top:8px">✨ AI로 후킹 다시 추천</button>
-          ${info.hasNarration ? `<label class="field-label" style="margin-top:12px">🎙 나레이션(해설) <span class="hint">— 틀린 내용·인물 이름을 직접 고치면 음성도 다시 만들어요(TTS 재생성)</span></label>
-          <textarea id="ed-narr" class="input" rows="4" maxlength="2000">${esc(info.narration || '')}</textarea>` : ''}
+          <label class="field-label" style="margin-top:12px">🎙 나레이션(해설 내용) <span class="hint">— ${info.hasNarration ? '틀린 내용·인물 이름을 직접 고치면 음성도 다시 만들어요(TTS 재생성)' : '여기에 입력하면 해설 음성을 새로 넣어요'}</span></label>
+          <textarea id="ed-narr" class="input" rows="5" maxlength="2000" placeholder="해설 내용을 입력하세요">${esc(info.narration || '')}</textarea>
           <label class="field-label" style="margin-top:12px">🎨 디자인 템플릿 <span class="hint">— 미리보기를 보고 골라요</span></label>
           <div id="ed-tpl" class="tpl-grid">
             ${TPLS.map(([v,l]) => `<button type="button" class="tpl-card ed-tpl-b ${v===curTpl?'active':''}" data-t="${v}"><span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/${v}.png" alt="${l} 미리보기" loading="lazy"></span><span class="tpl-name">${l}</span></button>`).join('')}
