@@ -130,11 +130,17 @@ async function clipVisionFrames(clipAbs: string, durSec: number, workDir: string
 //   원본 대사(transcript)를 근거로 맥락·논평을 더한다(단순 중계/낭독 금지).
 async function writeCommentary(
   geminiKeys: string[], title: string, transcript: string, hook: string, clipSec: number,
-  log?: (m: string) => void, images?: GeminiImage[],
+  log?: (m: string) => void, images?: GeminiImage[], episodeIdx = 0,
 ): Promise<string> {
   if (!geminiKeys.length) { log?.('[하이라이트] 해설 생략: Gemini 키가 없습니다.'); return ''; }
-  // ★분량을 클립 길이에 맞게 꽉 채운다 — 한국어 나레이션 ~4.4자/초(TTS 기준). 너무 적으면 뒤가 허전해짐.
-  const targetChars = Math.max(60, Math.round(clipSec * 4.4));
+  // ★분량을 클립 길이에 '꽉' 채운다 — 한국어 나레이션 ~4.9자/초(TTS 실측, 끝까지 말이 이어지게).
+  //   예전 4.4는 AI가 ±적게 쓰면 45~50초로 짧게 끝났다(테리 지적) → 하한을 길이의 90%로 못박음.
+  const targetChars = Math.max(60, Math.round(clipSec * 4.9));
+  const minChars = Math.round(clipSec * 4.4); // 이보다 짧으면 지정 길이에 한참 못 미침
+  // ★시리즈 2편+는 앞 편과 똑같은 도입(소개)을 반복하지 마라 — 바로 '이번 장면 본내용'으로.
+  const seriesHint = episodeIdx >= 1
+    ? `\n★★이건 시리즈 ${episodeIdx + 1}편이다. 1편에서 이미 한 '전체 소개·배경 설명'(무슨 행사·누가 나왔는지 등)을 또 반복하지 마라. 시청자는 앞 편을 봤다고 가정하고, '이번 장면의 새로운 내용'으로 곧바로 들어가라(도입에 시간 낭비 금지 — 첫 문장부터 이 장면의 핵심).`
+    : '';
   const prompt = `너는 유튜브 '리뷰·해설' 채널 운영자다. 아래는 남의 영상(재사용)에서 가져온 한 장면이다.
 이 장면에 '네 관점의 해설/논평'을 한국어로 입혀 영상에 깔 나레이션을 써라. 장면을 그대로 중계·낭독하지 말고,
 배경·맥락 설명, 왜 중요한지, 포인트 짚기, 너의 해석 한마디를 넣어 '원본과 구별되는 가치'를 더해라.
@@ -144,8 +150,8 @@ async function writeCommentary(
 장면 대사/내용: ${transcript || '(대사 없음 — 제목과 후킹으로 맥락 추론)'}
 
 [규칙]
-- 분량: ${targetChars}자 내외로 '꽉' 채워라(이 장면 ${clipSec}초 거의 끝까지 말이 이어지게). 너무 짧으면 뒤가 허전하다. ±15%.
-- 구어체로 말하듯. ★★첫 문장이 생사다 — 인사·뜸들이기 절대 금지. 0.5초 안에 가장 센 포인트·반전·질문부터 때려 스크롤을 멈춰라(쇼츠는 첫 1초에 확산이 갈린다).
+- 분량: ${targetChars}자 내외로 '꽉' 채워라(최소 ${minChars}자 이상 — 이 장면 ${clipSec}초 끝까지 말이 이어지게, 짧으면 영상이 빈 채로 끝난다). 모자라지 않게.
+- 구어체로 말하듯. ★★첫 문장이 생사다 — 인사·뜸들이기 절대 금지. 0.5초 안에 가장 센 포인트·반전·질문부터 때려 스크롤을 멈춰라(쇼츠는 첫 1초에 확산이 갈린다).${seriesHint}
 - 해설·논평·맥락 중심(받아쓰기·중계 금지).
 ${contentStrategy()}
 ${RULE.answer}
@@ -320,7 +326,7 @@ export async function makeHighlights(
       //   캡의 92%를 목표 길이로(여운 1.3초 + 여유). 사용자가 59초로 맞췄으면 해설은 ~54초 분량으로 생성.
       const capSec = capFrames / FPS;
       const narrTargetSec = Math.max(5, Math.min(Math.round(durSec), Math.floor(capSec * 0.92)));
-      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log, visionFrames);
+      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log, visionFrames, i);
       commentaryText = commentary || '';
       if (commentary && k.elevenlabs) {
         log(`[하이라이트] ${i + 1}편 해설 나레이션 생성…`);
