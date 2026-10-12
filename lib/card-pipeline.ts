@@ -16,6 +16,10 @@ import {writeFile} from 'node:fs/promises';
 import type {CardData, MotionStyle} from '../src/Card';
 import {pickSkin, getSkin} from '../src/skins';
 import {registerCardDeck} from './card-portfolio';
+import {removePortfolio} from './portfolio';
+import {r2Enabled, videoKey, getStream} from './storage';
+import fs from 'node:fs';
+import os from 'node:os';
 
 const FPS = 30;
 
@@ -41,6 +45,14 @@ export type CardOpts = {
   log?: (m: string) => void;
   isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인(영상 파이프라인과 동일).
 };
+
+// ★재편집용 opts — 완성 카드를 '똑같은 조건'으로 다시 만들 때 필요한 제작 설정만 뽑아 보존(topic/count/프리셋/배경/스타일/톤/모션/스킨/폰트/나레이션/BGM/목소리/출력).
+//   storyboard·log·isCancelled·uploads(임시경로)는 제외 — 재렌더 때 수정본 storyboard를 새로 넘긴다.
+function reeditOpts(o: CardOpts) {
+  return {topic: o.topic, count: o.count, presetId: o.presetId, output: o.output, bg: o.bg,
+    narration: o.narration, bgm: o.bgm, voice: o.voice, imageStyle: o.imageStyle,
+    cardTheme: o.cardTheme, motion: o.motion, skin: o.skin, font: o.font};
+}
 
 // 카드 → 나레이션용 텍스트(타입별로 자연스럽게 읽히게 조합).
 function cardSpeech(c: CardPlan): string {
@@ -195,7 +207,7 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
     const images = cards.map((_, i) => `${pubRel}/card-${i + 1}.png`);
     let projectId: string | undefined;
     try {
-      projectId = await registerCardDeck({cards, title: sb.title, kind: 'post', out: zipAbs, images, narrations: regNarrations, voice: regVoice, category: regCategory, goal: regGoal, orientation: 'portrait', durSec: regDurSec, log});
+      projectId = await registerCardDeck({cards, title: sb.title, kind: 'post', out: zipAbs, images, narrations: regNarrations, voice: regVoice, category: regCategory, goal: regGoal, orientation: 'portrait', durSec: regDurSec, cardStoryboard: sb, cardOpts: reeditOpts(opts), log});
     } catch (e: any) { log('[안내] 포트폴리오 등록 건너뜀: ' + (e?.message || e)); }
     return {out: zipAbs, title: sb.title, dir: abs(pubRel), kind: 'post', images, projectId};
   }
@@ -227,7 +239,53 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
   log('[완료] 카드뉴스 영상 완성!');
   let projectId: string | undefined;
   try {
-    projectId = await registerCardDeck({cards, title: sb.title, kind: 'video', out, narrations: regNarrations, voice: regVoice, category: regCategory, goal: regGoal, orientation: 'portrait', durSec: regDurSec, log});
+    projectId = await registerCardDeck({cards, title: sb.title, kind: 'video', out, narrations: regNarrations, voice: regVoice, category: regCategory, goal: regGoal, orientation: 'portrait', durSec: regDurSec, cardStoryboard: sb, cardOpts: reeditOpts(opts), log});
   } catch (e: any) { log('[안내] 포트폴리오 등록 건너뜀: ' + (e?.message || e)); }
   return {out, title: sb.title, dir: abs(pubRel), kind: 'video', projectId};
+}
+
+// ★카드 project.json 복구 — 디스크 → R2 백업 순(영상 loadHlProject와 같은 원리). 재편집 소스 확보용.
+const CARD_DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data');
+async function loadCardProject(projectId: string): Promise<any | null> {
+  const pjPath = path.join(CARD_DATA_DIR, 'studio', projectId, 'project.json');
+  if (fs.existsSync(pjPath)) { try { return JSON.parse(fs.readFileSync(pjPath, 'utf8')); } catch {} }
+  if (!r2Enabled()) return null;
+  try {
+    const got = await getStream(videoKey(projectId, 'project.json'));
+    if (got) {
+      const buf: Buffer = await new Promise((resolve, reject) => { const chunks: Buffer[] = []; got.stream.on('data', (c: Buffer) => chunks.push(c)); got.stream.on('end', () => resolve(Buffer.concat(chunks))); got.stream.on('error', reject); });
+      return JSON.parse(buf.toString('utf8'));
+    }
+  } catch {}
+  return null;
+}
+
+// 카드 edit-info — 저장된 대본(수정 폼이 채울 내용) 반환. 없으면 editable:false.
+export async function cardEditInfo(projectId: string): Promise<any> {
+  const proj = await loadCardProject(projectId);
+  if (!proj || !proj.cardEdit || !proj.cardEdit.storyboard) {
+    return {editable: false, reason: '이 카드는 (옛 버전이라) 아직 수정을 지원하지 않아요. 새로 만든 카드부터 수정할 수 있어요.'};
+  }
+  const sb = proj.cardEdit.storyboard;
+  return {editable: true, title: proj.title || sb.title || '', cards: sb.cards || [], kind: proj.cardEdit.kind || 'post'};
+}
+
+// ★카드 재렌더 — 수정된 대본(cards)으로 '똑같은 조건'으로 다시 만든다(저장된 cardOpts + 수정 storyboard).
+//   영상 reRenderHighlight와 같은 역할. makeCardVideo가 storyboard 옵션으로 재제작을 이미 지원.
+export async function reRenderCard(keys: CardKeys, projectId: string, editedCards: any[] | undefined, log: (m: string) => void = () => {}): Promise<{projectId?: string; out: string; kind: CardOutput}> {
+  const proj = await loadCardProject(projectId);
+  if (!proj || !proj.cardEdit || !proj.cardEdit.storyboard) throw new Error('이 카드는 수정 소스가 없어 다시 만들 수 없어요. 새로 만들어 주세요.');
+  const saved = proj.cardEdit;
+  const sb = {...saved.storyboard, ...(editedCards && editedCards.length ? {cards: editedCards} : {})};
+  const o = saved.opts || {};
+  log('[카드] 수정한 대본으로 다시 만드는 중…');
+  const r = await makeCardVideo(keys, {
+    topic: o.topic || sb.title || '카드', count: sb.cards?.length || o.count, presetId: o.presetId,
+    output: (o.output as CardOutput) || saved.kind || 'post', bg: o.bg, narration: o.narration, bgm: o.bgm,
+    voice: o.voice, imageStyle: o.imageStyle, cardTheme: o.cardTheme, motion: o.motion, skin: o.skin, font: o.font,
+    storyboard: sb, log,
+  });
+  // 새 카드가 등록됐으면(새 projectId) 옛 항목은 포폴에서 제거 — 수정본 하나만 남게(중복 방지).
+  if (r.projectId && r.projectId !== projectId) { try { removePortfolio(projectId); log('[카드] 이전 버전을 정리했어요(수정본으로 교체).'); } catch {} }
+  return {projectId: r.projectId, out: r.out, kind: r.kind};
 }

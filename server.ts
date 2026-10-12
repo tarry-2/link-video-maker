@@ -10,7 +10,7 @@ import {makeVideo} from './lib/pipeline';
 import {generateStoryboard, type Storyboard} from './lib/script';
 import {registerVideoToPortfolio} from './lib/video-portfolio';
 import {makeVideoManual} from './lib/manual';
-import {makeCardVideo} from './lib/card-pipeline';
+import {makeCardVideo, cardEditInfo, reRenderCard} from './lib/card-pipeline';
 import {makeHighlights, backfillHighlightProjects, reRenderHighlight, loadHlProject, suggestNarration} from './lib/youtube-highlight';
 import {searchArchiveChannel, sampleForAnalysis, fetchSourceTranscript} from './lib/youtube-clip';
 import {analyzeReframe} from './lib/reframe';
@@ -2147,6 +2147,36 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
         job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
+    })();
+    return json(res, 202, {id});
+  }
+  // ── 카드 수정: 저장된 대본 불러오기 ──
+  if (p.startsWith('/api/card/edit-info/') && req.method === 'GET') {
+    const projectId = p.slice('/api/card/edit-info/'.length);
+    try { return json(res, 200, await cardEditInfo(projectId)); }
+    catch (e: any) { return json(res, 500, {error: (e?.message || 'edit-info 실패')}); }
+  }
+  // ── 카드 수정: 수정한 대본으로 다시 만들기(job+SSE, 하이라이트 re-render와 동일 구조) ──
+  if (p === '/api/card/re-render' && req.method === 'POST') {
+    const b = await readBody(req);
+    const projectId = String(b.projectId || '').trim();
+    if (!projectId) return json(res, 400, {error: '수정할 카드를 찾을 수 없어요.'});
+    const k = pipelineKeys();
+    if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 Gemini 또는 OpenAI 키를 저장하세요.'});
+    const sanitized = sanitizeCardStoryboard({cards: b.cards});
+    const editedCards = sanitized && Array.isArray(sanitized.cards) ? sanitized.cards : undefined;
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false};
+    jobs.set(id, job);
+    currentGenJob = id;
+    (async () => {
+      try {
+        const r = await reRenderCard(k, projectId, editedCards, (m) => jlog(job, m));
+        job.kind = r.kind === 'post' ? 'post' : undefined;
+        if (r.kind === 'post') job.zip = path.basename(r.out); else job.file = path.basename(r.out);
+        job.projectId = r.projectId;
+        job.done = true; job.doneAt = Date.now();
+      } catch (e: any) { job.error = e.message; job.done = true; job.doneAt = Date.now(); jlog(job, '[실패] ' + e.message); }
     })();
     return json(res, 202, {id});
   }

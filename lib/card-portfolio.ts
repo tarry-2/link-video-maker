@@ -27,6 +27,9 @@ export type CardRegister = {
   goal: 'issue' | 'info' | 'sell' | 'heal';
   orientation?: 'portrait' | 'landscape';
   durSec?: number;          // 전체 길이(초) — 메타 생성 참고.
+  // ★완성본 재편집용 — 카드 대본(문구) 원본. 영상의 source.mp4 보존과 같은 원리(이게 있어야 수정→재렌더 가능).
+  cardStoryboard?: {title: string; musicPrompt: string; subject: string; cards: any[]};
+  cardOpts?: any;           // 재렌더 시 동일 조건으로(bg·imageStyle·bgm·voiceId 등).
   log?: (m: string) => void;
 };
 
@@ -54,6 +57,8 @@ export async function registerCardDeck(reg: CardRegister): Promise<string> {
     scenes: reg.narrations.map((n) => ({narration: n, voice: {frames: perFrames}})),
     input: {duration: reg.durSec ? Math.round(reg.durSec) : 30},
     cardKind: reg.kind === 'post' ? 'card-post' : 'card',
+    // ★재편집 소스 — 카드 대본·제작조건 보존(수정→재렌더). 영상 hlEdit과 같은 역할.
+    cardEdit: reg.cardStoryboard ? {storyboard: reg.cardStoryboard, opts: reg.cardOpts || {}, kind: reg.kind} : undefined,
   };
 
   if (reg.kind === 'video') {
@@ -127,6 +132,9 @@ export async function registerCardDeck(reg: CardRegister): Promise<string> {
     });
     if (r2keys.length) log('[저장] 카드 게시물을 클라우드(R2)에 올렸습니다.');
   }
+
+  // ★project.json도 R2 백업 — 볼륨 정리돼도 재편집 메타(cardEdit)가 안 날아가게(영상과 동일).
+  if (r2Enabled()) { try { await uploadFile(videoKey(id, 'project.json'), path.join(dir, 'project.json'), 'application/json'); } catch {} }
 
   log('[완료] 포트폴리오에 자동 등록됐습니다.');
   return id;

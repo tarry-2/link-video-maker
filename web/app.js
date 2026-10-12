@@ -342,7 +342,7 @@ function renderCardHistory() {
     const action = isPost
       ? `<a class="ghost-btn small" href="/voices?tab=pf" target="_blank" rel="noopener">📂 포트폴리오</a>`
       : `<a class="ghost-btn small" href="${esc2(it.video)}" download="${esc2(it.title)}.mp4">⬇ 다운로드</a>`;
-    return `<div class="history-item" data-card-id="${esc2(it.id)}" data-title="${esc2(it.title)}" data-media="${esc2(it.media)}"><span><strong>${esc2(it.title)}</strong><small>${esc2(when)} · ${badge}${yt}${ig}</small></span><span class="hi-actions"><button type="button" class="ghost-btn small" data-reset="${esc2(it.id)}">⟳ 다시 세팅</button>${action}</span></div>`;
+    return `<div class="history-item" data-card-id="${esc2(it.id)}" data-title="${esc2(it.title)}" data-media="${esc2(it.media)}"><span><strong>${esc2(it.title)}</strong><small>${esc2(when)} · ${badge}${yt}${ig}</small></span><span class="hi-actions"><button type="button" class="ghost-btn small" data-card-edit="${esc2(it.id)}">✏️ 수정</button><button type="button" class="ghost-btn small" data-reset="${esc2(it.id)}">⟳ 다시 세팅</button>${action}</span></div>`;
   }).join('');
   let pager = '';
   if (totalPages > 1) {
@@ -360,11 +360,81 @@ $('card-history-refresh')?.addEventListener('click', () => loadCardHistory());
 
 // 카드 작업 내역 클릭 → 그 카드를 만든 설정으로 폼 '다시 세팅'(영상 작업내역처럼 다시 만들 수 있게).
 $('card-history')?.addEventListener('click', (e) => {
+  const edit = e.target.closest('[data-card-edit]');
+  if (edit) { openCardEditModal(edit.dataset.cardEdit); return; }
   const btn = e.target.closest('[data-reset]');
   if (!btn) return;
   const row = btn.closest('[data-card-id]');
   applyCardSettings(btn.dataset.reset, row?.dataset.title || '', row?.dataset.media || '');
 });
+
+// 카드 수정 모달 — 저장된 대본을 카드별 필드로 보여주고, 고쳐서 재렌더(에너지바+폭죽).
+async function openCardEditModal(projectId) {
+  let info = {};
+  try { info = await (await fetch('/api/card/edit-info/' + encodeURIComponent(projectId))).json(); } catch {}
+  if (!info || info.editable !== true) { alert(info && info.reason ? info.reason : '이 카드는 아직 수정을 지원하지 않아요.'); return; }
+  const cards = Array.isArray(info.cards) ? info.cards : [];
+  // 카드 타입별로 '채워진 필드'만 입력칸으로 노출(빈 필드는 안 보이게 깔끔히).
+  const FIELDS = [['badge','뱃지'],['big','큰 글자'],['small','윗줄'],['title','제목'],['number','숫자'],['unit','단위'],['body','본문'],['before','전(before)'],['after','후(after)'],['wrong','실수'],['right','해결']];
+  const cardHtml = cards.map((c, i) => {
+    const rows = FIELDS.filter(([k]) => c[k] != null && c[k] !== '').map(([k, label]) =>
+      `<label class="field-label" style="margin-top:6px">${label}</label><input class="input cde-f" data-i="${i}" data-k="${k}" value="${esc2(c[k])}">`).join('');
+    const items = Array.isArray(c.items) && c.items.length
+      ? `<label class="field-label" style="margin-top:6px">항목(줄바꿈 구분)</label><textarea class="input cde-items" data-i="${i}" rows="${Math.min(6,c.items.length+1)}">${esc2(c.items.join('\n'))}</textarea>` : '';
+    return `<div style="border:1px solid var(--line,#ddd);border-radius:12px;padding:12px;margin-top:10px"><b style="font-size:13px;opacity:.7">${i+1}. ${esc2(c.type||'')}</b>${rows}${items}</div>`;
+  }).join('');
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;background:rgba(8,8,12,.82);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60';
+  box.innerHTML = `<div style="background:var(--card,#fff);color:var(--text,#111);border-radius:18px;padding:20px;max-width:520px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.5)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2 style="margin:0;font-size:18px">✏️ 카드 수정</h2><button data-x="c" style="border:none;background:none;font-size:22px;cursor:pointer;color:inherit">✕</button></div>
+    <p class="mini-state">카드 문구를 고쳐서 다시 만들어요(1~3분). 배경·디자인·목소리는 그대로 유지돼요.</p>
+    ${cardHtml}
+    <button id="cde-save" class="primary-btn" style="margin-top:14px;width:100%">💾 저장하고 다시 만들기</button>
+    <div id="cde-energy-wrap" style="display:none;margin-top:12px"><div style="height:12px;border-radius:8px;background:rgba(0,0,0,.08);overflow:hidden"><div id="cde-energy" style="height:100%;width:6%;border-radius:8px;background:linear-gradient(90deg,var(--teal,#12a998),var(--purple,#7c5cff));transition:width .4s"></div></div><p id="cde-energy-label" class="mini-state" style="margin-top:6px"></p></div>
+    <p id="cde-msg" class="mini-state"></p></div>`;
+  document.body.appendChild(box);
+  const close = () => box.remove();
+  box.onclick = ev => { if (ev.target === box || ev.target.closest('[data-x="c"]')) close(); };
+  box.querySelector('#cde-save').onclick = async (ev) => {
+    const btn = ev.target; btn.disabled = true; btn.textContent = '저장 중…';
+    try {
+      // 수정 폼 → cards 재구성(원본 복제 후 입력칸 반영).
+      const edited = cards.map(c => ({...c}));
+      box.querySelectorAll('.cde-f').forEach(el => { edited[+el.dataset.i][el.dataset.k] = el.value; });
+      box.querySelectorAll('.cde-items').forEach(el => { edited[+el.dataset.i].items = el.value.split('\n').map(s => s.trim()).filter(Boolean); });
+      const resp = await fetch('/api/card/re-render', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({projectId, cards: edited})});
+      const d = await resp.json();
+      if (!resp.ok || d.error) throw new Error(d.error || ('서버 오류 ' + resp.status));
+      if (!d.id) throw new Error('재렌더 작업 ID를 못 받았어요.');
+      box.querySelector('#cde-energy-wrap').style.display = 'block';
+      box.querySelector('#cde-msg').textContent = '';
+      pollCardReRender(d.id, box, close);
+    } catch (e) { box.querySelector('#cde-msg').textContent = '실패: ' + e.message; btn.disabled = false; btn.textContent = '💾 저장하고 다시 만들기'; }
+  };
+}
+function pollCardReRender(id, box, closeModal) {
+  const setE = (pct, label) => { const f = box.querySelector('#cde-energy'); if (f) f.style.width = Math.min(99, pct) + '%'; const l = box.querySelector('#cde-energy-label'); if (l) l.textContent = Math.round(Math.min(99, pct)) + '% · ' + (label || ''); };
+  const curE = () => parseFloat((box.querySelector('#cde-energy') || {}).style?.width) || 0;
+  const es = new EventSource('/api/progress?id=' + id);
+  es.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.log) {
+      if (/배경|이미지/.test(m.log)) setE(Math.max(curE(), 35), '🖼 배경 만드는 중…');
+      else if (/나레이션|음성/.test(m.log)) setE(Math.max(curE(), 55), '🎙 음성 만드는 중…');
+      else if (/렌더|합성|완성/.test(m.log)) setE(Math.max(curE(), 75), '🎬 카드 만드는 중…');
+      else setE(Math.max(curE() + 1, 12), '다시 만드는 중…');
+    }
+    if (m.done) {
+      es.close();
+      if (m.error) { box.querySelector('#cde-msg').textContent = '실패: ' + m.error; const s = box.querySelector('#cde-save'); if (s) { s.disabled = false; s.textContent = '💾 저장하고 다시 만들기'; } return; }
+      setE(100, '완성! 🎉');
+      try { cardCelebrate(); } catch {}
+      loadCardHistory();
+      setTimeout(() => { if (closeModal) closeModal(); }, 1400);
+    }
+  };
+  es.onerror = () => es.close();
+}
 // 저장된 카드 설정(projectId별)을 폼에 복원. 없으면 제목·출력종류만이라도 채워 다시 만들 수 있게.
 function applyCardSettings(id, title, media) {
   setMode('card');
