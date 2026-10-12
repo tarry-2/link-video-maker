@@ -16,7 +16,7 @@ import {intensifyHooks} from './script';
 import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
 import {geminiGenerate, GeminiImage} from './gemini';
-import {RULE} from './prompt-rules'; // ★로직 센터 — 화면진실·답보장 원칙의 단일 출처
+import {RULE, contentStrategy} from './prompt-rules'; // ★로직 센터 — 소재유형·화면진실·답/정보·오보금지 단일 출처
 import {generateImageFlux, generateImageSmart} from './image';
 import {ttsElevenJoined, alignToWords, pickVoice, VOICES, type Word} from './tts';
 import type {SceneData} from '../src/Scene';
@@ -147,8 +147,10 @@ async function writeCommentary(
 - 분량: ${targetChars}자 내외로 '꽉' 채워라(이 장면 ${clipSec}초 거의 끝까지 말이 이어지게). 너무 짧으면 뒤가 허전하다. ±15%.
 - 구어체로 말하듯. ★★첫 문장이 생사다 — 인사·뜸들이기 절대 금지. 0.5초 안에 가장 센 포인트·반전·질문부터 때려 스크롤을 멈춰라(쇼츠는 첫 1초에 확산이 갈린다).
 - 해설·논평·맥락 중심(받아쓰기·중계 금지).
+${contentStrategy()}
 ${RULE.answer}
-- 답을 분명히 준 뒤 마지막 한마디로만 짧은 여운.
+${RULE.factTruth}
+- 답/정보를 분명히 준 뒤 마지막 한마디로만 짧은 여운.
 - 해시태그·이모지·따옴표 없이 '읽을 문장'만.
 JSON만 출력: {"commentary":"..."}` + (images?.length ? '\n\n' + RULE.screenTruth : '');
   // 레이트리밋·일시 오류·빈 응답이면 짧게 쉬고 1회 재시도(편마다 연속 호출이라 2편째부터 레이트에 걸리기 쉬움).

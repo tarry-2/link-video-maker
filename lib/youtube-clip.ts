@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {geminiGenerate} from './gemini';
-import {RULE} from './prompt-rules'; // ★로직 센터 — 인물·이름 진실 원칙 단일 출처
+import {RULE, contentStrategy} from './prompt-rules'; // ★로직 센터 — 소재유형·인물 진실 원칙 단일 출처
 import {reframeClip} from './reframe';
 import {sttWords} from './align';
 
@@ -294,6 +294,8 @@ function splitEvenly(durationSec: number, n: number, clipSec: number): Highlight
 async function hooksFromTitle(geminiKeys: string[], title: string, n: number, log: (m: string) => void): Promise<{hookTop: string; hookAccent: string; score: number}[]> {
   const prompt = `유튜브 쇼츠 ${n}개에 붙일 '상단 후킹 자막'을 만들어라. 아래는 원본 영상 제목이다(자막·대사 정보는 없음).
 영상 제목: "${title}"
+
+${contentStrategy()}
 
 [규칙 — 첫 3초에 스크롤을 멈추게 하는 게 전부]
 - 제목에 실제로 담긴 소재·상황만 근거로(없는 내용 지어내기=거짓 낚시 금지). 추측이면 '~일까?' 식 질문으로.

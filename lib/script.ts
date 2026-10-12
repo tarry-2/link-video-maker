@@ -1,6 +1,6 @@
 // 대본 생성 — 링크 본문 → 기승전결 서사 쇼츠 대본(JSON). Gemini 우선, 없거나 실패 시 OpenAI 폴백.
 import {geminiGenerate, GeminiImage} from './gemini';
-import {RULE, hookRule as hookFormula, seriesRule, storyStructure} from './prompt-rules'; // ★로직 센터
+import {RULE, hookRule as hookFormula, seriesRule, storyStructure, contentStrategy} from './prompt-rules'; // ★로직 센터
 import {openaiJson} from './openai';
 import type {Preset} from './presets';
 import {getStyle, stylePeopleWelcome} from './styles';
@@ -268,7 +268,7 @@ ${RULE.answer}
 ★★★가장 중요: 아래 의뢰의 '핵심 주제·소재'를 반드시 그대로 지켜라. 주제가 미지의 세계·장소·현상·우주·자연이면 그 세계를 탐험·발견·파헤치는 이야기로, 인물 드라마면 인물 중심으로 써라. 의뢰 주제를 무시하고 틀에 박힌 복수·배신 막장극으로 흐르는 것은 최악의 실패다(제목·줄거리가 주제와 동떨어지면 안 된다).`
     : `너는 구독자 100만 한국 유튜브 쇼츠 채널의 기획자이자 대본 작가다. 아래 자료로 '한 편의 영화처럼 기승전결이 있어 끝까지 보게 되는' 한국어 ${orient} ${format} 대본을 JSON으로 쓴다.`;
   const epLine = seriesRule(opts.episode, opts.episodesTotal, opts.episodeLogline);
-  const prompt = `${intro}${opts.seriesBible ? `\n\n[시리즈 설정 — 반드시 지켜라(스토리 바이블)]\n이 영상은 시리즈의 한 편이다. 아래 세계관·인물·전체 줄거리를 '그대로' 지키며(인물 이름·성격·외형·관계·설정 유지), 이 편의 분량을 써라.${epLine}\n${opts.seriesBible.slice(0, 4000)}` : ''}
+  const prompt = `${intro}${opts.seriesBible ? `\n\n[시리즈 설정 — 반드시 지켜라(스토리 바이블)]\n이 영상은 시리즈의 한 편이다. 아래 세계관·인물·전체 줄거리를 '그대로' 지키며(인물 이름·성격·외형·관계·설정 유지), 이 편의 분량을 써라.${epLine}\n${opts.seriesBible.slice(0, 4000)}` : ''}${opts.creative ? '' : `\n\n${contentStrategy()}\n${RULE.factTruth}`}
 
 ${catLine}
 [화법·톤] ${toneGuide}
