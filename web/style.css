@@ -543,7 +543,9 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .app-grid.card-mode .app-right:has(> section:not(.hidden):not(#preview-hint):not(#card-hint):not(#studio-editor)) #card-hint { display: none; }
 /* 카드 출력 토글(영상/게시물) */
 .seg { display: flex; gap: 8px; background: var(--card2); border-radius: 12px; padding: 5px; }
-.seg-btn { flex: 1; border: none; background: transparent; color: var(--muted); font-weight: 700; font-size: 13.5px; padding: 11px 8px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+.seg-btn { flex: 1; min-width: 0; border: none; background: transparent; color: var(--muted); font-weight: 700; font-size: 13.5px; padding: 11px 8px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+/* ★버튼 안 둘째 줄 보조설명(.hint)은 줄바꿈 허용 — nowrap이면 긴 설명("그림이 실제로 살아 움직임·유료")이 박스 밖으로 삐져나감(영화 버튼 등). min-width:0과 함께 박스 안에 들어오게. */
+.seg-btn .hint { display: block; white-space: normal; line-height: 1.25; margin-top: 2px; }
 .seg-btn.active { background: var(--grad); color: #fff; box-shadow: 0 4px 12px rgba(18,169,152,0.3); }
 /* 세로변환 ✨추천 뱃지(버튼 안, 영상 분석 결과) */
 .rf-badge { font-size: 11px; font-weight: 800; color: #e2543d; }

@@ -16,18 +16,40 @@
 
   // ── 진행 표시 헬퍼(경과시간·에너지바·완성 폭죽) ──
   const fmtDur = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
-  // 전체 진행률(대본6% → 소재 10~70% → 배경음악 72% → 렌더 75~99% → 완성 100%)
+  // 전체 진행률 — 단계를 가중치로 쪼개 "제작 N%"가 처음부터 끝까지 또렷이 오른다.
+  // 대본 6% → 그림·목소리 8~(영화 있으면 52/없으면 68)% → 영화 클립 52~68% → 배경음악 70% → 렌더 72~99% → 완성 100%
   function progressOf(p) {
     if (p.status === 'completed') return 100;
     if (p.status === 'planning') return 6;
     if (p.status !== 'running') return null;
-    const total = p.scenes.length || 1;
-    const done = p.scenes.filter(s => s.image && s.voice).length;
-    let pct = 10 + (done / total) * 60;
-    if (/배경음악/.test(p.phase)) pct = Math.max(pct, 72);
-    const rlog = [...p.logs].reverse().find(l => /\[렌더\][^0-9]*(\d+)%/.test(l));
-    if (/합성|렌더/.test(p.phase) || rlog) { const n = rlog ? Number(rlog.match(/(\d+)%/)[1]) : 0; pct = 75 + n * 0.24; }
+    const scenes = p.scenes || [];
+    const total = scenes.length || 1;
+    const aiClips = Math.min(Number(p.input?.aiClips) || 0, total); // 영화로 만들 앞 N장면
+    const matEnd = aiClips > 0 ? 52 : 68;                            // 그림·목소리 단계 끝 지점
+    // 1) 그림·목소리 — image/voice를 각각 반 개로 세분 → 8%~matEnd%
+    const assetsDone = scenes.reduce((n, s) => n + (s.image ? 1 : 0) + (s.voice ? 1 : 0), 0);
+    let pct = 8 + (assetsDone / (total * 2)) * (matEnd - 8);
+    // 2) 영화 클립(scene.video) → matEnd%~68%
+    if (aiClips > 0 && (assetsDone >= total * 2 || /영화/.test(p.phase || ''))) {
+      const clipsDone = scenes.filter(s => s.video).length;
+      pct = Math.max(pct, matEnd + (clipsDone / aiClips) * (68 - matEnd));
+    }
+    // 3) 배경음악 → 70%
+    if (/배경음악/.test(p.phase || '')) pct = Math.max(pct, 70);
+    // 4) 영상 합성(렌더) → 72%~99%
+    const rlog = [...(p.logs || [])].reverse().find(l => /\[렌더\][^0-9]*(\d+)%/.test(l));
+    if (/합성|렌더/.test(p.phase || '') || rlog) { const n = rlog ? Number(rlog.match(/(\d+)%/)[1]) : 0; pct = Math.max(pct, 72 + n * 0.27); }
     return Math.max(1, Math.min(99, Math.round(pct)));
+  }
+  // 현재 단계 이름(에너지바 라벨용) — 사용자가 지금 뭘 하는지 또렷이
+  function phaseLabel(p) {
+    if (p.status === 'planning') return '대본 쓰는 중';
+    if (p.status !== 'running') return '';
+    const ph = p.phase || '';
+    if (/합성|렌더/.test(ph)) return '영상 합치는 중';
+    if (/배경음악/.test(ph)) return '배경음악 까는 중';
+    if (/영화/.test(ph)) return '영화(움직임) 만드는 중';
+    return '그림·목소리 만드는 중';
   }
   // 경과시간 텍스트(렌더 시 즉시 채움 → 항상 보이게). started 없으면 빈 문자열.
   function elapsedText(p) {
@@ -272,7 +294,7 @@
     el('studio-editor').innerHTML = `
       <div class="modal-head"><h2>대본 검토 · 장면 편집</h2><span class="badge">${stateNames[p.status]}</span></div>
       <div class="job-status"><span class="job-phase">${escape(p.phase || '')}</span><span id="job-elapsed" class="job-elapsed">${elapsedText(p)}</span></div>
-      ${prog !== null ? `<div class="energy"><div class="energy-fill${busy ? ' anim' : ''}" style="width:${prog}%"></div></div><p class="energy-label">${prog}%${busy ? ' 진행 중…' : p.status === 'completed' ? ' 완성! 🎉' : ''}</p>` : ''}
+      ${prog !== null ? `<div class="energy"><div class="energy-fill${busy ? ' anim' : ''}" style="width:${prog}%"></div></div><p class="energy-label">제작 ${prog}%${busy ? ' · ' + phaseLabel(p) : p.status === 'completed' ? ' · 완성! 🎉' : ''}</p>` : ''}
       <p id="editor-message" class="mini-state" role="status"></p>
       ${p.error ? `<p class="error" role="alert">${escape(p.error)}</p>` : ''}
       ${p.input.product ? `<div class="product-summary"><strong>고정된 상품 정보</strong><p>${escape(p.input.product.name)} · ${escape(p.input.product.price)}</p><p>${escape(p.input.product.benefit)}</p><p>${escape(p.input.product.url)}</p><small>상품 정보는 이 작업에서 변경되지 않습니다. 대본의 [상품명], [가격], [혜택]은 위 값으로 읽힙니다. 직접 쓰는 문구의 사실관계는 확인해주세요.</small></div>` : ''}

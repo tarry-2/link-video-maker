@@ -77,6 +77,12 @@ export type PipelineOpts = {
   // ★본인 얼굴: 사용자가 올린 사진 경로. 있으면 이 얼굴을 '기준 캐릭터'로 전 장면 스틸을 nano-banana로 생성
   //   → 모든 컷이 그 얼굴(Seedance가 그대로 움직임). 장르·스타일 무관 적용.
   faceRef?: string;
+  // ★시리즈(재창작·창작 N편) — 연속 서사로 묶는다. 1편 셋업+클리프행어 → 2편 해소+새 긴장 → … 마지막 편 매듭.
+  //   (안 넘기면 기존처럼 단편. 넘기면 generateStoryboard가 바이블·이 편 로그라인을 지켜 집필.)
+  seriesBible?: string;
+  episode?: number;
+  episodesTotal?: number;
+  episodeLogline?: string;
   log?: (m: string) => void;
   isCancelled?: () => boolean; // ★사용자 중단 — 단계 경계마다 확인해서 멈춘다(하이라이트와 동일).
 };
@@ -122,6 +128,8 @@ export async function makeVideo(
       imageStyle: opts.imageStyle,
       sceneCount: opts.sceneCount,
       openaiKey: keys.openai,
+      // ★시리즈(N편 연속 서사) — 있으면 바이블·이 편 로그라인을 지켜 "앞 편 이어받고 클리프행어로 끊기".
+      seriesBible: opts.seriesBible, episode: opts.episode, episodesTotal: opts.episodesTotal, episodeLogline: opts.episodeLogline,
       log,
     });
   }

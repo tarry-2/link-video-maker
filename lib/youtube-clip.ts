@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import {geminiGenerate} from './gemini';
+import {RULE} from './prompt-rules'; // ★로직 센터 — 인물·이름 진실 원칙 단일 출처
 import {reframeClip} from './reframe';
 import {sttWords} from './align';
 
@@ -295,7 +296,8 @@ async function hooksFromTitle(geminiKeys: string[], title: string, n: number, lo
 영상 제목: "${title}"
 
 [규칙 — 첫 3초에 스크롤을 멈추게 하는 게 전부]
-- 제목에 실제로 담긴 소재·인물·상황만 근거로(없는 내용 지어내기=거짓 낚시 금지). 추측이면 '~일까?' 식 질문으로.
+- 제목에 실제로 담긴 소재·상황만 근거로(없는 내용 지어내기=거짓 낚시 금지). 추측이면 '~일까?' 식 질문으로.
+- ${RULE.screenTruth}
 - '제목 요약'이 아니라 '궁금증 폭탄'으로. 공식: 정보격차("아무도 모르는 ○○")·충격반전("설마 했는데")·숫자·경고("절대")·질문("왜 ○○?").
 - ${n}개를 서로 '다른 각도'로(같은 영상의 다른 장면이라고 가정). 밋밋한 제목 반복 금지.
 - hookTop=한국어 12~16자(자극적, 열린 고리), hookAccent=가장 센 단어 1~2개(6자내), score=이 후킹이 터질 확률 55~90 정수(세면 높게).

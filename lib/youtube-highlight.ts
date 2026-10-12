@@ -15,7 +15,8 @@ import {renderHighlightFast} from './highlight-fast';
 import {intensifyHooks} from './script';
 import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream} from './storage';
-import {geminiGenerate} from './gemini';
+import {geminiGenerate, GeminiImage} from './gemini';
+import {RULE} from './prompt-rules'; // ★로직 센터 — 화면진실·답보장 원칙의 단일 출처
 import {generateImageFlux, generateImageSmart} from './image';
 import {ttsElevenJoined, alignToWords, pickVoice, VOICES, type Word} from './tts';
 import type {SceneData} from '../src/Scene';
@@ -39,7 +40,7 @@ export function stripUnrenderable(s: string): string {
 // 제목을 '단어/구분자 경계'에서 깔끔하게 자른다(글자 수로 뚝 자르면 "...1화 둘"처럼 단어 중간이 끊긴다).
 //   구분자(|·-·[]()·화/회/편) 앞에서 끊고, 없으면 공백 단위로. 그래도 길면 글자 수 폴백.
 // ★후킹은 '한국어'여야 한다. 제목·자막이 영어여도 한국어 후킹을 창작/번역한다(테리: 후킹은 한글이야).
-async function koreanHook(geminiKeys: string[], title: string, transcript: string, log: (m: string) => void): Promise<{hookTop: string; hookAccent: string} | null> {
+async function koreanHook(geminiKeys: string[], title: string, transcript: string, log: (m: string) => void, images?: GeminiImage[]): Promise<{hookTop: string; hookAccent: string} | null> {
   if (!geminiKeys.length) return null;
   const prompt = `아래 영상의 '한국어' 쇼츠 후킹을 만들어라. 제목/자막이 영어여도 반드시 자연스러운 한국어로 창작·번역한다.
 제목: ${title}
@@ -52,9 +53,9 @@ async function koreanHook(geminiKeys: string[], title: string, transcript: strin
 요구:
 - hookTop: 스크롤을 멈추게 하는 한국어 10~16자. 궁금증·긴장을 만드는 셋업. 제목 그대로 복붙 금지, 영어 금지, 뻔한 표현(대박·레전드·충격 남발) 금지.
 - hookAccent: hookTop과 단어가 겹치지 않는 강펀치 한국어 6~12자. 결과·반전·감정을 터뜨린다(예: "결국 무릎 꿇음", "소름 돋는 반전").
-JSON만: {"hookTop":"...","hookAccent":"..."}`;
+JSON만: {"hookTop":"...","hookAccent":"..."}` + (images?.length ? '\n\n' + RULE.screenTruth : '');
   try {
-    const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 220, temperature: 0.9});
+    const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 220, temperature: 0.9, images});
     const m = raw.match(/\{[\s\S]*\}/); const d = m ? JSON.parse(m[0]) : {};
     const ht = String(d.hookTop || '').slice(0, 24).trim();
     if (!/[가-힣]/.test(ht)) return null; // 한글이 없으면 실패로 간주
@@ -103,11 +104,33 @@ function extractThumb(videoPath: string, outPng: string, atSec: number): Promise
   });
 }
 
+// ★클립의 '실제 화면' 프레임을 뽑아 Gemini 비전용 이미지로(폭 512로 줄여 토큰·시간 절약).
+//   후킹·해설이 제목/자막 '텍스트'가 아니라 '화면'에 근거하게 해서 "인물 이름 뒤바뀜·없는데 있다고" 방지.
+//   짧은 편은 1장(중앙), 긴 편은 2장(1/4·3/5 지점)으로 장면 변화를 커버.
+async function clipVisionFrames(clipAbs: string, durSec: number, workDir: string): Promise<GeminiImage[]> {
+  const pts = durSec > 6 ? [durSec * 0.25, durSec * 0.6] : [Math.max(0.3, durSec * 0.5)];
+  const imgs: GeminiImage[] = [];
+  for (const at of pts) {
+    const png = path.join(workDir, `vframe-${randomUUID()}.png`);
+    try {
+      const ok = await new Promise<boolean>((resolve) => {
+        const ps = spawn(FFMPEG, ['-y', '-ss', String(at), '-i', clipAbs, '-frames:v', '1', '-vf', 'scale=512:-2', '-q:v', '4', png], {stdio: ['ignore', 'ignore', 'ignore']});
+        const t = setTimeout(() => { ps.kill('SIGKILL'); resolve(false); }, 30000);
+        ps.on('error', () => { clearTimeout(t); resolve(false); });
+        ps.on('close', (code) => { clearTimeout(t); resolve(code === 0 && fs.existsSync(png)); });
+      });
+      if (ok) { const b = fs.readFileSync(png); if (b.length) imgs.push({mimeType: 'image/png', dataB64: b.toString('base64')}); }
+      if (fs.existsSync(png)) fs.unlinkSync(png);
+    } catch { /* 프레임 실패해도 텍스트 기반으로 진행 */ }
+  }
+  return imgs;
+}
+
 // 재사용 영상에 '내 관점의 해설'을 입혀 수익화(변형 가치) 기준을 충족시키기 위한 나레이션 대본 생성.
 //   원본 대사(transcript)를 근거로 맥락·논평을 더한다(단순 중계/낭독 금지).
 async function writeCommentary(
   geminiKeys: string[], title: string, transcript: string, hook: string, clipSec: number,
-  log?: (m: string) => void,
+  log?: (m: string) => void, images?: GeminiImage[],
 ): Promise<string> {
   if (!geminiKeys.length) { log?.('[하이라이트] 해설 생략: Gemini 키가 없습니다.'); return ''; }
   // ★분량을 클립 길이에 맞게 꽉 채운다 — 한국어 나레이션 ~4.4자/초(TTS 기준). 너무 적으면 뒤가 허전해짐.
@@ -124,13 +147,14 @@ async function writeCommentary(
 - 분량: ${targetChars}자 내외로 '꽉' 채워라(이 장면 ${clipSec}초 거의 끝까지 말이 이어지게). 너무 짧으면 뒤가 허전하다. ±15%.
 - 구어체로 말하듯. ★★첫 문장이 생사다 — 인사·뜸들이기 절대 금지. 0.5초 안에 가장 센 포인트·반전·질문부터 때려 스크롤을 멈춰라(쇼츠는 첫 1초에 확산이 갈린다).
 - 해설·논평·맥락 중심(받아쓰기·중계 금지).
-- ★마지막 문장은 '처음의 궁금증으로 되돌아가듯' 닫아라(쇼츠는 자동 반복 — 끝이 처음과 이어지면 다시 보게 돼 조회수가 는다). 말이 뚝 끊기지 않게.
+${RULE.answer}
+- 답을 분명히 준 뒤 마지막 한마디로만 짧은 여운.
 - 해시태그·이모지·따옴표 없이 '읽을 문장'만.
-JSON만 출력: {"commentary":"..."}`;
+JSON만 출력: {"commentary":"..."}` + (images?.length ? '\n\n' + RULE.screenTruth : '');
   // 레이트리밋·일시 오류·빈 응답이면 짧게 쉬고 1회 재시도(편마다 연속 호출이라 2편째부터 레이트에 걸리기 쉬움).
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 1024, temperature: 0.8});
+      const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 1024, temperature: 0.8, images});
       const m = raw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/);
       const text = m ? String(JSON.parse(m[0]).commentary || '').trim() : '';
       if (text) return text;
@@ -278,6 +302,11 @@ export async function makeHighlights(
     //   clipSec이 지정돼 있으면 그 프레임을 상한으로 쓴다(지정 안 하면 clipFrames 그대로).
     const capFrames = opts.clipSec ? Math.round(opts.clipSec * FPS) : clipFrames;
 
+    // ★이 구간의 '실제 화면' 프레임 — 후킹·해설을 '보이는 것' 기준으로(인물 이름 단정·뒤바뀜 방지, 테리 대형 지적).
+    const visionFrames = await clipVisionFrames(path.join(pubClipDir, clipName), durSec, studioDir).catch(() => []);
+    if (visionFrames.length) log(`[하이라이트] ${i + 1}편 화면 ${visionFrames.length}장 분석 — 후킹·해설을 화면 기준으로 생성(없는 인물·이름 방지)`);
+    else log(`[하이라이트] ${i + 1}편 화면 프레임 추출 실패 — 텍스트 기준으로 진행`);
+
     // ── 해설 나레이션(선택) — 원본에 '내 관점의 해설'을 입혀 수익화(변형 가치) 충족 ──
     //   Gemini로 해설 대본 → ElevenLabs TTS(단어 타이밍) → 원본 소리는 더킹, 카라오케 자막으로 표시.
     let words: Word[] = [];
@@ -289,7 +318,7 @@ export async function makeHighlights(
       //   캡의 92%를 목표 길이로(여운 1.3초 + 여유). 사용자가 59초로 맞췄으면 해설은 ~54초 분량으로 생성.
       const capSec = capFrames / FPS;
       const narrTargetSec = Math.max(5, Math.min(Math.round(durSec), Math.floor(capSec * 0.92)));
-      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log);
+      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log, visionFrames);
       commentaryText = commentary || '';
       if (commentary && k.elevenlabs) {
         log(`[하이라이트] ${i + 1}편 해설 나레이션 생성…`);
@@ -324,7 +353,7 @@ export async function makeHighlights(
     // 후킹에 한글이 하나도 없으면(영어 제목·영어 자막이라 AI가 영어로 뽑았거나 제목으로 폴백된 경우)
     //   제목+대사로 '한국어 후킹'을 새로 만든다. 이게 테리가 말한 "후킹은 한글이야".
     if (!hasKorean(hookTopFinal)) {
-      const kh = await koreanHook(k.gemini, meta.title, c.transcript || '', log);
+      const kh = await koreanHook(k.gemini, meta.title, c.transcript || '', log, visionFrames);
       if (kh) { hookTopFinal = kh.hookTop; if (!hasKorean(hookAccentFinal)) hookAccentFinal = kh.hookAccent; }
     }
     if (!hasVisibleHook(hookTopFinal)) hookTopFinal = cleanTitle(meta.title, 20) || (meta.title || '').slice(0, 20) || '하이라이트';
@@ -333,7 +362,7 @@ export async function makeHighlights(
     hookAccentFinal = dedupAccent(hookTopFinal, hookAccentFinal);
     // ★후킹 강화 게이트 — "항상 90점 이상"으로 재작성(밋밋 방지, 테리 지시). 영상 대사(transcript)에 근거.
     try {
-      const [strong] = await intensifyHooks(k.gemini, [{hookTop: hookTopFinal, hookAccent: hookAccentFinal, context: (c.transcript || meta.title || '').slice(0, 300)}], log);
+      const [strong] = await intensifyHooks(k.gemini, [{hookTop: hookTopFinal, hookAccent: hookAccentFinal, context: (c.transcript || meta.title || '').slice(0, 300)}], log, visionFrames);
       if (strong && strong.hookTop && hasKorean(strong.hookTop)) { hookTopFinal = strong.hookTop; hookAccentFinal = strong.hookAccent; }
     } catch (e: any) { log('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
     log(`[하이라이트] ${i + 1}편 후킹: "${hookTopFinal}"${hookAccentFinal ? ` / "${hookAccentFinal}"` : ''}${hasKorean(hookTopFinal) ? '' : ' (한글 변환 실패—원문 유지)'}`);

@@ -1675,11 +1675,38 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
         const aiClips = Number(b.aiClips) || 0;
         const imageStyle = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
         job.clips = [];
+        // ★N편 연속 시리즈 설계 — 같은 소재를 독립 N번(다 비슷·궁금증만 쌓이고 해소 없음, 테리 지적) 만들던 것을
+        //   "1편 떡밥 → 2편 회수+새 떡밥 → … → 마지막 편 매듭" 연속 서사로. count>1일 때만.
+        let seriesBible = '';
+        let episodeLoglines: string[] = [];
+        if (count > 1) {
+          try {
+            jlog(job, `[시리즈] ${count}부작 설계 중 — 편마다 다른 국면으로, 궁금증을 다음 편에서 풀어주는 연속 구성…`);
+            const bibleRaw = await geminiGenerate(k.gemini, `아래 원본 소재를 유튜브 쇼츠 '${count}부작 연속 시리즈'로 재구성하라.
+★핵심: 각 편은 '서로 다른 국면/주제'를 다루되 하나의 이야기로 이어진다. 1편 끝에 강한 궁금증(클리프행어)을 남기면, 다음 편이 그걸 풀어주면서 또 다른 궁금증으로 끊고, 계속 이어진다. 마지막 편은 전체를 매듭짓고 큰 여운. ★절대 매 편 같은 내용·같은 후킹 반복 금지 — 편마다 주제가 뚜렷이 달라야 한다.
+[원본 제목] ${title}
+[원본 내용] ${(realContent || title).slice(0, 8000)}
+JSON만: {"bible":"세계관·인물·전체 줄거리를 한 문단으로(인물 이름·설정 고정)","episodes":["1편에서 벌어질 일(끝에 남길 궁금증 포함)","2편에서 벌어질 일(앞 궁금증 해소+새 궁금증)", ... 정확히 ${count}개]}`,
+              {json: true, maxTokens: 1600, temperature: 0.9, log: (m) => jlog(job, m)});
+            const bd = JSON.parse(bibleRaw.replace(/```json|```/g, '').match(/\{[\s\S]*\}/)?.[0] || '{}');
+            seriesBible = String(bd.bible || '').trim();
+            episodeLoglines = Array.isArray(bd.episodes) ? bd.episodes.map((e: any) => String(e || '').trim()) : [];
+            if (seriesBible && episodeLoglines.length >= count) jlog(job, `[시리즈] 설계 완료 — ${episodeLoglines.length}편 로그라인 확보(편마다 다른 주제로 이어집니다)`);
+            else { jlog(job, '[시리즈] 설계가 부족해 각 편 독립 제작으로 진행합니다.'); seriesBible = ''; episodeLoglines = []; }
+          } catch (e: any) { jlog(job, '[시리즈] 설계 실패 → 각 편 독립 제작으로 진행: ' + (e?.message || '').slice(0, 60)); seriesBible = ''; episodeLoglines = []; }
+        }
+        const useSeries = count > 1 && !!seriesBible && episodeLoglines.length >= count;
         for (let i = 0; i < count; i++) {
           if (job.cancelled) break;
           if (count > 1) jlog(job, `──── ${i + 1}/${count}편 제작 ────`);
+          if (useSeries && episodeLoglines[i]) jlog(job, `[이 편] ${episodeLoglines[i].slice(0, 80)}`);
           const r = await makeVideo([], k, {
             sourceText,
+            // ★시리즈면 바이블·이 편 로그라인을 넘겨 연속 서사로(안 넘기면 기존처럼 독립 단편).
+            seriesBible: useSeries ? seriesBible : undefined,
+            episode: useSeries ? i + 1 : undefined,
+            episodesTotal: useSeries ? count : undefined,
+            episodeLogline: useSeries ? episodeLoglines[i] : undefined,
             duration: durSec,
             orientation, // ★내가 고른 방향 그대로(세로면 길이 길어도 세로)
             presetId: b.presetId || 'mystery', // 재창작 기본 결=미스터리(서프라이즈 톤). UI에서 바꿀 수 있음.

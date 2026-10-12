@@ -182,29 +182,15 @@
         </div>
 
         <details id="detail-settings" class="detail-settings">
-          <summary>⚙️ 세부 설정 <span class="hint">— 안 건드려도 알아서 잘 나와요 (카테고리·길이·목소리·스타일·나레이션·움직임)</span></summary>
+          <summary>⚙️ 세부 설정 <span class="hint">— 안 건드려도 알아서 잘 나와요 (카테고리·목소리·스타일·나레이션·움직임)</span></summary>
 
         <label class="field-label">카테고리 <span class="hint">— 고르면 톤·이미지·목소리·배경음악이 자동으로 맞춰져요</span></label>
         <div id="categories" class="cat-groups"></div>
 
         <div class="row">
           <div class="col">
-            <label class="field-label">길이</label>
-            <select id="duration" class="input">
-              <optgroup label="쇼츠 (세로 9:16)">
-                <option value="15">15초 · 짧게 · 세로</option>
-                <option value="30" selected>30초 · 표준 · 세로</option>
-                <option value="45">45초 · 세로</option>
-                <option value="60">60초 · 세로</option>
-              </optgroup>
-              <optgroup label="롱폼 (가로 16:9)">
-                <option value="90">90초 · 가로</option>
-                <option value="120">2분 · 가로</option>
-                <option value="180">3분 · 가로</option>
-              </optgroup>
-            </select>
-            <p id="format-note" class="mini-state">쇼츠 = 세로 9:16 · 롱폼 = 가로 16:9 (유튜브 기준 자동)</p>
-            <label class="field-label" style="margin-top:10px">장면(이미지) 수 <span class="hint">— 몇 개의 그림으로 나눌지</span></label>
+            <!-- ★길이는 세부 설정 밖(영상 종류 위)으로 옮김 — 영화 고를 때도 전체 길이가 바로 보이게. -->
+            <label class="field-label">장면(이미지) 수 <span class="hint">— 몇 개의 그림으로 나눌지</span></label>
             <div class="seg" style="margin-top:6px;flex-wrap:wrap">
               <button type="button" class="seg-btn sc-n active" data-n="0">자동</button>
               <button type="button" class="seg-btn sc-n" data-n="4">4장</button>
@@ -269,7 +255,23 @@
 
         <!-- ★중요 선택이라 세부 설정 밖, 버튼 바로 위에 크게 노출. 네이티브 select 대신 버튼(확실히 클릭됨) -->
         <div id="advanced-row" style="margin-top:14px">
-          <label class="field-label">🎥 영상 종류 — 눌러서 고르세요</label>
+          <!-- ★영상 길이 — 세부 설정 밖으로 꺼내 항상 노출(사진·영화 공통, 영화 고를 때도 전체 길이가 바로 보이게) -->
+          <label class="field-label">⏱ 영상 길이 <span class="hint">— 완성 영상 전체 길이</span></label>
+          <select id="duration" class="input" style="margin-top:6px">
+            <optgroup label="쇼츠 (세로 9:16)">
+              <option value="15">15초 · 짧게 · 세로</option>
+              <option value="30" selected>30초 · 표준 · 세로</option>
+              <option value="45">45초 · 세로</option>
+              <option value="60">60초 · 세로</option>
+            </optgroup>
+            <optgroup label="롱폼 (가로 16:9)">
+              <option value="90">90초 · 가로</option>
+              <option value="120">2분 · 가로</option>
+              <option value="180">3분 · 가로</option>
+            </optgroup>
+          </select>
+          <p id="format-note" class="mini-state">쇼츠 = 세로 9:16 · 롱폼 = 가로 16:9 (유튜브 기준 자동)</p>
+          <label class="field-label" style="margin-top:14px">🎥 영상 종류 — 눌러서 고르세요</label>
           <div class="seg vtype-seg" style="margin-top:6px">
             <button type="button" id="vtype-photo" class="seg-btn active" data-clips="0">📷 사진 영상<br><span class="hint">그림 + 움직임 효과 · 무료·빠름</span></button>
             <button type="button" id="vtype-motion" class="seg-btn" data-clips="1">🎬 영화<br><span class="hint">그림이 실제로 살아 움직임 · 유료</span></button>
@@ -277,13 +279,13 @@
           <input type="hidden" id="aiClips" value="0" />
           <!-- 영화 고르면 몇 장면 만들지 -->
           <div id="motion-count-row" class="hidden" style="margin-top:10px">
-            <label class="field-label">영화 장면 수 <span class="hint">(많을수록 생생해요. 비용 대부분은 GPU 준비 고정비라 장면 늘려도 조금만 올라요)</span></label>
+            <label class="field-label">영화 장면 수 <span class="hint">(많을수록 더 생생하게 움직여요)</span></label>
             <div class="seg" style="margin-top:6px;flex-wrap:wrap">
-              <button type="button" class="seg-btn active vclip-n" data-clips="1">첫 장면만<br><span class="hint">약 250원</span></button>
-              <button type="button" class="seg-btn vclip-n" data-clips="2">2장면<br><span class="hint">약 300원</span></button>
-              <button type="button" class="seg-btn vclip-n" data-clips="3">3장면<br><span class="hint">약 350원</span></button>
-              <button type="button" class="seg-btn vclip-n" data-clips="5">5장면<br><span class="hint">약 450원</span></button>
-              <button type="button" class="seg-btn vclip-n" data-clips="8">8장면<br><span class="hint">약 600원</span></button>
+              <button type="button" class="seg-btn active vclip-n" data-clips="1">첫 장면만</button>
+              <button type="button" class="seg-btn vclip-n" data-clips="2">2장면</button>
+              <button type="button" class="seg-btn vclip-n" data-clips="3">3장면</button>
+              <button type="button" class="seg-btn vclip-n" data-clips="5">5장면</button>
+              <button type="button" class="seg-btn vclip-n" data-clips="8">8장면</button>
             </div>
             <label class="voice-row" style="margin-top:8px">
               <span class="field-label" style="margin:0">직접 입력</span>

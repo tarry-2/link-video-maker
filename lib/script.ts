@@ -1,5 +1,6 @@
 // 대본 생성 — 링크 본문 → 기승전결 서사 쇼츠 대본(JSON). Gemini 우선, 없거나 실패 시 OpenAI 폴백.
-import {geminiGenerate} from './gemini';
+import {geminiGenerate, GeminiImage} from './gemini';
+import {RULE, hookRule as hookFormula, seriesRule, storyStructure} from './prompt-rules'; // ★로직 센터
 import {openaiJson} from './openai';
 import type {Preset} from './presets';
 import {getStyle, stylePeopleWelcome} from './styles';
@@ -95,6 +96,7 @@ export async function intensifyHooks(
   geminiKeys: string[],
   items: {hookTop: string; hookAccent: string; context: string}[],
   log?: (m: string) => void,
+  images?: GeminiImage[], // ★하이라이트: 이 구간 실제 화면 프레임. 주면 화면 기준으로 후킹(인물 이름 단정 방지). 창작/수동은 미전달.
 ): Promise<{hookTop: string; hookAccent: string}[]> {
   const best = items.map((i) => ({hookTop: i.hookTop, hookAccent: i.hookAccent, score: 0}));
   if (!geminiKeys.length || !items.length) return best.map((b) => ({hookTop: b.hookTop, hookAccent: b.hookAccent}));
@@ -107,22 +109,19 @@ export async function intensifyHooks(
 각각을 '첫 1초에 스크롤을 멈추게 하는 ${TARGET}점 이상 후킹'으로 다시 쓰고, 네가 쓴 결과에 냉정하게 점수(0~100)를 매겨라.
 조회수의 90%가 이 후킹에서 갈린다. 지금보다 무조건 더 세게.
 
-[강한 후킹 공식 — 가장 꽂히는 하나를 골라 세게]
-① 충격 숫자·구체("단 3일 만에","99%가 모르는") ② 반전·의외("알고 보니 정반대") ③ 금지·경고("절대 하지 마세요") ④ 정보격차("아무도 안 알려준") ⑤ 직격 질문("왜 당신만 안 될까?")
+${hookFormula()}
 
 [점수 기준 — 냉정하게]
 90+ = 나도 모르게 멈추고 끝까지 보게 됨(진짜 강한 것만). 70~89 = 괜찮지만 평범. 70 미만 = 밋밋/탈락.
 
 [규칙]
 - 각 후킹의 '내용'에 근거(없는 사실 지어내기 금지, 과장 OK·거짓 금지).
-- hookTop=긴장 셋업(10~16자), hookAccent=다른 단어의 펀치(6~12자). ★두 줄에 같은 단어 반복 금지.
-- '대박·레전드·충격·실화ㄷㄷ' 상투어 남발 금지 — 소재에 꽂히는 구체적인 말로.
-- 한국어로만.
+- hookTop=긴장 셋업(10~16자), hookAccent=다른 단어의 펀치(6~12자).
 
 입력(JSON): ${JSON.stringify(payload)}
-출력 JSON만: {"hooks":[{"i":0,"hookTop":"...","hookAccent":"...","score":92}]}`;
+출력 JSON만: {"hooks":[{"i":0,"hookTop":"...","hookAccent":"...","score":92}]}` + (images?.length ? '\n\n' + RULE.screenTruth : '');
     try {
-      const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 1200, temperature: attempt === 1 ? 1.0 : 1.15, log});
+      const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 1200, temperature: attempt === 1 ? 1.0 : 1.15, log, images});
       const m = raw.match(/\{[\s\S]*\}/);
       const d: any = m ? JSON.parse(m[0]) : {};
       const arr: any[] = Array.isArray(d.hooks) ? d.hooks : [];
@@ -187,30 +186,9 @@ export async function generateStoryboard(
     : (duration <= 30 ? 4 : duration <= 60 ? 6 : Math.min(10, Math.ceil(duration / 12)));
   const perScene = Math.round((duration * 5.6) / n); // ★실측보정 5.6: dry-run으로 목표길이에 중심 맞춤(v4 통짜 rate 6.0자/초). "약 N자"만 지시(문장수 지시 금지=폭주). Gemini가 ±25% 널뛰어도 평균은 목표에 근접.
 
-  // ★★길이 구간별 '이야기 구조 로직'(테리 지시 + 2026 쇼츠 리서치: 길이는 랭킹요소 아님, 완주율이 전부).
-  //   → 길이에 맞는 '이야기 복잡도'를 써야 완주율이 산다. 복잡한 다단계 반전을 30초에 욱여넣으면 전개가 급해 망함(테리 실측).
-  const storyMode: 'micro' | 'standard' | 'long' =
-    duration <= 35 ? 'micro' : duration <= 60 ? 'standard' : 'long';
-  // 각 구간 = 서사형(창작) 이야기 설계에 쓰는 '구조 지시'. 완주율 목표도 명시.
-  const STORY_LOGIC: Record<typeof storyMode, string> = {
-    // ~30초: 완주율 65%+ 필요. 마이크로스토리 = '반전 한 방'. 다단계·복잡 금지.
-    micro: `[이야기 구조 — ${duration}초 초단편(마이크로스토리). ★완주율 65%+가 생명]
-- 구조는 '기승전결'을 다 펼치지 마라. 딱 '세팅(2초) → 긴장 하나 → 반전 한 방(payoff)'으로 압축하라.
-- ★반전은 '단 하나'만. 납치·10년·복수 같은 복잡한 다단계 전개를 30초에 욱여넣지 마라(전개가 급해 다 망한다). 단순하지만 강렬한 훅 하나를 끝까지 밀어라.
-- 설명·여운을 길게 빼지 마라. 마지막은 충격·반전으로 '탁' 끊어 끝내라(완주 후 "뭐야?!" 하고 다시 보게).
-- 첫 1~2초에 가장 센 떡밥. 뜸 들이는 도입 절대 금지.`,
-    // 30~60초: 완주율 50%+. 기승전결 기본형 + 반전 1개 + 가벼운 복선.
-    standard: `[이야기 구조 — ${duration}초 표준 쇼츠. ★완주율 50%+가 생명]
-- 기-승-전-결 기본형. 반전은 '1개', 앞에 '가벼운 복선 하나'를 깔아 납득되게(갑툭 금지).
-- 전개는 또렷하게, 매 장면 새 진전. 중간에 늘어지면 이탈한다 — 군더더기 0.
-- 마지막은 반전의 여파 + 1번 질문에 답하며 그 장르 톤으로 닫는다.`,
-    // 60초+: 완주율 50%+(더 어려움). 복잡한 다단계 반전·복선 여러 개 허용.
-    long: `[이야기 구조 — ${duration}초 롱폼/숏드라마. ★몰입 설계가 생명]
-- 복잡한 다단계 전개 가능(복선 여러 개, 반전 1~2개). 단 모든 장면은 하나의 로그라인에서 벗어나지 마라.
-- 감정을 계단처럼 쌓아 후반에 정점, 복선을 회수해 "그래서 그랬구나"가 터지게.
-- 길어도 늘어지면 죽는다 — 매 장면 끝을 다음이 궁금하게 끊어 완주율을 끌어라.`,
-  };
-  const storyLogic = STORY_LOGIC[storyMode];
+  // ★★길이 구간별 '이야기 구조 로직' — 로직 센터(prompt-rules.ts storyStructure)에서 단일 관리.
+  //   길이에 맞는 '이야기 복잡도'를 써야 완주율이 산다(30초에 다단계 반전 욱여넣으면 전개가 급해 망함, 테리 실측).
+  const storyLogic = storyStructure(duration);
 
   // ★★0패스(창작 전용) — 재창작은 '완성된 줄거리(실제 인기영상 자막)'를 소스로 받아 기승전결이 탄탄한데,
   //   창작은 장르·키워드 한 줄뿐이라 LLM이 맨땅에서 지어내다 '주제를 못 끌고 가고 기승전결이 무너진다'(테리 지적).
@@ -274,8 +252,9 @@ ${source.slice(0, 2000)}`;
    예) 음식→"오늘 이 한 그릇으로 맛도 건강도 챙겨보세요", 건강→"작은 습관 하나가 내일의 나를 바꿉니다", 여행→"다음 여행지는 여기로 정해보는 건 어떨까요".
    즉 마지막 문장은 정보가 아니라 '시청자에게 건네는 말'이어야 한다.`;
   // ★★★마무리가 영상 성패를 가른다(테리 최우선). 뜬금없는 엔딩 금지 — 앞 내용과 반드시 이어지게.
-  const endingGuard = `\n★★★마무리는 이 영상에서 가장 중요하다. 반드시 앞에서 다룬 내용을 자연스럽게 매듭지어라. 앞에 안 나온 뜬금없는 새 소재·엉뚱한 말·주제와 동떨어진 문장으로 끝내면 절대 안 된다(가장 흔한 실패). 흐름상 앞 장면들과 자연스럽게 연결되고, 영상 전체의 핵심을 한 번 짚어준 뒤 여운으로 닫아라.
-★★루프(매우 중요 — 쇼츠는 자동 반복된다): 마지막 narration은 '맨 처음 장면(hookTop)의 궁금증으로 자연스럽게 되돌아가게' 닫아라. 끝이 1번 장면 첫 마디와 매끄럽게 이어져 시청자가 자기도 모르게 다시 처음부터 보게 만들어라(시청 지속·반복이 조회수의 핵심). '끝·구독·좋아요' 같은 영상 밖 멘트로 끊지 마라(몰입·루프가 깨진다).`;
+  const endingGuard = `\n★★★마무리는 이 영상에서 가장 중요하다. 반드시 앞에서 다룬 내용을 자연스럽게 매듭지어라. 앞에 안 나온 뜬금없는 새 소재·엉뚱한 말·주제와 동떨어진 문장으로 끝내면 절대 안 된다(가장 흔한 실패). 영상 전체의 핵심을 한 번 짚어준 뒤 여운으로 닫아라.
+${RULE.answer}
+답·결과를 확실히 말한 뒤, 그 여운이 맨 처음 장면과 자연스럽게 이어지도록 닫아 자동 반복을 유도하라(답이 먼저, 루프는 그 다음). '끝·구독·좋아요' 같은 영상 밖 멘트로 끊지 마라(몰입·루프가 깨진다).`;
   const endingRule = (isSell
     ? '마지막 장면 = 구매·신청으로 이어지는 행동 유도 + 혜택 강조. 구매 욕구를 자극하며 맺는다.'
     : (preset?.endingStyle || '마지막 장면 = 주제의 핵심 메시지나 긍정적 실천 독려로 맺는다.') +
@@ -288,9 +267,7 @@ ${source.slice(0, 2000)}`;
     ? `너는 수백만 조회수를 내는 한국의 이야기 작가다(장르 불문 — 드라마·미스터리·SF·판타지·다큐·역사 다 쓴다). 아래 '창작 의뢰'로 실제 자료 없이 완전히 새로운 '오리지널 픽션 시나리오'를 창작한다. 지어내도 된다(픽션). '한 편의 영화처럼 기승전결이 살아있고 끝까지 보게 되는' 한국어 ${orient} ${format} 시나리오를 JSON으로 쓴다.
 ★★★가장 중요: 아래 의뢰의 '핵심 주제·소재'를 반드시 그대로 지켜라. 주제가 미지의 세계·장소·현상·우주·자연이면 그 세계를 탐험·발견·파헤치는 이야기로, 인물 드라마면 인물 중심으로 써라. 의뢰 주제를 무시하고 틀에 박힌 복수·배신 막장극으로 흐르는 것은 최악의 실패다(제목·줄거리가 주제와 동떨어지면 안 된다).`
     : `너는 구독자 100만 한국 유튜브 쇼츠 채널의 기획자이자 대본 작가다. 아래 자료로 '한 편의 영화처럼 기승전결이 있어 끝까지 보게 되는' 한국어 ${orient} ${format} 대본을 JSON으로 쓴다.`;
-  const epLine = opts.episode && opts.episodesTotal
-    ? `\n★지금은 전체 ${opts.episodesTotal}편 중 ${opts.episode}편이다.${opts.episode > 1 ? ' 앞 편들의 전개를 자연스럽게 이어받아라(1편부터 본 사람이 "그래서 이렇게 됐구나" 싶게).' : ' 1편이므로 세계관과 인물을 자연스럽게 소개하되, 초반 3초에 강한 훅으로 시작하라.'}${opts.episode < opts.episodesTotal ? ' 이 편은 반드시 다음 편이 미치도록 궁금한 클리프행어(결정적 순간/충격 폭로/위기)로 끊어라 — 절대 깔끔하게 마무리하지 마라.' : ' 마지막 편이므로 전체 시리즈를 감정적으로 매듭지어 큰 여운을 남겨라.'}${opts.episodeLogline ? `\n이 편에서 벌어질 일: ${opts.episodeLogline}` : ''}`
-    : '';
+  const epLine = seriesRule(opts.episode, opts.episodesTotal, opts.episodeLogline);
   const prompt = `${intro}${opts.seriesBible ? `\n\n[시리즈 설정 — 반드시 지켜라(스토리 바이블)]\n이 영상은 시리즈의 한 편이다. 아래 세계관·인물·전체 줄거리를 '그대로' 지키며(인물 이름·성격·외형·관계·설정 유지), 이 편의 분량을 써라.${epLine}\n${opts.seriesBible.slice(0, 4000)}` : ''}
 
 ${catLine}

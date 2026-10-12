@@ -346,6 +346,7 @@
 
   // ── 로그 UI(복사/크게보기/초기화, 하이라이트와 동일) ──
   function setEnergy(pct, label) { const e = $('cr-energy'); if (e) e.style.width = Math.max(4, Math.min(100, pct)) + '%'; const l = $('cr-energy-label'); if (l && label != null) l.textContent = label; }
+  function getEnergy() { const e = $('cr-energy'); return e ? (parseFloat(e.style.width) || 0) : 0; } // 현재 막대 % (단조증가 보장용)
   function addLog(m) { const box = $('cr-log'); if (!box) return; const d = document.createElement('div'); d.textContent = m; box.appendChild(d); box.scrollTop = box.scrollHeight; const big = $('cr-log-big'); if (big && !$('cr-log-modal').classList.contains('hidden')) { const d2 = document.createElement('div'); d2.textContent = m; big.appendChild(d2); big.scrollTop = big.scrollHeight; } }
   const logText = () => Array.from($('cr-log').children).map((d) => d.textContent).join('\n');
   $('cr-log-copy').onclick = () => navigator.clipboard?.writeText(logText());
@@ -472,14 +473,30 @@
         addLog(m.log); n++;
         const mm = m.log.match(/^\[([^\]]+)\]/); if (mm) $('cr-phase').textContent = mm[1];
         lastLogAt = Date.now(); // 하트비트용(멈춤 감지)
-        // ★렌더 % 로그가 오면 그걸 에너지바에 직접 반영(렌더=마지막 단계 → 바의 70~99% 구간).
-        //   예전엔 로그 '줄 수'로만 올려서 렌더가 길면 92%에 멈춘 듯 보였다 → 이제 실제 % + 프레임 수가 라벨에.
+        // ★제작 전체 진행률 — 로그 '내용(단계)'으로 "제작 N%"를 처음부터 끝까지 또렷이 올린다.
+        //   대본 → 그림·목소리(장면 i/N) → 영화(움직임) → 배경음악 → 최종 합성(렌더 %). 뒤로 안 가게 단조증가(getEnergy).
+        //   예전엔 로그 '줄 수'로만 올려 앞 단계가 숫자로 안 보이고 렌더가 길면 멈춘 듯 보였다.
+        const hasWan = (out === 'wan');          // 영화(움직임) 선택 여부
+        const matEnd = hasWan ? 52 : 68;         // 그림·목소리 단계가 끝나는 지점
+        const cur = getEnergy();
         const rm = m.log.match(/\[렌더\]\s*(\d+)%(?:[^\(]*\(([^\)]*프레임[^\)]*)\))?/);
+        const sm = m.log.match(/장면\s*(\d+)\s*\/\s*(\d+)/); // [장면 i/N]
         if (rm) {
           const rp = Number(rm[1]);
-          setEnergy(70 + Math.min(29, rp * 0.29), `🎬 최종 합성 ${rp}%` + (rm[2] ? ` · ${rm[2]}` : ''));
+          setEnergy(72 + Math.min(27, rp * 0.27), `🎬 최종 합성 ${rp}%` + (rm[2] ? ` · ${rm[2]}` : ''));
+        } else if (/\[렌더\]|영상 합성/.test(m.log)) {
+          setEnergy(Math.max(cur, 72), '🎬 최종 합성 준비…');
+        } else if (/배경음악/.test(m.log)) {
+          setEnergy(Math.max(cur, 70), '🎵 배경음악 까는 중…');
+        } else if (hasWan && /\[영화\]|움직이는|클립/.test(m.log)) {
+          setEnergy(Math.min(68, Math.max(cur, matEnd) + 1.2), '🎬 영화(움직임) 만드는 중…');
+        } else if (sm) {
+          const i = Number(sm[1]), tot = Number(sm[2]) || 1;
+          setEnergy(Math.max(cur, 8 + Math.min(1, i / tot) * (matEnd - 8)), `🖼 그림·목소리 ${i}/${tot}…`);
+        } else if (/\[대본\]/.test(m.log)) {
+          setEnergy(Math.max(cur, 6), '✍️ 대본 쓰는 중…');
         } else {
-          setEnergy(Math.min(68, 10 + n * 3), '제작 중…');
+          setEnergy(Math.max(cur, Math.min(matEnd - 2, 8 + n)), '제작 중…');
         }
       }
       if (m.done) {
