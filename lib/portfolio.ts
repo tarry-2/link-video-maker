@@ -16,6 +16,7 @@ export type PortfolioItem = {
   createdAt: string;
   youtubeUrl?: string; // 유튜브 업로드 완료 시 링크
   instagramUrl?: string; // 인스타 업로드 완료 시 permalink
+  facebookUrl?: string; // 페이스북 게시 완료 시 permalink
   orientation?: 'portrait' | 'landscape'; // 화면비(롱폼=landscape). 없으면 세로 폴백(레거시).
   // ★작업내역 분리: 영상(video) / 카드영상(card) / 카드게시물=캐러셀(card-post) / 유튜브하이라이트(highlight). 없으면 video(레거시).
   kind?: 'video' | 'card' | 'card-post' | 'highlight';
@@ -50,6 +51,13 @@ export function setPortfolioInstagram(projectId: string, instagramUrl: string) {
   if (it) { it.instagramUrl = instagramUrl; save(items); }
 }
 
+// 특정 항목에 페이스북 링크 기록(업로드 완료 후).
+export function setPortfolioFacebook(projectId: string, facebookUrl: string) {
+  const items = listPortfolio();
+  const it = items.find((x) => x.projectId === projectId);
+  if (it) { it.facebookUrl = facebookUrl; save(items); }
+}
+
 // 샘플 영상의 유튜브 링크는 별도 파일에 기록(샘플은 portfolio.json에 없으므로).
 const SAMPLE_YT_FILE = path.join(DATA_DIR, 'sample-youtube.json');
 export function loadSampleYouTube(): Record<string, string> {
@@ -74,6 +82,19 @@ export function setSampleInstagram(file: string, instagramUrl: string) {
   fs.mkdirSync(DATA_DIR, {recursive: true});
   fs.writeFileSync(SAMPLE_IG_FILE + '.tmp', JSON.stringify(m));
   fs.renameSync(SAMPLE_IG_FILE + '.tmp', SAMPLE_IG_FILE);
+}
+
+// 샘플 영상의 페이스북 링크(배지용) — 인스타와 동일 방식.
+const SAMPLE_FB_FILE = path.join(DATA_DIR, 'sample-facebook.json');
+export function loadSampleFacebook(): Record<string, string> {
+  try { return JSON.parse(fs.readFileSync(SAMPLE_FB_FILE, 'utf8')); } catch { return {}; }
+}
+export function setSampleFacebook(file: string, facebookUrl: string) {
+  const m = loadSampleFacebook();
+  m[file] = facebookUrl;
+  fs.mkdirSync(DATA_DIR, {recursive: true});
+  fs.writeFileSync(SAMPLE_FB_FILE + '.tmp', JSON.stringify(m));
+  fs.renameSync(SAMPLE_FB_FILE + '.tmp', SAMPLE_FB_FILE);
 }
 
 // 샘플 영상을 인스타로 보낼 때 R2 백필 키 기록(public/portfolio 파일 → R2, 한 번만 올리고 재사용).

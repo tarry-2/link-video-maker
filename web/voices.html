@@ -50,6 +50,8 @@
       .pf-yt { background: linear-gradient(135deg,#ff3b3b,#cc0000); color: #fff; box-shadow: 0 3px 12px rgba(255,0,0,.32); }
       .pf-yt:hover { box-shadow: 0 7px 20px rgba(255,0,0,.46); filter: brightness(1.06); }
       .pf-yt:disabled { opacity: .5; cursor: default; transform: none; box-shadow: none; }
+      .pf-fb { background: linear-gradient(135deg,#1877f2,#0a5fd1); color: #fff; box-shadow: 0 3px 12px rgba(24,119,242,.34); }
+      .pf-fb:hover { box-shadow: 0 7px 20px rgba(24,119,242,.5); filter: brightness(1.06); }
       .pf-del { background: transparent !important; border: 1.5px solid var(--line) !important; color: var(--muted); }
       .pf-del:hover { border-color: #ff6b5e !important; color: #ff6b5e; }
       .pf-yt-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #ff4d4d; text-decoration: none; }
@@ -61,8 +63,10 @@
       .pf-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); opacity: .92; }
       .pf-yt-badge { position: absolute; top: 8px; right: 8px; background: #ff0000; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-ig-badge { position: absolute; top: 8px; left: 8px; background: linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
+      .pf-fb-badge { position: absolute; top: 8px; left: 42px; background: #1877f2; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-motion-badge { position: absolute; bottom: 8px; left: 8px; background: linear-gradient(120deg,#6b4cf0,#12a998); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-ig-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #dc2743; text-decoration: none; }
+      .pf-fb-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #1877f2; text-decoration: none; }
       /* 📊 성과 패널 */
       .yt-stats { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; margin-bottom: 18px; }
       .yt-stats-head { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; margin-bottom: 14px; letter-spacing: -.3px; }
@@ -359,8 +363,8 @@
           fig.className = 'pf-card pf-thumb-card';
           fig.dataset.idx = i;
           const thumbBox = isPost
-            ? `<div class="pf-thumb post"><img src="${esc(it.thumb || (it.images && it.images[0]) || '')}" alt="" loading="lazy">${(it.images && it.images.length) ? `<span class="pf-card-count">🎴 ${it.images.length}장</span>` : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>`
-            : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.motion ? '<span class="pf-motion-badge">🎬 영상</span>' : ''}${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}</div>`;
+            ? `<div class="pf-thumb post"><img src="${esc(it.thumb || (it.images && it.images[0]) || '')}" alt="" loading="lazy">${(it.images && it.images.length) ? `<span class="pf-card-count">🎴 ${it.images.length}장</span>` : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}</div>`
+            : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.motion ? '<span class="pf-motion-badge">🎬 영상</span>' : ''}${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}</div>`;
           const madeTxt = it.createdAt ? new Date(it.createdAt).toLocaleDateString('ko-KR', {year: 'numeric', month: 'long', day: 'numeric'}) : '';
           fig.innerHTML = `${thumbBox}
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${esc(it.title)}</h3>${madeTxt ? `<p class="pf-made">📅 ${esc(madeTxt)} 제작</p>` : ''}</figcaption>`;
@@ -398,10 +402,12 @@
         const actions = isPost
           ? `<button class="pf-zoom">🔍 크게 보기</button>
              <button class="pf-ig" data-id="${esc(it.id)}">📷 인스타 캐러셀 올리기</button>
+             <button class="pf-fb" data-id="${esc(it.id)}">👍 페북 올리기</button>
              ${canDel ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}`
           : `<button class="pf-zoom">🔍 크게 보기</button>
              <button class="pf-yt" data-id="${esc(it.id)}">📺 유튜브 올리기</button>
              <button class="pf-ig" data-id="${esc(it.id)}">📷 인스타 올리기</button>
+             <button class="pf-fb" data-id="${esc(it.id)}">👍 페북 올리기</button>
              <a class="pf-dl" href="${it.video}" download="${esc(it.title)}.mp4">⬇ 다운로드</a>
              ${canDel ? `<button class="pf-edit" data-id="${esc(it.id)}">✏️ 수정</button>` : ''}
              ${canDel ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}`;
@@ -413,6 +419,7 @@
           ${(() => { const st = (window.__ytStats || {})[it.id]; return st && (st.views || st.likes || st.comments || st.shares) ? `<div class="pf-stage-stats"><div class="pf-stat"><b>${fmtNum(st.views)}</b><span>조회수</span></div><div class="pf-stat"><b>${fmtNum(st.likes)}</b><span>좋아요</span></div><div class="pf-stat"><b>${fmtNum(st.comments)}</b><span>댓글</span></div>${st.shares ? `<div class="pf-stat"><b>${fmtNum(st.shares)}</b><span>공유</span></div>` : ''}</div>` : ''; })()}
           ${it.youtubeUrl ? `<a class="pf-yt-link" href="${esc(it.youtubeUrl)}" target="_blank">▶ 유튜브에서 보기</a>` : ''}
           ${it.instagramUrl ? `<a class="pf-ig-link" href="${esc(it.instagramUrl)}" target="_blank">▶ 인스타에서 보기</a>` : ''}
+          ${it.facebookUrl ? `<a class="pf-fb-link" href="${esc(it.facebookUrl)}" target="_blank">▶ 페이스북에서 보기</a>` : ''}
           <div class="pf-actions">${actions}</div>`;
         document.querySelectorAll('.pf-thumb-card').forEach(c => c.classList.toggle('sel', Number(c.dataset.idx) === idx));
         if (doScroll) $('my-videos').scrollIntoView({behavior:'smooth', block:'start'});
@@ -451,6 +458,12 @@
           const isPost = cur && cur.media === 'card-post';
           const isLandscape = cur && cur.orientation === 'landscape';
           uploadToInstagram(ig, isPost, isLandscape); return;
+        }
+        const fb = e.target.closest('.pf-fb');
+        if (fb) {
+          const cur = myItems[curIdx];
+          const isPost = cur && cur.media === 'card-post';
+          uploadToFacebook(fb, isPost); return;
         }
         const del = e.target.closest('.pf-del');
         if (del) { if (confirm('이 영상을 포트폴리오에서 삭제할까요? (원본 작업은 남아 있어요)')) fetch('/api/portfolio/' + encodeURIComponent(del.dataset.id), { method: 'DELETE' }).then(r => { if (r.ok) loadMyVideos(Math.max(0, curIdx - 1)); }); }
@@ -686,6 +699,55 @@
               up.textContent = '완료 🎉'; up.disabled = true;
               loadMyVideos(curIdx); // 스테이지·썸네일에 인스타 링크/뱃지 즉시 반영
             } catch (err) { $('ig-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '인스타에 올리기'; }
+          }
+        };
+      }
+      // ── 포트폴리오에서 페이스북 올리기(영상/카드) ──
+      async function uploadToFacebook(btn, isPost) {
+        const id = btn.dataset.id;
+        const orig = btn.textContent; btn.disabled = true; btn.textContent = '👍 준비 중…';
+        try {
+          const st = await (await fetch('/api/facebook/status')).json();
+          if (!st.connected) { alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 페이스북 페이지를 연결하세요.'); btn.disabled = false; btn.textContent = orig; return; }
+          btn.textContent = '👍 글 만드는 중…';
+          // 캡션은 인스타 캡션 생성기를 공용으로 재사용(제목·내용 기반).
+          const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id));
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || '글 생성 실패');
+          openFbPfModal(id, d.caption || '', st.pageName, isPost);
+        } catch (e) { alert(e.message); }
+        finally { btn.disabled = false; btn.textContent = orig; }
+      }
+      function openFbPfModal(id, caption, pageName, isPost) {
+        let box = $('fb-modal');
+        if (!box) { box = document.createElement('div'); box.id = 'fb-modal'; box.className = 'modal'; document.body.appendChild(box); }
+        box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50';
+        box.innerHTML = `<div class="modal-box" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">
+          <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>👍 페이스북 ${isPost ? '게시물 올리기' : '올리기'}</h2><button class="ghost-btn" data-fb="close">✕</button></div>
+          <p class="sub small">${pageName ? '페이지: <b>' + esc(pageName) + '</b> · ' : ''}글은 수정할 수 있어요.</p>
+          ${isPost ? '<p class="sub small">🎴 여러 장 사진 게시물로 올라갑니다.</p>' : '<p class="sub small">📄 페이지 피드에 영상으로 올라갑니다(가로·세로 모두).</p>'}
+          <label class="field-label">글 내용<textarea id="fb-caption" class="input" rows="8" maxlength="5000">${esc(caption)}</textarea></label>
+          <button class="primary-btn" data-fb="upload">페이스북에 올리기</button>
+          <p id="fb-up-msg" class="mini-state">${isPost ? '사진 업로드에 잠시 걸려요.' : '영상 처리 때문에 1~2분 걸릴 수 있어요.'}</p>
+        </div>`;
+        box.onclick = async e => {
+          const act = e.target.closest('[data-fb]')?.dataset.fb;
+          if (act === 'close' || e.target === box) { box.remove(); return; }
+          if (act === 'upload') {
+            const up = e.target; up.disabled = true; up.textContent = '올리는 중… (잠시 걸려요)';
+            $('fb-up-msg').textContent = isPost ? '사진을 변환해 페북에 올리는 중이에요…' : '페북이 영상을 받아 처리하는 중이에요…';
+            try {
+              const r = isPost
+                ? await fetch('/api/facebook/upload-photos/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: $('fb-caption').value }) })
+                : await fetch('/api/facebook/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: $('fb-caption').value }) });
+              const d = await r.json();
+              if (!r.ok) throw new Error(d.error || '업로드 실패');
+              $('fb-up-msg').innerHTML = d.permalink
+                ? `✅ 게시 완료!<br><a href="${d.permalink}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:#1877f2;color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 페이스북에서 열기</a>`
+                : '✅ 게시 완료! 페이스북에서 확인하세요.';
+              up.textContent = '완료 🎉'; up.disabled = true;
+              loadMyVideos(curIdx); // 스테이지·썸네일에 페북 링크/뱃지 즉시 반영
+            } catch (err) { $('fb-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '페이스북에 올리기'; }
           }
         };
       }

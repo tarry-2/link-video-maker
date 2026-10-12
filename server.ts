@@ -23,11 +23,12 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
-import {listPortfolio, removePortfolio, updatePortfolioTitle, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
+import {listPortfolio, removePortfolio, updatePortfolioTitle, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, setPortfolioFacebook, setSampleFacebook, loadSampleFacebook, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getChannelVideos, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys, head as r2Head} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
+import {facebookStatus, saveFacebook, verifyFacebook, publishVideo as fbPublishVideo, publishPhotos as fbPublishPhotos, getFbStats, getUploadActivity as getFbActivity} from './lib/facebook';
 import {pngToJpeg} from './lib/img-util';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -204,6 +205,20 @@ function saveProjectInstagram(projectId: string, url: string) {
 function readProjectInstagram(projectId: string): string {
   try {
     return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).instagramUrl || '';
+  } catch { return ''; }
+}
+// ── 페이스북 링크도 동일 방식으로 project.json에 보강(배지 안정화) ──
+function saveProjectFacebook(projectId: string, url: string) {
+  try {
+    const pj = path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json');
+    const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+    proj.facebookUrl = url;
+    fs.writeFileSync(pj, JSON.stringify(proj));
+  } catch {}
+}
+function readProjectFacebook(projectId: string): string {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).facebookUrl || '';
   } catch { return ''; }
 }
 // project.json에서 완성영상 R2 키(있으면 R2에서 서빙).
@@ -677,6 +692,7 @@ const server = http.createServer(async (req, res) => {
         // ★배지: portfolio.json에 링크 없으면 project.json에서 보강(제작 화면서 바로 올린 경우도 배지 뜨게).
         youtubeUrl: it.youtubeUrl || readProjectYouTube(it.projectId),
         instagramUrl: it.instagramUrl || readProjectInstagram(it.projectId),
+        facebookUrl: it.facebookUrl || readProjectFacebook(it.projectId),
         orientation: it.orientation || 'portrait', // 레거시(없음)=세로 폴백
         video: isPost ? '' : `/portfolio-item/${it.projectId}.mp4`,
         images: isPost ? (it.images || []).map((_, i) => `/portfolio-card/${it.projectId}/${i + 1}.png`) : undefined,
@@ -692,6 +708,7 @@ const server = http.createServer(async (req, res) => {
     });
     const sampleYt = loadSampleYouTube();
     const sampleIg = loadSampleInstagram();
+    const sampleFb = loadSampleFacebook();
     const samples = SAMPLES.map((s) => ({
       id: 'sample:' + s.file,
       kind: 'sample' as const,
@@ -703,6 +720,7 @@ const server = http.createServer(async (req, res) => {
       createdAt: '',
       youtubeUrl: sampleYt[s.file] || '',
       instagramUrl: sampleIg[s.file] || '', // 샘플도 인스타 업로드 시 R2 백필 후 배지 기록
+      facebookUrl: sampleFb[s.file] || '', // 샘플도 페북 업로드 시 배지 기록
       orientation: s.orientation || 'portrait', // 샘플은 전부 세로(9:16)
       video: `/portfolio/${s.file}`,
       thumb: '', // 샘플은 썸네일 파일 없음(영상 메타프레임 사용)
@@ -935,8 +953,8 @@ const server = http.createServer(async (req, res) => {
       ...listPortfolio().map((it) => it.youtubeUrl || readProjectYouTube(it.projectId)),
       ...SAMPLES.map((s) => sampleYt[s.file] || ''),
     ].filter(Boolean).map((u) => extractVideoId(u)).filter(Boolean);
-    const [youtube, instagram] = await Promise.all([getYtActivity(ytIds), getUploadActivity()]);
-    return json(res, 200, {produced: todayProducedCount(), youtube, instagram});
+    const [youtube, instagram, facebook] = await Promise.all([getYtActivity(ytIds), getUploadActivity(), getFbActivity()]);
+    return json(res, 200, {produced: todayProducedCount(), youtube, instagram, facebook});
   }
   // ── 성과 추적: 올린 인스타 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──
   if (p === '/api/instagram/stats' && req.method === 'GET') {
@@ -1046,6 +1064,72 @@ const server = http.createServer(async (req, res) => {
       if (r.permalink) {
         if (isSample) setSampleInstagram(path.basename(id.slice('sample:'.length)), r.permalink);
         else { setPortfolioInstagram(id, r.permalink); saveProjectInstagram(id, r.permalink); }
+      }
+      return json(res, 200, r);
+    } catch (e: any) { return json(res, 502, {error: e.message}); }
+  }
+
+  // ── 페이스북 페이지 발송 (인스타·유튜브와 동일 플로우) ──
+  if (p === '/api/facebook/status' && req.method === 'GET') return json(res, 200, facebookStatus());
+  if (p === '/api/facebook/activity' && req.method === 'GET') return json(res, 200, await getFbActivity());
+  if (p === '/api/facebook/stats' && req.method === 'GET') {
+    const debug = u.searchParams.get('debug') === '1';
+    if (!facebookStatus().connected) return json(res, 200, {connected: false, items: [], summary: null, ...(debug ? {debug: ['연결 안 됨(status)']} : {})});
+    const sampleFb = loadSampleFacebook();
+    const withUrl = [
+      ...listPortfolio().map((it) => ({id: it.projectId, title: it.title, voice: it.voice, category: it.category, goal: it.goal, url: it.facebookUrl || readProjectFacebook(it.projectId)})),
+      ...SAMPLES.map((s) => ({id: 'sample:' + s.file, title: s.title, voice: s.voice, category: s.category, goal: s.goal, url: sampleFb[s.file] || ''})),
+    ].filter((x) => x.url);
+    if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 facebookUrl 저장된 게 없음']} : {})});
+    const diag: string[] = [];
+    const stats = await getFbStats(debug ? diag : undefined);
+    const items = withUrl.map((x) => ({...x, ...(stats[x.url] || {views: 0, likes: 0, comments: 0, shares: 0})}));
+    return json(res, 200, {connected: true, items, ...(debug ? {debug: diag} : {})});
+  }
+  if (p === '/api/facebook/connect' && req.method === 'POST') {
+    const b = await readBody(req);
+    const pageId = String(b.pageId || '').trim();
+    const pageAccessToken = String(b.pageAccessToken || '').trim();
+    if (!pageId || !pageAccessToken) return json(res, 400, {error: '페이지 ID와 페이지 액세스 토큰을 입력하세요.'});
+    try {
+      const pageName = await verifyFacebook({pageId, pageAccessToken});
+      saveFacebook({pageId, pageAccessToken, pageName, tokenSavedAt: Date.now()});
+      return json(res, 200, {connected: true, pageName});
+    } catch (e: any) { return json(res, 400, {error: e.message}); }
+  }
+  // 카드 게시물(여러 장 사진) 페북 업로드 — JPEG 변환 후 publishPhotos.
+  if (p.startsWith('/api/facebook/upload-photos/') && req.method === 'POST') {
+    const id = decodeURIComponent(p.slice('/api/facebook/upload-photos/'.length));
+    if (!/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '올릴 수 없는 항목입니다.'});
+    const item = listPortfolio().find((x) => x.projectId === id && x.kind === 'card-post');
+    if (!item) return json(res, 404, {error: '카드 게시물을 찾을 수 없습니다.'});
+    if (!facebookStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 페이스북 페이지를 연결하세요.'});
+    const b = await readBody(req);
+    const caption = String(b.caption || '').trim();
+    try {
+      const urls = await ensureCarouselJpegUrls(id, () => {});
+      const r = await fbPublishPhotos(urls, caption);
+      if (r.permalink) { setPortfolioFacebook(id, r.permalink); saveProjectFacebook(id, r.permalink); }
+      return json(res, 200, r);
+    } catch (e: any) { return json(res, 502, {error: e.message}); }
+  }
+  // 페북 영상 업로드 — 완성 영상이 R2에 있어야 함(공개 presigned URL 필요).
+  if (p.startsWith('/api/facebook/upload/') && req.method === 'POST') {
+    const id = decodeURIComponent(p.slice('/api/facebook/upload/'.length));
+    const isSample = id.startsWith('sample:');
+    if (!isSample && !/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '올릴 수 없는 영상입니다.'});
+    if (!facebookStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 페이스북 페이지를 연결하세요.'});
+    const r2key = await ensureInstaVideoR2(id); // 인스타와 같은 R2 백필 재사용
+    if (!r2key) return json(res, 400, {error: '영상 파일을 찾을 수 없어요. 너무 오래돼 정리됐을 수 있어요 — 다시 제작해 주세요.'});
+    const b = await readBody(req);
+    const caption = String(b.caption || '').trim();
+    try {
+      const url = await presignGet(r2key, 3600);
+      if (!url) return json(res, 502, {error: '영상 임시 링크 생성 실패.'});
+      const r = await fbPublishVideo(url, caption);
+      if (r.permalink) {
+        if (isSample) setSampleFacebook(path.basename(id.slice('sample:'.length)), r.permalink);
+        else { setPortfolioFacebook(id, r.permalink); saveProjectFacebook(id, r.permalink); }
       }
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }

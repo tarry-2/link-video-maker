@@ -1098,6 +1098,7 @@ $('settings-btn').onclick = async () => {
   $('settings-modal').classList.remove('hidden');
   refreshYtStatus();
   refreshIgStatus();
+  refreshFbStatus();
   refreshRunpod();
   // 저장된 키 상태는 뒤에서 채운다(실패해도 입력엔 영향 없음).
   try {
@@ -1251,6 +1252,45 @@ $('ig-connect')?.addEventListener('click', async () => {
     $('ig-token').value = '';
     refreshIgStatus();
   } catch (e) { $('ig-msg').textContent = '실패: ' + e.message; }
+});
+// ── 페이스북 연결 ──
+async function refreshFbStatus() {
+  const st = $('fb-status'); if (!st) return;
+  try {
+    const s = await (await fetch('/api/facebook/status')).json();
+    if (s.connected) { st.innerHTML = `<span style="color:var(--teal)">● 연결됨${s.pageName ? ' · ' + s.pageName : ''}</span>`; refreshFbActivity(); }
+    else st.textContent = '미연결';
+  } catch {}
+}
+async function refreshFbActivity() {
+  const el = $('fb-activity'); if (!el) return;
+  try {
+    const a = await (await fetch('/api/facebook/activity')).json();
+    if (a.error) { el.innerHTML = `<span style="color:var(--muted)">📅 업로드 현황 확인 불가 — ${a.error}</span>`; return; }
+    let last = '없음';
+    if (a.lastAt) {
+      const d = new Date(a.lastAt);
+      const hhmm = d.toLocaleTimeString('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit'});
+      const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+      const ago = mins < 1 ? '방금' : mins < 60 ? `${mins}분 전` : mins < 1440 ? `${Math.floor(mins / 60)}시간 전` : `${Math.floor(mins / 1440)}일 전`;
+      last = `${hhmm} (${ago})`;
+    }
+    el.innerHTML = `<span style="color:var(--teal)">📅 오늘 <b>${a.today}</b>개 올림 · 마지막 게시 ${last} · 총 ${a.total}개</span>`;
+  } catch {}
+}
+$('fb-connect')?.addEventListener('click', async () => {
+  const pageId = $('fb-page-id').value.trim();
+  const pageAccessToken = $('fb-token').value.trim();
+  if (!pageId || !pageAccessToken) { $('fb-msg').textContent = '페이지 ID와 토큰을 입력하세요.'; return; }
+  $('fb-msg').textContent = '연결 확인 중…';
+  try {
+    const r = await fetch('/api/facebook/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId, pageAccessToken }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '연결 실패');
+    $('fb-msg').innerHTML = `<span style="color:var(--teal)">✅ 연결됐습니다 · ${d.pageName}</span>`;
+    $('fb-token').value = '';
+    refreshFbStatus();
+  } catch (e) { $('fb-msg').textContent = '실패: ' + e.message; }
 });
 $('save-keys').onclick = async () => {
   // 1) 단가를 localStorage에 저장(studio.js가 onvideo-unit-rates에서 읽어씀)
