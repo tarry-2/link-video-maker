@@ -257,11 +257,62 @@
   el('product-lock').onchange = () => el('product-fields').classList.toggle('hidden', !el('product-lock').checked);
   // 영상 종류(aiClips)는 app.js의 버튼이 관리한다. 여기서 건드리지 않음.
   updateEstimate();
+  // ★작업내역 = 포폴(완성본 전부 — project.json 날아가도 다 뜸) + studio(진행중·초안=대본편집).
+  //   탭(영상/창작/재창작) + 제목검색 + 날짜범위 + 페이지네이션(10개/페이지, 가로 페이저).
+  let vhTab = 'video', vhPage = 0, vhAll = [], vhStudio = [];
+  const VH_PER = 10;
+  function vhWhen(ts) { return ts ? new Date(ts).toLocaleString('ko-KR') : ''; }
   async function loadHistory() {
-    const rows = await api('/api/studio');
-    el('studio-history').innerHTML = rows.length ? rows.map(p => `<button class="history-item" data-project="${p.id}"><span><strong>${escape(p.title)}</strong><small>${escape(new Date(p.updatedAt).toLocaleString('ko-KR'))}</small></span><span class="badge ${p.status === 'failed' ? 'error' : ''}">${stateNames[p.status]}</span></button>`).join('') : '<p class="mini-state">첫 대본을 만들어보세요.</p>';
-    return rows;
+    try {
+      const [pf, rows] = await Promise.all([
+        (await fetch('/api/portfolio', {cache: 'no-store'})).json().catch(() => ({items: []})),
+        api('/api/studio').catch(() => []),
+      ]);
+      vhStudio = Array.isArray(rows) ? rows : [];
+      // 포폴에서 영상류만(카드 제외). origin: video/create/remake.
+      const items = (Array.isArray(pf.items) ? pf.items : []).filter(it => it.kind === 'mine' && it.media !== 'card' && it.media !== 'card-post');
+      // 진행중/초안(studio) 중 완성 아닌 것을 '영상' 탭 상단에 섞음(대본편집 가능).
+      const draftIds = new Set(items.map(it => it.id));
+      const drafts = vhStudio.filter(p => p.status !== 'completed').map(p => ({id: p.id, title: p.title, createdAt: p.updatedAt, origin: 'video', _draft: true, status: p.status}));
+      vhAll = [...drafts, ...items];
+      renderVH();
+    } catch { el('studio-history').innerHTML = '<p class="mini-state">작업 내역을 불러오지 못했어요.</p>'; }
+    return vhStudio;
   }
+  function renderVH() {
+    const box = el('studio-history'); if (!box) return;
+    const q = ((el('vh-search') && el('vh-search').value) || '').trim().toLowerCase().replace(/\s+/g, '');
+    const from = (el('vh-from') && el('vh-from').value) || '', to = (el('vh-to') && el('vh-to').value) || '';
+    const fromT = from ? new Date(from + 'T00:00:00').getTime() : 0;
+    const toT = to ? new Date(to + 'T23:59:59').getTime() : Infinity;
+    let list = vhAll.filter(it => (it.origin || 'video') === vhTab);
+    if (q) list = list.filter(it => String(it.title || '').toLowerCase().replace(/\s+/g, '').includes(q));
+    list = list.filter(it => { const t = it.createdAt ? new Date(it.createdAt).getTime() : 0; return t >= fromT && t <= toT; });
+    if (!list.length) { box.innerHTML = '<p class="mini-state">해당하는 작업이 없어요.</p>'; return; }
+    const totalPages = Math.max(1, Math.ceil(list.length / VH_PER));
+    if (vhPage >= totalPages) vhPage = totalPages - 1; if (vhPage < 0) vhPage = 0;
+    const pageItems = list.slice(vhPage * VH_PER, vhPage * VH_PER + VH_PER);
+    const body = pageItems.map(it => {
+      const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
+      const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
+      if (it._draft) return `<button class="history-item" data-project="${escape(it.id)}"><span><strong>${escape(it.title || '새 영상')}</strong><small>${escape(vhWhen(it.createdAt))} · 대본 편집</small></span><span class="badge ${it.status === 'failed' ? 'error' : ''}">${stateNames[it.status] || ''}</span></button>`;
+      return `<a class="history-item" href="/voices?tab=pf" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span><strong>${escape(it.title || '')}</strong><small>${escape(vhWhen(it.createdAt))} · 포트폴리오에서 열기${yt}${ig}</small></span><span class="badge">▶ 보기</span></a>`;
+    }).join('');
+    let pager = '';
+    if (totalPages > 1) {
+      const nums = [];
+      for (let i = 0; i < totalPages; i++) { if (i === 0 || i === totalPages - 1 || (i >= vhPage - 2 && i <= vhPage + 2)) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…'); }
+      pager = `<div class="arc-pager" style="margin-top:12px"><button type="button" class="arc-pg nav vh-pg" data-p="${Math.max(0, vhPage - 1)}" ${vhPage === 0 ? 'disabled' : ''}>◀</button>${nums.map(n => n === '…' ? '<span class="arc-pg dots">…</span>' : `<button type="button" class="arc-pg vh-pg ${n === vhPage ? 'active' : ''}" data-p="${n}">${n + 1}</button>`).join('')}<button type="button" class="arc-pg nav vh-pg" data-p="${Math.min(totalPages - 1, vhPage + 1)}" ${vhPage >= totalPages - 1 ? 'disabled' : ''}>▶</button></div>`;
+    }
+    box.innerHTML = body + pager;
+    box.querySelectorAll('.vh-pg[data-p]').forEach(b => b.onclick = () => { vhPage = Number(b.dataset.p); renderVH(); });
+  }
+  // 탭·검색·날짜 바인딩(한 번만).
+  document.querySelectorAll('.vh-tab').forEach(b => b.addEventListener('click', () => { vhTab = b.dataset.f; vhPage = 0; document.querySelectorAll('.vh-tab').forEach(x => x.classList.toggle('active', x === b)); renderVH(); }));
+  let vhSearchT = null;
+  el('vh-search') && el('vh-search').addEventListener('input', () => { clearTimeout(vhSearchT); vhSearchT = setTimeout(() => { vhPage = 0; renderVH(); }, 200); });
+  el('vh-from') && el('vh-from').addEventListener('change', () => { vhPage = 0; renderVH(); });
+  el('vh-to') && el('vh-to').addEventListener('change', () => { vhPage = 0; renderVH(); });
   const loadHistoryRows = loadHistory;
   const report = e => message(e.message || String(e), true);
   el('history-refresh').onclick = () => loadHistory().catch(report);

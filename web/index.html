@@ -426,12 +426,28 @@
 
       <section id="video-history-section" class="card" aria-label="영상 작업 내역">
         <div class="modal-head"><h2 class="block-title">🎬 영상 작업 내역</h2><button id="history-refresh" class="ghost-btn">새로고침</button></div>
-        <p class="hint">영상 제작(대본 편집) 작업이 저장됩니다. 실패한 작업은 열어서 이어서 재시작할 수 있습니다.</p>
+        <p class="hint">만든 모든 영상이 저장됩니다. 눌러서 미리보기·유튜브/인스타 업로드·수정할 수 있어요.</p>
+        <!-- 탭(영상/창작/재창작) + 검색 + 날짜 -->
+        <div class="seg" id="vh-tabs" style="margin:6px 0 10px;flex-wrap:wrap">
+          <button type="button" class="seg-btn vh-tab active" data-f="video">🎬 영상</button>
+          <button type="button" class="seg-btn vh-tab" data-f="create">✍️ 창작</button>
+          <button type="button" class="seg-btn vh-tab" data-f="remake">🎭 재창작</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <input id="vh-search" class="input" type="search" placeholder="🔍 제목 검색" style="flex:1;min-width:160px">
+          <input id="vh-from" class="input" type="date" title="시작 날짜" style="max-width:150px">
+          <input id="vh-to" class="input" type="date" title="끝 날짜" style="max-width:150px">
+        </div>
         <div id="studio-history" aria-live="polite">로그인 후 작업 내역을 불러옵니다.</div>
       </section>
       <section id="card-history-section" class="card hidden" aria-label="카드 작업 내역">
         <div class="modal-head"><h2 class="block-title">🎴 카드 작업 내역</h2><button id="card-history-refresh" class="ghost-btn">새로고침</button></div>
         <p class="hint">만든 카드(영상·게시물)가 저장됩니다. 다운로드·유튜브·인스타 업로드는 포트폴리오에서도 관리할 수 있어요.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <input id="ch-search" class="input" type="search" placeholder="🔍 제목 검색" style="flex:1;min-width:160px">
+          <input id="ch-from" class="input" type="date" title="시작 날짜" style="max-width:150px">
+          <input id="ch-to" class="input" type="date" title="끝 날짜" style="max-width:150px">
+        </div>
         <div id="card-history" aria-live="polite">로그인 후 카드 작업 내역을 불러옵니다.</div>
       </section>
     </main>

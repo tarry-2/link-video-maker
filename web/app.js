@@ -306,29 +306,57 @@ $('style-close')?.addEventListener('click', () => $('style-modal')?.classList.ad
 $('style-modal')?.addEventListener('click', (e) => { if (e.target.id === 'style-modal') $('style-modal').classList.add('hidden'); });
 
 // 🎴 카드 작업 내역 — 영상 내역과 완전 분리. 내가 만든 카드(영상·게시물)만 포트폴리오에서 추려 보여줌.
+//   제목검색 + 날짜범위 + 페이지네이션(10개/페이지, 가로 페이저).
+let chAll = [], chPage = 0; const CH_PER = 10;
 async function loadCardHistory() {
   const box = $('card-history');
   if (!box) return;
   try {
     const d = await (await fetch('/api/portfolio', {cache: 'no-store'})).json();
-    const items = (Array.isArray(d.items) ? d.items : [])
+    chAll = (Array.isArray(d.items) ? d.items : [])
       .filter((it) => it.kind === 'mine' && (it.media === 'card' || it.media === 'card-post'));
-    box.innerHTML = items.length ? items.map((it) => {
-      const isPost = it.media === 'card-post';
-      const badge = isPost ? '🖼 카드 게시물' : '🎬 카드 영상';
-      const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
-      const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
-      const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
-      const action = isPost
-        ? `<a class="ghost-btn small" href="/voices?tab=pf" target="_blank" rel="noopener">📂 포트폴리오</a>`
-        : `<a class="ghost-btn small" href="${esc2(it.video)}" download="${esc2(it.title)}.mp4">⬇ 다운로드</a>`;
-      return `<div class="history-item" data-card-id="${esc2(it.id)}" data-title="${esc2(it.title)}" data-media="${esc2(it.media)}"><span><strong>${esc2(it.title)}</strong><small>${esc2(when)} · ${badge}${yt}${ig}</small></span><span class="hi-actions"><button type="button" class="ghost-btn small" data-reset="${esc2(it.id)}">⟳ 다시 세팅</button>${action}</span></div>`;
-    }).join('') : '<p class="mini-state">아직 만든 카드가 없어요. 카드뉴스를 만들어보세요.</p>';
+    renderCardHistory();
   } catch {
     box.innerHTML = '<p class="mini-state">카드 작업 내역을 불러오지 못했어요.</p>';
   }
 }
+function renderCardHistory() {
+  const box = $('card-history'); if (!box) return;
+  const q = (($('ch-search') && $('ch-search').value) || '').trim().toLowerCase().replace(/\s+/g, '');
+  const from = ($('ch-from') && $('ch-from').value) || '', to = ($('ch-to') && $('ch-to').value) || '';
+  const fromT = from ? new Date(from + 'T00:00:00').getTime() : 0;
+  const toT = to ? new Date(to + 'T23:59:59').getTime() : Infinity;
+  let list = chAll.slice();
+  if (q) list = list.filter(it => String(it.title || '').toLowerCase().replace(/\s+/g, '').includes(q));
+  list = list.filter(it => { const t = it.createdAt ? new Date(it.createdAt).getTime() : 0; return t >= fromT && t <= toT; });
+  if (!list.length) { box.innerHTML = '<p class="mini-state">해당하는 카드가 없어요.</p>'; return; }
+  const totalPages = Math.max(1, Math.ceil(list.length / CH_PER));
+  if (chPage >= totalPages) chPage = totalPages - 1; if (chPage < 0) chPage = 0;
+  const pageItems = list.slice(chPage * CH_PER, chPage * CH_PER + CH_PER);
+  const body = pageItems.map((it) => {
+    const isPost = it.media === 'card-post';
+    const badge = isPost ? '🖼 카드 게시물' : '🎬 카드 영상';
+    const yt = it.youtubeUrl ? ' <span class="badge">YT</span>' : '';
+    const ig = it.instagramUrl ? ' <span class="badge">IG</span>' : '';
+    const when = it.createdAt ? new Date(it.createdAt).toLocaleString('ko-KR') : '';
+    const action = isPost
+      ? `<a class="ghost-btn small" href="/voices?tab=pf" target="_blank" rel="noopener">📂 포트폴리오</a>`
+      : `<a class="ghost-btn small" href="${esc2(it.video)}" download="${esc2(it.title)}.mp4">⬇ 다운로드</a>`;
+    return `<div class="history-item" data-card-id="${esc2(it.id)}" data-title="${esc2(it.title)}" data-media="${esc2(it.media)}"><span><strong>${esc2(it.title)}</strong><small>${esc2(when)} · ${badge}${yt}${ig}</small></span><span class="hi-actions"><button type="button" class="ghost-btn small" data-reset="${esc2(it.id)}">⟳ 다시 세팅</button>${action}</span></div>`;
+  }).join('');
+  let pager = '';
+  if (totalPages > 1) {
+    const nums = [];
+    for (let i = 0; i < totalPages; i++) { if (i === 0 || i === totalPages - 1 || (i >= chPage - 2 && i <= chPage + 2)) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…'); }
+    pager = `<div class="arc-pager" style="margin-top:12px"><button type="button" class="arc-pg nav ch-pg" data-p="${Math.max(0, chPage - 1)}" ${chPage === 0 ? 'disabled' : ''}>◀</button>${nums.map(n => n === '…' ? '<span class="arc-pg dots">…</span>' : `<button type="button" class="arc-pg ch-pg ${n === chPage ? 'active' : ''}" data-p="${n}">${n + 1}</button>`).join('')}<button type="button" class="arc-pg nav ch-pg" data-p="${Math.min(totalPages - 1, chPage + 1)}" ${chPage >= totalPages - 1 ? 'disabled' : ''}>▶</button></div>`;
+  }
+  box.innerHTML = body + pager;
+  box.querySelectorAll('.ch-pg[data-p]').forEach(b => b.onclick = () => { chPage = Number(b.dataset.p); renderCardHistory(); });
+}
 $('card-history-refresh')?.addEventListener('click', () => loadCardHistory());
+(() => { let t = null; $('ch-search')?.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { chPage = 0; renderCardHistory(); }, 200); });
+  $('ch-from')?.addEventListener('change', () => { chPage = 0; renderCardHistory(); });
+  $('ch-to')?.addEventListener('change', () => { chPage = 0; renderCardHistory(); }); })();
 
 // 카드 작업 내역 클릭 → 그 카드를 만든 설정으로 폼 '다시 세팅'(영상 작업내역처럼 다시 만들 수 있게).
 $('card-history')?.addEventListener('click', (e) => {

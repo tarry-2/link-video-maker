@@ -133,7 +133,11 @@
         else { setEnergy(100, '완성! 🎉'); const f = $('hl-energy'); if (f) f.classList.remove('anim'); celebrate(); }
         showStopped(); // 성공·실패 공통: '같은 설정으로 다시' + '취소하고 새 영상' 노출
         if (m.kind === 'highlight' && !m.error) {
-          (m.clips || []).forEach((c) => { if (!resultClips.some((x) => x.projectId === c.projectId)) resultClips.push(c); });
+          addLog(`[진단] 완료 — 서버 clips=${(m.clips||[]).length}개, 화면 결과=${resultClips.length}개`, 'done');
+          // ★서버가 보낸 m.clips가 '완전한 최종 목록'이다 — 이걸로 resultClips를 재구성(병합)한다.
+          //   예전엔 중복이면 skip이라 ①마지막 편이 실시간 clip 경합으로 누락되거나(6개 중 5개만 보임)
+          //   ②편집 재렌더가 옛 카드 그대로 보였다(테리 지적). 병합(교체+추가)으로 둘 다 해결.
+          (m.clips || []).forEach((c) => { if (!c || !c.projectId) return; const i = resultClips.findIndex((x) => x.projectId === c.projectId); if (i >= 0) resultClips[i] = {...resultClips[i], ...c}; else resultClips.push(c); });
           mediaBust = String(Date.now()); // 편집 재렌더 후 새 영상·썸네일 보이게 캐시 무효화
           if (resultClips.length) showResults(resultClips, false);
           loadHistory();
@@ -391,15 +395,23 @@
   function renderHistory() {
     const box = $('hl-history'); if (!box) return;
     if (!histItems.length) { box.innerHTML = '<p class="mini-state">아직 만든 하이라이트가 없어요. 위에서 재사용 영상을 골라 만들어보세요.</p>'; return; }
+    // 제목검색 + 날짜범위 필터.
+    const q = (($('hh-search') && $('hh-search').value) || '').trim().toLowerCase().replace(/\s+/g, '');
+    const dFrom = ($('hh-from') && $('hh-from').value) || '', dTo = ($('hh-to') && $('hh-to').value) || '';
+    const fromT = dFrom ? new Date(dFrom + 'T00:00:00').getTime() : 0;
+    const toT = dTo ? new Date(dTo + 'T23:59:59').getTime() : Infinity;
+    let filtered = histItems.filter(it => { const t = it.createdAt ? new Date(it.createdAt).getTime() : 0; return t >= fromT && t <= toT; });
+    if (q) filtered = filtered.filter(it => String(it.title || '').toLowerCase().replace(/\s+/g, '').includes(q));
+    if (!filtered.length) { box.innerHTML = '<p class="mini-state">해당하는 하이라이트가 없어요.</p>'; return; }
     // 소스별로 그룹핑(각 그룹 안에서 점수순). 레거시(source 없음)는 '주제로 찾기'로.
     const groups = {};
-    for (const it of histItems) { const s = SRC_META[it.source] ? it.source : 'search'; (groups[s] ||= []).push(it); }
+    for (const it of filtered) { const s = SRC_META[it.source] ? it.source : 'search'; (groups[s] ||= []).push(it); }
     const order = Object.keys(groups).sort((a, b) => (SRC_META[a].order) - (SRC_META[b].order));
     // 소스 필터 탭(2개 이상 소스가 있을 때만 노출).
     let tabs = '';
     if (order.length > 1) {
       tabs = `<div class="seg" style="margin:4px 0 12px;flex-wrap:wrap">
-        <button type="button" class="seg-btn hh-tab ${histFilter==='all'?'active':''}" data-f="all">전체 (${histItems.length})</button>
+        <button type="button" class="seg-btn hh-tab ${histFilter==='all'?'active':''}" data-f="all">전체 (${filtered.length})</button>
         ${order.map((s) => `<button type="button" class="seg-btn hh-tab ${histFilter===s?'active':''}" data-f="${s}">${SRC_META[s].label} (${groups[s].length})</button>`).join('')}
       </div>`;
     }
@@ -455,6 +467,10 @@
       renderRemakeHistory(all.filter((it) => it.kind === 'mine' && it.origin === 'remake'));
     } catch { box.innerHTML = '<p class="mini-state">작업 내역을 불러오지 못했어요.</p>'; }
   }
+  // 작업내역 제목검색·날짜 필터(한 번만 바인딩 — renderHistory가 매번 읽음).
+  (() => { let t = null; $('hh-search')?.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { histPage = 0; renderHistory(); }, 200); });
+    $('hh-from')?.addEventListener('change', () => { histPage = 0; renderHistory(); });
+    $('hh-to')?.addEventListener('change', () => { histPage = 0; renderHistory(); }); })();
   // 영상 크게보기(결과·작업내역 공용).
   function bigView(id, isLand) {
     const b = Date.now();

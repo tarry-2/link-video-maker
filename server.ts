@@ -2232,6 +2232,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
           onClip: (c) => { if (!job.clips!.some((x) => x.projectId === c.projectId)) job.clips!.push(c); }});
         if (localFile) { try { fs.rmSync(localFile, {force: true}); } catch {} } // 업로드 원본은 작업 끝나면 정리
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }
+        jlog(job, `[진단] 완성 ${clips.length}편 · SSE 전송목록 ${job.clips?.length || 0}편`); // 6개인데 5개만 보이는 문제 추적
         job.done = true; job.doneAt = Date.now();
       } catch (e: any) {
         job.error = e.message; job.done = true; job.doneAt = Date.now();
