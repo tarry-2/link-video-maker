@@ -448,6 +448,8 @@
         ${order.map((s) => `<button type="button" class="seg-btn hh-tab ${histFilter===s?'active':''}" data-f="${s}">${SRC_META[s].label} (${groups[s].length})</button>`).join('')}
       </div>`;
     }
+    // ★저장된 histFilter가 지금 목록에 없는 소스면(예: 예전 'archive' 고정인데 이번엔 그 그룹 없음) 'all'로 리셋 — 빈 화면 방지.
+    if (histFilter !== 'all' && !order.includes(histFilter)) histFilter = 'all';
     // 선택된 소스들의 항목을 소스 순서대로 평탄화 → 10개씩 페이지. 밑으로 안 길어지게 가로 페이저.
     const shown = order.filter((s) => histFilter === 'all' || histFilter === s);
     const items = [];
@@ -495,6 +497,7 @@
       const d = await (await fetch('/api/portfolio', {cache: 'no-store'})).json();
       const all = Array.isArray(d.items) ? d.items : [];
       histItems = all.filter((it) => it.kind === 'mine' && it.media === 'highlight');
+      try { console.log('[작업내역] 하이라이트', histItems.length, '개 로드 (전체 포폴', all.length, '개)'); } catch {}
       renderHistory();
       // ★재창작(origin=remake) 작업 내역 이원화 — 같은 데이터로 별도 섹션에 렌더(테리: 재창작 내역이 안 남음).
       renderRemakeHistory(all.filter((it) => it.kind === 'mine' && it.origin === 'remake'));
