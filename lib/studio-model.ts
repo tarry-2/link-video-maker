@@ -16,6 +16,7 @@ export const createSchema = z.object({
   duration: z.number().int().min(15).max(180),
   voice: text(60).default(''), presetId: text(80).default(''),
   characterId: text(40).default(''), // 애니: 지정 캐릭터(비우면 랜덤 생성)
+  faceImage: text(15_000_000).default(''), // ★본인 얼굴(base64, 선택). 있으면 전 장면을 그 얼굴로(characterRef로 연결).
   quality: z.enum(['fast', 'high']).default('high'),
   font: text(40).default('Black Han Sans'), // 제목·후킹 폰트(Scene.tsx TITLE_FONTS·web UI와 동일 목록). 미등록이면 렌더에서 기본값 폴백.
   imageStyle: z.enum(STYLE_IDS as [string, ...string[]]).default('real'),
@@ -47,7 +48,7 @@ export const editSchema = z.object({
 export type EditScene = z.infer<typeof sceneEditSchema>;
 export type Product = z.infer<typeof productSchema>;
 export type Rates = z.infer<typeof ratesSchema>;
-export type Input = Omit<z.infer<typeof createSchema>, 'images'>;
+export type Input = Omit<z.infer<typeof createSchema>, 'images' | 'faceImage'>;
 export type Media = {signature: string; file: string; words?: {t: string; s: number; e: number}[]; frames?: number};
 export type Scene = EditScene & {image?: Media; voice?: Media; video?: Media; imageVersion?: number; voiceVersion?: number};
 export type Project = {

@@ -42,11 +42,14 @@ export const studioProviders: StudioDependencies = {
     // ★화면비: 롱폼(≥90초)=가로 16:9 이미지 / 쇼츠=세로 9:16 (render·plan과 동일 기준).
     const landscape = p.input.duration >= 90;
     const prompt = `${p.subject}. ${s.visualPrompt}`;
-    if (p.input.imageStyle === 'anime') {
-      // 애니 = nano-banana로 캐릭터 일관성. 첫 장면을 기준 캐릭터로 저장 → 이후 장면·다음 편이 참조.
-      const dir = path.dirname(file);
+    const dir = path.dirname(file);
+    // 애니거나, 본인 얼굴/캐릭터 기준(characterRef)이 있으면 nano-banana로 '같은 얼굴' 유지.
+    //   첫 장면을 기준으로 저장(얼굴 없을 때) → 이후 장면·다음 편이 참조. 실사 등은 그 스타일 promptAdd를 nano에 넘김.
+    const useNano = p.input.imageStyle === 'anime' || !!p.characterRef;
+    if (useNano) {
       const refs = p.characterRef ? [path.join(dir, p.characterRef)] : [];
-      await generateImageNano(k.replicate, prompt, file, log, refs, landscape);
+      const styleAdd = p.input.imageStyle === 'anime' ? undefined : getStyle(p.input.imageStyle).promptAdd;
+      await generateImageNano(k.replicate, prompt, file, log, refs, landscape, styleAdd);
       if (!p.characterRef) {
         const cref = 'character-ref.jpg';
         try { await fs.copyFile(file, path.join(dir, cref)); p.characterRef = cref; } catch {}

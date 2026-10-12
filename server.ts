@@ -1675,6 +1675,17 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
         const aiClips = Number(b.aiClips) || 0;
         const imageStyle = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
         job.clips = [];
+        // ★본인 얼굴: 업로드 사진(base64) → faceRef(전 장면을 그 얼굴로). 창작과 동일 패턴.
+        let faceRef: string | undefined;
+        if (b.faceImage) {
+          try {
+            const fdir = path.join(os.tmpdir(), 'onvideo-face-' + id);
+            fs.mkdirSync(fdir, {recursive: true});
+            faceRef = path.join(fdir, 'face.jpg');
+            fs.writeFileSync(faceRef, Buffer.from(String(b.faceImage).replace(/^data:image\/\w+;base64,/, ''), 'base64'));
+            jlog(job, '[이미지] 🧑 올린 얼굴을 받았어요 — 전 장면을 이 얼굴로 만듭니다.');
+          } catch { faceRef = undefined; }
+        }
         // ★N편 연속 시리즈 설계 — 같은 소재를 독립 N번(다 비슷·궁금증만 쌓이고 해소 없음, 테리 지적) 만들던 것을
         //   "1편 떡밥 → 2편 회수+새 떡밥 → … → 마지막 편 매듭" 연속 서사로. count>1일 때만.
         let seriesBible = '';
@@ -1702,6 +1713,7 @@ JSON만: {"bible":"세계관·인물·전체 줄거리를 한 문단으로(인�
           if (useSeries && episodeLoglines[i]) jlog(job, `[이 편] ${episodeLoglines[i].slice(0, 80)}`);
           const r = await makeVideo([], k, {
             sourceText,
+            faceRef, // ★본인 얼굴(있으면 전 장면 그 얼굴로)
             // ★시리즈면 바이블·이 편 로그라인을 넘겨 연속 서사로(안 넘기면 기존처럼 독립 단편).
             seriesBible: useSeries ? seriesBible : undefined,
             episode: useSeries ? i + 1 : undefined,

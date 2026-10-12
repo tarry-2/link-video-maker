@@ -233,6 +233,12 @@
           </div>
         </div>
 
+        <!-- ★본인 얼굴(선택) — 올리면 전 장면 주인공을 이 얼굴로(실사·애니·영화 공통, pipeline/studio가 characterRef로 고정) -->
+        <div id="face-row" style="margin-top:12px">
+          <label class="field-label">🧑 본인 얼굴 <span class="hint">— 선택. 올리면 모든 장면 주인공이 이 얼굴로(영화도 같은 인물)</span></label>
+          <input id="face-upload" type="file" accept="image/*" class="input" style="padding:8px" />
+          <div id="face-preview" style="margin-top:8px"></div>
+        </div>
         <div class="row" id="character-row" style="display:none">
           <div class="col" style="flex:1">
             <label class="field-label">🎭 주인공 캐릭터 <span class="hint">— 애니만 · 고르면 모든 장면·다음 편이 같은 캐릭터</span></label>

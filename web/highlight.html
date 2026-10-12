@@ -180,6 +180,10 @@
               <button type="button" class="seg-btn hl-rmstyle" data-style="cinema">🎞️ 시네마</button>
               <button type="button" class="seg-btn hl-rmstyle" data-style="classic">🏛️ 고전</button>
             </div>
+            <!-- ★본인 얼굴(선택) — 재창작도 전 장면 주인공을 이 얼굴로 -->
+            <label class="field-label" style="margin-top:10px">🧑 본인 얼굴 <span class="hint">— 선택. 올리면 모든 장면 주인공이 이 얼굴로</span></label>
+            <input id="hl-face-upload" type="file" accept="image/*" class="input" style="padding:8px" />
+            <div id="hl-face-preview" style="margin-top:8px"></div>
             <!-- 영화 고를 때만: 몇 장면을 움직이게 할지(임의 지정 + 저장) -->
             <div id="hl-rm-motion" class="hidden" style="margin-top:10px">
               <label class="field-label">영화 장면 수 <span class="hint">(많을수록 생생·비용↑. 비용 대부분은 GPU 고정비)</span></label>

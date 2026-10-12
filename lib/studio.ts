@@ -201,7 +201,7 @@ export class Studio {
   async settled(id: string) { await this.tasks.get(id); return this.get(id); }
   create(body: unknown) {
     this.available();
-    const {images, ...input} = createSchema.parse(body);
+    const {images, faceImage, ...input} = createSchema.parse(body);
     // 애니 전용 카테고리는 이미지를 무조건 애니로(실사로 두면 동화·안전교육이 어색해짐).
     if (getPreset(input.presetId)?.anime) input.imageStyle = 'anime';
     const id = randomUUID();
@@ -223,6 +223,11 @@ export class Studio {
     if (getStyle(input.imageStyle).characterRef && input.characterId) {
       const src = characterImagePath(input.characterId);
       if (src) { const ref = 'character-ref.jpg'; fs.copyFileSync(src, path.join(this.directory(id), ref)); p.characterRef = ref; }
+    }
+    // ★본인 얼굴: 업로드 사진 → 기준 캐릭터(characterRef)로 전 장면을 그 얼굴로(애니 캐릭터 지정보다 우선).
+    if (faceImage) {
+      const m = faceImage.match(/^data:image\/(jpeg|png|webp);base64,(.+)$/);
+      if (m) { const ref = 'face-ref.jpg'; fs.writeFileSync(path.join(this.directory(id), ref), Buffer.from(m[2], 'base64')); p.characterRef = ref; }
     }
     for (const u of uploads) { fs.writeFileSync(path.join(this.directory(id), u.name), u.data); p.sources.push(u.name); }
     this.save(p);

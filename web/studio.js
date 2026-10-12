@@ -424,6 +424,13 @@
         }
       }
       const product = el('product-lock').checked ? Object.fromEntries(['name','price','benefit','url'].map(k => [k, el('product-' + k).value.trim()])) : null;
+      // ★본인 얼굴(선택) — 올리면 전 장면을 이 얼굴로(서버가 characterRef로 고정, 영화도 같은 인물).
+      let faceImage = '';
+      const faceF = el('face-upload')?.files?.[0];
+      if (faceF) {
+        if (!['image/jpeg','image/png','image/webp'].includes(faceF.type)) throw new Error('얼굴 사진은 JPG·PNG·WebP만 지원합니다.');
+        faceImage = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(new Error('얼굴 사진을 읽지 못했습니다.')); r.readAsDataURL(faceF); });
+      }
       const p = await api('/api/studio', {mode, url:el('url').value.trim(), topic:el('topic-input') ? el('topic-input').value.trim() : '', images, keywords:el('keywords').value.trim(), facts:el('facts').value.trim(),
         duration:Number(el('duration').value), voice:el('voice').value, presetId:selectedPreset || '', quality:el('quality').value,
         imageStyle:el('image-style') ? el('image-style').value : 'real',
@@ -431,13 +438,24 @@
         characterId:el('character-select') ? el('character-select').value : '',
         sceneCount:Number(el('scene-count')?.value) || 0,
         aiClips:Number(el('aiClips')?.value) || 0, autoShutdown:el('auto-shutdown') ? el('auto-shutdown').checked : true,
-        music:el('v-bgm') ? el('v-bgm').checked : true, product, rates:rates()});
+        music:el('v-bgm') ? el('v-bgm').checked : true, product, faceImage, rates:rates()});
       try { localStorage.setItem('onvideo-open', p.id); } catch {}
       render(p); schedule(); await loadHistory();
       el('studio-editor').scrollIntoView({behavior:'smooth'}); message('대본 작성이 시작됐습니다. 작업 내역에서 다시 열 수 있습니다.');
     } catch (e) { report(e); }
     finally { loading = false; el('generate').disabled = active(current); }
   };
+  // 본인 얼굴 미리보기 — 올린 사진을 보여주고 제거 버튼.
+  el('face-upload')?.addEventListener('change', () => {
+    const f = el('face-upload').files?.[0]; const pv = el('face-preview'); if (!pv) return;
+    if (!f) { pv.innerHTML = ''; return; }
+    const r = new FileReader();
+    r.onload = () => {
+      pv.innerHTML = `<img src="${r.result}" alt="얼굴" style="height:72px;border-radius:10px;border:1.5px solid var(--edline);vertical-align:middle"/> <button type="button" id="face-clear" class="ghost-btn small">✕ 제거</button>`;
+      const c = el('face-clear'); if (c) c.onclick = () => { el('face-upload').value = ''; pv.innerHTML = ''; };
+    };
+    r.readAsDataURL(f);
+  });
 
   // ── 📚 배치 생성: 주제 여러 개 → 순차 자동 제작 ──
   let batchTimer = null;

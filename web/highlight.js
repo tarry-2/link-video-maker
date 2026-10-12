@@ -471,6 +471,7 @@
   let rmClips = 1;       // 재창작 영화 장면 수(기본 1) — restoreState 전에 선언(TDZ 방지)
   let rmStyle = 'real';  // 재창작 그림 스타일(real/anime/cinema/classic) — 이미지·영화 둘 다 적용
   let rmCount = 1;       // 재창작 편수(같은 소재로 서로 다른 N편)
+  let hlFaceImage = '';  // ★본인 얼굴 base64(선택) — 올리면 전 장면을 이 얼굴로
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
   const STATE_KEY = 'onvideo-hl-state';
@@ -1212,6 +1213,18 @@
     document.querySelectorAll('.hl-rmcount').forEach((x) => x.classList.toggle('active', Number(x.dataset.c) === rmCount));
     applyRmCountNote(); saveState(); addLog(`🎬 재창작 편수 = ${rmCount}편`);
   }));
+  // ★본인 얼굴 업로드 — 올리면 전 장면 주인공을 이 얼굴로(미리보기 + 제거).
+  $('hl-face-upload')?.addEventListener('change', () => {
+    const f = $('hl-face-upload').files?.[0]; const pv = $('hl-face-preview'); if (!pv) return;
+    if (!f) { hlFaceImage = ''; pv.innerHTML = ''; return; }
+    const r = new FileReader();
+    r.onload = () => {
+      hlFaceImage = String(r.result || '');
+      pv.innerHTML = `<img src="${hlFaceImage}" alt="얼굴" style="height:72px;border-radius:10px;border:1.5px solid var(--edline);vertical-align:middle"/> <button type="button" id="hl-face-clear" class="ghost-btn small">✕ 제거</button>`;
+      const c = $('hl-face-clear'); if (c) c.onclick = () => { hlFaceImage = ''; $('hl-face-upload').value = ''; pv.innerHTML = ''; };
+    };
+    r.readAsDataURL(f);
+  });
   async function generate(body, endpoint) {
     const btn = $('hl-generate'); btn.disabled = true; btn.textContent = '시작하는 중…';
     resultClips = []; $('hl-result-block')?.classList.add('hidden'); // 새 제작 → 이전 결과 비움
@@ -1242,6 +1255,7 @@
         videoId: picked.videoId || '', // ★원본 실제 내용(자막/음성STT) 확보용 — 서버가 이걸로 전사해 충실히 각색
         duration: sec, orientation: orient, voice, font, imageStyle: rmStyle, count: rmCount,
         aiClips: rmOut === 'wan' ? rmClips : 0, // >0 = 영화(앞 N장면 Wan), 0 = 이미지영상
+        faceImage: hlFaceImage || undefined, // ★본인 얼굴(있으면 전 장면 그 얼굴로)
       };
       lastEndpoint = '/api/generate-remake';
       generate(lastBody, lastEndpoint);
