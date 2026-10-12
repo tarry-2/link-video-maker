@@ -139,20 +139,27 @@ export async function publishPhotos(
 }
 
 // 업로드 현황: 페이지에 올라간 영상 기준 "오늘(한국시간) 몇 개 · 마지막 게시 시각 · 총 개수".
-export async function getUploadActivity(): Promise<{today: number; lastAt: string | null; total: number; error?: string}> {
+export async function getUploadActivity(): Promise<{today: number; lastAt: string | null; total: number; followers?: number; error?: string}> {
   const c = loadFacebook();
   if (!c.pageId || !c.pageAccessToken) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
   const token = c.pageAccessToken;
+  // 페이지 팔로워 수 — 영상 목록과 별개로 조회.
+  let followers: number | undefined;
+  try {
+    const fr = await fetch(`${BASE}/${API}/${c.pageId}?fields=followers_count,fan_count&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+    const fd: any = await fr.json();
+    if (fr.ok) followers = Number(fd?.followers_count ?? fd?.fan_count ?? 0);
+  } catch {}
   try {
     const r = await fetch(`${BASE}/${API}/${c.pageId}/videos?fields=id,created_time&limit=100&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
     const d: any = await r.json();
-    if (!r.ok) return {today: 0, lastAt: null, total: 0, error: d?.error?.message || `API 오류(${r.status})`};
+    if (!r.ok) return {today: 0, lastAt: null, total: 0, followers, error: d?.error?.message || `API 오류(${r.status})`};
     const times: string[] = (d.data || []).map((m: any) => m.created_time).filter(Boolean).sort().reverse();
     const kstDay = (iso: string) => new Date(iso).toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'});
     const todayKst = new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'});
     const today = times.filter((t) => kstDay(t) === todayKst).length;
-    return {today, lastAt: times[0] || null, total: times.length};
-  } catch (e: any) { return {today: 0, lastAt: null, total: 0, error: e.message}; }
+    return {today, lastAt: times[0] || null, total: times.length, followers};
+  } catch (e: any) { return {today: 0, lastAt: null, total: 0, followers, error: e.message}; }
 }
 
 // 성과 추적: 내 페이지 영상의 조회수·좋아요·댓글·공유를 permalink 키로 반환.

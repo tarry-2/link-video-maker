@@ -309,10 +309,18 @@ export async function getChannelVideos(max = 400): Promise<{id: string; title: s
   return out;
 }
 
-export async function getUploadActivity(ids: string[]): Promise<{today: number; lastAt: string | null; total: number; error?: string}> {
+export async function getUploadActivity(ids: string[]): Promise<{today: number; lastAt: string | null; total: number; followers?: number; error?: string}> {
   if (!youtubeStatus().connected) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
   const uniq = [...new Set(ids.filter(Boolean))];
-  if (!uniq.length) return {today: 0, lastAt: null, total: 0};
+  // 구독자 수(채널 통계) — 업로드 목록과 별개로 조회(ids 없어도 구독자는 뜨게).
+  let followers: number | undefined;
+  try {
+    const t = await accessToken();
+    const cr = await fetch('https://www.googleapis.com/youtube/v3/channels?part=statistics&mine=true', {headers: {Authorization: 'Bearer ' + t}, cache: 'no-store'});
+    const cd: any = await cr.json();
+    if (cr.ok) followers = Number(cd?.items?.[0]?.statistics?.subscriberCount ?? 0);
+  } catch {}
+  if (!uniq.length) return {today: 0, lastAt: null, total: 0, followers};
   try {
     const token = await accessToken();
     const times: string[] = [];
@@ -328,8 +336,8 @@ export async function getUploadActivity(ids: string[]): Promise<{today: number; 
     times.sort().reverse();
     const todayKst = new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'});
     const today = times.filter((t) => new Date(t).toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'}) === todayKst).length;
-    return {today, lastAt: times[0] || null, total: times.length};
-  } catch (e: any) { return {today: 0, lastAt: null, total: 0, error: e.message}; }
+    return {today, lastAt: times[0] || null, total: times.length, followers};
+  } catch (e: any) { return {today: 0, lastAt: null, total: 0, followers, error: e.message}; }
 }
 
 async function fetchChannelTitle(token: string): Promise<string> {

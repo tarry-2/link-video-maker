@@ -1083,8 +1083,23 @@ const server = http.createServer(async (req, res) => {
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 facebookUrl 저장된 게 없음']} : {})});
     const diag: string[] = [];
     const stats = await getFbStats(debug ? diag : undefined);
-    const items = withUrl.map((x) => ({...x, ...(stats[x.url] || {views: 0, likes: 0, comments: 0, shares: 0})}));
-    return json(res, 200, {connected: true, items, ...(debug ? {debug: diag} : {})});
+    const items = withUrl.map((x) => ({...x, ...(stats[x.url] || {views: 0, likes: 0, comments: 0, shares: 0})}))
+      .sort((a: any, b: any) => b.views - a.views || b.likes - a.likes);
+    const avgBy = (key: 'voice' | 'category') => {
+      const m: Record<string, number[]> = {};
+      for (const it of items) (m[(it as any)[key]] = m[(it as any)[key]] || []).push((it as any).views || (it as any).likes);
+      return Object.entries(m).map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length})).sort((a, b) => b.avg - a.avg);
+    };
+    const summary = {
+      total: items.length,
+      totalViews: items.reduce((n: number, x: any) => n + x.views, 0),
+      totalLikes: items.reduce((n: number, x: any) => n + x.likes, 0),
+      totalShares: items.reduce((n: number, x: any) => n + (x.shares || 0), 0),
+      top3: items.slice(0, 3),
+      byVoice: avgBy('voice').slice(0, 5),
+      byCategory: avgBy('category').slice(0, 5),
+    };
+    return json(res, 200, {connected: true, items, summary, ...(debug ? {debug: diag} : {})});
   }
   if (p === '/api/facebook/connect' && req.method === 'POST') {
     const b = await readBody(req);

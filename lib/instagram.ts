@@ -273,20 +273,27 @@ export async function maybeRefreshInstagram(log?: (m: string) => void): Promise<
 
 // 업로드 현황: 인스타에 실제로 올라간 시각(media timestamp) 기준으로
 // "오늘(한국시간) 몇 개 · 마지막 게시 시각 · 총 개수"를 반환. 업로드 페이스 모니터용.
-export async function getUploadActivity(): Promise<{today: number; lastAt: string | null; total: number; error?: string}> {
+export async function getUploadActivity(): Promise<{today: number; lastAt: string | null; total: number; followers?: number; error?: string}> {
   const c = loadInstagram();
   if (!c.igUserId || !c.accessToken) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
   const base = host(c), token = c.accessToken;
+  // 팔로워 수(계정 프로필) — 미디어 목록과 별개로 조회.
+  let followers: number | undefined;
+  try {
+    const fr = await fetch(`${base}/${API}/${c.igUserId}?fields=followers_count&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+    const fd: any = await fr.json();
+    if (fr.ok) followers = Number(fd?.followers_count ?? 0);
+  } catch {}
   try {
     const r = await fetch(`${base}/${API}/${c.igUserId}/media?fields=id,timestamp&limit=100&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
     const d: any = await r.json();
-    if (!r.ok) return {today: 0, lastAt: null, total: 0, error: d?.error?.message || `API 오류(${r.status})`};
+    if (!r.ok) return {today: 0, lastAt: null, total: 0, followers, error: d?.error?.message || `API 오류(${r.status})`};
     const times: string[] = (d.data || []).map((m: any) => m.timestamp).filter(Boolean).sort().reverse();
     const kstDay = (iso: string) => new Date(iso).toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'}); // YYYY-MM-DD
     const todayKst = new Date().toLocaleDateString('en-CA', {timeZone: 'Asia/Seoul'});
     const today = times.filter((t) => kstDay(t) === todayKst).length;
-    return {today, lastAt: times[0] || null, total: times.length};
-  } catch (e: any) { return {today: 0, lastAt: null, total: 0, error: e.message}; }
+    return {today, lastAt: times[0] || null, total: times.length, followers};
+  } catch (e: any) { return {today: 0, lastAt: null, total: 0, followers, error: e.message}; }
 }
 
 // 성과 추적: 내 인스타 미디어의 조회수·좋아요·댓글을 permalink 키로 반환.

@@ -189,6 +189,7 @@
         <!-- 📊 성과(올린 영상의 조회수·반응 집계) -->
         <div id="yt-stats" class="yt-stats" hidden></div>
         <div id="ig-stats" class="yt-stats" hidden></div>
+        <div id="fb-stats" class="yt-stats" hidden></div>
 
         <!-- 큰 미리보기 플레이어 + 액션 -->
         <div class="pf-stage">
@@ -798,6 +799,12 @@
           renderPerf('ig-stats', d, '📷 인스타 성과');
         } catch (e) {}
       }
+      async function loadFbStats() {
+        try {
+          const d = await (await fetch('/api/facebook/stats?t=' + Date.now(), {cache: 'no-store'})).json();
+          renderPerf('fb-stats', d, '👍 페이스북 성과');
+        } catch (e) {}
+      }
       // ── 📊 오늘의 활동(제작·유튜브·인스타 각각) ──
       function fmtLast(x) {
         if (!x || !x.lastAt) return '없음';
@@ -811,10 +818,16 @@
         const el = document.getElementById('today-activity'); if (!el) return;
         try {
           const a = await (await fetch('/api/activity/today')).json();
-          const yt = a.youtube || {}, ig = a.instagram || {};
-          const col = (emoji, label, x, isProduce) => {
+          const yt = a.youtube || {}, ig = a.instagram || {}, fb = a.facebook || {};
+          const col = (emoji, label, x, isProduce, followLbl) => {
             const num = isProduce ? (a.produced || 0) : (x.error ? '–' : (x.today || 0));
-            const sub = isProduce ? '완성' : (x.error ? esc(x.error) : '마지막 ' + fmtLast(x));
+            // 마지막 올린 시각 · 총 몇 개 올렸는지 · 팔로워/구독자 수(연결된 채널만)
+            const lines = isProduce
+              ? ['완성']
+              : (x.error
+                ? [esc(x.error)]
+                : ['마지막 ' + fmtLast(x), '총 ' + (x.total || 0) + '개 올림', (x.followers != null ? '👥 ' + followLbl + ' ' + fmtNum(x.followers) : '')].filter(Boolean));
+            const sub = lines.map(t => `<span style="display:block">${t}</span>`).join('');
             return `<div class="yt-kpi"><div class="num">${num}</div><div class="lbl">${emoji} ${label}<br><span style="font-size:11px;color:var(--muted);font-weight:600">${sub}</span></div></div>`;
           };
           el.hidden = false;
@@ -822,8 +835,9 @@
             <div class="yt-stats-head">📊 오늘의 활동 <span style="font-size:12px;color:var(--muted);font-weight:600">· 한국시간 기준</span></div>
             <div class="yt-kpis">
               ${col('🎬', '제작', null, true)}
-              ${col('▶️', '유튜브 올림', yt, false)}
-              ${col('📷', '인스타 올림', ig, false)}
+              ${col('▶️', '유튜브', yt, false, '구독자')}
+              ${col('📷', '인스타', ig, false, '팔로워')}
+              ${col('👍', '페이스북', fb, false, '팔로워')}
             </div>`;
         } catch (e) {}
       }
@@ -846,6 +860,7 @@
       loadMyVideos();
       loadYtStats();
       loadIgStats();
+      loadFbStats();
       loadActivity();
       setInterval(loadActivity, 60000); // "N분 전" 실시간 갱신
     </script>
