@@ -275,13 +275,17 @@ async function hasVideoStream(file: string): Promise<boolean> {
 
 // 영상을 앞에서부터 N개 구간으로 나눈다(순차 분할). 하이라이트 모음 영상처럼 "이미 전체가 하이라이트"면
 //   굳이 베스트를 또 못 고르므로, 그냥 순서대로 N개를 쓴다. 후킹은 자막으로 나중에 붙인다.
+// ★완성도 우선(테리): clipSec보다 짧은 '꼬리 구간'을 억지로 만들지 않는다. 온전한 clipSec짜리만.
+//   영상이 짧아 N개가 안 나오면 '나오는 만큼만' 반환(한 편 덜 만들어도 각 편은 제 길이).
 function splitEvenly(durationSec: number, n: number, clipSec: number): Highlight[] {
   const hs: Highlight[] = [];
   const usable = Math.max(0, durationSec - 2);
-  const gap = Math.max(clipSec, Math.floor(usable / n)); // 겹치지 않게 간격
-  for (let i = 0; i < n; i++) {
-    const start = Math.min(usable - clipSec, i * gap);
-    if (start < 0) break;
+  const maxFit = Math.floor(usable / clipSec); // 온전한 clipSec짜리가 최대 몇 개 들어가나
+  const k = Math.max(0, Math.min(n, maxFit));
+  if (k === 0) return hs; // 영상이 clipSec보다도 짧으면 순차분할로는 한 편도 안 만듦(상위에서 처리)
+  const gap = Math.floor(usable / k); // k개를 균등 배치(각 구간은 온전한 clipSec)
+  for (let i = 0; i < k; i++) {
+    const start = Math.min(usable - clipSec, i * gap); // 마지막 편도 clipSec 확보되는 위치
     hs.push({start: Math.max(0, start), end: Math.min(durationSec, start + clipSec), hookTop: '', hookAccent: '', reason: '', score: 60});
   }
   return hs;
@@ -416,6 +420,17 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
     const extra = splitEvenly(durationSec, n * 2, clipSec).filter((e) =>
       !hs.some((h) => e.start < h.end && e.end > h.start)); // 시간대가 실제로 겹치면 제외
     hs = dropOverlaps(hs.concat(extra)).slice(0, n); // 합친 뒤에도 다시 겹침 제거(추가분끼리도)
+  }
+  // ★완성도 게이트(테리): 설정 길이의 80% 미만인 '반토막 구간'은 버린다 — god 24초 같은 억지 편 방지.
+  //   한 편 덜 만들어도 각 편은 제 길이. 단 최소 1편은 남겨(전부 걸러 0편 되는 건 방지, 가장 긴 것 유지).
+  const minLen = Math.max(10, Math.floor(clipSec * 0.8));
+  const full = hs.filter((h) => h.end - h.start >= minLen);
+  if (full.length) {
+    if (full.length < hs.length) log(`[하이라이트] ${hs.length - full.length}개 구간이 짧아(기준 ${minLen}초 미만) 완성도 위해 제외했습니다.`);
+    hs = full;
+  } else if (hs.length) {
+    hs = [hs.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0]]; // 전부 짧으면 가장 긴 1편만
+    log(`[하이라이트] 온전한 길이의 구간이 없어, 가장 긴 1편만 만듭니다(영상이 짧아요).`);
   }
   hs.sort((a, b) => a.start - b.start);
   log(`[하이라이트] 구간 ${hs.length}개 확정`);

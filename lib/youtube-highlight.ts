@@ -16,7 +16,7 @@ import {intensifyHooks, autoSpace} from './script';
 import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream, head as r2Head, deleteKey as deleteR2Key} from './storage';
 import {geminiGenerate, GeminiImage} from './gemini';
-import {RULE, contentStrategy} from './prompt-rules'; // ★로직 센터 — 소재유형·화면진실·답/정보·오보금지 단일 출처
+import {RULE, contentStrategy, sceneContext} from './prompt-rules'; // ★로직 센터 — 소재유형·화면우선·답/정보·오보금지 단일 출처
 import {generateImageFlux, generateImageSmart} from './image';
 import {ttsElevenJoined, alignToWords, pickVoice, VOICES, type Word} from './tts';
 import type {SceneData} from '../src/Scene';
@@ -42,18 +42,18 @@ export function stripUnrenderable(s: string): string {
 // ★후킹은 '한국어'여야 한다. 제목·자막이 영어여도 한국어 후킹을 창작/번역한다(테리: 후킹은 한글이야).
 async function koreanHook(geminiKeys: string[], title: string, transcript: string, log: (m: string) => void, images?: GeminiImage[]): Promise<{hookTop: string; hookAccent: string} | null> {
   if (!geminiKeys.length) return null;
-  const prompt = `아래 영상의 '한국어' 쇼츠 후킹을 만들어라. 제목/자막이 영어여도 반드시 자연스러운 한국어로 창작·번역한다.
-제목: ${title}
-내용(일부): ${(transcript || '').slice(0, 700)}
+  const prompt = `아래 '한 장면'의 '한국어' 쇼츠 후킹을 만들어라. 제목/자막이 영어여도 반드시 자연스러운 한국어로 창작·번역한다.
+
+${sceneContext({title, transcript, hasVision: !!images?.length})}
 
 후킹은 두 줄로 화면 위에 동시에 뜬다. 윗줄(hookTop)=상황/셋업, 아랫줄(hookAccent)=그걸 터뜨리는 '반전 펀치'다.
 ★가장 중요: hookAccent는 hookTop에 '이미 쓴 단어·표현을 절대 반복하지 마라'. 같은 말을 두 번 쓰면 촌스럽고 식상하다. 윗줄에서 궁금하게 만들고(상황/셋업), 아랫줄은 완전히 다른 단어로 그 결과·반전·감정을 꽂아라.
-(이건 형식 규칙일 뿐이다 — 예시 소재를 베끼지 말고 반드시 '이 영상'의 제목·내용으로 만들어라.)
+(이건 형식 규칙일 뿐이다 — 예시 소재를 베끼지 말고 반드시 '이 장면'의 내용으로 만들어라.)
 
 요구:
 - hookTop: 스크롤을 멈추게 하는 한국어 10~16자. 궁금증·긴장을 만드는 셋업. 제목 그대로 복붙 금지, 영어 금지, 뻔한 표현(대박·레전드·충격 남발) 금지.
 - hookAccent: hookTop과 단어가 겹치지 않는 강펀치 한국어 6~12자. 결과·반전·감정을 터뜨린다(예: "결국 무릎 꿇음", "소름 돋는 반전").
-JSON만: {"hookTop":"...","hookAccent":"..."}` + (images?.length ? '\n\n' + RULE.screenTruth : '');
+JSON만: {"hookTop":"...","hookAccent":"..."}`;
   try {
     const raw = await geminiGenerate(geminiKeys, prompt, {json: true, maxTokens: 220, temperature: 0.9, images});
     const m = raw.match(/\{[\s\S]*\}/); const d = m ? JSON.parse(m[0]) : {};
@@ -145,9 +145,7 @@ async function writeCommentary(
 이 장면에 '네 관점의 해설/논평'을 한국어로 입혀 영상에 깔 나레이션을 써라. 장면을 그대로 중계·낭독하지 말고,
 배경·맥락 설명, 왜 중요한지, 포인트 짚기, 너의 해석 한마디를 넣어 '원본과 구별되는 가치'를 더해라.
 
-영상 제목: ${title}
-장면 상단 후킹: ${hook || '(없음)'}
-장면 대사/내용: ${transcript || '(대사 없음 — 제목과 후킹으로 맥락 추론)'}
+${sceneContext({title, hook, transcript, hasVision: !!images?.length})}
 
 [규칙]
 - 분량: ${targetChars}자 내외로 '꽉' 채워라(최소 ${minChars}자 이상 — 이 장면 ${clipSec}초 끝까지 말이 이어지게, 짧으면 영상이 빈 채로 끝난다). 모자라지 않게.
@@ -157,8 +155,9 @@ ${contentStrategy()}
 ${RULE.answer}
 ${RULE.factTruth}
 - 답/정보를 분명히 준 뒤 마지막 한마디로만 짧은 여운.
+${RULE.polite}
 - 해시태그·이모지·따옴표 없이 '읽을 문장'만.
-JSON만 출력: {"commentary":"..."}` + (images?.length ? '\n\n' + RULE.screenTruth : '');
+JSON만 출력: {"commentary":"..."}`;
   // 레이트리밋·일시 오류·빈 응답이면 짧게 쉬고 1회 재시도(편마다 연속 호출이라 2편째부터 레이트에 걸리기 쉬움).
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -288,9 +287,18 @@ export async function makeHighlights(
   const sourceKey = isMine ? ('upload:' + (meta.title || '').trim()) : ('yt:' + videoId);
   const startEpisode = countBySourceKey(sourceKey);
 
+  // ★완성도 게이트(테리): 설정 길이의 80% 미만인 구간은 억지로 만들지 않고 스킵+로그한다.
+  //   "한 편을 둘로 쪼개 반토막" 방지 — 한 편 덜 만들어도 각 편은 제 길이. (clipSec 지정 시만, 미지정이면 통과)
+  const minSec = opts.clipSec ? Math.max(10, Math.floor(opts.clipSec * 0.8)) : 0;
+  let episodeNo = 0; // 실제로 '만든' 편 수(스킵한 편은 번호 안 밀림)
   for (let i = 0; i < clips.length; i++) {
     stopIfCancelled();
     const c = clips[i];
+    if (minSec && (c.end - c.start) < minSec) {
+      log(`[하이라이트] 구간이 짧아(${Math.round(c.end - c.start)}초 · 기준 ${minSec}초) 완성도 위해 한 편을 스킵했습니다.`);
+      continue;
+    }
+    episodeNo++;
     const projectId = randomUUID();
     const studioDir = path.join(DATA_DIR, 'studio', projectId);
     await fsp.mkdir(studioDir, {recursive: true});
@@ -326,7 +334,7 @@ export async function makeHighlights(
       //   캡의 92%를 목표 길이로(여운 1.3초 + 여유). 사용자가 59초로 맞췄으면 해설은 ~54초 분량으로 생성.
       const capSec = capFrames / FPS;
       const narrTargetSec = Math.max(5, Math.min(Math.round(durSec), Math.floor(capSec * 0.92)));
-      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log, visionFrames, i);
+      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log, visionFrames, episodeNo - 1);
       commentaryText = commentary || '';
       if (commentary && k.elevenlabs) {
         log(`[하이라이트] ${i + 1}편 해설 나레이션 생성…`);
@@ -459,7 +467,8 @@ export async function makeHighlights(
     }
 
     // 후킹 그대로 + 끝에 누적 회차('N편'). 같은 소재 몇 번을 만들든 이어서 번호가 붙어 배포 구분이 쉽다.
-    const episode = startEpisode + i + 1;
+    //   ★스킵된 편은 번호를 안 밀리게 episodeNo(실제 만든 순서) 사용.
+    const episode = startEpisode + episodeNo;
     const baseT = hookTopFinal ? hookTopFinal.slice(0, 74) : cleanTitle(meta.title, 74);
     const title = `${baseT} ${episode}편`;
     const createdAt = new Date().toISOString();
