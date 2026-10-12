@@ -248,7 +248,8 @@
             ${TPLS.map(([v,l]) => `<button type="button" class="tpl-card ed-tpl-b ${v===curTpl?'active':''}" data-t="${v}"><span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/${v}.png" alt="${l} 미리보기" loading="lazy"></span><span class="tpl-name">${l}</span></button>`).join('')}
           </div>
           <button id="ed-save" class="primary-btn" style="margin-top:14px">💾 저장하고 다시 만들기</button>
-          <p class="mini-state">저장하면 이 편만 새 디자인으로 다시 렌더해요(1~3분). 완성되면 자동으로 새로고침됩니다.</p>
+          <p class="mini-state">저장하면 이 편만 새로 다시 렌더해요(1~3분). 완성되면 결과가 바뀝니다.</p>
+          <div id="ed-energy-wrap" style="display:none;margin-top:12px"><div style="height:12px;border-radius:8px;background:rgba(0,0,0,.08);overflow:hidden"><div id="ed-energy" style="height:100%;width:6%;border-radius:8px;background:linear-gradient(90deg,var(--teal,#12a998),var(--purple,#7c5cff));transition:width .4s"></div></div><p id="ed-energy-label" class="mini-state" style="margin-top:6px"></p></div>
           <p id="ed-msg" class="mini-state"></p>
         </div>
       </div>`,
@@ -294,15 +295,47 @@
               const narrEl = box.querySelector('#ed-narr');
               if (narrEl && narrEl.value.trim() && narrEl.value.trim() !== (info.narration || '').trim()) body.narration = narrEl.value.trim();
             }
-            const d = await (await fetch('/api/highlight/re-render', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})).json();
-            if (d.error) throw new Error(d.error);
-            close();
-            // 진행 로그 창에 붙여 재렌더 진행을 보여주고, 끝나면 결과·내역 새로고침.
-            addLog('✏️ 편집 재렌더 시작…', 'done');
-            if (d.id) attachProgress(d.id);
+            const resp = await fetch('/api/highlight/re-render', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+            const d = await resp.json();
+            if (!resp.ok || d.error) throw new Error(d.error || ('서버 오류 ' + resp.status));
+            if (!d.id) throw new Error('재렌더 작업 ID를 못 받았어요(서버 응답: ' + JSON.stringify(d).slice(0,80) + ')');
+            // ★모달 안에서 진행 에너지바 + 완료 폭죽(포폴 모달과 동일 UX, 테리 요구).
+            box.querySelector('#ed-energy-wrap').style.display = 'block';
+            box.querySelector('#ed-msg').textContent = '';
+            pollEditRerender(d.id, box, close);
           } catch (e) { box.querySelector('#ed-msg').textContent = '실패: ' + e.message; btn.disabled = false; btn.textContent = '💾 저장하고 다시 만들기'; }
         };
       });
+  }
+  // 편집 재렌더 — 모달 안 에너지바 + 완료 폭죽 + 결과카드 갱신(포폴 모달과 동일 UX).
+  function pollEditRerender(id, box, closeModal) {
+    const setE = (pct, label) => { const f = box.querySelector('#ed-energy'); if (f) f.style.width = Math.min(99, pct) + '%'; const l = box.querySelector('#ed-energy-label'); if (l) l.textContent = Math.round(Math.min(99, pct)) + '% · ' + (label || ''); };
+    const curE = () => parseFloat((box.querySelector('#ed-energy') || {}).style?.width) || 0;
+    const es = new EventSource('/api/progress?id=' + id);
+    es.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.log) {
+        const rm = m.log.match(/\[빠른렌더\]\s*(\d+)%/);
+        if (rm) setE(Math.max(curE(), 60 + Number(rm[1]) * 0.35), '🎬 영상 합치는 중…');
+        else if (/원본 소스 불러오/.test(m.log)) setE(Math.max(curE(), 12), '원본 불러오는 중…');
+        else if (/나레이션/.test(m.log)) setE(Math.max(curE(), 35), '🎙 나레이션 만드는 중…');
+        else if (/다시 렌더|합성/.test(m.log)) setE(Math.max(curE(), 58), '🎬 영상 합치는 중…');
+        else if (/썸네일/.test(m.log)) setE(Math.max(curE(), 92), '🖼 썸네일 만드는 중…');
+        else setE(Math.max(curE() + 1, 10), '다시 만드는 중…');
+      }
+      if (m.done) {
+        es.close();
+        if (m.error) { box.querySelector('#ed-msg').textContent = '실패: ' + m.error; const s = box.querySelector('#ed-save'); if (s) { s.disabled = false; s.textContent = '💾 저장하고 다시 만들기'; } return; }
+        setE(100, '완성! 🎉'); const f = box.querySelector('#ed-energy'); if (f) f.style.width = '100%';
+        // 결과카드 갱신 — 같은 projectId 영상·썸네일을 새것으로(캐시 무효화).
+        mediaBust = String(Date.now());
+        (m.clips || []).forEach((c) => { if (!c || !c.projectId) return; const i = resultClips.findIndex((x) => x.projectId === c.projectId); if (i >= 0) resultClips[i] = {...resultClips[i], ...c}; });
+        try { celebrate(); } catch {}
+        loadHistory();
+        setTimeout(() => { if (closeModal) closeModal(); if (resultClips.length) showResults(resultClips, false); }, 1400);
+      }
+    };
+    es.onerror = () => es.close();
   }
 
   // ── 업로드 모달(유튜브·인스타) — projectId 기반, 영상과 동일 엔드포인트 ──
