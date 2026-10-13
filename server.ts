@@ -29,7 +29,7 @@ import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as del
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, addInstagram, removeInstagram, renameInstagram, listInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
 import {facebookStatus, addFacebook, removeFacebook, renameFacebook, listFacebook, verifyFacebook, publishVideo as fbPublishVideo, publishPhotos as fbPublishPhotos, getFbStats, getUploadActivity as getFbActivity} from './lib/facebook';
-import {threadsStatus, addThreads, removeThreads, renameThreads, verifyThreads, publishVideo as thPublishVideo, publishText as thPublishText, getThreadsStats, getUploadActivity as getThActivity, maybeRefreshThreads} from './lib/threads';
+import {threadsStatus, removeThreads, renameThreads, publishVideo as thPublishVideo, publishText as thPublishText, getThreadsStats, getUploadActivity as getThActivity, maybeRefreshThreads, saveThreadsClient, threadsAuthUrl, exchangeThreadsCode} from './lib/threads';
 import {pngToJpeg} from './lib/img-util';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -839,6 +839,20 @@ const server = http.createServer(async (req, res) => {
     catch (e: any) { return done(e.message, false); }
   }
 
+  // ── 스레드 OAuth 콜백(공개: 스레드가 로그인 쿠키 없이 여기로 리다이렉트) ──
+  if (p === '/api/threads/callback' && req.method === 'GET') {
+    const code = u.searchParams.get('code') || '';
+    const err = u.searchParams.get('error') || u.searchParams.get('error_description') || '';
+    const redirectUri = `${ytProto(req)}://${req.headers.host}/api/threads/callback`;
+    const done = (msg: string, ok: boolean) =>
+      res.end(`<!doctype html><meta charset=utf-8><body style="font-family:system-ui;background:#231e18;color:#efe9e0;text-align:center;padding:60px"><h2>${ok ? '✅ 스레드 연결 완료' : '❌ 연결 실패'}</h2><p>${msg}</p><p><a style="color:#4fe0d0" href="/app">← 돌아가기</a> (이 창은 닫아도 됩니다)</p></body>`);
+    res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
+    if (err) return done('스레드에서 취소됨: ' + err, false);
+    if (!code) return done('인증 코드가 없습니다.', false);
+    try { const acc = await exchangeThreadsCode(code, redirectUri); return done(`이제 완성 영상을 스레드(@${acc.username || acc.label})에 올릴 수 있어요.`, true); }
+    catch (e: any) { return done(e.message, false); }
+  }
+
   // ── 이 아래 모든 /api 는 로그인 필요(비번 설정 시) ──
   if (p.startsWith('/api/') && !authed(req))
     return json(res, 401, {error: '로그인이 필요합니다.'});
@@ -1242,16 +1256,20 @@ const server = http.createServer(async (req, res) => {
     };
     return json(res, 200, {connected: true, items, summary, ...(debug ? {debug: diag} : {})});
   }
-  // 스레드 계정 연결 — 토큰만 입력받고 /me로 userId·username 자동 조회(인스타보다 간편).
-  if (p === '/api/threads/connect' && req.method === 'POST') {
+  // 스레드 앱 자격(App ID/Secret) 저장 — 유튜브 config와 동일(한 번만).
+  if (p === '/api/threads/config' && req.method === 'POST') {
     const b = await readBody(req);
-    const accessToken = String(b.accessToken || '').trim();
-    const label = String(b.label || '').trim() || undefined;
-    if (!accessToken) return json(res, 400, {error: '스레드 액세스 토큰을 입력하세요.'});
+    const appId = String(b.appId || '').trim();
+    const appSecret = String(b.appSecret || '').trim();
+    if (!appId && !appSecret) return json(res, 400, {error: '앱 ID/시크릿을 입력하세요.'});
+    saveThreadsClient(appId, appSecret);
+    return json(res, 200, {ok: true, hasClient: threadsStatus().hasClient});
+  }
+  // 스레드 동의 창 URL(유튜브 auth와 동일) — 버튼 누르면 로그인·허용 → 콜백에서 자동 저장.
+  if (p === '/api/threads/auth' && req.method === 'GET') {
     try {
-      const {userId, username} = await verifyThreads(accessToken);
-      const acc = addThreads({userId, accessToken, username, label});
-      return json(res, 200, {connected: true, username, id: acc.id, label: acc.label});
+      const redirectUri = `${ytProto(req)}://${req.headers.host}/api/threads/callback`;
+      return json(res, 200, {url: threadsAuthUrl(redirectUri)});
     } catch (e: any) { return json(res, 400, {error: e.message}); }
   }
   if (p.startsWith('/api/threads/accounts/') && req.method === 'DELETE') {

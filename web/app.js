@@ -1338,15 +1338,17 @@ $('fb-connect')?.addEventListener('click', async () => {
     refreshFbStatus();
   } catch (e) { $('fb-msg').textContent = '실패: ' + e.message; }
 });
-// ── 스레드(Threads) 연결 — 토큰만 입력(인스타보다 간편, /me로 계정 자동 조회) ──
+// ── 스레드(Threads) 연결 — 유튜브처럼 OAuth 버튼(앱 ID/Secret 저장 → 로그인·허용) ──
 async function refreshThStatus() {
   const st = $('th-status'); if (!st) return;
   try {
     const s = await (await fetch('/api/threads/status')).json();
     const accts = s.accounts || [];
     if (s.connected) { st.innerHTML = `<span style="color:var(--teal)">● ${accts.length}개 연결됨</span>`; refreshThActivity(); }
+    else if (s.hasClient) st.innerHTML = '<span style="color:#e0a030">App ID/Secret 저장됨 — 계정 추가 필요</span>';
     else st.textContent = '미연결';
     renderAcctList('th-accounts', 'threads', accts);
+    if ($('th-connect')) $('th-connect').disabled = !s.hasClient;
   } catch {}
 }
 async function refreshThActivity() {
@@ -1365,19 +1367,24 @@ async function refreshThActivity() {
     el.innerHTML = `<span style="color:var(--teal)">📅 오늘 <b>${a.today}</b>개 올림 · 마지막 게시 ${last} · 총 ${a.total}개</span>`;
   } catch {}
 }
+$('th-save-config')?.addEventListener('click', async () => {
+  const appId = $('th-app-id').value.trim();
+  const appSecret = $('th-app-secret').value.trim();
+  if (!appId && !appSecret) { $('th-msg').textContent = 'App ID/Secret을 입력하세요.'; return; }
+  await fetch('/api/threads/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appId, appSecret }) });
+  $('th-msg').textContent = '저장했습니다. 이제 "스레드 로그인으로 계정 추가"를 누르세요.';
+  $('th-app-id').value = ''; $('th-app-secret').value = '';
+  refreshThStatus();
+});
 $('th-connect')?.addEventListener('click', async () => {
-  const accessToken = $('th-token').value.trim();
-  const label = $('th-label') ? $('th-label').value.trim() : '';
-  if (!accessToken) { $('th-msg').textContent = '스레드 액세스 토큰을 입력하세요.'; return; }
-  $('th-msg').textContent = '연결 확인 중…';
+  $('th-msg').textContent = '스레드 로그인 창을 여는 중…';
   try {
-    const r = await fetch('/api/threads/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessToken, label }) });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || '연결 실패');
-    $('th-msg').innerHTML = `<span style="color:var(--teal)">✅ 추가됐습니다 · @${d.username || d.label}</span>`;
-    $('th-token').value = ''; if ($('th-label')) $('th-label').value = '';
-    refreshThStatus();
-  } catch (e) { $('th-msg').textContent = '실패: ' + e.message; }
+    const d = await (await fetch('/api/threads/auth')).json();
+    if (!d.url) throw new Error(d.error || '연결 URL 실패');
+    window.open(d.url, '_blank');
+    $('th-msg').textContent = '새 창에서 스레드 로그인·허용 후, 이 창으로 돌아와 상태를 새로고침하세요.';
+    setTimeout(refreshThStatus, 4000);
+  } catch (e) { $('th-msg').textContent = e.message; }
 });
 $('save-keys').onclick = async () => {
   // 1) 단가를 localStorage에 저장(studio.js가 onvideo-unit-rates에서 읽어씀)

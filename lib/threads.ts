@@ -21,12 +21,13 @@ export type ThreadsConfig = {
 };
 // ★멀티계정: 여러 사람의 스레드 계정을 등록해두고 골라 보낸다. 각 계정 = 독립 userId+토큰.
 export type ThreadsAccount = ThreadsConfig & {id: string; label?: string; addedAt?: number};
-type ThreadsStore = {accounts: ThreadsAccount[]};
+// appId/appSecret = OAuth 앱 자격(스레드 앱 공용, 계정 공통). accounts = 연결된 계정들.
+type ThreadsStore = {accounts: ThreadsAccount[]; appId?: string; appSecret?: string};
 
 function loadStore(): ThreadsStore {
   let raw: any;
   try { raw = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return {accounts: []}; }
-  if (raw && Array.isArray(raw.accounts)) return {accounts: raw.accounts.filter((a: any) => a && a.id && a.userId && a.accessToken)};
+  if (raw && Array.isArray(raw.accounts)) return {accounts: raw.accounts.filter((a: any) => a && a.id && a.userId && a.accessToken), appId: raw.appId, appSecret: raw.appSecret};
   if (raw && raw.userId && raw.accessToken) { // 구버전 단일 → 배열 마이그레이션(혹시 모를 하위호환)
     return {accounts: [{id: 'legacy', label: raw.username || '내 계정', userId: raw.userId, accessToken: raw.accessToken, username: raw.username, tokenSavedAt: raw.tokenSavedAt, addedAt: raw.tokenSavedAt}]};
   }
@@ -80,13 +81,56 @@ function patchThreads(id: string, patch: Partial<ThreadsAccount>) {
   saveStore(store);
 }
 export function threadsStatus() {
-  const accounts = listThreads();
+  const store = loadStore();
+  const accounts = store.accounts;
   const first = accounts[0];
   return {
+    hasClient: !!(store.appId && store.appSecret), // OAuth 앱 자격 저장됨 = '계정 연결' 버튼 활성화
     connected: accounts.length > 0,
     accounts: accounts.map((a) => ({id: a.id, label: a.label || a.username || '', username: a.username || '', userId: a.userId || ''})),
     username: first?.username || '', userId: first?.userId || '', // 하위호환
   };
+}
+
+// ── OAuth(유튜브처럼 버튼 한 번으로 연결) ──
+const OAUTH_SCOPE = 'threads_basic,threads_content_publish';
+export function saveThreadsClient(appId?: string, appSecret?: string) {
+  const store = loadStore();
+  if (appId) store.appId = appId.trim();
+  if (appSecret) store.appSecret = appSecret.trim();
+  saveStore(store);
+}
+// 1) 동의 창 URL — 사용자가 여기서 스레드 계정 접근을 허용한다.
+export function threadsAuthUrl(redirectUri: string): string {
+  const s = loadStore();
+  if (!s.appId) throw new Error('먼저 스레드 앱 ID/시크릿을 저장하세요.');
+  const p = new URLSearchParams({client_id: s.appId, redirect_uri: redirectUri, scope: OAUTH_SCOPE, response_type: 'code'});
+  return 'https://threads.net/oauth/authorize?' + p.toString();
+}
+// 2) 동의 후 받은 code → 단기토큰 → 장기(60일)토큰 교환 → 계정 저장(append, 멀티계정).
+export async function exchangeThreadsCode(code: string, redirectUri: string, label?: string): Promise<ThreadsAccount> {
+  const s = loadStore();
+  if (!s.appId || !s.appSecret) throw new Error('앱 ID/시크릿이 없습니다.');
+  const clean = code.split('#')[0]; // Threads는 code 뒤에 '#_'를 붙여줌 → 제거
+  // 단기 토큰
+  const r = await fetch('https://graph.threads.net/oauth/access_token', {
+    method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams({client_id: s.appId, client_secret: s.appSecret, code: clean, grant_type: 'authorization_code', redirect_uri: redirectUri}),
+  });
+  const d: any = await r.json();
+  if (!r.ok || !d.access_token) throw new Error('토큰 교환 실패: ' + (d?.error_message || d?.error?.message || d?.error || JSON.stringify(d).slice(0, 200)));
+  const shortTok = d.access_token; const userId = String(d.user_id || '');
+  // 장기(60일) 토큰 교환 — 실패해도 단기로 폴백.
+  let longTok = shortTok;
+  try {
+    const lr = await fetch(`${HOST}/access_token?grant_type=th_exchange_token&client_secret=${encodeURIComponent(s.appSecret)}&access_token=${encodeURIComponent(shortTok)}`, {cache: 'no-store'});
+    const ld: any = await lr.json();
+    if (lr.ok && ld.access_token) longTok = ld.access_token;
+  } catch {}
+  // username 조회(실패해도 저장은 진행).
+  let username = '';
+  try { username = (await verifyThreads(longTok)).username; } catch {}
+  return addThreads({userId, accessToken: longTok, username, label});
 }
 
 // 연결 확인 + userId·username 조회(토큰 유효성 검증). ★스레드는 /me로 자동 조회 → 토큰만 입력받으면 됨.
