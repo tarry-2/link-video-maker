@@ -73,6 +73,22 @@
       .pf-th-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #000; text-decoration: none; }
       .pf-num { display: inline-block; font-weight: 800; color: var(--teal); background: color-mix(in srgb, var(--teal) 14%, transparent); padding: 0 6px; border-radius: 6px; margin-right: 2px; }
       /* 📊 성과 패널 */
+      .perf-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 18px; }
+      .perf-head { font-size: 16px; font-weight: 800; letter-spacing: -.3px; margin-bottom: 12px; }
+      .perf-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+      .perf-tab { flex: 1 1 auto; min-width: 72px; border: 1px solid var(--line); background: rgba(127,127,127,.05); border-radius: 12px; padding: 10px 8px; font-size: 13px; font-weight: 800; cursor: pointer; color: var(--muted); transition: all .15s ease; }
+      .perf-tab:hover { border-color: var(--teal); }
+      .perf-tab.active { background: linear-gradient(135deg,var(--teal),var(--purple)); color: #fff; border-color: transparent; box-shadow: 0 4px 14px rgba(107,76,240,.3); }
+      .perf-tab.off { opacity: .45; }
+      #perf-panel { padding: 0; border: none; background: none; margin: 0; }
+      /* 영상별 막대그래프 */
+      .perf-bars { display: flex; flex-direction: column; gap: 7px; }
+      .perf-bar-row { display: flex; align-items: center; gap: 9px; }
+      .perf-bar-name { width: 34%; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+      .perf-bar-track { flex: 1; height: 20px; background: rgba(127,127,127,.09); border-radius: 6px; overflow: hidden; position: relative; }
+      .perf-bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg,var(--teal),var(--purple)); min-width: 2px; transition: width .5s ease; }
+      .perf-bar-val { font-size: 11.5px; font-weight: 800; color: var(--teal); white-space: nowrap; min-width: 46px; text-align: right; }
+      .perf-empty { font-size: 13px; color: var(--muted); padding: 24px 8px; text-align: center; }
       .yt-stats { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; margin-bottom: 18px; }
       .yt-stats-head { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800; margin-bottom: 14px; letter-spacing: -.3px; }
       .yt-kpis { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -230,10 +246,17 @@
         <!-- 포폴 검색(제목) — 많아지면 찾기 쉽게 -->
         <div style="margin:0 0 14px"><input id="pf-search" class="input" type="search" placeholder="🔍 제목으로 검색" style="width:100%"></div>
 
-        <!-- 📊 성과(올린 영상의 조회수·반응 집계) -->
-        <div id="yt-stats" class="yt-stats" hidden></div>
-        <div id="ig-stats" class="yt-stats" hidden></div>
-        <div id="fb-stats" class="yt-stats" hidden></div>
+        <!-- 📊 성과(올린 영상의 조회수·반응 집계) — 플랫폼 탭 클릭해서 상세+그래프 -->
+        <div id="perf-wrap" class="perf-wrap" hidden>
+          <div class="perf-head">📊 성과 <span class="hint">· 플랫폼을 눌러 상세·그래프 보기</span></div>
+          <div id="perf-tabs" class="perf-tabs">
+            <button class="perf-tab" data-plat="instagram">📷 인스타</button>
+            <button class="perf-tab" data-plat="youtube">▶️ 유튜브</button>
+            <button class="perf-tab" data-plat="facebook">👍 페북</button>
+            <button class="perf-tab" data-plat="threads">🧵 스레드</button>
+          </div>
+          <div id="perf-panel" class="yt-stats"></div>
+        </div>
 
         <!-- 큰 미리보기 플레이어 + 액션 -->
         <div class="pf-stage">
@@ -1099,48 +1122,71 @@
         if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + '천';
         return String(n);
       }
-      // ── 📊 성과 패널 공용 렌더(유튜브/인스타) ──
-      function renderPerf(boxId, d, title) {
-        const box = $(boxId);
-        if (!d.connected || !d.summary || !d.summary.total) { box.hidden = true; return; }
-        const s = d.summary, medal = ['🥇', '🥈', '🥉'];
-        const top = s.top3.map((it, i) => `<div class="yt-top-row"><span class="yt-rank">${medal[i] || ''}</span><span class="yt-top-title">${esc(it.title)}</span><span class="yt-top-views">${fmtNum(it.views)}회</span></div>`).join('');
+      // ── 📊 성과 패널 (플랫폼 탭 + 상세 지표 + 막대그래프) ──
+      const PERF = {}; // {instagram:data, youtube:data, facebook:data, threads:data}
+      let perfPlat = null;
+      // 플랫폼별 추가 지표(플랫폼이 실제로 주는 것만). 유튜브는 공유·저장 비공개라 없음.
+      const PLAT_META = {
+        instagram: {label: '📷 인스타', url: '/api/instagram/stats', extra: [['saved', '저장'], ['shares', '공유']]},
+        youtube: {label: '▶️ 유튜브', url: '/api/youtube/stats', extra: []},
+        facebook: {label: '👍 페북', url: '/api/facebook/stats', extra: [['shares', '공유']]},
+        threads: {label: '🧵 스레드', url: '/api/threads/stats', extra: [['shares', '공유'], ['reposts', '리포스트'], ['quotes', '인용']]},
+      };
+      async function loadAllStats() {
+        await Promise.all(Object.entries(PLAT_META).map(async ([plat, m]) => {
+          try { PERF[plat] = await (await fetch(m.url + '?t=' + Date.now(), {cache: 'no-store'})).json(); } catch { PERF[plat] = {}; }
+        }));
+        // 카드 스테이지 성과 표시용(유튜브 아이템 캐시) — 기존 호환.
+        window.__ytStats = {}; ((PERF.youtube && PERF.youtube.items) || []).forEach(it => { window.__ytStats[it.id] = it; });
+        if (typeof curIdx === 'number' && myItems[curIdx]) selectVideo(curIdx, false);
+        renderPerfTabs();
+      }
+      function renderPerfTabs() {
+        const has = {}; let firstWithData = null;
+        document.querySelectorAll('.perf-tab').forEach(btn => {
+          const plat = btn.dataset.plat, d = PERF[plat];
+          const hasData = !!(d && d.summary && d.summary.total);
+          btn.classList.toggle('off', !hasData);
+          if (hasData && !firstWithData) firstWithData = plat;
+          has[plat] = hasData;
+        });
+        const anyData = Object.values(has).some(Boolean);
+        $('perf-wrap').hidden = !anyData;
+        if (!anyData) return;
+        if (!perfPlat || !has[perfPlat]) perfPlat = firstWithData;
+        selectPerfTab(perfPlat);
+      }
+      function selectPerfTab(plat) {
+        perfPlat = plat;
+        document.querySelectorAll('.perf-tab').forEach(b => b.classList.toggle('active', b.dataset.plat === plat));
+        renderPerfPanel(plat, PERF[plat]);
+      }
+      function renderPerfPanel(plat, d) {
+        const box = $('perf-panel'), meta = PLAT_META[plat];
+        if (!d || !d.connected) { box.innerHTML = `<p class="perf-empty">${meta.label} 아직 연결 안 됨 — 영상 만들기 화면 ⚙ 키 설정에서 연결하세요.</p>`; return; }
+        if (!d.summary || !d.summary.total) { box.innerHTML = `<p class="perf-empty">${meta.label}에 올린 게시물이 없거나 성과 데이터가 아직 없어요.</p>`; return; }
+        const s = d.summary;
+        // KPI: 조회/좋아요/댓글 + 플랫폼 추가 지표(있는 것만).
+        const cap = k => k.charAt(0).toUpperCase() + k.slice(1);
+        const kpiDefs = [['totalViews', '조회수'], ['totalLikes', '좋아요'], ['totalComments', '댓글'], ...meta.extra.map(([k, lbl]) => ['total' + cap(k), lbl])];
+        const kpis = kpiDefs.filter(([k]) => s[k] != null).map(([k, lbl]) => `<div class="yt-kpi"><div class="num">${fmtNum(s[k])}</div><div class="lbl">총 ${lbl}</div></div>`).join('')
+          + `<div class="yt-kpi"><div class="num">${s.total}</div><div class="lbl">올린 수</div></div>`;
+        // 영상별 조회수 막대그래프(상위 8).
+        const chart = s.chart || [], maxV = Math.max(1, ...chart.map(c => c.views || 0));
+        const bars = chart.map(c => `<div class="perf-bar-row"><span class="perf-bar-name">${esc(c.title || '')}</span><div class="perf-bar-track"><div class="perf-bar-fill" style="width:${Math.round((c.views || 0) / maxV * 100)}%"></div></div><span class="perf-bar-val">${fmtNum(c.views || 0)}</span></div>`).join('');
+        const medal = ['🥇', '🥈', '🥉'];
+        const top = (s.top3 || []).map((it, i) => `<div class="yt-top-row"><span class="yt-rank">${medal[i] || ''}</span><span class="yt-top-title">${esc(it.title)}</span><span class="yt-top-views">${fmtNum(it.views)}회</span></div>`).join('');
         const voiceChips = (s.byVoice || []).filter(v => v.avg > 0).map(v => `<span class="yt-chip">🎙 ${esc(v.name)} <b>평균 ${fmtNum(v.avg)}</b></span>`).join('');
         const catChips = (s.byCategory || []).filter(c => c.avg > 0).map(c => `<span class="yt-chip">${esc(c.name)} <b>평균 ${fmtNum(c.avg)}</b></span>`).join('');
-        box.hidden = false;
+        const ytNote = plat === 'youtube' ? '<p class="mini-state" style="margin-top:6px">유튜브는 공유·저장 수를 API로 공개하지 않아 조회·좋아요·댓글만 표시돼요.</p>' : '';
         box.innerHTML = `
-          <div class="yt-stats-head">${title} <span style="font-size:12px;color:var(--muted);font-weight:600">· 올린 영상 ${s.total}개</span></div>
-          <div class="yt-kpis">
-            <div class="yt-kpi"><div class="num">${fmtNum(s.totalViews)}</div><div class="lbl">총 조회수</div></div>
-            <div class="yt-kpi"><div class="num">${fmtNum(s.totalLikes)}</div><div class="lbl">총 좋아요</div></div>
-            ${s.totalShares != null ? `<div class="yt-kpi"><div class="num">${fmtNum(s.totalShares)}</div><div class="lbl">총 공유수</div></div>` : ''}
-            <div class="yt-kpi"><div class="num">${s.total}</div><div class="lbl">올린 영상</div></div>
-          </div>
-          <div class="yt-sec-title">🏆 조회수 TOP 3</div>
-          <div class="yt-top">${top}</div>
+          <div class="yt-kpis">${kpis}</div>${ytNote}
+          ${bars ? `<div class="yt-sec-title">📈 영상별 조회수</div><div class="perf-bars">${bars}</div>` : ''}
+          <div class="yt-sec-title">🏆 조회수 TOP 3</div><div class="yt-top">${top}</div>
           ${voiceChips ? `<div class="yt-sec-title">🎙 어떤 목소리가 먹히나 (평균)</div><div class="yt-chips">${voiceChips}</div>` : ''}
           ${catChips ? `<div class="yt-sec-title">📂 어떤 주제가 먹히나 (평균)</div><div class="yt-chips">${catChips}</div>` : ''}`;
       }
-      async function loadYtStats() {
-        try {
-          const d = await (await fetch('/api/youtube/stats?t=' + Date.now(), {cache: 'no-store'})).json();
-          window.__ytStats = {}; (d.items || []).forEach(it => { window.__ytStats[it.id] = it; });
-          renderPerf('yt-stats', d, '📊 유튜브 성과');
-          if (typeof curIdx === 'number' && myItems[curIdx]) selectVideo(curIdx, false);
-        } catch (e) {}
-      }
-      async function loadIgStats() {
-        try {
-          const d = await (await fetch('/api/instagram/stats?t=' + Date.now(), {cache: 'no-store'})).json();
-          renderPerf('ig-stats', d, '📷 인스타 성과');
-        } catch (e) {}
-      }
-      async function loadFbStats() {
-        try {
-          const d = await (await fetch('/api/facebook/stats?t=' + Date.now(), {cache: 'no-store'})).json();
-          renderPerf('fb-stats', d, '👍 페이스북 성과');
-        } catch (e) {}
-      }
+      $('perf-tabs')?.addEventListener('click', e => { const b = e.target.closest('.perf-tab'); if (b) selectPerfTab(b.dataset.plat); });
       // ── 📊 오늘의 활동(제작·유튜브·인스타 각각) ──
       function fmtLast(x) {
         if (!x || !x.lastAt) return '없음';
@@ -1195,9 +1241,7 @@
       applyVoicesTab(new URLSearchParams(location.search).get('tab') || 'voice');
 
       loadMyVideos();
-      loadYtStats();
-      loadIgStats();
-      loadFbStats();
+      loadAllStats();
       loadActivity();
       setInterval(loadActivity, 60000); // "N분 전" 실시간 갱신
     </script>

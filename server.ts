@@ -303,6 +303,29 @@ function readProductCta(id: string): string {
   return '';
 }
 
+// ── 성과 요약 공용 빌더 — 조회/좋아요/댓글 + 플랫폼별 추가 지표(extra: shares·saved·reposts·quotes 등) 합계.
+//   items = [{views,likes,comments, voice,category, ...extra}]. extraKeys에 있는 지표만 total*로 합산(대문자 키).
+function perfSummary(items: any[], extraKeys: string[] = []) {
+  const avgBy = (key: 'voice' | 'category') => {
+    const m: Record<string, number[]> = {};
+    for (const it of items) { const kk = it[key]; if (!kk) continue; (m[kk] = m[kk] || []).push(it.views || it.likes || 0); }
+    return Object.entries(m).map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length})).sort((a, b) => b.avg - a.avg);
+  };
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const sum: any = {
+    total: items.length,
+    totalViews: items.reduce((n, x) => n + (x.views || 0), 0),
+    totalLikes: items.reduce((n, x) => n + (x.likes || 0), 0),
+    totalComments: items.reduce((n, x) => n + (x.comments || 0), 0),
+    top3: items.slice(0, 3),
+    chart: items.slice(0, 8).map((x) => ({title: x.title, views: x.views || 0, likes: x.likes || 0})), // 막대그래프용 상위 8
+    byVoice: avgBy('voice').slice(0, 5),
+    byCategory: avgBy('category').slice(0, 5),
+  };
+  for (const key of extraKeys) sum['total' + cap(key)] = items.reduce((n, x) => n + (x[key] || 0), 0);
+  return sum;
+}
+
 // 재사용(CC BY) 하이라이트의 출처 문구 — 상세설명·캡션에 반드시 포함(저작권 표기 의무). 도메인은 뺀다(stripAttrUrl).
 //   project.json.attribution 우선, 없으면 attribution.txt 폴백. 하이라이트가 아니면 빈 문자열.
 function readAttribution(id: string): string {
@@ -926,24 +949,8 @@ const server = http.createServer(async (req, res) => {
     const items = withId
       .map((x) => ({...x, ...(stats[x.videoId] || {views: 0, likes: 0, comments: 0, shares: 0})}))
       .sort((a, b) => b.views - a.views);
-    const avgBy = (key: 'voice' | 'category') => {
-      const m: Record<string, number[]> = {};
-      // 채널에서만 병합된 영상(앱 밖 업로드 등)은 voice·category가 없으니 목소리/카테고리 통계에서 제외('undefined' 버킷 방지).
-      for (const it of items) { const k = (it as any)[key]; if (!k) continue; (m[k] = m[k] || []).push(it.views); }
-      return Object.entries(m)
-        .map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length}))
-        .sort((a, b) => b.avg - a.avg);
-    };
-    const summary = {
-      total: items.length,
-      totalViews: items.reduce((n, x) => n + x.views, 0),
-      totalLikes: items.reduce((n, x) => n + x.likes, 0),
-      totalShares: items.reduce((n, x) => n + (x.shares || 0), 0),
-      top3: items.slice(0, 3),
-      byVoice: avgBy('voice').slice(0, 5),
-      byCategory: avgBy('category').slice(0, 5),
-    };
-    return json(res, 200, {connected: true, items, summary, ...(diag ? {debug: diag} : {})});
+    // 유튜브는 공유/저장을 Data API가 공개하지 않음(비공개) → 조회·좋아요·댓글만.
+    return json(res, 200, {connected: true, items, summary: perfSummary(items), ...(diag ? {debug: diag} : {})});
   }
   // ── 유튜브: Client ID/Secret 저장 ──
   if (p === '/api/youtube/config' && req.method === 'POST') {
@@ -1037,7 +1044,7 @@ const server = http.createServer(async (req, res) => {
     ];
     const withUrl = all.filter((x) => x.url);
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 instagramUrl(permalink) 저장된 게 없음']} : {})});
-    let byPermalink: Record<string, {views: number; likes: number; comments: number}> = {};
+    let byPermalink: Record<string, {views: number; likes: number; comments: number; saved?: number; shares?: number}> = {};
     try { byPermalink = await getInstaStats(diag); }
     catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message, ...(debug ? {debug: [...(diag || []), '예외: ' + e.message]} : {})}); }
     if (diag) {
@@ -1048,24 +1055,9 @@ const server = http.createServer(async (req, res) => {
       diag.push(`permalink 매칭 성공 ${matched}/${withUrl.length}개 (0이면 키 불일치)`);
     }
     const items = withUrl
-      .map((x) => ({...x, ...(byPermalink[x.url] || {views: 0, likes: 0, comments: 0})}))
+      .map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, saved: 0, shares: 0}, ...(byPermalink[x.url] || {})}))
       .sort((a, b) => b.views - a.views || b.likes - a.likes);
-    const avgBy = (key: 'voice' | 'category') => {
-      const m: Record<string, number[]> = {};
-      for (const it of items) (m[(it as any)[key]] = m[(it as any)[key]] || []).push(it.views || it.likes);
-      return Object.entries(m)
-        .map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length}))
-        .sort((a, b) => b.avg - a.avg);
-    };
-    const summary = {
-      total: items.length,
-      totalViews: items.reduce((n, x) => n + x.views, 0),
-      totalLikes: items.reduce((n, x) => n + x.likes, 0),
-      top3: items.slice(0, 3),
-      byVoice: avgBy('voice').slice(0, 5),
-      byCategory: avgBy('category').slice(0, 5),
-    };
-    return json(res, 200, {connected: true, items, summary, ...(debug ? {debug: diag} : {})});
+    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['saved', 'shares']), ...(debug ? {debug: diag} : {})});
   }
   // 인스타 연결(계정 추가 — 여러 개 등록 가능. 같은 계정이면 토큰 갱신)
   if (p === '/api/instagram/connect' && req.method === 'POST') {
@@ -1170,23 +1162,9 @@ const server = http.createServer(async (req, res) => {
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 facebookUrl 저장된 게 없음']} : {})});
     const diag: string[] = [];
     const stats = await getFbStats(debug ? diag : undefined);
-    const items = withUrl.map((x) => ({...x, ...(stats[x.url] || {views: 0, likes: 0, comments: 0, shares: 0})}))
+    const items = withUrl.map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, shares: 0}, ...(stats[x.url] || {})}))
       .sort((a: any, b: any) => b.views - a.views || b.likes - a.likes);
-    const avgBy = (key: 'voice' | 'category') => {
-      const m: Record<string, number[]> = {};
-      for (const it of items) (m[(it as any)[key]] = m[(it as any)[key]] || []).push((it as any).views || (it as any).likes);
-      return Object.entries(m).map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length})).sort((a, b) => b.avg - a.avg);
-    };
-    const summary = {
-      total: items.length,
-      totalViews: items.reduce((n: number, x: any) => n + x.views, 0),
-      totalLikes: items.reduce((n: number, x: any) => n + x.likes, 0),
-      totalShares: items.reduce((n: number, x: any) => n + (x.shares || 0), 0),
-      top3: items.slice(0, 3),
-      byVoice: avgBy('voice').slice(0, 5),
-      byCategory: avgBy('category').slice(0, 5),
-    };
-    return json(res, 200, {connected: true, items, summary, ...(debug ? {debug: diag} : {})});
+    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['shares']), ...(debug ? {debug: diag} : {})});
   }
   if (p === '/api/facebook/connect' && req.method === 'POST') {
     const b = await readBody(req);
@@ -1266,22 +1244,9 @@ const server = http.createServer(async (req, res) => {
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 threadsUrl 저장된 게 없음']} : {})});
     const diag: string[] = [];
     const stats = await getThreadsStats(debug ? diag : undefined);
-    const items = withUrl.map((x) => ({...x, ...(stats[x.url] || {views: 0, likes: 0, comments: 0})}))
+    const items = withUrl.map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, shares: 0, reposts: 0, quotes: 0}, ...(stats[x.url] || {})}))
       .sort((a: any, b: any) => b.views - a.views || b.likes - a.likes);
-    const avgBy = (key: 'voice' | 'category') => {
-      const m: Record<string, number[]> = {};
-      for (const it of items) (m[(it as any)[key]] = m[(it as any)[key]] || []).push((it as any).views || (it as any).likes);
-      return Object.entries(m).map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length})).sort((a, b) => b.avg - a.avg);
-    };
-    const summary = {
-      total: items.length,
-      totalViews: items.reduce((n: number, x: any) => n + x.views, 0),
-      totalLikes: items.reduce((n: number, x: any) => n + x.likes, 0),
-      top3: items.slice(0, 3),
-      byVoice: avgBy('voice').slice(0, 5),
-      byCategory: avgBy('category').slice(0, 5),
-    };
-    return json(res, 200, {connected: true, items, summary, ...(debug ? {debug: diag} : {})});
+    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['shares', 'reposts', 'quotes']), ...(debug ? {debug: diag} : {})});
   }
   // 스레드 앱 자격(App ID/Secret) 저장 — 유튜브 config와 동일(한 번만).
   if (p === '/api/threads/config' && req.method === 'POST') {

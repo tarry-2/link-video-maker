@@ -385,16 +385,17 @@ async function igActivityForAccount(c: InstagramAccount): Promise<{today: number
 // 성과 추적: 내 인스타 미디어의 조회수·좋아요·댓글을 permalink 키로 반환.
 // 좋아요/댓글은 미디어 목록 fields로 1콜(확실), 조회수(릴스 재생)는 미디어별 insights(views).
 // diag(옵션): 진단 로그 배열을 넘기면 Meta API 실제 응답/에러를 담아준다(삼키지 않음). debug=1 용.
+export type InstaStat = {views: number; likes: number; comments: number; saved: number; shares: number};
 export async function getInstaStats(
   diag?: string[],
-): Promise<Record<string, {views: number; likes: number; comments: number}>> {
-  const byPermalink: Record<string, {views: number; likes: number; comments: number}> = {};
+): Promise<Record<string, InstaStat>> {
+  const byPermalink: Record<string, InstaStat> = {};
   const accounts = listInstagram();
   if (!accounts.length) { diag?.push('연결 안 됨: 계정 없음'); return byPermalink; }
   for (const c of accounts) await igStatsForAccount(c, byPermalink, diag);
   return byPermalink;
 }
-async function igStatsForAccount(c: InstagramAccount, byPermalink: Record<string, {views: number; likes: number; comments: number}>, diag?: string[]): Promise<void> {
+async function igStatsForAccount(c: InstagramAccount, byPermalink: Record<string, InstaStat>, diag?: string[]): Promise<void> {
   const base = host(c), token = c.accessToken!;
   const tokAge = c.tokenSavedAt ? Math.round((Date.now() - c.tokenSavedAt) / 86400000) + '일' : '미기록';
   diag?.push(`base=${base} · igUserId=${c.igUserId} · 토큰나이=${tokAge}`);
@@ -416,20 +417,31 @@ async function igStatsForAccount(c: InstagramAccount, byPermalink: Record<string
     } catch (e: any) { diag?.push(`❌ media fetch 예외: ${e.message}`); break; }
   }
   diag?.push(`총 미디어 ${media.length}개 · 첫 permalink=${media[0]?.permalink || '(없음)'} · 첫 좋아요=${media[0]?.likes ?? '?'}`);
-  // 2) 각 미디어 조회수(insights views) — 실패해도 좋아요/댓글은 유지. 첫 실패만 진단 기록.
+  // 2) 각 미디어 insights(조회수·저장·공유). 좋아요/댓글은 미디어 목록이 확실. 실패해도 그건 유지.
+  //    metric=views,saved,shares 한 콜 시도 → 일부 메트릭 미지원으로 전체 400이면 views만 재시도(안전).
+  const parseIns = (data: any): {views: number; saved: number; shares: number} => {
+    const out = {views: 0, saved: 0, shares: 0};
+    for (const row of (data?.data || [])) {
+      const v = Number(row?.values?.[0]?.value ?? row?.total_value?.value ?? 0);
+      if (row.name === 'views') out.views = v; else if (row.name === 'saved') out.saved = v; else if (row.name === 'shares') out.shares = v;
+    }
+    return out;
+  };
   let insightNoted = false;
   for (const m of media) {
-    let views = 0;
+    let ins = {views: 0, saved: 0, shares: 0};
     try {
-      const ir = await fetch(`${base}/${API}/${m.id}/insights?metric=views&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
-      const idata: any = await ir.json();
-      if (ir.ok) views = Number(idata.data?.[0]?.values?.[0]?.value ?? idata.data?.[0]?.total_value?.value ?? 0);
-      else if (!insightNoted) {
-        const err = idata?.error || idata;
-        diag?.push(`⚠️ insights(views) 실패 HTTP ${ir.status} (code=${err?.code ?? '?'}): ${String(err?.message || JSON.stringify(err)).slice(0, 300)}`);
-        insightNoted = true;
+      let ir = await fetch(`${base}/${API}/${m.id}/insights?metric=views,saved,shares&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+      let idata: any = await ir.json();
+      if (ir.ok) ins = parseIns(idata);
+      else {
+        // 폴백: 조회수만(저장·공유 미지원 환경).
+        ir = await fetch(`${base}/${API}/${m.id}/insights?metric=views&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+        idata = await ir.json();
+        if (ir.ok) ins.views = Number(idata.data?.[0]?.values?.[0]?.value ?? idata.data?.[0]?.total_value?.value ?? 0);
+        else if (!insightNoted) { const err = idata?.error || idata; diag?.push(`⚠️ insights 실패 HTTP ${ir.status} (code=${err?.code ?? '?'}): ${String(err?.message || JSON.stringify(err)).slice(0, 300)}`); insightNoted = true; }
       }
     } catch (e: any) { if (!insightNoted) { diag?.push(`⚠️ insights 예외: ${e.message}`); insightNoted = true; } }
-    if (m.permalink) byPermalink[m.permalink] = {views, likes: m.likes, comments: m.comments};
+    if (m.permalink) byPermalink[m.permalink] = {views: ins.views, likes: m.likes, comments: m.comments, saved: ins.saved, shares: ins.shares};
   }
 }

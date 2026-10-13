@@ -308,16 +308,17 @@ async function thActivityForAccount(c: ThreadsAccount): Promise<{today: number; 
   } catch (e: any) { return {today: 0, lastAt: null, total: 0, followers, error: e.message}; }
 }
 
-// 성과 추적: 내 스레드 게시물의 조회수·좋아요·댓글(replies)을 permalink 키로 반환.
-// 스레드는 좋아요/댓글이 미디어 목록 fields에 없어 insights(views,likes,replies)로 조회한다.
-export async function getThreadsStats(diag?: string[]): Promise<Record<string, {views: number; likes: number; comments: number}>> {
-  const byPermalink: Record<string, {views: number; likes: number; comments: number}> = {};
+// 성과 추적: 내 스레드 게시물의 조회수·좋아요·댓글(replies)·공유·리포스트·인용을 permalink 키로 반환.
+// 스레드는 좋아요/댓글이 미디어 목록 fields에 없어 insights(views,likes,replies,reposts,quotes,shares)로 조회한다.
+export type ThreadsStat = {views: number; likes: number; comments: number; shares: number; reposts: number; quotes: number};
+export async function getThreadsStats(diag?: string[]): Promise<Record<string, ThreadsStat>> {
+  const byPermalink: Record<string, ThreadsStat> = {};
   const accounts = listThreads();
   if (!accounts.length) { diag?.push('연결 안 됨: 계정 없음'); return byPermalink; }
   for (const c of accounts) await thStatsForAccount(c, byPermalink, diag);
   return byPermalink;
 }
-async function thStatsForAccount(c: ThreadsAccount, byPermalink: Record<string, {views: number; likes: number; comments: number}>, diag?: string[]): Promise<void> {
+async function thStatsForAccount(c: ThreadsAccount, byPermalink: Record<string, ThreadsStat>, diag?: string[]): Promise<void> {
   const token = c.accessToken!;
   const media: {id: string; permalink: string}[] = [];
   let url = `${HOST}/${API}/me/threads?fields=id,permalink&limit=100&access_token=${encodeURIComponent(token)}`;
@@ -331,17 +332,30 @@ async function thStatsForAccount(c: ThreadsAccount, byPermalink: Record<string, 
     } catch (e: any) { diag?.push(`❌ threads 목록 예외: ${e.message}`); break; }
   }
   diag?.push(`총 게시물 ${media.length}개`);
+  const parseIns = (data: any): ThreadsStat => {
+    const o: ThreadsStat = {views: 0, likes: 0, comments: 0, shares: 0, reposts: 0, quotes: 0};
+    for (const row of (data?.data || [])) {
+      const v = Number(row?.values?.[0]?.value ?? row?.total_value?.value ?? 0);
+      if (row.name === 'views') o.views = v; else if (row.name === 'likes') o.likes = v; else if (row.name === 'replies') o.comments = v;
+      else if (row.name === 'shares') o.shares = v; else if (row.name === 'reposts') o.reposts = v; else if (row.name === 'quotes') o.quotes = v;
+    }
+    return o;
+  };
   let noted = false;
   for (const m of media) {
-    let views = 0, likes = 0, comments = 0;
+    let st: ThreadsStat = {views: 0, likes: 0, comments: 0, shares: 0, reposts: 0, quotes: 0};
     try {
-      const ir = await fetch(`${HOST}/${API}/${m.id}/insights?metric=views,likes,replies&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
-      const idata: any = await ir.json();
-      if (ir.ok) for (const row of (idata.data || [])) {
-        const v = Number(row?.values?.[0]?.value ?? row?.total_value?.value ?? 0);
-        if (row.name === 'views') views = v; else if (row.name === 'likes') likes = v; else if (row.name === 'replies') comments = v;
-      } else if (!noted) { diag?.push(`⚠️ insights 실패 HTTP ${ir.status}: ${String(idata?.error?.message || '').slice(0, 200)}`); noted = true; }
+      let ir = await fetch(`${HOST}/${API}/${m.id}/insights?metric=views,likes,replies,reposts,quotes,shares&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+      let idata: any = await ir.json();
+      if (ir.ok) st = parseIns(idata);
+      else {
+        // 폴백: 일부 메트릭 미지원이면 기본 3개만.
+        ir = await fetch(`${HOST}/${API}/${m.id}/insights?metric=views,likes,replies&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+        idata = await ir.json();
+        if (ir.ok) st = parseIns(idata);
+        else if (!noted) { diag?.push(`⚠️ insights 실패 HTTP ${ir.status}: ${String(idata?.error?.message || '').slice(0, 200)}`); noted = true; }
+      }
     } catch (e: any) { if (!noted) { diag?.push(`⚠️ insights 예외: ${e.message}`); noted = true; } }
-    byPermalink[m.permalink] = {views, likes, comments};
+    byPermalink[m.permalink] = st;
   }
 }
