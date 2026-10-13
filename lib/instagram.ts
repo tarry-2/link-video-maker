@@ -3,6 +3,7 @@
 // 설정(IG User ID·access token)은 data 볼륨 instagram.json에 저장(재배포해도 유지).
 import fs from 'node:fs';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {geminiGenerate} from './gemini';
 import {openaiJson} from './openai';
 
@@ -41,20 +42,72 @@ export type InstagramConfig = {
   username?: string; // 표시용
   tokenSavedAt?: number; // 토큰 발급/갱신 시각(ms). 자동 갱신 판단용.
 };
+// ★멀티계정: 여러 사람의 인스타 계정을 등록해두고 골라 보낸다. 각 계정 = 독립 igUserId+토큰.
+export type InstagramAccount = InstagramConfig & {id: string; label?: string; addedAt?: number};
+type InstagramStore = {accounts: InstagramAccount[]};
 
-export function loadInstagram(): InstagramConfig {
-  try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return {}; }
+function loadStore(): InstagramStore {
+  let raw: any;
+  try { raw = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return {accounts: []}; }
+  if (raw && Array.isArray(raw.accounts)) return {accounts: raw.accounts.filter((a: any) => a && a.id && a.igUserId && a.accessToken)};
+  if (raw && raw.igUserId && raw.accessToken) { // 구버전 단일 → 배열 마이그레이션
+    return {accounts: [{id: 'legacy', label: raw.username || '내 계정', igUserId: raw.igUserId, accessToken: raw.accessToken, base: raw.base, username: raw.username, tokenSavedAt: raw.tokenSavedAt, addedAt: raw.tokenSavedAt}]};
+  }
+  return {accounts: []};
 }
-export function saveInstagram(patch: Partial<InstagramConfig>) {
-  const next = {...loadInstagram(), ...patch};
+function saveStore(store: InstagramStore) {
   fs.mkdirSync(DATA_DIR, {recursive: true});
-  fs.writeFileSync(FILE + '.tmp', JSON.stringify(next));
+  fs.writeFileSync(FILE + '.tmp', JSON.stringify(store));
   fs.renameSync(FILE + '.tmp', FILE);
-  return next;
+}
+export function listInstagram(): InstagramAccount[] { return loadStore().accounts; }
+export function getInstagram(id?: string): InstagramAccount | undefined {
+  const a = loadStore().accounts;
+  return id ? a.find((x) => x.id === id) : a[0];
+}
+export function loadInstagram(): InstagramConfig { return getInstagram() || {}; } // 하위호환
+export function addInstagram(acc: {igUserId: string; accessToken: string; base?: 'instagram' | 'facebook'; username?: string; label?: string}): InstagramAccount {
+  const store = loadStore();
+  const exist = store.accounts.find((x) => x.igUserId === acc.igUserId);
+  if (exist) {
+    exist.accessToken = acc.accessToken;
+    if (acc.base) exist.base = acc.base;
+    if (acc.username) exist.username = acc.username;
+    if (acc.label) exist.label = acc.label;
+    exist.tokenSavedAt = Date.now();
+    saveStore(store);
+    return exist;
+  }
+  const account: InstagramAccount = {
+    id: randomUUID(), label: acc.label || acc.username || '계정',
+    igUserId: acc.igUserId, accessToken: acc.accessToken, base: acc.base || 'instagram', username: acc.username,
+    tokenSavedAt: Date.now(), addedAt: Date.now(),
+  };
+  store.accounts.push(account);
+  saveStore(store);
+  return account;
+}
+export function removeInstagram(id: string) {
+  const store = loadStore();
+  store.accounts = store.accounts.filter((x) => x.id !== id);
+  saveStore(store);
+}
+// 특정 계정 필드 갱신(토큰 자동갱신용). id로 찾아 patch.
+function patchInstagram(id: string, patch: Partial<InstagramAccount>) {
+  const store = loadStore();
+  const a = store.accounts.find((x) => x.id === id);
+  if (!a) return;
+  Object.assign(a, patch);
+  saveStore(store);
 }
 export function instagramStatus() {
-  const c = loadInstagram();
-  return {connected: !!(c.igUserId && c.accessToken), username: c.username || '', igUserId: c.igUserId || ''};
+  const accounts = listInstagram();
+  const first = accounts[0];
+  return {
+    connected: accounts.length > 0,
+    accounts: accounts.map((a) => ({id: a.id, label: a.label || a.username || '', username: a.username || '', igUserId: a.igUserId || ''})),
+    username: first?.username || '', igUserId: first?.igUserId || '', // 하위호환
+  };
 }
 
 function host(c: InstagramConfig) {
@@ -123,10 +176,10 @@ JSON만 출력: {"hook":"...","blocks":["...","...","..."],"hashtags":["...","..
 //     deprecated. Use the REELS media type to publish a video to your Instagram feed."). 가로/세로 상관없이
 //     모든 영상은 REELS로 올려야 하며, share_to_feed=true면 피드에도 노출된다(가로 영상도 그대로 올라감).
 export async function publishVideo(
-  videoUrl: string, caption: string, kind: 'reels' | 'feed', log?: (m: string) => void, coverUrl?: string,
+  videoUrl: string, caption: string, kind: 'reels' | 'feed', log?: (m: string) => void, coverUrl?: string, accountId?: string,
 ): Promise<{permalink: string; id: string}> {
-  const c = loadInstagram();
-  if (!c.igUserId || !c.accessToken) throw new Error('인스타가 연결되지 않았습니다. 키 설정에서 연결하세요.');
+  const c = getInstagram(accountId);
+  if (!c || !c.igUserId || !c.accessToken) throw new Error('인스타가 연결되지 않았습니다. 키 설정에서 연결하세요.');
   const base = host(c);
   const token = c.accessToken;
 
@@ -188,10 +241,10 @@ export async function publishVideo(
 // 카드 게시물(캐러셀) 게시 — 이미지 2~10장. ★인스타 API는 JPEG만 허용(PNG 거부)하므로 imageUrls는
 // 반드시 JPEG 공개 URL(R2 presigned)이어야 한다. 자식 컨테이너(is_carousel_item)→CAROUSEL 부모→publish.
 export async function publishCarousel(
-  imageUrls: string[], caption: string, log?: (m: string) => void,
+  imageUrls: string[], caption: string, log?: (m: string) => void, accountId?: string,
 ): Promise<{permalink: string; id: string}> {
-  const c = loadInstagram();
-  if (!c.igUserId || !c.accessToken) throw new Error('인스타가 연결되지 않았습니다. 키 설정에서 연결하세요.');
+  const c = getInstagram(accountId);
+  if (!c || !c.igUserId || !c.accessToken) throw new Error('인스타가 연결되지 않았습니다. 키 설정에서 연결하세요.');
   const base = host(c); const token = c.accessToken;
   const urls = imageUrls.filter(Boolean).slice(0, 10);
   if (urls.length < 2) throw new Error('캐러셀은 이미지가 2장 이상이어야 합니다.');
@@ -243,9 +296,10 @@ export async function publishCarousel(
 }
 
 // 60일 long-lived 토큰을 ig_refresh_token으로 갱신(또 60일 연장). Instagram 로그인(graph.instagram.com) 토큰만 가능.
-export async function refreshInstagram(log?: (m: string) => void): Promise<boolean> {
-  const c = loadInstagram();
-  if (!c.accessToken || c.base === 'facebook') return false;
+// ★멀티계정: 한 계정만 갱신. accountId 없으면 첫 계정.
+export async function refreshInstagram(log?: (m: string) => void, accountId?: string): Promise<boolean> {
+  const c = getInstagram(accountId);
+  if (!c || !c.accessToken || c.base === 'facebook') return false;
   try {
     const r = await fetch(
       `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(c.accessToken)}`,
@@ -253,8 +307,8 @@ export async function refreshInstagram(log?: (m: string) => void): Promise<boole
     );
     const d: any = await r.json();
     if (r.ok && d.access_token) {
-      saveInstagram({accessToken: d.access_token, tokenSavedAt: Date.now()});
-      log?.(`[인스타] 토큰 자동 갱신 완료 (+${Math.round((d.expires_in || 0) / 86400)}일)`);
+      patchInstagram(c.id, {accessToken: d.access_token, tokenSavedAt: Date.now()});
+      log?.(`[인스타] 토큰 자동 갱신 완료 (${c.label || c.username || c.id}, +${Math.round((d.expires_in || 0) / 86400)}일)`);
       return true;
     }
     log?.('[인스타] 토큰 갱신 건너뜀: ' + (d?.error?.message || JSON.stringify(d).slice(0, 150)));
@@ -262,21 +316,32 @@ export async function refreshInstagram(log?: (m: string) => void): Promise<boole
   return false;
 }
 
-// 토큰 나이를 보고 필요할 때만 갱신(45일↑). 연결 안 됐거나 FB방식이면 무시. 기준시각 없으면 지금으로 기록만.
+// 토큰 나이를 보고 필요할 때만 갱신(45일↑) — ★전 계정 루프. FB방식/만료기록 없는 건 건너뜀.
 export async function maybeRefreshInstagram(log?: (m: string) => void): Promise<void> {
-  const c = loadInstagram();
-  if (!c.accessToken || !c.igUserId || c.base === 'facebook') return;
-  if (!c.tokenSavedAt) { saveInstagram({tokenSavedAt: Date.now()}); return; }
-  const ageDays = (Date.now() - c.tokenSavedAt) / 86400000;
-  if (ageDays >= 45) await refreshInstagram(log);
+  for (const c of listInstagram()) {
+    if (!c.accessToken || !c.igUserId || c.base === 'facebook') continue;
+    if (!c.tokenSavedAt) { patchInstagram(c.id, {tokenSavedAt: Date.now()}); continue; }
+    const ageDays = (Date.now() - c.tokenSavedAt) / 86400000;
+    if (ageDays >= 45) await refreshInstagram(log, c.id);
+  }
 }
 
 // 업로드 현황: 인스타에 실제로 올라간 시각(media timestamp) 기준으로
 // "오늘(한국시간) 몇 개 · 마지막 게시 시각 · 총 개수"를 반환. 업로드 페이스 모니터용.
-export async function getUploadActivity(): Promise<{today: number; lastAt: string | null; total: number; followers?: number; error?: string}> {
-  const c = loadInstagram();
-  if (!c.igUserId || !c.accessToken) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
-  const base = host(c), token = c.accessToken;
+export async function getUploadActivity(accountId?: string): Promise<{today: number; lastAt: string | null; total: number; followers?: number; error?: string}> {
+  const accounts = accountId ? [getInstagram(accountId)].filter(Boolean) as InstagramAccount[] : listInstagram();
+  if (!accounts.length) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
+  let today = 0, total = 0, followers = 0; let lastAt: string | null = null; let error: string | undefined;
+  for (const c of accounts) {
+    const one = await igActivityForAccount(c);
+    today += one.today; total += one.total; followers += one.followers || 0;
+    if (one.lastAt && (!lastAt || one.lastAt > lastAt)) lastAt = one.lastAt;
+    if (one.error && !error) error = one.error;
+  }
+  return {today, lastAt, total, followers, ...(error ? {error} : {})};
+}
+async function igActivityForAccount(c: InstagramAccount): Promise<{today: number; lastAt: string | null; total: number; followers?: number; error?: string}> {
+  const base = host(c), token = c.accessToken!;
   // 팔로워 수(계정 프로필) — 미디어 목록과 별개로 조회.
   let followers: number | undefined;
   try {
@@ -302,10 +367,14 @@ export async function getUploadActivity(): Promise<{today: number; lastAt: strin
 export async function getInstaStats(
   diag?: string[],
 ): Promise<Record<string, {views: number; likes: number; comments: number}>> {
-  const c = loadInstagram();
   const byPermalink: Record<string, {views: number; likes: number; comments: number}> = {};
-  if (!c.igUserId || !c.accessToken) { diag?.push('연결 안 됨: igUserId 또는 accessToken 없음'); return byPermalink; }
-  const base = host(c), token = c.accessToken;
+  const accounts = listInstagram();
+  if (!accounts.length) { diag?.push('연결 안 됨: 계정 없음'); return byPermalink; }
+  for (const c of accounts) await igStatsForAccount(c, byPermalink, diag);
+  return byPermalink;
+}
+async function igStatsForAccount(c: InstagramAccount, byPermalink: Record<string, {views: number; likes: number; comments: number}>, diag?: string[]): Promise<void> {
+  const base = host(c), token = c.accessToken!;
   const tokAge = c.tokenSavedAt ? Math.round((Date.now() - c.tokenSavedAt) / 86400000) + '일' : '미기록';
   diag?.push(`base=${base} · igUserId=${c.igUserId} · 토큰나이=${tokAge}`);
   // 1) 최근 미디어 목록(permalink + 좋아요/댓글) — 최대 3페이지.
@@ -342,5 +411,4 @@ export async function getInstaStats(
     } catch (e: any) { if (!insightNoted) { diag?.push(`⚠️ insights 예외: ${e.message}`); insightNoted = true; } }
     if (m.permalink) byPermalink[m.permalink] = {views, likes: m.likes, comments: m.comments};
   }
-  return byPermalink;
 }

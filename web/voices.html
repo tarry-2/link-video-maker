@@ -166,6 +166,15 @@
       .mypf-grid.selmode .pf-thumb-card .pf-check { display: flex; }
       .pf-thumb-card.picked { outline: 3px solid var(--teal); outline-offset: 1px; border-radius: 16px; }
       .pf-thumb-card.picked .pf-check { background: var(--teal); color: #fff; border-color: #fff; }
+      /* 업로드 대상 계정 선택(멀티계정) */
+      .acct-pick-box { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 4px; max-height: 220px; overflow-y: auto; }
+      .acct-pick { display: flex; align-items: center; gap: 8px; background: var(--card2, rgba(127,127,127,.08)); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; cursor: pointer; font-weight: 700; font-size: 13.5px; }
+      .acct-pick input { width: 18px; height: 18px; accent-color: var(--teal); }
+      /* 로딩 팝업(업로드 준비·진행) — 버튼 위 글자 대신 보기 좋은 중앙 팝업 */
+      .load-pop { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 70; }
+      .load-pop-box { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px 30px; display: flex; align-items: center; gap: 14px; box-shadow: 0 16px 48px rgba(0,0,0,.4); font-weight: 800; font-size: 14.5px; color: var(--text); max-width: 86%; }
+      .load-spin { width: 24px; height: 24px; border: 3px solid var(--line); border-top-color: var(--teal); border-radius: 50%; animation: loadspin .8s linear infinite; flex-shrink: 0; }
+      @keyframes loadspin { to { transform: rotate(360deg); } }
     </style>
   </head>
   <body>
@@ -552,23 +561,29 @@
         const statusUrl = plat === 'fb' ? '/api/facebook/status' : plat === 'ig' ? '/api/instagram/status' : '/api/youtube/status';
         let st; try { st = await (await fetch(statusUrl)).json(); } catch { st = {}; }
         if (!st.connected) { alert('먼저 ⚙ 키 설정에서 ' + platName + ' 계정을 연결하세요.'); return; }
-        if (!confirm('선택한 ' + ids.length + '개를 ' + platName + '에 올릴까요?\n하나씩 순서대로 올라가며 몇 분 걸릴 수 있어요.')) return;
+        // 대상 계정 선택(2개 이상이면 팝업). 유튜브는 단일 계정.
+        const accIds = plat === 'yt' ? [undefined] : await pickAccounts(st.accounts || []);
+        if (!accIds) return; // 취소
+        const totalOps = ids.length * accIds.length;
+        if (!confirm(`선택한 ${ids.length}개를 ${platName}${accIds.length > 1 ? ' ' + accIds.length + '개 계정' : ''}에 올릴까요? (총 ${totalOps}건)\n하나씩 순서대로 올라가며 몇 분 걸릴 수 있어요.`)) return;
         bulkBusy = true; updateSelCount();
         const prog = $('sb-prog'); prog.hidden = false;
-        let ok = 0, fail = 0;
-        for (let i = 0; i < ids.length; i++) {
-          const it = ids[i];
-          prog.textContent = `올리는 중 ${i + 1}/${ids.length} · ✅${ok} ❌${fail} — ${it.title || ''}`;
-          try { await bulkUploadOne(plat, it); ok++; }
-          catch (err) { fail++; console.warn('[벌크 실패]', it.id, err && err.message); }
-          prog.textContent = `올리는 중 ${i + 1}/${ids.length} · ✅${ok} ❌${fail}`;
-          if (i < ids.length - 1) await new Promise(r => setTimeout(r, 1500)); // 과속(제재) 방지
+        let ok = 0, fail = 0, done = 0;
+        for (const it of ids) {
+          for (const accId of accIds) {
+            done++;
+            prog.textContent = `올리는 중 ${done}/${totalOps} · ✅${ok} ❌${fail} — ${it.title || ''}`;
+            try { const link = await bulkUploadOne(plat, it, accId); applyUploadBadge(it.id, plat, link); ok++; }
+            catch (err) { fail++; console.warn('[벌크 실패]', it.id, err && err.message); }
+            prog.textContent = `올리는 중 ${done}/${totalOps} · ✅${ok} ❌${fail}`;
+            if (done < totalOps) await new Promise(r => setTimeout(r, 1500)); // 과속(제재) 방지
+          }
         }
         prog.textContent = `완료 🎉 성공 ${ok} · 실패 ${fail}${fail ? ' (실패는 카드에서 개별로 다시 시도하세요)' : ''}`;
-        bulkBusy = false; updateSelCount();
-        loadMyVideos(curIdx); // 뱃지 갱신(picked 는 유지 안 됨 — 새로 로드)
+        bulkBusy = false; updateSelCount(); // ★리로드 안 함 — 배열·스크롤·선택 유지(배지는 제자리 반영됨)
       };
-      async function bulkUploadOne(plat, it) {
+      // 반환 = permalink/url(배지용) 또는 ''(링크 없음). 실패 시 throw.
+      async function bulkUploadOne(plat, it, accountId) {
         const id = it.id;
         const isPost = it.media === 'card-post', isLand = it.orientation === 'landscape';
         if (plat === 'yt') {
@@ -576,7 +591,7 @@
           if (meta.error) throw new Error(meta.error);
           const r = await fetch('/api/youtube/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: meta.title, description: meta.description, tags: meta.tags || [], privacy: 'public' }) });
-          const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); return;
+          const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); return d.url || '';
         }
         // 캡션(인스타·페북 공용 생성기)
         const cap = await (await fetch('/api/instagram/caption/' + encodeURIComponent(id))).json();
@@ -584,14 +599,14 @@
         const caption = cap.caption || '';
         if (plat === 'fb') {
           const url = (isPost ? '/api/facebook/upload-photos/' : '/api/facebook/upload/') + encodeURIComponent(id);
-          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption }) });
-          const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); return;
+          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption, accountId }) });
+          const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); return d.permalink || '';
         }
         // ig
         const url = isPost ? '/api/instagram/upload-carousel/' + encodeURIComponent(id) : '/api/instagram/upload/' + encodeURIComponent(id);
-        const body = isPost ? { caption } : { kind: isLand ? 'feed' : 'reels', caption };
+        const body = isPost ? { caption, accountId } : { kind: isLand ? 'feed' : 'reels', caption, accountId };
         const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패');
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); return d.permalink || '';
       }
       // 큰 미리보기 액션(크게보기/유튜브/삭제) 위임
       $('pf-stage-info').onclick = async e => {
@@ -767,20 +782,77 @@
         es.onerror = () => es.close();
       }
 
+      // ── 로딩 팝업(버튼 위 글자 대신 중앙 팝업) ──
+      function showLoading(msg) {
+        let el = $('load-pop');
+        if (!el) { el = document.createElement('div'); el.id = 'load-pop'; el.className = 'load-pop'; document.body.appendChild(el); }
+        el.innerHTML = `<div class="load-pop-box"><div class="load-spin"></div><span>${esc(msg)}</span></div>`;
+        el.style.display = 'flex';
+      }
+      function setLoading(msg) { const el = $('load-pop'); if (el) { const s = el.querySelector('span'); if (s) s.textContent = msg; } }
+      function hideLoading() { const el = $('load-pop'); if (el) el.style.display = 'none'; }
+
+      // ── 올린 뒤 그리드 리로드 없이 그 카드 배지만 제자리 갱신(배열·스크롤 유지) ──
+      function applyUploadBadge(id, platform, url) {
+        [allItems, myItems].forEach(arr => { const it = arr.find(x => x.id === id); if (it) { if (platform === 'yt') it.youtubeUrl = url; else if (platform === 'ig') it.instagramUrl = url; else it.facebookUrl = url; } });
+        const card = document.querySelector('.pf-thumb-card[data-id="' + id + '"]');
+        if (card) {
+          const thumb = card.querySelector('.pf-thumb');
+          const cls = platform === 'yt' ? 'pf-yt-badge' : platform === 'ig' ? 'pf-ig-badge' : 'pf-fb-badge';
+          const lbl = platform === 'yt' ? 'YT' : platform === 'ig' ? 'IG' : 'FB';
+          if (thumb && !thumb.querySelector('.' + cls)) thumb.insertAdjacentHTML('beforeend', `<span class="${cls}">${lbl}</span>`);
+        }
+        if (myItems[curIdx] && myItems[curIdx].id === id) selectVideo(curIdx, false); // 스테이지면 갱신
+      }
+
+      // ── 업로드 대상 계정 선택(멀티계정 공용) ──
+      // 모달 안에 넣는 체크박스(계정 2개 이상일 때만). 1개면 빈 문자열 → 기본 계정 사용.
+      function acctPickerHtml(accounts) {
+        if (!accounts || accounts.length <= 1) return '';
+        const rows = accounts.map((a, i) => `<label class="acct-pick"><input type="checkbox" class="acct-cb" value="${esc(a.id)}" ${i === 0 ? 'checked' : ''}><span>${esc(a.label || a.username || a.pageName || a.id)}</span></label>`).join('');
+        return `<div class="field-label">보낼 계정 (여러 개 선택 가능)</div><div class="acct-pick-box">${rows}</div>`;
+      }
+      function pickedAcctIds(scope) {
+        const cbs = [...scope.querySelectorAll('.acct-cb')];
+        if (!cbs.length) return [undefined]; // 계정 1개(선택 UI 없음) → 기본
+        const ids = cbs.filter(c => c.checked).map(c => c.value);
+        return ids; // 빈 배열이면 호출부에서 "계정 선택하세요" 처리
+      }
+      // 벌크용: 계정 선택 팝업(2개 이상일 때). 1개면 바로 그 계정. 반환 = id 배열 또는 null(취소).
+      function pickAccounts(accounts) {
+        return new Promise(resolve => {
+          if (!accounts || accounts.length <= 1) { resolve(accounts && accounts.length ? [accounts[0].id] : [undefined]); return; }
+          const box = document.createElement('div'); box.className = 'load-pop';
+          const rows = accounts.map(a => `<label class="acct-pick"><input type="checkbox" class="acct-cb" value="${esc(a.id)}" checked><span>${esc(a.label || a.username || a.pageName || a.id)}</span></label>`).join('');
+          box.innerHTML = `<div class="modal-box" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto">
+            <h2 style="margin-bottom:4px">보낼 계정 선택</h2><p class="sub small">체크한 계정 전부에 올라갑니다.</p>
+            <div class="acct-pick-box">${rows}</div>
+            <div style="display:flex;gap:8px;margin-top:16px"><button class="ghost-btn" data-pa="cancel" style="flex:1">취소</button><button class="primary-btn" data-pa="ok" style="flex:2">이 계정들로 올리기</button></div></div>`;
+          box.onclick = e => {
+            const act = e.target.closest('[data-pa]')?.dataset.pa;
+            if (act === 'cancel' || e.target === box) { box.remove(); resolve(null); return; }
+            if (act === 'ok') { const ids = [...box.querySelectorAll('.acct-cb')].filter(c => c.checked).map(c => c.value); box.remove(); resolve(ids.length ? ids : null); }
+          };
+          document.body.appendChild(box);
+        });
+      }
+
       // ── 유튜브 올리기 ──
       async function uploadToYouTube(btn) {
         const id = btn.dataset.id;
-        const orig = btn.textContent; btn.disabled = true; btn.textContent = '📺 준비 중…';
+        if (btn.disabled) return; btn.disabled = true;
+        showLoading('📺 유튜브 준비 중…');
         try {
           const st = await (await fetch('/api/youtube/status')).json();
-          if (!st.connected) { alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 유튜브 계정을 연결하세요.'); btn.disabled = false; btn.textContent = orig; return; }
-          btn.textContent = '📺 제목·설명 만드는 중…';
+          if (!st.connected) { hideLoading(); alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 유튜브 계정을 연결하세요.'); btn.disabled = false; return; }
+          setLoading('📺 제목·설명 만드는 중…');
           const r = await fetch('/api/youtube/meta/' + encodeURIComponent(id));
           const meta = await r.json();
           if (!r.ok) throw new Error(meta.error || '메타 생성 실패');
+          hideLoading();
           openYtModal(id, meta, st.channelTitle);
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; btn.textContent = orig; }
+        } catch (e) { hideLoading(); alert(e.message); }
+        finally { btn.disabled = false; }
       }
       function openYtModal(id, meta, channel) {
         let box = $('yt-modal');
@@ -811,7 +883,7 @@
               if (!r.ok) throw new Error(d.error || '업로드 실패');
               $('yt-up-msg').innerHTML = `✅ 업로드 완료!<br><a href="${d.url}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:#ff0000;color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 유튜브에서 열기</a><br><span style="font-size:12px;color:var(--muted)">${d.url}</span>`;
               up.textContent = '완료 🎉'; up.disabled = true;
-              loadMyVideos(curIdx); // 스테이지·썸네일에 유튜브 링크/뱃지 즉시 반영
+              applyUploadBadge(id, 'yt', d.url); // 리로드 없이 그 카드만 배지(배열·스크롤 유지)
             } catch (err) { $('yt-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '유튜브에 올리기'; }
           }
         };
@@ -819,25 +891,28 @@
       // ── 포트폴리오에서 인스타 올리기(릴스/피드) ──
       async function uploadToInstagram(btn, carousel, isLandscape) {
         const id = btn.dataset.id;
-        const orig = btn.textContent; btn.disabled = true; btn.textContent = '📷 준비 중…';
+        if (btn.disabled) return; btn.disabled = true;
+        showLoading('📷 인스타 준비 중…');
         try {
           const st = await (await fetch('/api/instagram/status')).json();
-          if (!st.connected) { alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 인스타 계정을 연결하세요.'); btn.disabled = false; btn.textContent = orig; return; }
-          btn.textContent = '📷 캡션 만드는 중…';
+          if (!st.connected) { hideLoading(); alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 인스타 계정을 연결하세요.'); btn.disabled = false; return; }
+          setLoading('📷 캡션 만드는 중…');
           const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id));
           const d = await r.json();
           if (!r.ok) throw new Error(d.error || '캡션 생성 실패');
-          openIgPfModal(id, d.caption || '', st.username, carousel, isLandscape);
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; btn.textContent = orig; }
+          hideLoading();
+          openIgPfModal(id, d.caption || '', st.username, carousel, isLandscape, st.accounts || []);
+        } catch (e) { hideLoading(); alert(e.message); }
+        finally { btn.disabled = false; }
       }
-      function openIgPfModal(id, caption, username, carousel, isLandscape) {
+      function openIgPfModal(id, caption, username, carousel, isLandscape, accounts) {
         let box = $('ig-modal');
         if (!box) { box = document.createElement('div'); box.id = 'ig-modal'; box.className = 'modal'; document.body.appendChild(box); }
         box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50';
         box.innerHTML = `<div class="modal-box" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">
           <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>📷 인스타 ${carousel ? '캐러셀 올리기' : '올리기'}</h2><button class="ghost-btn" data-ig="close">✕</button></div>
-          <p class="sub small">${username ? '계정: <b>@' + esc(username) + '</b> · ' : ''}캡션·해시태그는 수정할 수 있어요.</p>
+          <p class="sub small">캡션·해시태그는 수정할 수 있어요.</p>
+          ${acctPickerHtml(accounts)}
           ${carousel ? '<p class="sub small">🎴 여러 장 넘기는 게시물(캐러셀)로 올라갑니다.</p>'
             : `<label class="field-label">올릴 방식<input class="input" value="${isLandscape ? '🖥 가로 → 게시물(피드)로 올라갑니다' : '📱 세로 → 릴스로 올라갑니다'}" disabled></label><input type="hidden" id="ig-kind" value="${isLandscape ? 'feed' : 'reels'}">`}
           <label class="field-label">캡션 · 해시태그<textarea id="ig-caption" class="input" rows="8" maxlength="2200">${esc(caption)}</textarea></label>
@@ -848,46 +923,57 @@
           const act = e.target.closest('[data-ig]')?.dataset.ig;
           if (act === 'close' || e.target === box) { box.remove(); return; }
           if (act === 'upload') {
-            const up = e.target; up.disabled = true; up.textContent = '올리는 중… (잠시 걸려요)';
-            $('ig-up-msg').textContent = carousel ? '이미지를 변환해 인스타에 올리는 중이에요…' : '인스타가 영상을 받아 처리하는 중이에요…';
-            try {
-              const r = carousel
-                ? await fetch('/api/instagram/upload-carousel/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: $('ig-caption').value }) })
-                : await fetch('/api/instagram/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: $('ig-kind').value, caption: $('ig-caption').value }) });
-              const d = await r.json();
-              if (!r.ok) throw new Error(d.error || '업로드 실패');
-              $('ig-up-msg').innerHTML = d.permalink
-                ? `✅ 게시 완료!<br><a href="${d.permalink}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 인스타에서 열기</a>`
-                : '✅ 게시 완료! 인스타 앱에서 확인하세요.';
-              up.textContent = '완료 🎉'; up.disabled = true;
-              loadMyVideos(curIdx); // 스테이지·썸네일에 인스타 링크/뱃지 즉시 반영
-            } catch (err) { $('ig-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '인스타에 올리기'; }
+            const accIds = pickedAcctIds(box);
+            if (!accIds.length) { $('ig-up-msg').textContent = '보낼 계정을 하나 이상 선택하세요.'; return; }
+            const up = e.target; up.disabled = true;
+            const cap = $('ig-caption').value, kind = carousel ? '' : $('ig-kind').value;
+            let ok = 0, fail = 0, link = '';
+            for (let i = 0; i < accIds.length; i++) {
+              up.textContent = `올리는 중… ${i + 1}/${accIds.length}`;
+              $('ig-up-msg').textContent = carousel ? '이미지를 변환해 인스타에 올리는 중…' : '인스타가 영상을 받아 처리하는 중…';
+              try {
+                const r = carousel
+                  ? await fetch('/api/instagram/upload-carousel/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: cap, accountId: accIds[i] }) })
+                  : await fetch('/api/instagram/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, caption: cap, accountId: accIds[i] }) });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || '업로드 실패');
+                ok++; if (d.permalink) link = d.permalink;
+              } catch (err) { fail++; console.warn('[인스타 실패]', accIds[i], err && err.message); }
+              if (i < accIds.length - 1) await new Promise(r => setTimeout(r, 1500));
+            }
+            if (ok) applyUploadBadge(id, 'ig', link);
+            $('ig-up-msg').innerHTML = (ok ? `✅ ${ok}개 계정 게시 완료!` + (fail ? ` · ❌ ${fail}개 실패` : '') : `❌ 전부 실패(${fail}개)`)
+              + (link ? `<br><a href="${link}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 인스타에서 열기</a>` : '');
+            up.textContent = ok ? '완료 🎉' : '다시 시도'; up.disabled = ok > 0;
           }
         };
       }
       // ── 포트폴리오에서 페이스북 올리기(영상/카드) ──
       async function uploadToFacebook(btn, isPost) {
         const id = btn.dataset.id;
-        const orig = btn.textContent; btn.disabled = true; btn.textContent = '👍 준비 중…';
+        if (btn.disabled) return; btn.disabled = true;
+        showLoading('👍 페북 준비 중…');
         try {
           const st = await (await fetch('/api/facebook/status')).json();
-          if (!st.connected) { alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 페이스북 페이지를 연결하세요.'); btn.disabled = false; btn.textContent = orig; return; }
-          btn.textContent = '👍 글 만드는 중…';
+          if (!st.connected) { hideLoading(); alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 페이스북 페이지를 연결하세요.'); btn.disabled = false; return; }
+          setLoading('👍 글 만드는 중…');
           // 캡션은 인스타 캡션 생성기를 공용으로 재사용(제목·내용 기반).
           const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id));
           const d = await r.json();
           if (!r.ok) throw new Error(d.error || '글 생성 실패');
-          openFbPfModal(id, d.caption || '', st.pageName, isPost);
-        } catch (e) { alert(e.message); }
-        finally { btn.disabled = false; btn.textContent = orig; }
+          hideLoading();
+          openFbPfModal(id, d.caption || '', st.pageName, isPost, st.accounts || []);
+        } catch (e) { hideLoading(); alert(e.message); }
+        finally { btn.disabled = false; }
       }
-      function openFbPfModal(id, caption, pageName, isPost) {
+      function openFbPfModal(id, caption, pageName, isPost, accounts) {
         let box = $('fb-modal');
         if (!box) { box = document.createElement('div'); box.id = 'fb-modal'; box.className = 'modal'; document.body.appendChild(box); }
         box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50';
         box.innerHTML = `<div class="modal-box" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">
           <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>👍 페이스북 ${isPost ? '게시물 올리기' : '올리기'}</h2><button class="ghost-btn" data-fb="close">✕</button></div>
-          <p class="sub small">${pageName ? '페이지: <b>' + esc(pageName) + '</b> · ' : ''}글은 수정할 수 있어요.</p>
+          <p class="sub small">글은 수정할 수 있어요.</p>
+          ${acctPickerHtml(accounts)}
           ${isPost ? '<p class="sub small">🎴 여러 장 사진 게시물로 올라갑니다.</p>' : '<p class="sub small">📄 페이지 피드에 영상으로 올라갑니다(가로·세로 모두).</p>'}
           <label class="field-label">글 내용<textarea id="fb-caption" class="input" rows="8" maxlength="5000">${esc(caption)}</textarea></label>
           <button class="primary-btn" data-fb="upload">페이스북에 올리기</button>
@@ -897,20 +983,27 @@
           const act = e.target.closest('[data-fb]')?.dataset.fb;
           if (act === 'close' || e.target === box) { box.remove(); return; }
           if (act === 'upload') {
-            const up = e.target; up.disabled = true; up.textContent = '올리는 중… (잠시 걸려요)';
-            $('fb-up-msg').textContent = isPost ? '사진을 변환해 페북에 올리는 중이에요…' : '페북이 영상을 받아 처리하는 중이에요…';
-            try {
-              const r = isPost
-                ? await fetch('/api/facebook/upload-photos/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: $('fb-caption').value }) })
-                : await fetch('/api/facebook/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: $('fb-caption').value }) });
-              const d = await r.json();
-              if (!r.ok) throw new Error(d.error || '업로드 실패');
-              $('fb-up-msg').innerHTML = d.permalink
-                ? `✅ 게시 완료!<br><a href="${d.permalink}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:#1877f2;color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 페이스북에서 열기</a>`
-                : '✅ 게시 완료! 페이스북에서 확인하세요.';
-              up.textContent = '완료 🎉'; up.disabled = true;
-              loadMyVideos(curIdx); // 스테이지·썸네일에 페북 링크/뱃지 즉시 반영
-            } catch (err) { $('fb-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '페이스북에 올리기'; }
+            const accIds = pickedAcctIds(box);
+            if (!accIds.length) { $('fb-up-msg').textContent = '보낼 페이지를 하나 이상 선택하세요.'; return; }
+            const up = e.target; up.disabled = true;
+            const cap = $('fb-caption').value;
+            let ok = 0, fail = 0, link = '';
+            for (let i = 0; i < accIds.length; i++) {
+              up.textContent = `올리는 중… ${i + 1}/${accIds.length}`;
+              $('fb-up-msg').textContent = isPost ? '사진을 변환해 페북에 올리는 중…' : '페북이 영상을 받아 처리하는 중…';
+              try {
+                const url = (isPost ? '/api/facebook/upload-photos/' : '/api/facebook/upload/') + encodeURIComponent(id);
+                const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: cap, accountId: accIds[i] }) });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || '업로드 실패');
+                ok++; if (d.permalink) link = d.permalink;
+              } catch (err) { fail++; console.warn('[페북 실패]', accIds[i], err && err.message); }
+              if (i < accIds.length - 1) await new Promise(r => setTimeout(r, 1500));
+            }
+            if (ok) applyUploadBadge(id, 'fb', link);
+            $('fb-up-msg').innerHTML = (ok ? `✅ ${ok}개 페이지 게시 완료!` + (fail ? ` · ❌ ${fail}개 실패` : '') : `❌ 전부 실패(${fail}개)`)
+              + (link ? `<br><a href="${link}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:#1877f2;color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 페이스북에서 열기</a>` : '');
+            up.textContent = ok ? '완료 🎉' : '다시 시도'; up.disabled = ok > 0;
           }
         };
       }

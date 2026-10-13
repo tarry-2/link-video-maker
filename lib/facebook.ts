@@ -3,6 +3,7 @@
 // 설정(페이지 ID·페이지 액세스 토큰)은 data 볼륨 facebook.json에 저장(재배포해도 유지).
 import fs from 'node:fs';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {geminiGenerate} from './gemini';
 import {openaiJson} from './openai';
 
@@ -17,20 +18,66 @@ export type FacebookConfig = {
   pageName?: string; // 표시용
   tokenSavedAt?: number; // 토큰 발급 시각(ms)
 };
+// ★멀티계정: 여러 사람의 페이지를 등록해두고 올릴 때 골라 보낸다. 각 계정 = 독립 페이지ID+토큰.
+export type FacebookAccount = FacebookConfig & {id: string; label?: string; addedAt?: number};
+type FacebookStore = {accounts: FacebookAccount[]};
 
-export function loadFacebook(): FacebookConfig {
-  try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return {}; }
+// 파일 로드 — 구버전 단일 설정({pageId,...})도 배열로 자동 마이그레이션(기존 연결 안 끊김).
+function loadStore(): FacebookStore {
+  let raw: any;
+  try { raw = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return {accounts: []}; }
+  if (raw && Array.isArray(raw.accounts)) return {accounts: raw.accounts.filter((a: any) => a && a.id && a.pageId && a.pageAccessToken)};
+  if (raw && raw.pageId && raw.pageAccessToken) {
+    return {accounts: [{id: 'legacy', label: raw.pageName || '내 페이지', pageId: raw.pageId, pageAccessToken: raw.pageAccessToken, pageName: raw.pageName, tokenSavedAt: raw.tokenSavedAt, addedAt: raw.tokenSavedAt}]};
+  }
+  return {accounts: []};
 }
-export function saveFacebook(patch: Partial<FacebookConfig>) {
-  const next = {...loadFacebook(), ...patch};
+function saveStore(store: FacebookStore) {
   fs.mkdirSync(DATA_DIR, {recursive: true});
-  fs.writeFileSync(FILE + '.tmp', JSON.stringify(next));
+  fs.writeFileSync(FILE + '.tmp', JSON.stringify(store));
   fs.renameSync(FILE + '.tmp', FILE);
-  return next;
+}
+export function listFacebook(): FacebookAccount[] { return loadStore().accounts; }
+// id로 계정 찾기(없으면 첫 계정 = 기본). 단일계정 호출부 하위호환.
+export function getFacebook(id?: string): FacebookAccount | undefined {
+  const a = loadStore().accounts;
+  return id ? a.find((x) => x.id === id) : a[0];
+}
+export function loadFacebook(): FacebookConfig { return getFacebook() || {}; } // 하위호환
+// 계정 추가(같은 페이지면 토큰·이름 갱신). 반환 = 추가/갱신된 계정.
+export function addFacebook(acc: {pageId: string; pageAccessToken: string; pageName?: string; label?: string}): FacebookAccount {
+  const store = loadStore();
+  const exist = store.accounts.find((x) => x.pageId === acc.pageId);
+  if (exist) {
+    exist.pageAccessToken = acc.pageAccessToken;
+    if (acc.pageName) exist.pageName = acc.pageName;
+    if (acc.label) exist.label = acc.label;
+    exist.tokenSavedAt = Date.now();
+    saveStore(store);
+    return exist;
+  }
+  const account: FacebookAccount = {
+    id: randomUUID(), label: acc.label || acc.pageName || '페이지',
+    pageId: acc.pageId, pageAccessToken: acc.pageAccessToken, pageName: acc.pageName,
+    tokenSavedAt: Date.now(), addedAt: Date.now(),
+  };
+  store.accounts.push(account);
+  saveStore(store);
+  return account;
+}
+export function removeFacebook(id: string) {
+  const store = loadStore();
+  store.accounts = store.accounts.filter((x) => x.id !== id);
+  saveStore(store);
 }
 export function facebookStatus() {
-  const c = loadFacebook();
-  return {connected: !!(c.pageId && c.pageAccessToken), pageName: c.pageName || '', pageId: c.pageId || ''};
+  const accounts = listFacebook();
+  const first = accounts[0];
+  return {
+    connected: accounts.length > 0,
+    accounts: accounts.map((a) => ({id: a.id, label: a.label || a.pageName || '', pageName: a.pageName || '', pageId: a.pageId || ''})),
+    pageName: first?.pageName || '', pageId: first?.pageId || '', // 하위호환(기존 프론트)
+  };
 }
 
 // 연결 확인 + 페이지명 조회(토큰·ID 유효성 검증).
@@ -44,10 +91,10 @@ export async function verifyFacebook(cfg: {pageId: string; pageAccessToken: stri
 // 페이스북 영상 게시 — 공개 영상 URL(R2 presigned)을 file_url로 주면 FB가 가져가 처리한다.
 // 가로/세로 상관없이 페이지 피드에 올라간다. 반환 = {permalink, id}.
 export async function publishVideo(
-  videoUrl: string, description: string, log?: (m: string) => void,
+  videoUrl: string, description: string, log?: (m: string) => void, accountId?: string,
 ): Promise<{permalink: string; id: string}> {
-  const c = loadFacebook();
-  if (!c.pageId || !c.pageAccessToken) throw new Error('페이스북이 연결되지 않았습니다. 키 설정에서 연결하세요.');
+  const c = getFacebook(accountId);
+  if (!c || !c.pageId || !c.pageAccessToken) throw new Error('페이스북이 연결되지 않았습니다. 키 설정에서 연결하세요.');
   const token = c.pageAccessToken;
 
   // 1) 영상 업로드(비동기) — file_url로 FB가 원격에서 가져감.
@@ -97,10 +144,10 @@ export async function publishVideo(
 // 카드 게시물(여러 장 사진) 페이스북 게시 — 사진을 published=false로 각각 올린 뒤
 // feed 글에 attached_media로 묶어 한 게시물로 공개한다. imageUrls = 공개 JPEG URL(R2 presigned).
 export async function publishPhotos(
-  imageUrls: string[], message: string, log?: (m: string) => void,
+  imageUrls: string[], message: string, log?: (m: string) => void, accountId?: string,
 ): Promise<{permalink: string; id: string}> {
-  const c = loadFacebook();
-  if (!c.pageId || !c.pageAccessToken) throw new Error('페이스북이 연결되지 않았습니다. 키 설정에서 연결하세요.');
+  const c = getFacebook(accountId);
+  if (!c || !c.pageId || !c.pageAccessToken) throw new Error('페이스북이 연결되지 않았습니다. 키 설정에서 연결하세요.');
   const token = c.pageAccessToken;
   const urls = imageUrls.filter(Boolean).slice(0, 10);
   if (!urls.length) throw new Error('올릴 이미지가 없습니다.');
@@ -139,10 +186,21 @@ export async function publishPhotos(
 }
 
 // 업로드 현황: 페이지에 올라간 영상 기준 "오늘(한국시간) 몇 개 · 마지막 게시 시각 · 총 개수".
-export async function getUploadActivity(): Promise<{today: number; lastAt: string | null; total: number; followers?: number; error?: string}> {
-  const c = loadFacebook();
-  if (!c.pageId || !c.pageAccessToken) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
-  const token = c.pageAccessToken;
+// ★멀티계정: accountId 주면 그 계정만, 없으면 전 계정 합산(대시보드).
+export async function getUploadActivity(accountId?: string): Promise<{today: number; lastAt: string | null; total: number; followers?: number; error?: string}> {
+  const accounts = accountId ? [getFacebook(accountId)].filter(Boolean) as FacebookAccount[] : listFacebook();
+  if (!accounts.length) return {today: 0, lastAt: null, total: 0, error: '연결 안 됨'};
+  let today = 0, total = 0, followers = 0; let lastAt: string | null = null; let error: string | undefined;
+  for (const c of accounts) {
+    const one = await activityForAccount(c);
+    today += one.today; total += one.total; followers += one.followers || 0;
+    if (one.lastAt && (!lastAt || one.lastAt > lastAt)) lastAt = one.lastAt;
+    if (one.error && !error) error = one.error;
+  }
+  return {today, lastAt, total, followers, ...(error ? {error} : {})};
+}
+async function activityForAccount(c: FacebookAccount): Promise<{today: number; lastAt: string | null; total: number; followers?: number; error?: string}> {
+  const token = c.pageAccessToken!;
   // 페이지 팔로워 수 — 영상 목록과 별개로 조회.
   let followers: number | undefined;
   try {
@@ -164,10 +222,14 @@ export async function getUploadActivity(): Promise<{today: number; lastAt: strin
 
 // 성과 추적: 내 페이지 영상의 조회수·좋아요·댓글·공유를 permalink 키로 반환.
 export async function getFbStats(diag?: string[]): Promise<Record<string, {views: number; likes: number; comments: number; shares: number}>> {
-  const c = loadFacebook();
   const byPermalink: Record<string, {views: number; likes: number; comments: number; shares: number}> = {};
-  if (!c.pageId || !c.pageAccessToken) { diag?.push('연결 안 됨: pageId 또는 pageAccessToken 없음'); return byPermalink; }
-  const token = c.pageAccessToken;
+  const accounts = listFacebook();
+  if (!accounts.length) { diag?.push('연결 안 됨: 계정 없음'); return byPermalink; }
+  for (const c of accounts) await fbStatsForAccount(c, byPermalink, diag);
+  return byPermalink;
+}
+async function fbStatsForAccount(c: FacebookAccount, byPermalink: Record<string, {views: number; likes: number; comments: number; shares: number}>, diag?: string[]): Promise<void> {
+  const token = c.pageAccessToken!;
   let url = `${BASE}/${API}/${c.pageId}/videos?fields=id,permalink_url,views,likes.summary(true),comments.summary(true)&limit=100&access_token=${encodeURIComponent(token)}`;
   for (let pg = 0; pg < 3 && url; pg++) {
     try {
@@ -189,5 +251,4 @@ export async function getFbStats(diag?: string[]): Promise<Record<string, {views
       url = d.paging?.next || '';
     } catch (e: any) { diag?.push(`❌ videos fetch 예외: ${e.message}`); break; }
   }
-  return byPermalink;
 }

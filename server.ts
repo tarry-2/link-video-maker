@@ -27,8 +27,8 @@ import {listPortfolio, removePortfolio, updatePortfolioTitle, addPortfolio, setP
 import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getChannelVideos, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys, head as r2Head} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
-import {instagramStatus, saveInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
-import {facebookStatus, saveFacebook, verifyFacebook, publishVideo as fbPublishVideo, publishPhotos as fbPublishPhotos, getFbStats, getUploadActivity as getFbActivity} from './lib/facebook';
+import {instagramStatus, addInstagram, removeInstagram, listInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
+import {facebookStatus, addFacebook, removeFacebook, listFacebook, verifyFacebook, publishVideo as fbPublishVideo, publishPhotos as fbPublishPhotos, getFbStats, getUploadActivity as getFbActivity} from './lib/facebook';
 import {pngToJpeg} from './lib/img-util';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -998,18 +998,25 @@ const server = http.createServer(async (req, res) => {
     };
     return json(res, 200, {connected: true, items, summary, ...(debug ? {debug: diag} : {})});
   }
-  // 인스타 연결(계정 ID + 토큰 저장, 유효성 검증)
+  // 인스타 연결(계정 추가 — 여러 개 등록 가능. 같은 계정이면 토큰 갱신)
   if (p === '/api/instagram/connect' && req.method === 'POST') {
     const b = await readBody(req);
     const igUserId = String(b.igUserId || '').trim();
     const accessToken = String(b.accessToken || '').trim();
     const base = b.base === 'facebook' ? 'facebook' : 'instagram';
+    const label = String(b.label || '').trim() || undefined;
     if (!igUserId || !accessToken) return json(res, 400, {error: '인스타 계정 ID와 액세스 토큰을 입력하세요.'});
     try {
       const username = await verifyInstagram({igUserId, accessToken, base});
-      saveInstagram({igUserId, accessToken, base, username, tokenSavedAt: Date.now()});
-      return json(res, 200, {connected: true, username});
+      const acc = addInstagram({igUserId, accessToken, base, username, label});
+      return json(res, 200, {connected: true, username, id: acc.id, label: acc.label});
     } catch (e: any) { return json(res, 400, {error: e.message}); }
+  }
+  // 인스타 계정 삭제(멀티계정)
+  if (p.startsWith('/api/instagram/accounts/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(p.slice('/api/instagram/accounts/'.length));
+    removeInstagram(id);
+    return json(res, 200, {ok: true, accounts: instagramStatus().accounts});
   }
   // 카드 게시물(캐러셀) 인스타 업로드 — JPEG 변환 후 publishCarousel.
   if (p.startsWith('/api/instagram/upload-carousel/') && req.method === 'POST') {
@@ -1020,9 +1027,10 @@ const server = http.createServer(async (req, res) => {
     if (!instagramStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 인스타 계정을 연결하세요.'});
     const b = await readBody(req);
     const caption = String(b.caption || '').trim();
+    const accountId = String(b.accountId || '').trim() || undefined;
     try {
       const urls = await ensureCarouselJpegUrls(id, () => {});
-      const r = await publishCarousel(urls, caption);
+      const r = await publishCarousel(urls, caption, undefined, accountId);
       if (r.permalink) { setPortfolioInstagram(id, r.permalink); saveProjectInstagram(id, r.permalink); }
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
@@ -1053,13 +1061,14 @@ const server = http.createServer(async (req, res) => {
     const b = await readBody(req);
     const kind = b.kind === 'feed' ? 'feed' : 'reels';
     const caption = String(b.caption || '').trim();
+    const accountId = String(b.accountId || '').trim() || undefined;
     try {
       const url = await presignGet(r2key, 3600);
       if (!url) return json(res, 502, {error: '영상 임시 링크 생성 실패.'});
       // ★커버 지정(내 완성작만) — 빈 썸네일 방지. 실패해도 업로드는 진행.
       let coverUrl: string | undefined;
       if (!isSample) { try { coverUrl = (await ensureThumbJpegUrl(id)) || undefined; } catch {} }
-      const r = await publishVideo(url, caption, kind as 'reels' | 'feed', undefined, coverUrl);
+      const r = await publishVideo(url, caption, kind as 'reels' | 'feed', undefined, coverUrl, accountId);
       // ★배지: 게시 성공 시 permalink 기록(어느 경로든 IG 배지 뜨게). 샘플/내작품 분기.
       if (r.permalink) {
         if (isSample) setSampleInstagram(path.basename(id.slice('sample:'.length)), r.permalink);
@@ -1105,12 +1114,19 @@ const server = http.createServer(async (req, res) => {
     const b = await readBody(req);
     const pageId = String(b.pageId || '').trim();
     const pageAccessToken = String(b.pageAccessToken || '').trim();
+    const label = String(b.label || '').trim() || undefined;
     if (!pageId || !pageAccessToken) return json(res, 400, {error: '페이지 ID와 페이지 액세스 토큰을 입력하세요.'});
     try {
       const pageName = await verifyFacebook({pageId, pageAccessToken});
-      saveFacebook({pageId, pageAccessToken, pageName, tokenSavedAt: Date.now()});
-      return json(res, 200, {connected: true, pageName});
+      const acc = addFacebook({pageId, pageAccessToken, pageName, label});
+      return json(res, 200, {connected: true, pageName, id: acc.id, label: acc.label});
     } catch (e: any) { return json(res, 400, {error: e.message}); }
+  }
+  // 페북 계정(페이지) 삭제(멀티계정)
+  if (p.startsWith('/api/facebook/accounts/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(p.slice('/api/facebook/accounts/'.length));
+    removeFacebook(id);
+    return json(res, 200, {ok: true, accounts: facebookStatus().accounts});
   }
   // 카드 게시물(여러 장 사진) 페북 업로드 — JPEG 변환 후 publishPhotos.
   if (p.startsWith('/api/facebook/upload-photos/') && req.method === 'POST') {
@@ -1121,9 +1137,10 @@ const server = http.createServer(async (req, res) => {
     if (!facebookStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 페이스북 페이지를 연결하세요.'});
     const b = await readBody(req);
     const caption = String(b.caption || '').trim();
+    const accountId = String(b.accountId || '').trim() || undefined;
     try {
       const urls = await ensureCarouselJpegUrls(id, () => {});
-      const r = await fbPublishPhotos(urls, caption);
+      const r = await fbPublishPhotos(urls, caption, undefined, accountId);
       if (r.permalink) { setPortfolioFacebook(id, r.permalink); saveProjectFacebook(id, r.permalink); }
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
@@ -1138,10 +1155,11 @@ const server = http.createServer(async (req, res) => {
     if (!r2key) return json(res, 400, {error: '영상 파일을 찾을 수 없어요. 너무 오래돼 정리됐을 수 있어요 — 다시 제작해 주세요.'});
     const b = await readBody(req);
     const caption = String(b.caption || '').trim();
+    const accountId = String(b.accountId || '').trim() || undefined;
     try {
       const url = await presignGet(r2key, 3600);
       if (!url) return json(res, 502, {error: '영상 임시 링크 생성 실패.'});
-      const r = await fbPublishVideo(url, caption);
+      const r = await fbPublishVideo(url, caption, undefined, accountId);
       if (r.permalink) {
         if (isSample) setSampleFacebook(path.basename(id.slice('sample:'.length)), r.permalink);
         else { setPortfolioFacebook(id, r.permalink); saveProjectFacebook(id, r.permalink); }

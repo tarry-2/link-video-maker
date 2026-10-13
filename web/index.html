@@ -507,7 +507,9 @@
         <div id="instagram-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
           <h3 class="field-label">📷 인스타 연결 <span id="ig-status" class="hint"></span></h3>
           <p id="ig-activity" class="mini-state"></p>
-          <p class="hint">완성 영상을 인스타 릴스/게시물로 바로 올리려면 한 번만 연결하세요. (인스타 비즈니스 계정 ID + 액세스 토큰 필요)</p>
+          <p class="hint">여러 계정을 추가할 수 있어요. 올릴 때 계정을 골라 보냅니다. (계정마다 비즈니스 ID + 액세스 토큰)</p>
+          <div id="ig-accounts" class="acct-list"></div>
+          <label class="field-label">계정 이름(표시용, 선택)<input id="ig-label" class="input" placeholder="예: 철수 먹방 / 요리채널" /></label>
           <label class="field-label">인스타 계정 ID(숫자)<input id="ig-user-id" class="input" placeholder="예: 17841400000000000" /></label>
           <label class="field-label">액세스 토큰<input id="ig-token" class="input" type="password" placeholder="긴 수명 토큰 (instagram_content_publish)" /></label>
           <label class="field-label">연결 방식<select id="ig-base" class="input">
@@ -515,7 +517,7 @@
             <option value="facebook">페이스북 로그인 API (graph.facebook.com)</option>
           </select></label>
           <div class="voice-row">
-            <button id="ig-connect" class="ghost-btn small" type="button">🔗 인스타 계정 연결</button>
+            <button id="ig-connect" class="ghost-btn small" type="button">🔗 인스타 계정 추가</button>
           </div>
           <p id="ig-msg" class="mini-state"></p>
         </div>
@@ -523,11 +525,13 @@
         <div id="facebook-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
           <h3 class="field-label">👍 페이스북 연결 <span id="fb-status" class="hint"></span></h3>
           <p id="fb-activity" class="mini-state"></p>
-          <p class="hint">완성 영상·카드를 페이스북 페이지에 바로 올리려면 한 번만 연결하세요. (페이스북 페이지 ID + 페이지 액세스 토큰 필요 · pages_manage_posts 권한)</p>
+          <p class="hint">여러 페이지를 추가할 수 있어요. 올릴 때 페이지를 골라 보냅니다. (페이지마다 ID + 페이지 토큰 · pages_manage_posts)</p>
+          <div id="fb-accounts" class="acct-list"></div>
+          <label class="field-label">페이지 이름(표시용, 선택)<input id="fb-label" class="input" placeholder="예: 영희 여행 페이지" /></label>
           <label class="field-label">페이지 ID(숫자)<input id="fb-page-id" class="input" placeholder="예: 100000000000000" /></label>
           <label class="field-label">페이지 액세스 토큰<input id="fb-token" class="input" type="password" placeholder="긴 수명 페이지 토큰 (pages_manage_posts)" /></label>
           <div class="voice-row">
-            <button id="fb-connect" class="ghost-btn small" type="button">🔗 페이스북 페이지 연결</button>
+            <button id="fb-connect" class="ghost-btn small" type="button">🔗 페이스북 페이지 추가</button>
           </div>
           <p id="fb-msg" class="mini-state"></p>
         </div>

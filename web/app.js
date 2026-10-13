@@ -1212,15 +1212,36 @@ $('yt-connect')?.addEventListener('click', async () => {
   } catch (e) { $('yt-msg').textContent = e.message; }
 });
 // ── 인스타 연결 ──
+// 멀티계정 목록 렌더(인스타/페북 공용)
+function renderAcctList(boxId, platform, accts) {
+  const box = $(boxId); if (!box) return;
+  box.innerHTML = (accts || []).map(a => {
+    const name = a.label || a.username || a.pageName || '(이름없음)';
+    const sub = platform === 'instagram' ? ('@' + (a.username || a.igUserId || '')) : (a.pageName || a.pageId || '');
+    return `<div class="acct-row"><div class="acct-grow"><div class="acct-name">${esc2(name)}</div><div class="acct-sub">${esc2(sub)}</div></div><button class="acct-del" data-acct-del="${esc2(a.id)}" data-platform="${platform}" title="삭제">✕</button></div>`;
+  }).join('');
+}
 async function refreshIgStatus() {
   const st = $('ig-status'); if (!st) return;
   try {
     const s = await (await fetch('/api/instagram/status')).json();
-    if (s.connected) st.innerHTML = `<span style="color:var(--teal)">● 연결됨${s.username ? ' · @' + s.username : ''}</span>`;
+    const accts = s.accounts || [];
+    if (s.connected) st.innerHTML = `<span style="color:var(--teal)">● ${accts.length}개 연결됨</span>`;
     else st.textContent = '미연결';
+    renderAcctList('ig-accounts', 'instagram', accts);
     if (s.connected) refreshIgActivity();
   } catch {}
 }
+// 계정 삭제(인스타/페북 공용) — 목록의 ✕ 위임
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-acct-del]'); if (!b) return;
+  const platform = b.dataset.platform, id = b.dataset.acctDel;
+  if (!confirm('이 계정을 목록에서 삭제할까요? (올린 게시물은 그대로 남아요)')) return;
+  try {
+    await fetch('/api/' + platform + '/accounts/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (platform === 'instagram') refreshIgStatus(); else refreshFbStatus();
+  } catch {}
+});
 // 인스타 업로드 페이스 — 오늘 몇 개·마지막 게시 시각(실제 인스타 기준).
 async function refreshIgActivity() {
   const el = $('ig-activity'); if (!el) return;
@@ -1242,14 +1263,15 @@ $('ig-connect')?.addEventListener('click', async () => {
   const igUserId = $('ig-user-id').value.trim();
   const accessToken = $('ig-token').value.trim();
   const base = $('ig-base').value;
+  const label = $('ig-label') ? $('ig-label').value.trim() : '';
   if (!igUserId || !accessToken) { $('ig-msg').textContent = '계정 ID와 토큰을 입력하세요.'; return; }
   $('ig-msg').textContent = '연결 확인 중…';
   try {
-    const r = await fetch('/api/instagram/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ igUserId, accessToken, base }) });
+    const r = await fetch('/api/instagram/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ igUserId, accessToken, base, label }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || '연결 실패');
-    $('ig-msg').innerHTML = `<span style="color:var(--teal)">✅ 연결됐습니다 · @${d.username}</span>`;
-    $('ig-token').value = '';
+    $('ig-msg').innerHTML = `<span style="color:var(--teal)">✅ 추가됐습니다 · @${d.username}</span>`;
+    $('ig-token').value = ''; $('ig-user-id').value = ''; if ($('ig-label')) $('ig-label').value = '';
     refreshIgStatus();
   } catch (e) { $('ig-msg').textContent = '실패: ' + e.message; }
 });
@@ -1258,8 +1280,10 @@ async function refreshFbStatus() {
   const st = $('fb-status'); if (!st) return;
   try {
     const s = await (await fetch('/api/facebook/status')).json();
-    if (s.connected) { st.innerHTML = `<span style="color:var(--teal)">● 연결됨${s.pageName ? ' · ' + s.pageName : ''}</span>`; refreshFbActivity(); }
+    const accts = s.accounts || [];
+    if (s.connected) { st.innerHTML = `<span style="color:var(--teal)">● ${accts.length}개 연결됨</span>`; refreshFbActivity(); }
     else st.textContent = '미연결';
+    renderAcctList('fb-accounts', 'facebook', accts);
   } catch {}
 }
 async function refreshFbActivity() {
@@ -1281,14 +1305,15 @@ async function refreshFbActivity() {
 $('fb-connect')?.addEventListener('click', async () => {
   const pageId = $('fb-page-id').value.trim();
   const pageAccessToken = $('fb-token').value.trim();
+  const label = $('fb-label') ? $('fb-label').value.trim() : '';
   if (!pageId || !pageAccessToken) { $('fb-msg').textContent = '페이지 ID와 토큰을 입력하세요.'; return; }
   $('fb-msg').textContent = '연결 확인 중…';
   try {
-    const r = await fetch('/api/facebook/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId, pageAccessToken }) });
+    const r = await fetch('/api/facebook/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pageId, pageAccessToken, label }) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || '연결 실패');
-    $('fb-msg').innerHTML = `<span style="color:var(--teal)">✅ 연결됐습니다 · ${d.pageName}</span>`;
-    $('fb-token').value = '';
+    $('fb-msg').innerHTML = `<span style="color:var(--teal)">✅ 추가됐습니다 · ${d.pageName}</span>`;
+    $('fb-token').value = ''; $('fb-page-id').value = ''; if ($('fb-label')) $('fb-label').value = '';
     refreshFbStatus();
   } catch (e) { $('fb-msg').textContent = '실패: ' + e.message; }
 });
