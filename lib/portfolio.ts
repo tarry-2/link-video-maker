@@ -18,6 +18,8 @@ export type PortfolioItem = {
   instagramUrl?: string; // 인스타 업로드 완료 시 permalink
   facebookUrl?: string; // 페이스북 게시 완료 시 permalink
   threadsUrl?: string; // 스레드 게시 완료 시 permalink
+  productUrl?: string; // 쇼핑 쇼츠: 발송 캡션/링크에 꽂을 구매 링크(온파트너 제휴 /r/code 또는 온종일팜 다이렉트)
+  productName?: string; // 쇼핑 쇼츠: 상품명(캡션 보조)
   orientation?: 'portrait' | 'landscape'; // 화면비(롱폼=landscape). 없으면 세로 폴백(레거시).
   // ★작업내역 분리: 영상(video) / 카드영상(card) / 카드게시물=캐러셀(card-post) / 유튜브하이라이트(highlight). 없으면 video(레거시).
   kind?: 'video' | 'card' | 'card-post' | 'highlight';
@@ -64,6 +66,13 @@ export function setPortfolioThreads(projectId: string, threadsUrl: string) {
   const items = listPortfolio();
   const it = items.find((x) => x.projectId === projectId);
   if (it) { it.threadsUrl = threadsUrl; save(items); }
+}
+
+// 쇼핑 쇼츠: 항목에 구매 링크·상품명 기록(제작 완료 후). 발송 시 캡션/링크에 자동 사용.
+export function setPortfolioProduct(projectId: string, productUrl: string, productName?: string) {
+  const items = listPortfolio();
+  const it = items.find((x) => x.projectId === projectId);
+  if (it) { it.productUrl = productUrl; if (productName) it.productName = productName; save(items); }
 }
 
 // 샘플 영상의 유튜브 링크는 별도 파일에 기록(샘플은 portfolio.json에 없으므로).

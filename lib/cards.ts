@@ -104,6 +104,70 @@ function normalize(j: Record<string, unknown>, count: number, palette: string[])
   return {title: String(j.title || '카드뉴스').slice(0, 80), musicPrompt: String(j.musicPrompt || 'upbeat bright cheerful light background music'), cards, subject};
 }
 
+// ── 쇼핑 쇼츠 대본 ── 상품(이름·가격)으로 리뷰/실연 톤 카드뉴스를 짠다.
+//   ★상품 정보가 이름·가격뿐이라 '없는 효능·수치'를 지어내면 안 된다(허위광고). 일반적 매력·사용 장면·구매 유도로만.
+//   마지막 카드(CTA+제휴고지)는 코드로 강제 추가 — FTC 고지 누락 방지.
+export type ShoppingProduct = {name: string; price: number | null; image?: string};
+export async function generateShoppingStoryboard(
+  keys: {gemini: string[]; openai?: string},
+  product: ShoppingProduct,
+  count = 6,
+  preset?: Preset,
+): Promise<CardStoryboard> {
+  const n = Math.max(4, Math.min(10, count));
+  const palette = preset?.accentColors?.length ? preset.accentColors : ['#FF5A3C', '#FFB400', '#16A34A'];
+  const priceTxt = product.price ? product.price.toLocaleString('ko-KR') + '원' : '';
+  // 본문(중간) 카드 수 = 전체 - cover - CTA(코드로 붙임) → AI에겐 cover + (n-2) 본문만 요청.
+  const bodyN = Math.max(2, n - 2);
+  const prompt = `너는 홈쇼핑·릴스로 물건을 파는 한국어 카피라이터다. 아래 '상품'을 소개하는 숏폼 카드뉴스를 만들어라. 스크롤을 멈추고 "오 이거 사고싶다"가 되게, 생생하고 군침 돌게.
+
+[상품명] ${product.name}
+[가격] ${priceTxt || '(가격 정보 없음)'}
+
+🔴🔴절대 규칙:
+- 상품에 대해 '확인되지 않은 효능·수치·원산지·인증'을 지어내지 마라(예: "비타민 300%", "당뇨에 좋음", "전국 1위"). 과장 허위광고는 금지.
+- 아는 사실은 상품명과 가격뿐이다. 그 범위에서 '일반적인 매력·먹는/쓰는 장면·상황·구매 이유'로만 설득해라(예: 신선식품이면 '밥상에 올리는 장면·제철·간편함', 공산품이면 '쓰는 순간의 편리').
+- 숫자(number) 카드는 '가격'만 사실로 쓴다. 다른 수치는 넣지 마라.
+- 한국어. 쉽고 리듬감 있게.
+
+카드 구성(정확히 ${bodyN + 1}장 — 뒤에 구매 버튼 카드는 시스템이 자동으로 붙이니 넣지 마라):
+1장 cover: 시선폭탄. big(2~5단어 강한 후킹, 상품의 매력 한방), small(윗줄 보조), badge(2~4자: 추천/신상/제철/강추 등), body(짧은 미끼 한 줄).
+${bodyN}장 본문: body/list/number/quote를 섞어라.
+   - 적어도 1장은 number 타입으로 '가격'을 크게(number="${product.price || ''}", unit="원", title="이 가격에?").
+   - 나머지는 상품을 먹고싶게/갖고싶게 만드는 장면·이유(body 2~3문장 또는 list 3개).
+JSON만: {"title":"(영상 제목)","musicPrompt":"upbeat shopping bright","subject":"${product.name}","cards":[...]}`;
+  let lastErr = 'AI 키를 확인하세요.';
+  let sb: CardStoryboard | null = null;
+  for (let attempt = 0; attempt < 3 && !sb; attempt++) {
+    let raw = '';
+    if (keys.gemini?.length) { try { raw = await geminiGenerate(keys.gemini, prompt, {json: true, maxTokens: 2048, temperature: attempt === 0 ? 0.9 : 0.6}); } catch (e: any) { lastErr = e?.message || '생성 실패'; } }
+    if (!raw && keys.openai) { try { raw = await openaiJson(keys.openai, prompt, 2048); } catch (e: any) { lastErr = e?.message || '생성 실패'; } }
+    if (!raw) continue;
+    try {
+      const s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+      const m = s.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('JSON 형태 아님');
+      const got = normalize(JSON.parse(m[0]), bodyN + 1, palette);
+      if (got.cards.length) sb = got; else lastErr = '카드가 비어있음';
+    } catch (e: any) { lastErr = e?.message || 'JSON 파싱 실패'; }
+  }
+  if (!sb) throw new Error('쇼핑 대본 생성 실패(재시도 후): ' + lastErr);
+  // normalize가 마지막 카드를 closing으로 바꿔놨을 수 있음 → 본문으로 되돌리고(장면 유지), CTA 카드를 새로 붙인다.
+  const last = sb.cards[sb.cards.length - 1];
+  if (last && last.type === 'closing' && sb.cards.length > 1) last.type = 'body';
+  // ★구매 유도 + 제휴고지(FTC) 카드 강제. big=CTA, body=고지. 발송 캡션에도 고지가 또 들어간다(이중).
+  sb.cards.push({
+    type: 'closing',
+    accent: palette[0],
+    badge: priceTxt || '지금',
+    big: '지금 주문하기',
+    small: product.name,
+    title: priceTxt ? priceTxt + ' · 아래 링크에서' : '아래 링크에서',
+    body: '프로필/캡션의 링크로 바로 구매할 수 있어요. ※ 이 게시물은 제휴 활동의 일환으로 수수료를 받을 수 있습니다.',
+  });
+  return sb;
+}
+
 export async function generateCardStoryboard(
   keys: {gemini: string[]; openai?: string},
   topic: string,

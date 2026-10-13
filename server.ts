@@ -15,7 +15,7 @@ import {makeHighlights, backfillHighlightProjects, reRenderHighlight, loadHlProj
 import {searchArchiveChannel, sampleForAnalysis, fetchSourceTranscript} from './lib/youtube-clip';
 import {analyzeReframe} from './lib/reframe';
 import {getTrends} from './lib/trends';
-import {generateCardStoryboard} from './lib/cards';
+import {generateCardStoryboard, generateShoppingStoryboard} from './lib/cards';
 import {PRESETS, RECOMMEND_STYLE, getPreset} from './lib/presets';
 import {STYLES, STYLE_IDS} from './lib/styles';
 import {runpodStatus, stopAllWanPods} from './lib/runpod-wan';
@@ -23,7 +23,7 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
-import {listPortfolio, removePortfolio, updatePortfolioTitle, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, setPortfolioFacebook, setSampleFacebook, loadSampleFacebook, setPortfolioThreads, setSampleThreads, loadSampleThreads, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
+import {listPortfolio, removePortfolio, updatePortfolioTitle, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, setPortfolioFacebook, setSampleFacebook, loadSampleFacebook, setPortfolioThreads, setSampleThreads, loadSampleThreads, setPortfolioProduct, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, removeYouTube, renameYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getChannelVideos, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys, head as r2Head} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
@@ -289,6 +289,20 @@ async function ensureInstaVideoR2(id: string): Promise<string> {
 function stripAttrUrl(s: string): string {
   return s.replace(/\s*[—–-]\s*https?:\/\/\S+/gi, '').replace(/[ \t]{2,}/g, ' ').trim();
 }
+// 쇼핑 쇼츠의 구매 링크 블록 — 발송 캡션/설명 끝에 붙인다(제휴 고지 포함, FTC). 포폴에 저장된 productUrl 사용.
+//   도메인(링크)을 '여기선' 일부러 넣는다 — 쇼핑은 링크로 사는 게 목적(출처와 반대).
+function readProductCta(id: string): string {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return '';
+  try {
+    const it = listPortfolio().find((x) => x.projectId === id);
+    if (it?.productUrl) {
+      const name = it.productName ? `${it.productName} ` : '';
+      return `🛒 ${name}구매하기 👉 ${it.productUrl}\n※ 이 게시물은 제휴 활동의 일환으로 수수료를 받을 수 있습니다.`;
+    }
+  } catch {}
+  return '';
+}
+
 // 재사용(CC BY) 하이라이트의 출처 문구 — 상세설명·캡션에 반드시 포함(저작권 표기 의무). 도메인은 뺀다(stripAttrUrl).
 //   project.json.attribution 우선, 없으면 attribution.txt 폴백. 하이라이트가 아니면 빈 문자열.
 function readAttribution(id: string): string {
@@ -990,6 +1004,9 @@ const server = http.createServer(async (req, res) => {
       // CC BY 하이라이트는 출처를 설명 끝에 반드시 붙인다(저작권 표기 의무).
       const attr = readAttribution(id);
       if (attr && !meta.description.includes(attr)) meta.description = (meta.description + '\n\n' + attr).slice(0, 4900);
+      // 쇼핑 쇼츠는 구매 링크(+제휴 고지)를 설명 끝에.
+      const cta = readProductCta(id);
+      if (cta && !meta.description.includes(cta)) meta.description = (meta.description + '\n\n' + cta).slice(0, 4900);
       return json(res, 200, meta);
     } catch (e: any) { return json(res, 502, {error: '메타 생성 실패: ' + e.message}); }
   }
@@ -1104,8 +1121,11 @@ const server = http.createServer(async (req, res) => {
       const caption = await generateCaption({gemini: k.gemini, openai: k.openai}, meta.title, meta.narrations);
       // CC BY 하이라이트는 캡션에도 출처를 붙인다(저작권 표기 의무).
       const attr = readAttribution(id);
-      const finalCaption = attr && !caption.includes(attr) ? (caption + '\n\n' + attr) : caption;
-      return json(res, 200, {caption: finalCaption});
+      let finalCaption = attr && !caption.includes(attr) ? (caption + '\n\n' + attr) : caption;
+      // 쇼핑 쇼츠는 구매 링크(+제휴 고지)를 캡션 끝에 — 인스타·페북·스레드 공용.
+      const cta = readProductCta(id);
+      if (cta && !finalCaption.includes(cta)) finalCaption = finalCaption + '\n\n' + cta;
+      return json(res, 200, {caption: finalCaption, productUrl: (listPortfolio().find((x) => x.projectId === id)?.productUrl || '')});
     } catch (e: any) { return json(res, 502, {error: '캡션 생성 실패: ' + e.message}); }
   }
   // 인스타 업로드(릴스/피드) — 완성 영상이 R2에 있어야 함(공개 presigned URL 필요)
@@ -1300,7 +1320,9 @@ const server = http.createServer(async (req, res) => {
     if (!r2key) return json(res, 400, {error: '영상 파일을 찾을 수 없어요. 너무 오래돼 정리됐을 수 있어요 — 다시 제작해 주세요.'});
     const b = await readBody(req);
     const caption = String(b.caption || b.text || '').trim();
-    const link = String(b.link || '').trim() || undefined;
+    // 링크: 사용자가 입력하면 그걸, 없으면 쇼핑 쇼츠 구매링크(포폴 productUrl)를 자동으로 붙인다.
+    const autoProd = !isSample ? (listPortfolio().find((x) => x.projectId === id)?.productUrl || '') : '';
+    const link = (String(b.link || '').trim() || autoProd) || undefined;
     const accountId = String(b.accountId || '').trim() || undefined;
     try {
       const url = await presignGet(r2key, 3600);
@@ -2377,25 +2399,60 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
   if (p === '/api/generate-cards' && req.method === 'POST') {
     const b = await readBody(req);
     const topic = String(b.topic || '').trim();
-    if (!topic) return json(res, 400, {error: '주제를 입력하세요.'});
+    // ★쇼핑 쇼츠 모드: productLink(온파트너 /r/code 또는 온종일팜 다이렉트 상품페이지)가 오면 상품 기반으로 만든다.
+    const productLink = String(b.productLink || '').trim();
+    const isShopping = !!productLink;
+    if (!topic && !isShopping) return json(res, 400, {error: '주제나 상품 링크를 입력하세요.'});
     const k = pipelineKeys();
     if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 Gemini 또는 OpenAI 키를 저장하세요.'});
     const output = b.output === 'post' ? 'post' : 'video';
-    const bg = ['ai', 'solid', 'upload'].includes(b.bg) ? b.bg : 'solid';
+    // 쇼핑은 상품 사진을 배경으로 쓰므로 bg=upload 고정(상품 사진을 서버가 받아 깐다).
+    const bg = isShopping ? 'upload' : (['ai', 'solid', 'upload'].includes(b.bg) ? b.bg : 'solid');
     const narration = output === 'video' && b.narration === true;
     const bgm = output === 'video' && b.bgm === true;
     if ((narration || bgm) && !k.elevenlabs) return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다.'});
     if (bg === 'ai' && !k.replicate) return json(res, 400, {error: 'AI 배경을 쓰려면 Replicate 키가 필요합니다.'});
+    // 발송 링크 토글: 'direct'=온종일팜 상품페이지, 그 외=온파트너 제휴링크(기본, 수수료).
+    const linkMode = b.linkMode === 'direct' ? 'direct' : 'partner';
 
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
     currentGenJob = id;
     (async () => {
+      let shopUrlToSave = '', shopNameToSave = '';
       try {
         // 업로드 배경(dataURL) 저장.
         let uploads: string[] | undefined;
-        if (bg === 'upload' && Array.isArray(b.images) && b.images.length) {
+        let storyboard = sanitizeCardStoryboard(b.storyboard);
+        let cardTopic = topic;
+        // ── 쇼핑 모드: 상품 조회 → 사진 다운로드(배경) → 쇼핑 대본 생성 ──
+        if (isShopping) {
+          jlog(job, '[쇼핑] 상품 정보를 불러오는 중…');
+          const product = await resolveProduct(productLink);
+          cardTopic = product.name;
+          shopNameToSave = product.name;
+          shopUrlToSave = linkMode === 'direct'
+            ? (product.shopUrl || product.partnerUrl)
+            : (product.partnerUrl || product.shopUrl);
+          jlog(job, `[쇼핑] "${product.name}"${product.price ? ' · ' + product.price.toLocaleString('ko-KR') + '원' : ''} — 발송 링크: ${shopUrlToSave}`);
+          // 상품 사진 다운로드 → 배경으로(모든 카드에 상품 사진이 깔린다).
+          if (product.image) {
+            try {
+              const ir = await fetch(product.image, {cache: 'no-store'});
+              if (ir.ok) {
+                const ab = Buffer.from(await ir.arrayBuffer());
+                const ext = /png/i.test(ir.headers.get('content-type') || '') || /\.png/i.test(product.image) ? 'png' : 'jpg';
+                const upDir = path.join(ROOT, 'public', 'uploads', 'card-' + id);
+                fs.mkdirSync(upDir, {recursive: true});
+                fs.writeFileSync(path.join(upDir, `u-0.${ext}`), ab);
+                uploads = [`uploads/card-${id}/u-0.${ext}`];
+              }
+            } catch (e: any) { jlog(job, '[쇼핑] 상품 사진 다운로드 실패(단색 배경으로 진행): ' + (e?.message || e)); }
+          }
+          // 대본이 편집본으로 안 왔으면 쇼핑 대본 생성.
+          if (!storyboard) storyboard = await generateShoppingStoryboard({gemini: k.gemini, openai: k.openai}, {name: product.name, price: product.price, image: product.image}, Number(b.count) || 6);
+        } else if (bg === 'upload' && Array.isArray(b.images) && b.images.length) {
           const upDir = path.join(ROOT, 'public', 'uploads', 'card-' + id);
           fs.mkdirSync(upDir, {recursive: true});
           uploads = [];
@@ -2407,22 +2464,26 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
             uploads!.push(`uploads/card-${id}/u-${i}.${ext}`);
           });
         }
+        // 쇼핑 모드인데 상품 사진이 없으면 단색으로 폴백(배경 비면 제작 실패 방지).
+        const effBg = (isShopping && (!uploads || !uploads.length)) ? 'solid' : bg;
         const r = await makeCardVideo(k, {
-          topic,
-          count: Number(b.count) || 7,
+          topic: cardTopic,
+          count: Number(b.count) || (isShopping ? 6 : 7),
           presetId: b.presetId || undefined,
-          output, bg, uploads,
+          output, bg: effBg, uploads,
           narration, bgm,
           voice: b.voice || undefined,
           imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
           cardTheme: b.cardTheme === 'dark' ? 'dark' : 'light',
           motion: ['pop', 'slide', 'type', 'zoom', 'flip'].includes(b.motion) ? b.motion : 'auto',
           font: pickFont(b.font), // 제목 폰트(모든 탭 공통). 자동이면 undefined→스킨 폰트.
-          // 대본편집: 사용자가 고친 대본이 오면 그대로 제작(검증 후).
-          storyboard: sanitizeCardStoryboard(b.storyboard),
+          // 대본편집: 사용자가 고친 대본이 오면 그대로 제작(검증 후). 쇼핑은 위에서 만든 대본.
+          storyboard,
           log: (m) => jlog(job, m),
           isCancelled: () => !!job.cancelled, // ★중단 — 파이프라인이 단계마다 확인
         });
+        // ★쇼핑: 포폴에 구매 링크·상품명 저장 → 발송 시 캡션/링크에 자동.
+        if (isShopping && r.projectId && shopUrlToSave) setPortfolioProduct(r.projectId, shopUrlToSave, shopNameToSave);
         // 바탕화면 저장은 선택(로컬에서만, 실패해도 무시 — Railway엔 Desktop 없음).
         try {
           const safe = r.title.replace(/[\/\\:*?"<>|]/g, '_').slice(0, 60);

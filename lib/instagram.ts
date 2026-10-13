@@ -156,13 +156,29 @@ export async function generateCaption(
    썰 푸는 구어체·위트 유지, 딱딱한 설명체·정보 나열 금지.
 - hashtags: 이 영상의 실제 소재에 맞는, 인스타에서 잘 노출되는 해시태그 12~15개. 한국어 중심 + 핵심 영어 2~3개. 초대형 트렌드 태그(릴스추천/탐색탭/fyp) 1~2개 + 주제 핵심 + 틈새 믹스. # 없이 배열, 공백 없는 단어.
 JSON만 출력: {"hook":"...","blocks":["...","...","..."],"hashtags":["...","..."]}`;
-  let raw = '';
-  if (keys.gemini.length) {
-    try { raw = await geminiGenerate(keys.gemini, prompt, {json: true, maxTokens: 1024, temperature: 1.0}); } catch {}
+  // ★AI가 고온도에서 깨진 JSON(문자열 안 잘못된 \ 이스케이프 등)을 뱉으면 JSON.parse가 "Bad escaped character"로
+  //   터져 캡션 생성 '전체'가 실패하던 문제 → 재시도(저온도) + 깨진 이스케이프 정리 + 최후 폴백(제목 기반).
+  //   generateCaption은 인스타·페북·스레드 공용이라 여기 한 곳만 고치면 세 발송 경로가 다 안전해진다.
+  const parseLoose = (s: string): any => {
+    const m = s.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('JSON 형태 아님');
+    let t = m[0];
+    try { return JSON.parse(t); } catch {}
+    // 유효하지 않은 백슬래시 이스케이프(\" \\ \/ \b \f \n \r \t \uXXXX 외)의 \ 를 제거해 복구 시도.
+    t = t.replace(/\\(?!["\\/bfnrtu])/g, '');
+    return JSON.parse(t);
+  };
+  let d: any = null;
+  for (let attempt = 0; attempt < 3 && !d; attempt++) {
+    let raw = '';
+    if (keys.gemini.length) {
+      try { raw = await geminiGenerate(keys.gemini, prompt, {json: true, maxTokens: 1024, temperature: attempt === 0 ? 1.0 : 0.5}); } catch {}
+    }
+    if (!raw && keys.openai) { try { raw = await openaiJson(keys.openai, prompt, 1024); } catch {} }
+    if (!raw) continue;
+    try { d = parseLoose(raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '')); } catch {}
   }
-  if (!raw && keys.openai) raw = await openaiJson(keys.openai, prompt, 1024);
-  const m = raw.match(/\{[\s\S]*\}/);
-  const d: any = m ? JSON.parse(m[0]) : {};
+  if (!d) d = {}; // 끝까지 실패 → 제목 기반 최소 캡션으로 폴백(발송은 되게, 에러 throw 안 함)
   const hook = String(d.hook || title).trim();
   // blocks(신규) 우선, 없으면 body(구) 호환. 각 블록을 빈 줄로 띄워 모바일 가독성 확보.
   const blocks = Array.isArray(d.blocks)
