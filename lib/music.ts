@@ -47,11 +47,14 @@ export async function generateBgm(
   if (!r.ok) {
     let detail = '';
     try { detail = (await r.text()).slice(0, 300); } catch {}
-    // 402/할당량·크레딧 부족을 식별해 "충전하라"는 명확한 안내로 바꿔준다. 그 외는 사유 그대로.
-    const lowCredit = r.status === 402 || /quota|credit|insufficient|exceed|limit|balance|not enough/i.test(detail);
+    // ★크레딧 부족 판정은 '엄격하게' — 흔한 단어("limit"·"exceed")만으로 단정하면, 길이제한·기능미지원 등
+    //   다른 실패를 "크레딧 없음"으로 오판한다(테리: 6만 크레딧 있는데 크레딧 없다고 나옴). 명확한 신호만 인정.
+    const lowCredit = r.status === 402
+      || /quota_exceeded|insufficient|not enough credit|credit.{0,12}(exceed|insufficient|run out|depleted)|balance.{0,12}(low|insufficient|zero)/i.test(detail);
     log?.(`[BGM] 생성 실패(HTTP ${r.status}) ${detail}`);
+    // 진짜 사유(HTTP·본문)를 항상 붙여 보여준다 — 오판 없이 원인이 바로 드러나게.
     throw new Error(lowCredit
-      ? `ElevenLabs 크레딧(할당량)이 부족하거나 한도를 초과했습니다. 충전 후 다시 시도하세요. (HTTP ${r.status})`
+      ? `ElevenLabs 크레딧(할당량) 부족으로 보입니다. 충전 후 다시 시도하세요. (HTTP ${r.status}: ${detail || '본문 없음'})`
       : `배경음악 생성 실패 (HTTP ${r.status}): ${detail || '응답 본문 없음'}`);
   }
   const raw = Buffer.from(await r.arrayBuffer());

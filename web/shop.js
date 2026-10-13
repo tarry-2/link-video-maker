@@ -350,11 +350,18 @@
       const d = await (await fetch('/api/jobs/current', {cache: 'no-store'})).json();
       if (d && d.id && d.kind === 'shopping') { $('sh-progress').classList.remove('hidden'); addLog('🔗 진행 중인 쇼핑 작업에 연결했어요(다른 기기에서 시작한 것도 보여요).'); attach(d.id); return; }
       if (d && d.done && d.done.kind === 'shopping') { lastJobId = d.doneId || d.done.id || lastJobId; showResult(d.done.projectId, d.done.title, d.done); loadHistory(); try { localStorage.removeItem('onvideo-shop-job'); } catch {} return; }
-      // 2순위: 내가 기억한 작업 id가 아직 서버에서 살아있으면(덮여도) 직접 재연결.
+      // 2순위: 내가 기억한 작업 id가 서버에 남아있으면(덮여도) 직접 재연결 — 진행 중이면 이어보고,
+      //   이미 실패했으면 그 '사유'라도 보여준다(새로고침했더니 아무것도 없이 초기화되는 느낌 방지).
       let saved = ''; try { saved = localStorage.getItem('onvideo-shop-job') || ''; } catch {}
       if (saved) {
         const jl = await (await fetch('/api/job-logs/' + encodeURIComponent(saved), {cache: 'no-store'})).json().catch(() => null);
-        if (jl && !jl.error && jl.done === false) { $('sh-progress').classList.remove('hidden'); addLog('🔗 새로고침 전 작업에 다시 연결했어요.'); attach(saved); return; }
+        if (jl && jl.done === false) { $('sh-progress').classList.remove('hidden'); addLog('🔗 새로고침 전 작업에 다시 연결했어요.'); attach(saved); return; }
+        if (jl && jl.done === true && jl.error) {
+          $('sh-progress').classList.remove('hidden'); $('sh-log').innerHTML = '';
+          (jl.logs || []).forEach(addLog); setEnergy(100, '실패');
+          try { localStorage.removeItem('onvideo-shop-job'); } catch {}
+          return;
+        }
         try { localStorage.removeItem('onvideo-shop-job'); } catch {} // 끝났거나 사라진 작업
       }
     } catch {}
