@@ -1184,6 +1184,12 @@ const server = http.createServer(async (req, res) => {
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 facebookUrl 저장된 게 없음']} : {})});
     const diag: string[] = [];
     const stats = await getFbStats(debug ? diag : undefined);
+    if (debug) {
+      const keys = Object.keys(stats);
+      diag.push(`우리가 저장한 facebookUrl ${withUrl.length}개: ${withUrl.map((x) => x.url).slice(0, 5).join(' , ')}`);
+      diag.push(`Meta가 돌려준 permalink ${keys.length}개: ${keys.slice(0, 5).join(' , ')}`);
+      diag.push(`permalink 매칭 성공 ${withUrl.filter((x) => stats[x.url]).length}/${withUrl.length}개 (0이면 키 불일치 / videos 0개면 권한·릴스 문제)`);
+    }
     const items = withUrl.map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, shares: 0, reactions: 0}, ...(stats[x.url] || {})}))
       .sort((a: any, b: any) => b.views - a.views || b.likes - a.likes);
     const fbBody = {connected: true, items, summary: perfSummary(items, ['shares', 'reactions']), ...(debug ? {debug: diag} : {})};
