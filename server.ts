@@ -2378,11 +2378,23 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
   if (p === '/api/card-plan' && req.method === 'POST') {
     const b = await readBody(req);
     const topic = String(b.topic || '').trim();
-    if (!topic) return json(res, 400, {error: '주제를 입력하세요.'});
+    const productLink = String(b.productLink || '').trim();
+    if (!topic && !productLink) return json(res, 400, {error: '주제나 상품 링크를 입력하세요.'});
     const k = pipelineKeys();
     if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 Gemini 또는 OpenAI 키를 저장하세요.'});
     const style = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
     try {
+      // ── 쇼핑 모드: 상품 조회 → 쇼핑 대본 + 상품 정보(프론트 미리보기용) 반환 ──
+      if (productLink) {
+        const product = await resolveProduct(productLink);
+        const sb = await generateShoppingStoryboard(
+          {gemini: k.gemini, openai: k.openai},
+          {name: product.name, price: product.price, image: product.image},
+          Number(b.count) || 6,
+          b.presetId ? getPreset(String(b.presetId)) : undefined,
+        );
+        return json(res, 200, {storyboard: sb, product});
+      }
       const sb = await generateCardStoryboard(
         {gemini: k.gemini, openai: k.openai},
         topic,

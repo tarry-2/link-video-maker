@@ -118,6 +118,27 @@
 
         <!-- 카드뉴스 모드: 글자 중심 카드 슬라이드 -->
         <div id="pane-card" class="hidden">
+          <!-- 🛍 쇼핑 쇼츠: 온파트너 상품/온종일팜 상품을 영상으로 만들어 제휴링크로 발송 -->
+          <label class="toggle" style="margin-bottom:6px"><input type="checkbox" id="shop-mode" /> 🛍 <b>쇼핑 상품으로 만들기</b> <span class="hint">— 상품 링크를 넣으면 상품 사진·가격으로 리뷰 쇼츠를 만들고, 올릴 때 구매 링크가 자동으로 붙어요</span></label>
+          <div id="shop-box" class="hidden" style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;background:color-mix(in srgb, var(--teal) 5%, transparent)">
+            <label class="field-label">상품 링크 <span class="hint">— 온파트너 제휴링크(.../r/코드) 또는 온종일팜 상품페이지 둘 다 가능</span></label>
+            <div class="voice-row">
+              <input id="shop-link" class="input" placeholder="예: https://partner.yuanfnb.com/r/4nv7v9" style="flex:1" />
+              <button id="shop-fetch" class="ghost-btn small" type="button">상품 불러오기</button>
+            </div>
+            <p id="shop-msg" class="mini-state"></p>
+            <div id="shop-preview" class="hidden" style="display:flex;gap:12px;align-items:center;margin-top:8px;padding:10px;border-radius:10px;background:var(--card)">
+              <img id="shop-img" style="width:64px;height:64px;object-fit:cover;border-radius:8px;background:#eee" />
+              <div style="flex:1"><div id="shop-name" style="font-weight:800"></div><div id="shop-price" style="color:var(--teal);font-weight:700"></div></div>
+            </div>
+            <label class="field-label" style="margin-top:10px">올릴 때 넣을 링크</label>
+            <div class="seg" id="shop-linkmode-seg">
+              <button type="button" class="seg-btn active" data-linkmode="partner">💰 온파트너 제휴링크 <span class="hint">(수수료)</span></button>
+              <button type="button" class="seg-btn" data-linkmode="direct">🛒 온종일팜 다이렉트</button>
+            </div>
+            <p class="mini-state" id="shop-linkmode-hint">제휴링크로 사면 수수료가 쌓여요. 다이렉트는 바로 상품 페이지로 연결돼요.</p>
+          </div>
+
           <label class="field-label">만들 형태</label>
           <div class="seg">
             <button type="button" id="card-out-video" class="seg-btn active" data-out="video">🎬 영상 (릴스·쇼츠)</button>
