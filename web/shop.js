@@ -164,6 +164,7 @@
     curJobId = id; lastJobId = id;
     if (curES) { try { curES.close(); } catch {} }
     try { localStorage.setItem('onvideo-shop-job', id); } catch {}
+    $('sh-log').innerHTML = ''; // 서버가 로그를 처음부터 재전송 → 재연결 시 중복 방지(교체)
     const es = new EventSource('/api/progress?id=' + id); curES = es; let n = 0;
     startTick();
     es.onmessage = (ev) => {
@@ -340,16 +341,28 @@
   }
   $('sh-history-refresh').onclick = loadHistory;
 
-  // ── 기기 연동(진행 중인 쇼핑 작업에 붙기) ──
+  // ── 기기 연동 + 새로고침 복원(진행 중인 쇼핑 작업에 다시 붙기) ──
+  //   1순위 = 서버의 현재 작업(/api/jobs/current, 다른 기기 것도). 2순위 = 이 브라우저가 기억한 작업 id
+  //   (localStorage) — currentGenJob이 다른 작업으로 덮여도 내 작업에 직접 재연결(새로고침해도 안 사라짐).
   async function syncCurrentJob() {
     if (curJobId) return;
     try {
       const d = await (await fetch('/api/jobs/current', {cache: 'no-store'})).json();
-      if (d && d.id && d.kind === 'shopping') { $('sh-progress').classList.remove('hidden'); addLog('🔗 진행 중인 쇼핑 작업에 연결했어요(다른 기기에서 시작한 것도 보여요).'); attach(d.id); }
-      else if (d && d.done && d.done.kind === 'shopping') { lastJobId = d.doneId || d.done.id || lastJobId; showResult(d.done.projectId, d.done.title, d.done); loadHistory(); }
-      else { try { localStorage.removeItem('onvideo-shop-job'); } catch {} }
+      if (d && d.id && d.kind === 'shopping') { $('sh-progress').classList.remove('hidden'); addLog('🔗 진행 중인 쇼핑 작업에 연결했어요(다른 기기에서 시작한 것도 보여요).'); attach(d.id); return; }
+      if (d && d.done && d.done.kind === 'shopping') { lastJobId = d.doneId || d.done.id || lastJobId; showResult(d.done.projectId, d.done.title, d.done); loadHistory(); try { localStorage.removeItem('onvideo-shop-job'); } catch {} return; }
+      // 2순위: 내가 기억한 작업 id가 아직 서버에서 살아있으면(덮여도) 직접 재연결.
+      let saved = ''; try { saved = localStorage.getItem('onvideo-shop-job') || ''; } catch {}
+      if (saved) {
+        const jl = await (await fetch('/api/job-logs/' + encodeURIComponent(saved), {cache: 'no-store'})).json().catch(() => null);
+        if (jl && !jl.error && jl.done === false) { $('sh-progress').classList.remove('hidden'); addLog('🔗 새로고침 전 작업에 다시 연결했어요.'); attach(saved); return; }
+        try { localStorage.removeItem('onvideo-shop-job'); } catch {} // 끝났거나 사라진 작업
+      }
     } catch {}
   }
+  // 탭 복귀 시 연결이 끊겨 있으면(curJobId 있는데 live 연결 죽음) 다시 붙여 로그가 이어지게.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && curJobId && !curES) { const id = curJobId; curJobId = null; attach(id); }
+  });
 
   // 🔆 작업 중 화면 꺼짐 방지
   let _wakeLock = null;
