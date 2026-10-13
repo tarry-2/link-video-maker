@@ -77,7 +77,8 @@
           <span class="field-label">형태</span>
           <div class="seg" id="sh-format">
             <button class="seg-btn active" data-fmt="card" type="button">🎴 카드형</button>
-            <button class="seg-btn" data-fmt="narration" type="button">🎙 나레이션형</button>
+            <button class="seg-btn" data-fmt="narration" type="button">🎙 AI 나레이션형</button>
+            <button class="seg-btn" data-fmt="media" type="button">📸 내 사진·영상</button>
           </div>
           <p class="shop-fmt-note" id="sh-fmt-note">카드형 = 상품 사진 위에 핵심 문구를 얹은 카드들이 넘어가는 쇼츠(빠른 제작).</p>
         </div>
@@ -107,13 +108,22 @@
           </div>
           <label class="hint" style="display:block;margin-top:10px"><input type="checkbox" id="sh-card-video" checked /> 영상(릴스)로 만들기 <span class="hint">— 끄면 캐러셀 이미지(게시물)</span></label>
         </div>
-        <!-- 나레이션형 전용 -->
-        <div class="field hidden" id="sh-narr-opts">
+        <!-- 📸 내 사진·영상 전용 업로드 -->
+        <div class="field hidden" id="sh-media-opts">
+          <span class="field-label">내 사진·영상 올리기 <span class="hint">(먹음직한 사진·요리 영상·언박싱 등 — 여러 개 가능)</span></span>
+          <input id="sh-media-file" type="file" accept="image/*,video/*" multiple class="input" style="padding:8px" />
+          <div id="sh-media-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+          <p class="shop-fmt-note">올린 사진·영상으로 <b>후킹·나레이션·자막</b>을 자동으로 입혀 진짜 판매 영상을 만들어요.</p>
+        </div>
+        <!-- 길이(AI 나레이션형·내 사진영상 공용) -->
+        <div class="field hidden" id="sh-dur-opts">
           <span class="field-label">길이</span>
           <div class="seg" id="sh-dur">
+            <button class="seg-btn" data-dur="15" type="button">15초</button>
             <button class="seg-btn" data-dur="20" type="button">20초</button>
             <button class="seg-btn active" data-dur="30" type="button">30초</button>
             <button class="seg-btn" data-dur="45" type="button">45초</button>
+            <button class="seg-btn" data-dur="60" type="button">60초</button>
           </div>
         </div>
         <div class="field" style="display:flex;gap:16px;flex-wrap:wrap">

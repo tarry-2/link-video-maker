@@ -31,11 +31,12 @@
 
   // ── 상태 ──
   let STYLES = [['real', '실사'], ['anime', '애니'], ['cinema', '시네마'], ['classic', '고전']];
-  let fmt = 'card';            // card | narration
+  let fmt = 'card';            // card | narration | media
   let linkMode = 'partner';    // partner | direct
   let style = 'real', voice = '';
   let count = 6, dur = 30, cardVideo = true, narr = true, bgm = true;
   let product = null;
+  let mediaFiles = [];         // 내 사진·영상(dataURL + type)
   let curJobId = null, curES = null, startTs = 0, tickTimer = null, lastLogAt = 0;
   let shownResultId = null, resultTimer = null, lastJobId = null;
 
@@ -51,10 +52,16 @@
   function applyFormat() {
     document.querySelectorAll('#sh-format .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.fmt === fmt));
     $('sh-card-opts').classList.toggle('hidden', fmt !== 'card');
-    $('sh-narr-opts').classList.toggle('hidden', fmt !== 'narration');
+    $('sh-media-opts').classList.toggle('hidden', fmt !== 'media');
+    // 길이 선택은 AI 나레이션형·내 사진영상에서 노출(카드형은 카드 수로 길이 결정).
+    $('sh-dur-opts').classList.toggle('hidden', fmt === 'card');
+    // 그림체는 AI가 장면을 그릴 때만 의미(카드형·AI나레이션형). 내 미디어는 내 사진이라 숨김.
+    $('sh-style').closest('.field').classList.toggle('hidden', fmt === 'media');
     $('sh-fmt-note').textContent = fmt === 'card'
       ? '카드형 = 상품 사진 위에 핵심 문구를 얹은 카드들이 넘어가는 쇼츠(빠른 제작).'
-      : '나레이션형 = 상품 사진을 바탕으로 성우가 리뷰하듯 소개하는 영상(장면 전환 + 음성).';
+      : fmt === 'narration'
+      ? 'AI 나레이션형 = 상품 사진으로 AI가 장면을 만들고 성우가 리뷰하듯 소개(장면 전환 + 음성).'
+      : '내 사진·영상 = 내가 올린 먹음직한 사진·요리/언박싱 영상에 후킹·나레이션·자막을 입혀 진짜 판매 영상으로.';
   }
 
   // ── 목소리/그림체 로드(영상만들기와 동일 /api/categories) ──
@@ -90,6 +97,24 @@
   $('sh-card-video').addEventListener('change', (e) => { cardVideo = e.target.checked; });
   $('sh-narr').addEventListener('change', (e) => { narr = e.target.checked; });
   $('sh-bgm').addEventListener('change', (e) => { bgm = e.target.checked; });
+
+  // 📸 내 사진·영상 업로드 — dataURL로 읽어 미리보기 + 제작 때 전송.
+  $('sh-media-file')?.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach((f) => {
+      const rd = new FileReader();
+      rd.onload = () => { mediaFiles.push({url: String(rd.result || ''), type: f.type.startsWith('video') ? 'video' : 'image'}); renderMediaPreview(); };
+      rd.readAsDataURL(f);
+    });
+  });
+  function renderMediaPreview() {
+    const box = $('sh-media-preview'); if (!box) return;
+    box.innerHTML = mediaFiles.map((m, i) => `<div style="position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;background:#000">
+      ${m.type === 'video' ? `<video src="${m.url}" style="width:100%;height:100%;object-fit:cover"></video>` : `<img src="${m.url}" style="width:100%;height:100%;object-fit:cover"/>`}
+      <button type="button" data-rm="${i}" style="position:absolute;top:0;right:0;background:rgba(0,0,0,.6);color:#fff;border:none;width:18px;height:18px;line-height:18px;cursor:pointer;font-size:12px">✕</button>
+    </div>`).join('');
+    box.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { mediaFiles.splice(Number(b.dataset.rm), 1); renderMediaPreview(); });
+  }
 
   // ── 상품 불러오기 ──
   $('sh-fetch').addEventListener('click', async () => {
@@ -145,7 +170,13 @@
     $('sh-phase').textContent = '제작 준비'; startTs = Date.now(); startTick();
     try {
       let url, body;
-      if (fmt === 'narration') {
+      if (fmt === 'media') {
+        if (!mediaFiles.length) { addLog('⚠️ 올릴 사진이나 영상을 먼저 추가하세요.'); $('sh-make').disabled = false; $('sh-stop').classList.add('hidden'); stopTick(); return; }
+        url = '/api/generate-shopping-video';
+        body = {productLink, linkMode, duration: dur, voice: voice || undefined, narration: narr, bgm,
+          images: mediaFiles.filter((m) => m.type === 'image').map((m) => m.url),
+          videos: mediaFiles.filter((m) => m.type === 'video').map((m) => m.url)};
+      } else if (fmt === 'narration') {
         url = '/api/generate-shopping-video';
         body = {productLink, linkMode, duration: dur, imageStyle: style, narration: narr, bgm, voice: voice || undefined};
       } else {

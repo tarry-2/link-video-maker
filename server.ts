@@ -1999,32 +1999,70 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
           } catch (e: any) { jlog(job, '[쇼핑] 상품 사진 다운로드 실패(AI 장면으로 진행): ' + (e?.message || e)); }
         }
         const priceLine = product.price ? `${product.price.toLocaleString('ko-KR')}원` : '(가격 정보 없음)';
-        const sourceText = `[상품 리뷰 쇼츠 대본 — 아래 상품을 소개하는 ${durSec}초 세로 영상]
-상품명: ${product.name}
+        // ★판매 대본 지침 — 실제 잘 나가는 상품 숏폼 구조(훅→침 넘어가는/탐나는 장면→사회적 증거→구매유도+제휴고지).
+        const sellRule = `상품명: ${product.name}
 가격: ${priceLine}
 
-🔴 절대 규칙(지키지 않으면 안 됨):
-- 없는 효능·과장된 수치(살이 빠진다/병이 낫는다/몇 % 등)를 지어내지 마라. 가격만 사실로 말하고, 나머지는 상품의 일반적인 매력·먹음직스러움/쓰임새·일상 속 사용 장면·구매하고 싶은 기분으로만 채워라.
-- 신선식품·건강식품이면 의학적 효능을 단정하지 마라.
-- 보는 사람이 "먹어보고 싶다 / 사고 싶다" 느끼도록 친근하고 생생하게.
-- 마지막 장면은 반드시 "지금 주문하기" 같은 구매 유도 + "유료 광고예요(제휴 수수료를 받을 수 있어요)"라는 제휴 고지 멘트로 끝내라(FTC 규정).`;
+🔴 판매 영상 규칙(꼭 지켜라):
+- 첫 장면(3초 안)=강한 후킹. "이 가격 실화?" "밥도둑 등장" 같이 멈칫하게. 밍밍한 "상품 소개합니다" 금지.
+- 중간=보는 사람이 "먹고 싶다/사고 싶다" 느끼게. 먹음직스러운/탐나는 장면, 쓰는 순간, 상황을 생생하게 묘사. 가격의 매력도 콕.
+- 없는 효능·수치·원산지·인증을 지어내지 마라(살 빠짐/병 나음/몇 % 금지). 아는 사실은 상품명·가격뿐. 신선식품이면 의학적 효능 단정 금지.
+- 마지막=구매 유도("지금 주문하세요") + "유료 광고예요(제휴 수수료를 받을 수 있어요)" 제휴 고지(FTC).
+- 한국어, 쉽고 군침 돌게.`;
 
-        const r = await makeVideo([], k, {
-          sourceText,
-          faceRef: productRef, // 상품 사진 = 기준 참조 → 전 장면에 상품 등장
-          duration: durSec,
-          orientation: 'portrait',
-          presetId: b.presetId || undefined,
-          voice: b.voice || undefined,
-          quality: 'high',
-          imageStyle,
-          sceneCount: Number(b.sceneCount) || 0,
-          narration: b.narration !== false,
-          bgm: b.bgm !== false,
-          font: pickFont(b.font),
-          log: (m) => jlog(job, m),
-          isCancelled: () => !!job.cancelled,
-        });
+        // ── 미디어 모드: 사용자가 올린 사진·영상으로 '진짜' 판매 영상(후킹·나레이션·길이·자막 자동) ──
+        //    AI가 어설픈 장면 만드는 대신, 실제 먹음직한 사진/요리 영상/언박싱을 쓴다(테리: "먹고싶게 안 됨").
+        const upImages: string[] = Array.isArray(b.images) ? b.images : [];
+        const upVideos: string[] = Array.isArray(b.videos) ? b.videos : [];
+        const useMedia = upImages.length > 0 || upVideos.length > 0;
+        let r: {out: string; title: string; imageDir: string; thumb?: string};
+        if (useMedia) {
+          jlog(job, `[쇼핑] 올린 미디어(사진 ${upImages.length}·영상 ${upVideos.length})로 판매 영상 제작 — 후킹·나레이션·자막 자동.`);
+          const upDir = path.join(ROOT, 'public', 'uploads', 'shop-media-' + id);
+          fs.mkdirSync(upDir, {recursive: true});
+          const imgPaths: string[] = [];
+          upImages.slice(0, 20).forEach((durl, i) => {
+            const m = String(durl).match(/^data:(image\/\w+);base64,(.+)$/); if (!m) return;
+            const ext = m[1] === 'image/png' ? 'png' : m[1] === 'image/webp' ? 'webp' : 'jpg';
+            const f = path.join(upDir, `img-${i}.${ext}`); fs.writeFileSync(f, Buffer.from(m[2], 'base64')); imgPaths.push(f);
+          });
+          const vidPaths: string[] = [];
+          upVideos.slice(0, 10).forEach((durl, i) => {
+            const m = String(durl).match(/^data:(video\/\w+);base64,(.+)$/); if (!m) return;
+            const ext = m[1].includes('quicktime') ? 'mov' : (m[1].split('/')[1] || 'mp4');
+            const f = path.join(upDir, `vid-${i}.${ext}`); fs.writeFileSync(f, Buffer.from(m[2], 'base64')); vidPaths.push(f);
+          });
+          r = await makeVideoManual(k, {
+            imagePaths: imgPaths, videoPaths: vidPaths,
+            keywords: product.name,
+            facts: sellRule,
+            duration: durSec,
+            presetId: b.presetId || undefined,
+            voice: b.voice || undefined,
+            font: pickFont(b.font),
+            log: (m) => jlog(job, m),
+            isCancelled: () => !!job.cancelled,
+          });
+        } else {
+          // AI 장면 모드: 상품 사진을 기준 참조로 전 장면에 상품 등장.
+          const sourceText = `[상품 리뷰 쇼츠 대본 — ${durSec}초 세로 영상]\n${sellRule}`;
+          r = await makeVideo([], k, {
+            sourceText,
+            faceRef: productRef,
+            duration: durSec,
+            orientation: 'portrait',
+            presetId: b.presetId || undefined,
+            voice: b.voice || undefined,
+            quality: 'high',
+            imageStyle,
+            sceneCount: Number(b.sceneCount) || 0,
+            narration: b.narration !== false,
+            bgm: b.bgm !== false,
+            font: pickFont(b.font),
+            log: (m) => jlog(job, m),
+            isCancelled: () => !!job.cancelled,
+          });
+        }
         let pid = '';
         try {
           pid = await registerVideoToPortfolio({
