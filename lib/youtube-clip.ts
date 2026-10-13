@@ -14,8 +14,8 @@ import {sttWords} from './align';
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 
-export type Highlight = {start: number; end: number; hookTop: string; hookAccent: string; reason: string; score: number};
-export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string; transcript?: string; score: number; reason?: string};
+export type Highlight = {start: number; end: number; hookTop: string; hookAccent: string; reason: string; score: number; whole?: boolean};
+export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string; transcript?: string; score: number; reason?: string; whole?: boolean};
 
 function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 300000, onLine?: (line: string) => void, cancelled?: () => boolean): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -336,6 +336,15 @@ function pickEmoji(raw: any): string {
 async function pickHighlights(geminiKeys: string[], subText: string, durationSec: number, count: number, clipSec: number, log: (m: string) => void, title = ''): Promise<Highlight[]> {
   const n = Math.max(1, Math.min(10, count));
 
+  // ★통째로(테리): 요청한 한 편 길이(clipSec)가 영상 길이 이상이면 하이라이트 쪼개기 없이 '영상 전체'를 한 편으로.
+  //   노래 1곡·짧은 클립을 통으로 쓰려는 경우 — splitEvenly는 maxFit=0으로 빈 배열을 줘 "구간 못 찾음"이 났다.
+  if (clipSec >= durationSec - 2) {
+    log(`[하이라이트] 요청 길이(${clipSec}초)가 영상(${Math.round(durationSec)}초) 이상 → 쪼개지 않고 '영상 전체'를 한 편으로 만듭니다.`);
+    let hook = {hookTop: '', hookAccent: '', score: 80};
+    if (geminiKeys.length && title.trim()) { try { const hs = await hooksFromTitle(geminiKeys, title.trim(), 1, log); if (hs[0]) hook = hs[0]; } catch {} }
+    return [{start: 0, end: durationSec, hookTop: hook.hookTop, hookAccent: hook.hookAccent, reason: '영상 전체', score: hook.score, whole: true}];
+  }
+
   // 자막이 없으면 순차 분할하되, ★제목으로라도 '빡센 궁금증 훅'을 편마다 만들어 넣는다(제목 그대로 쓰면 밋밋).
   if (!subText || !geminiKeys.length) {
     const base = splitEvenly(durationSec, n, clipSec);
@@ -654,7 +663,7 @@ export async function extractHighlights(
       try { fs.rmSync(raw, {force: true}); } catch {} // 섹션 원본은 크롭 후 삭제(용량 절약)
       // ★end는 '실제 클립 길이' 기준(무음 제거로 짧아졌을 수 있음) — makeHighlights가 durSec=end-start로 프레임을 잡으므로 일치시켜야 영상이 안 뜬다.
       const effEnd = h.start + Math.max(1, Math.round(secDur));
-      results.push({file, start: h.start, end: effEnd, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end), score: h.score, reason: h.reason});
+      results.push({file, start: h.start, end: effEnd, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end), score: h.score, reason: h.reason, whole: h.whole});
     } catch (e: any) {
       if (/사용자가 중단/.test(e?.message || '')) throw new Error('사용자가 중단했습니다.'); // 중단이면 다음 컷 말고 즉시 종료
       log(`[하이라이트] ${i + 1}번 구간 실패(건너뜀): ` + (e?.message || '').slice(0, 120));

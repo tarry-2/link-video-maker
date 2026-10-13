@@ -13,7 +13,7 @@ import {extractHighlights} from './youtube-clip';
 import {renderVideo, renderThumbnail, buildRenderPublic} from './render';
 import {renderHighlightFast} from './highlight-fast';
 import {intensifyHooks, autoSpace} from './script';
-import {addPortfolio, listPortfolio, countBySourceKey} from './portfolio';
+import {addPortfolio, listPortfolio} from './portfolio';
 import {r2Enabled, videoKey, uploadFile, getStream, head as r2Head, deleteKey as deleteR2Key} from './storage';
 import {geminiGenerate, GeminiImage} from './gemini';
 import {RULE, contentStrategy, sceneContext} from './prompt-rules'; // ★로직 센터 — 소재유형·화면우선·답/정보·오보금지 단일 출처
@@ -284,10 +284,9 @@ export async function makeHighlights(
       : `출처: ${meta.channel} — https://youtu.be/${videoId} (Creative Commons BY)`);
   const results: HighlightJobResult = [];
 
-  // ★누적 회차('N편') — 같은 소재로 지금까지 만든 편 수에 이어서 번호를 붙인다(배포 구분 편하게).
-  //   소재 식별: 유튜브/아카이브=videoId, 업로드=영상 제목. 이번 제작의 첫 편은 (기존수+1)편부터.
+  // 소재 식별키(포폴 저장·'✓ 사용함' 배지용). 유튜브/아카이브=videoId, 업로드=영상 제목.
+  //   ★번호는 이 누적이 아니라 '이번 배치' 기준 1편부터 매긴다(아래 episode=episodeNo).
   const sourceKey = isMine ? ('upload:' + (meta.title || '').trim()) : ('yt:' + videoId);
-  const startEpisode = countBySourceKey(sourceKey);
 
   // ★완성도 게이트(테리): 설정 길이의 80% 미만인 구간은 억지로 만들지 않고 스킵+로그한다.
   //   "한 편을 둘로 쪼개 반토막" 방지 — 한 편 덜 만들어도 각 편은 제 길이. (clipSec 지정 시만, 미지정이면 통과)
@@ -296,7 +295,7 @@ export async function makeHighlights(
   for (let i = 0; i < clips.length; i++) {
     stopIfCancelled();
     const c = clips[i];
-    if (minSec && (c.end - c.start) < minSec) {
+    if (minSec && !c.whole && (c.end - c.start) < minSec) { // whole=영상 전체(통째)는 길이 미달이어도 스킵 안 함
       log(`[하이라이트] 구간이 짧아(${Math.round(c.end - c.start)}초 · 기준 ${minSec}초) 완성도 위해 한 편을 스킵했습니다.`);
       continue;
     }
@@ -319,6 +318,9 @@ export async function makeHighlights(
     //   저작권 때문에 59초로 맞췄는데 해설 나레이션이 길어 60초를 넘기면 "쇼츠 전세계 차단" 위험 → 넘침 금지.
     //   clipSec이 지정돼 있으면 그 프레임을 상한으로 쓴다(지정 안 하면 clipFrames 그대로).
     const capFrames = opts.clipSec ? Math.round(opts.clipSec * FPS) : clipFrames;
+    // ★나레이션 커버리지(테리) — 바깥에서 1번 계산해 '나레이션 길이'와 '영상 길이' 둘 다에 쓴다.
+    //   <1(80/60%)이면 영상을 나레이션에 맞춰 자르지 말고 '클립 전체'를 둬서 뒷부분 음악·무대가 끝까지 재생되게.
+    const narrCoverage = Math.max(0.3, Math.min(1, opts.narrationCoverage ?? 1));
 
     // ★이 구간의 '실제 화면' 프레임 — 후킹·해설을 '보이는 것' 기준으로(인물 이름 단정·뒤바뀜 방지, 테리 대형 지적).
     const visionFrames = await clipVisionFrames(path.join(pubClipDir, clipName), durSec, studioDir).catch(() => []);
@@ -335,11 +337,10 @@ export async function makeHighlights(
       // 해설 길이도 '길이 락' 안에 맞춘다 — 영상이 capFrames에서 잘리므로 나레이션이 그보다 길면 뒷말이 뚝 끊긴다.
       //   캡의 92%를 목표 길이로(여운 1.3초 + 여유). 사용자가 59초로 맞췄으면 해설은 ~54초 분량으로 생성.
       const capSec = capFrames / FPS;
-      // ★나레이션 커버리지(테리): 1.0=끝까지 / 0.8 / 0.6 — 뒷부분은 원본 소리(노래·무대)가 커지며 재생된다.
-      const coverage = Math.max(0.3, Math.min(1, opts.narrationCoverage ?? 1));
-      const handoff = coverage < 0.95; // 중간에 끝나면 '자, 들어보시죠' 식 매끄러운 마무리
-      const narrTargetSec = Math.max(5, Math.min(Math.round(durSec), Math.floor(capSec * 0.92 * coverage)));
-      if (handoff) log(`[하이라이트] ${i + 1}편 해설 ${Math.round(coverage * 100)}%까지(${narrTargetSec}초) — 나머지는 원본 소리로 마무리`);
+      // ★커버리지 1.0=끝까지 / 0.8 / 0.6 (바깥 narrCoverage 재사용). 뒷부분은 원본 소리(노래·무대)가 커지며 재생.
+      const handoff = narrCoverage < 0.95; // 중간에 끝나면 '자, 들어보시죠' 식 매끄러운 마무리
+      const narrTargetSec = Math.max(5, Math.min(Math.round(durSec), Math.floor(capSec * 0.92 * narrCoverage)));
+      if (handoff) log(`[하이라이트] ${i + 1}편 해설 ${Math.round(narrCoverage * 100)}%까지(${narrTargetSec}초) — 나머지는 원본 소리로 마무리`);
       const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log, visionFrames, episodeNo - 1, handoff);
       commentaryText = commentary || '';
       if (commentary && k.elevenlabs) {
@@ -401,9 +402,14 @@ export async function makeHighlights(
       duckAudio: hasNarration, // 해설 깔면 원본 소리를 줄인다
       muteOriginal: !!opts.muteOriginal && hasNarration, // 원본 제거는 '해설이 있을 때만' — 없으면 무음 방지로 원본 유지
 
-      // ★해설 있으면 "나레이션 끝나는 지점 + 1.3초 여운"까지만(뒤 허전함 제거). 나레이션이 더 길면 그만큼.
-      //   해설 없으면 클립 전체. 단 어느 경우든 capFrames(사용자 지정 길이)를 '절대' 넘지 않는다(길이 락).
-      durationInFrames: Math.min(capFrames, words.length ? narrFrames + Math.round(FPS * 1.3) : clipFrames),
+      // ★영상 길이:
+      //   - 커버리지<1(80/60% = 뒤에 음악·무대를 더 듣겠다) → 나레이션으로 자르지 말고 '클립 전체'(capFrames까지)를 둬서
+      //     나레이션 끝난 뒤 남은 원본 소리가 끝까지 재생되게(테리: 60%인데 '들어보시죠' 하고 바로 끝나던 버그).
+      //   - 커버리지=1(끝까지 해설) → 기존대로 "나레이션 끝 + 1.3초 여운"까지만(뒤 허전함 제거).
+      //   어느 경우든 capFrames(사용자 지정 길이)를 '절대' 넘지 않는다(길이 락).
+      durationInFrames: (narrCoverage < 0.95 && words.length)
+        ? Math.min(capFrames, clipFrames)
+        : Math.min(capFrames, words.length ? narrFrames + Math.round(FPS * 1.3) : clipFrames),
     };
 
     // ★디자인 썸네일용 배경 = 후킹 글자 없는 '깨끗한' 원본 클립 프레임(c.file). 완성 mp4엔 후킹이 박혀
@@ -475,9 +481,12 @@ export async function makeHighlights(
 
     // 후킹 그대로 + 끝에 누적 회차('N편'). 같은 소재 몇 번을 만들든 이어서 번호가 붙어 배포 구분이 쉽다.
     //   ★스킵된 편은 번호를 안 밀리게 episodeNo(실제 만든 순서) 사용.
-    const episode = startEpisode + episodeNo;
+    // ★번호는 '이번 제작 배치' 기준 1편부터(테리: 전엔 누적 startEpisode라 새로 만들어도 3·4편으로 시작해 1편이 없어 보였음).
+    const episode = episodeNo;
     const baseT = hookTopFinal ? hookTopFinal.slice(0, 74) : cleanTitle(meta.title, 74);
-    const title = `${baseT} ${episode}편`;
+    // ★단편이면 'N편' 생략(테리): 이번에 1편만 만들거나(count 1), 영상 전체(통째)면 단편.
+    const isSingle = c.whole || (opts.count || 3) === 1;
+    const title = isSingle ? baseT : `${baseT} ${episode}편`;
     const createdAt = new Date().toISOString();
 
     // ★서버의 업로드·상세설명·서빙 스택(resolveVideo·ensureInstaVideoR2·readProject*·/portfolio-item)은
