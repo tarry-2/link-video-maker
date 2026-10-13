@@ -23,8 +23,8 @@ export type PortfolioItem = {
   orientation?: 'portrait' | 'landscape'; // 화면비(롱폼=landscape). 없으면 세로 폴백(레거시).
   // ★작업내역 분리: 영상(video) / 카드영상(card) / 카드게시물=캐러셀(card-post) / 유튜브하이라이트(highlight). 없으면 video(레거시).
   kind?: 'video' | 'card' | 'card-post' | 'highlight';
-  // ★작업내역 이원화(탭별): 어느 탭에서 만들었나 — 영상만들기(video)/재창작(remake)/창작(create). 없으면 kind로 폴백.
-  origin?: 'video' | 'remake' | 'create';
+  // ★작업내역 이원화(탭별): 어느 탭에서 만들었나 — 영상만들기(video)/재창작(remake)/창작(create)/쇼핑쇼츠(shopping). 없으면 kind로 폴백.
+  origin?: 'video' | 'remake' | 'create' | 'shopping';
   images?: string[]; // card-post: data/studio/{projectId}/{name} PNG 파일명들(캐러셀 순서).
   score?: number; // 하이라이트: AI 바이럴 점수(0~100). 카드 뱃지·정렬에 사용.
   source?: 'search' | 'url' | 'upload' | 'archive'; // 하이라이트 소재 출처(작업내역 탭별 이원화). 없으면 search 폴백.
@@ -69,10 +69,11 @@ export function setPortfolioThreads(projectId: string, threadsUrl: string) {
 }
 
 // 쇼핑 쇼츠: 항목에 구매 링크·상품명 기록(제작 완료 후). 발송 시 캡션/링크에 자동 사용.
+// origin='shopping'도 함께 세팅 → 카드형/나레이션형 둘 다 쇼핑쇼츠 작업내역 한 곳에 모인다(이원화).
 export function setPortfolioProduct(projectId: string, productUrl: string, productName?: string) {
   const items = listPortfolio();
   const it = items.find((x) => x.projectId === projectId);
-  if (it) { it.productUrl = productUrl; if (productName) it.productName = productName; save(items); }
+  if (it) { it.productUrl = productUrl; if (productName) it.productName = productName; it.origin = 'shopping'; save(items); }
 }
 
 // 샘플 영상의 유튜브 링크는 별도 파일에 기록(샘플은 portfolio.json에 없으므로).

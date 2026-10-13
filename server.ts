@@ -447,7 +447,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight' | 'remake' | 'create' | 'scenario' | 'bible'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean; storyboard?: Storyboard; bible?: any};
+type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight' | 'remake' | 'create' | 'scenario' | 'bible' | 'shopping'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean; storyboard?: Storyboard; bible?: any};
 // ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
 function jlog(job: Job, s: string) {
   const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
@@ -456,6 +456,16 @@ function jlog(job: Job, s: string) {
 const jobs = new Map<string, Job>();
 // ★모바일↔PC 실시간 동기화: 현재 진행 중인 생성 작업 id. 어느 기기든 로드 시 이걸 받아 같은 SSE에 붙는다.
 let currentGenJob = '';
+// 📊 성과(stats) 응답 캐시 — Meta/유튜브 insights는 영상마다 API를 긁어 느리다(수십 초). 플랫폼별 3분 TTL로
+//   두 번째 방문부터 성과탭이 즉시 뜬다. debug=1(진단)은 항상 새로 긁어 우회(원인 추적용).
+const statsCache = new Map<string, {at: number; body: any}>();
+const STATS_TTL = 3 * 60 * 1000;
+function cachedStats(plat: string, debug: boolean): any | null {
+  if (debug) return null;
+  const c = statsCache.get(plat);
+  return (c && Date.now() - c.at < STATS_TTL) ? c.body : null;
+}
+function putStats(plat: string, debug: boolean, body: any) { if (!debug) statsCache.set(plat, {at: Date.now(), body}); }
 
 // 지금 '영화(GPU)'을 쓰는 작업이 실제로 돌고 있는지 — 유휴 팟 자동종료 워치독의 판단 근거.
 function anyGpuJobRunning(): boolean {
@@ -627,7 +637,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── 🔒 기능 페이지 진입 차단 — 비번(세션) 없으면 랜딩으로. 대시보드·기능·관리 화면은 로그인 필수. ──
   //   랜딩(/)·로그인/버전 API·정적 자산·포트폴리오 쇼케이스(랜딩 캐러셀용)는 공개로 남긴다.
-  const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html', '/create', '/create.html']);
+  const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html', '/create', '/create.html', '/shop', '/shop.html']);
   if (GATED_PAGES.has(p) && !authed(req)) {
     res.writeHead(302, {Location: '/?login=1'});
     return res.end();
@@ -646,6 +656,11 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'web', 'highlight.html'), 'text/html; charset=utf-8');
   if (p === '/create' || p === '/create.html')
     return serveFile(res, path.join(ROOT, 'web', 'create.html'), 'text/html; charset=utf-8');
+  // ── 🛍 쇼핑 쇼츠 전용 페이지(독립 탭) ──
+  if (p === '/shop' || p === '/shop.html')
+    return serveFile(res, path.join(ROOT, 'web', 'shop.html'), 'text/html; charset=utf-8');
+  if (p === '/shop.js')
+    return serveFile(res, path.join(ROOT, 'web', 'shop.js'), 'application/javascript; charset=utf-8');
   if (p === '/highlight.js')
     return serveFile(res, path.join(ROOT, 'web', 'highlight.js'), 'application/javascript; charset=utf-8');
   if (p === '/create.js')
@@ -925,14 +940,15 @@ const server = http.createServer(async (req, res) => {
   }
   // ── 성과 추적: 올린 유튜브 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──
   if (p === '/api/youtube/stats' && req.method === 'GET') {
+    const debug = u.searchParams.get('debug') === '1';
     if (!youtubeStatus().connected) return json(res, 200, {connected: false, items: [], summary: null});
+    const yc = cachedStats('youtube', debug); if (yc) return json(res, 200, yc);
     const sampleYt = loadSampleYouTube();
     const all = [
       ...listPortfolio().map((it) => ({id: it.projectId, title: it.title, voice: it.voice, category: it.category, goal: it.goal, url: it.youtubeUrl || readProjectYouTube(it.projectId)})),
       ...SAMPLES.map((s) => ({id: 'sample:' + s.file, title: s.title, voice: s.voice, category: s.category, goal: s.goal, url: sampleYt[s.file] || ''})),
     ];
     const withId = all.map((x) => ({...x, videoId: extractVideoId(x.url)})).filter((x) => x.videoId);
-    const debug = u.searchParams.get('debug');
     const diag: string[] | undefined = debug ? [] : undefined;
     // ★채널에 실제로 올라간 모든 영상을 합집합으로 추가(포트폴리오에 URL이 안 저장됐거나 앱 밖에서 올린 것도
     //   포함 → "67 vs 70" 개수·합계 불일치 해소). 채널 조회 실패해도 기존 포트폴리오 기준으로는 동작(무회귀).
@@ -950,7 +966,9 @@ const server = http.createServer(async (req, res) => {
       .map((x) => ({...x, ...(stats[x.videoId] || {views: 0, likes: 0, comments: 0, shares: 0})}))
       .sort((a, b) => b.views - a.views);
     // 유튜브 공유수(shares)는 Analytics API로 긁어와 집계·표시한다. 저장(saved)은 Data API가 공개하지 않아 불가.
-    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['shares']), ...(diag ? {debug: diag} : {})});
+    const ytBody = {connected: true, items, summary: perfSummary(items, ['shares']), ...(diag ? {debug: diag} : {})};
+    putStats('youtube', debug, ytBody);
+    return json(res, 200, ytBody);
   }
   // ── 유튜브: Client ID/Secret 저장 ──
   if (p === '/api/youtube/config' && req.method === 'POST') {
@@ -1037,6 +1055,7 @@ const server = http.createServer(async (req, res) => {
     const debug = u.searchParams.get('debug') === '1';
     const diag: string[] | undefined = debug ? [] : undefined;
     if (!instagramStatus().connected) return json(res, 200, {connected: false, items: [], summary: null, ...(debug ? {debug: ['연결 안 됨(status)']} : {})});
+    const ic = cachedStats('instagram', debug); if (ic) return json(res, 200, ic);
     const sampleIg = loadSampleInstagram();
     const all = [
       ...listPortfolio().map((it) => ({id: it.projectId, title: it.title, voice: it.voice, category: it.category, goal: it.goal, url: it.instagramUrl || readProjectInstagram(it.projectId)})),
@@ -1057,7 +1076,9 @@ const server = http.createServer(async (req, res) => {
     const items = withUrl
       .map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, saved: 0, shares: 0, reposts: 0, reach: 0, interactions: 0}, ...(byPermalink[x.url] || {})}))
       .sort((a, b) => b.views - a.views || b.likes - a.likes);
-    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['saved', 'shares', 'reposts', 'reach', 'interactions']), ...(debug ? {debug: diag} : {})});
+    const igBody = {connected: true, items, summary: perfSummary(items, ['saved', 'shares', 'reposts', 'reach', 'interactions']), ...(debug ? {debug: diag} : {})};
+    putStats('instagram', debug, igBody);
+    return json(res, 200, igBody);
   }
   // 인스타 연결(계정 추가 — 여러 개 등록 가능. 같은 계정이면 토큰 갱신)
   if (p === '/api/instagram/connect' && req.method === 'POST') {
@@ -1154,6 +1175,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/facebook/stats' && req.method === 'GET') {
     const debug = u.searchParams.get('debug') === '1';
     if (!facebookStatus().connected) return json(res, 200, {connected: false, items: [], summary: null, ...(debug ? {debug: ['연결 안 됨(status)']} : {})});
+    const fc = cachedStats('facebook', debug); if (fc) return json(res, 200, fc);
     const sampleFb = loadSampleFacebook();
     const withUrl = [
       ...listPortfolio().map((it) => ({id: it.projectId, title: it.title, voice: it.voice, category: it.category, goal: it.goal, url: it.facebookUrl || readProjectFacebook(it.projectId)})),
@@ -1164,7 +1186,9 @@ const server = http.createServer(async (req, res) => {
     const stats = await getFbStats(debug ? diag : undefined);
     const items = withUrl.map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, shares: 0, reactions: 0}, ...(stats[x.url] || {})}))
       .sort((a: any, b: any) => b.views - a.views || b.likes - a.likes);
-    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['shares', 'reactions']), ...(debug ? {debug: diag} : {})});
+    const fbBody = {connected: true, items, summary: perfSummary(items, ['shares', 'reactions']), ...(debug ? {debug: diag} : {})};
+    putStats('facebook', debug, fbBody);
+    return json(res, 200, fbBody);
   }
   if (p === '/api/facebook/connect' && req.method === 'POST') {
     const b = await readBody(req);
@@ -1236,6 +1260,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/threads/stats' && req.method === 'GET') {
     const debug = u.searchParams.get('debug') === '1';
     if (!threadsStatus().connected) return json(res, 200, {connected: false, items: [], summary: null, ...(debug ? {debug: ['연결 안 됨(status)']} : {})});
+    const tc = cachedStats('threads', debug); if (tc) return json(res, 200, tc);
     const sampleTh = loadSampleThreads();
     const withUrl = [
       ...listPortfolio().map((it) => ({id: it.projectId, title: it.title, voice: it.voice, category: it.category, goal: it.goal, url: it.threadsUrl || readProjectThreads(it.projectId)})),
@@ -1246,7 +1271,9 @@ const server = http.createServer(async (req, res) => {
     const stats = await getThreadsStats(debug ? diag : undefined);
     const items = withUrl.map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, shares: 0, reposts: 0, quotes: 0}, ...(stats[x.url] || {})}))
       .sort((a: any, b: any) => b.views - a.views || b.likes - a.likes);
-    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['shares', 'reposts', 'quotes']), ...(debug ? {debug: diag} : {})});
+    const thBody = {connected: true, items, summary: perfSummary(items, ['shares', 'reposts', 'quotes']), ...(debug ? {debug: diag} : {})};
+    putStats('threads', debug, thBody);
+    return json(res, 200, thBody);
   }
   // 스레드 앱 자격(App ID/Secret) 저장 — 유튜브 config와 동일(한 번만).
   if (p === '/api/threads/config' && req.method === 'POST') {
@@ -1921,6 +1948,100 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
     return json(res, 202, {id});
   }
 
+  // ── 🛍 쇼핑 쇼츠 — 나레이션형: 상품(온파트너/온종일팜 링크) → 리뷰 나레이션 영상.
+  //    재창작과 동일 구조(makeVideo sourceText 주입) + 상품 사진을 '기준 참조 이미지'(faceRef)로 넘겨
+  //    전 장면에 상품이 등장. 대본 규칙=허위 효능·수치 금지, 가격만 사실, 끝에 FTC 제휴 고지.
+  //    카드형은 기존 /api/generate-cards(productLink)로. origin='shopping'(setPortfolioProduct가 세팅)으로 작업내역 이원화. ──
+  if (p === '/api/generate-shopping-video' && req.method === 'POST') {
+    const b = await readBody(req);
+    const productLink = String(b.productLink || '').trim();
+    if (!productLink) return json(res, 400, {error: '상품 링크를 입력하세요.'});
+    const k = pipelineKeys();
+    if (!k.gemini.length && !k.openai) return json(res, 400, {error: '설정에서 대본 키(Gemini 또는 OpenAI)를 저장하세요.'});
+    const needsEleven = b.narration !== false || b.bgm !== false;
+    if (needsEleven && !k.elevenlabs) return json(res, 400, {error: '나레이션·배경음악을 쓰려면 ElevenLabs 키가 필요합니다(둘 다 끄면 키 없이 가능).'});
+    const linkMode = b.linkMode === 'direct' ? 'direct' : 'partner';
+    const durSec = Number(b.duration) || 30;
+    const imageStyle = STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real';
+
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false, kind: 'shopping'};
+    jobs.set(id, job);
+    currentGenJob = id;
+    (async () => {
+      try {
+        jlog(job, '[쇼핑] 상품 정보를 불러오는 중…');
+        const product = await resolveProduct(productLink);
+        const shopUrl = linkMode === 'direct'
+          ? (product.shopUrl || product.partnerUrl)
+          : (product.partnerUrl || product.shopUrl);
+        jlog(job, `[쇼핑] "${product.name}"${product.price ? ' · ' + product.price.toLocaleString('ko-KR') + '원' : ''} — 발송 링크: ${shopUrl}`);
+        // 상품 사진 다운로드 → 전 장면 기준 참조 이미지(상품이 모든 컷에 등장).
+        let productRef: string | undefined;
+        if (product.image) {
+          try {
+            const ir = await fetch(product.image, {cache: 'no-store'});
+            if (ir.ok) {
+              const ab = Buffer.from(await ir.arrayBuffer());
+              const ext = /png/i.test(ir.headers.get('content-type') || '') || /\.png/i.test(product.image) ? 'png' : 'jpg';
+              const refDir = path.join(ROOT, 'public', 'uploads', 'shop-' + id);
+              fs.mkdirSync(refDir, {recursive: true});
+              productRef = path.join(refDir, `ref.${ext}`);
+              fs.writeFileSync(productRef, ab);
+              jlog(job, '[쇼핑] 상품 사진을 기준 이미지로 사용 — 전 장면에 상품이 등장합니다.');
+            }
+          } catch (e: any) { jlog(job, '[쇼핑] 상품 사진 다운로드 실패(AI 장면으로 진행): ' + (e?.message || e)); }
+        }
+        const priceLine = product.price ? `${product.price.toLocaleString('ko-KR')}원` : '(가격 정보 없음)';
+        const sourceText = `[상품 리뷰 쇼츠 대본 — 아래 상품을 소개하는 ${durSec}초 세로 영상]
+상품명: ${product.name}
+가격: ${priceLine}
+
+🔴 절대 규칙(지키지 않으면 안 됨):
+- 없는 효능·과장된 수치(살이 빠진다/병이 낫는다/몇 % 등)를 지어내지 마라. 가격만 사실로 말하고, 나머지는 상품의 일반적인 매력·먹음직스러움/쓰임새·일상 속 사용 장면·구매하고 싶은 기분으로만 채워라.
+- 신선식품·건강식품이면 의학적 효능을 단정하지 마라.
+- 보는 사람이 "먹어보고 싶다 / 사고 싶다" 느끼도록 친근하고 생생하게.
+- 마지막 장면은 반드시 "지금 주문하기" 같은 구매 유도 + "유료 광고예요(제휴 수수료를 받을 수 있어요)"라는 제휴 고지 멘트로 끝내라(FTC 규정).`;
+
+        const r = await makeVideo([], k, {
+          sourceText,
+          faceRef: productRef, // 상품 사진 = 기준 참조 → 전 장면에 상품 등장
+          duration: durSec,
+          orientation: 'portrait',
+          presetId: b.presetId || undefined,
+          voice: b.voice || undefined,
+          quality: 'high',
+          imageStyle,
+          sceneCount: Number(b.sceneCount) || 0,
+          narration: b.narration !== false,
+          bgm: b.bgm !== false,
+          font: pickFont(b.font),
+          log: (m) => jlog(job, m),
+          isCancelled: () => !!job.cancelled,
+        });
+        let pid = '';
+        try {
+          pid = await registerVideoToPortfolio({
+            out: r.out, title: r.title, thumb: r.thumb, imageDir: r.imageDir,
+            voice: String(b.voice || '쇼핑'), category: '🛍 쇼핑', goal: 'sell', origin: 'shopping',
+            orientation: 'portrait', durSec, source: 'url', log: (m) => jlog(job, m),
+          });
+        } catch (e: any) { jlog(job, '[포트폴리오] 등록 실패(영상은 완성됨): ' + (e?.message || e)); }
+        // 구매 링크·상품명 기록(발송 캡션에 자동) + origin='shopping' 세팅(작업내역 이원화).
+        if (pid) { try { setPortfolioProduct(pid, shopUrl, product.name); } catch {} job.projectId = pid; }
+        job.file = path.basename(r.out);
+        job.title = r.title;
+        job.done = true; job.doneAt = Date.now();
+        jlog(job, '[완료] 쇼핑 영상 제작 완료');
+      } catch (e: any) {
+        job.error = e.message;
+        job.done = true; job.doneAt = Date.now();
+        jlog(job, '[실패] ' + e.message);
+      }
+    })();
+    return json(res, 202, {id});
+  }
+
   // ── 🎭 재창작(리메이크): 인기 영상(서프라이즈 등)의 제목·자막을 '내용 소스'로 받아 우리 이미지·목소리·자막으로
   //    완전 새 영상을 만든다. 원본 미디어·로고를 안 쓰므로 Content ID/상표에 안 걸린다. /api/generate와 동일 구조 +
   //    URL 대신 sourceText 주입. 출력=이미지영상(기본) 또는 영화(aiClips>0). ──
@@ -2393,7 +2514,8 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const linkMode = b.linkMode === 'direct' ? 'direct' : 'partner';
 
     const id = randomUUID().slice(0, 8);
-    const job: Job = {id, logs: [], done: false};
+    // 쇼핑 카드는 kind='shopping' — 쇼핑 쇼츠 탭이 기기 연동(syncCurrentJob)에서 이 작업을 붙잡게.
+    const job: Job = {id, logs: [], done: false, ...(isShopping ? {kind: 'shopping' as const} : {})};
     jobs.set(id, job);
     currentGenJob = id;
     (async () => {

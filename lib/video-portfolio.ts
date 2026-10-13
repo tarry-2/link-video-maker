@@ -32,7 +32,7 @@ export type VideoRegister = {
   durSec?: number;
   attribution?: string;      // 출처 표기(재창작 소재).
   source?: 'search' | 'url' | 'upload' | 'archive';
-  origin?: 'video' | 'remake' | 'create'; // ★작업내역 탭별 이원화(영상만들기/재창작/창작).
+  origin?: 'video' | 'remake' | 'create' | 'shopping'; // ★작업내역 탭별 이원화(영상만들기/재창작/창작/쇼핑쇼츠).
   motion?: boolean;          // 영화(Wan)인지 — 작업내역 '🎬 영상' 배지.
   log?: (m: string) => void;
 };

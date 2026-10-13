@@ -212,6 +212,7 @@
     <nav class="topnav">
       <a href="/app" class="navtab">✏️ 영상 만들기</a>
       <a href="/create" class="navtab">✍️ 창작</a>
+      <a href="/shop" class="navtab">🛍 쇼핑 쇼츠</a>
       <a href="/voices?tab=voice" class="navtab" id="nav-voice">🎙 목소리 듣기</a>
       <a href="/voices?tab=pf" class="navtab" id="nav-pf">🎬 포트폴리오</a>
       <a href="/monetize" class="navtab">💰 수익화 가이드</a>
@@ -1163,8 +1164,17 @@
       }
       function renderPerfPanel(plat, d) {
         const box = $('perf-panel'), meta = PLAT_META[plat];
+        // 🔧 진단 링크 — 숫자가 안 뜨는 진짜 원인(권한 부족·매칭 0 등)을 각 플랫폼 API 응답으로 바로 확인.
+        const diagLink = `<a href="${meta.url}?debug=1" target="_blank" style="color:var(--teal);font-size:12px">🔧 왜 안 떠요? (진단 보기)</a>`;
+        const whyHint = plat === 'threads'
+          ? '스레드는 성과(인사이트) 권한이 새로 필요해요 — ⚙ 키 설정에서 스레드를 <b>한 번 재로그인</b>해야 숫자가 떠요(기존 연결엔 권한이 없어요).'
+          : plat === 'facebook'
+          ? '페북 숫자가 0이면 페이지 연결 권한(pages_read_engagement) 문제일 수 있어요. 진단으로 실제 응답을 확인하세요.'
+          : plat === 'instagram'
+          ? '인스타 저장·공유·리포스트는 <b>Facebook 로그인으로 연결된 비즈니스 계정</b>에서만 떠요(리포스트 = 내 영상이 리포스트된 수). 안 뜨면 진단을 확인하세요.'
+          : '';
         if (!d || !d.connected) { box.innerHTML = `<p class="perf-empty">${meta.label} 아직 연결 안 됨 — 영상 만들기 화면 ⚙ 키 설정에서 연결하세요.</p>`; return; }
-        if (!d.summary || !d.summary.total) { box.innerHTML = `<p class="perf-empty">${meta.label}에 올린 게시물이 없거나 성과 데이터가 아직 없어요.</p>`; return; }
+        if (!d.summary || !d.summary.total) { box.innerHTML = `<p class="perf-empty">${meta.label}에 올린 게시물이 없거나 성과 데이터가 아직 없어요.${whyHint ? '<br>' + whyHint : ''}</p><p style="margin-top:8px">${diagLink}</p>`; return; }
         const s = d.summary;
         // KPI: 조회/좋아요/댓글 + 플랫폼 추가 지표(있는 것만).
         const cap = k => k.charAt(0).toUpperCase() + k.slice(1);
@@ -1179,8 +1189,9 @@
         const voiceChips = (s.byVoice || []).filter(v => v.avg > 0).map(v => `<span class="yt-chip">🎙 ${esc(v.name)} <b>평균 ${fmtNum(v.avg)}</b></span>`).join('');
         const catChips = (s.byCategory || []).filter(c => c.avg > 0).map(c => `<span class="yt-chip">${esc(c.name)} <b>평균 ${fmtNum(c.avg)}</b></span>`).join('');
         const ytNote = plat === 'youtube' ? '<p class="mini-state" style="margin-top:6px">유튜브 공유수는 애널리틱스 기준(최근 1~2일 반영 지연 가능)이에요. 저장(재생목록) 수는 유튜브가 API로 공개하지 않아 표시할 수 없어요.</p>' : '';
+        const igNote = plat === 'instagram' ? '<p class="mini-state" style="margin-top:6px">저장·공유·리포스트는 Facebook 로그인으로 연결된 비즈니스 계정에서만 집계돼요(리포스트 = 내 영상이 리포스트된 횟수). 0이면 위 🔧 진단으로 확인하세요.</p>' : '';
         box.innerHTML = `
-          <div class="yt-kpis">${kpis}</div>${ytNote}
+          <div class="yt-kpis">${kpis}</div>${ytNote}${igNote}
           ${bars ? `<div class="yt-sec-title">📈 영상별 조회수</div><div class="perf-bars">${bars}</div>` : ''}
           <div class="yt-sec-title">🏆 조회수 TOP 3</div><div class="yt-top">${top}</div>
           ${voiceChips ? `<div class="yt-sec-title">🎙 어떤 목소리가 먹히나 (평균)</div><div class="yt-chips">${voiceChips}</div>` : ''}

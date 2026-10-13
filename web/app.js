@@ -602,68 +602,31 @@ $('card-out-post')?.addEventListener('click', () => { setCardOutput('post'); sav
 
 // ── 카드뉴스 생성(studio.js의 generate가 버튼을 덮으므로, 카드 모드는 이 함수로 처리) ──
 let cardPlanBody = null, cardEditStoryboard = null;
-// ── 🛍 쇼핑 모드 ──
-let shopMode = false, shopLinkMode = 'partner', shopProduct = null;
-$('shop-mode')?.addEventListener('change', (e) => {
-  shopMode = e.target.checked;
-  $('shop-box').classList.toggle('hidden', !shopMode);
-  // 쇼핑 모드면 주제 입력·추천은 가려서 헷갈리지 않게(상품으로 만드니까).
-  ['card-topic', 'card-topic-fetch', 'card-topic-state', 'card-topic-list'].forEach(id => { const el = $(id); if (el) el.style.display = shopMode ? 'none' : ''; });
-  // 쇼핑은 배경=상품사진 고정이라 배경 선택 숨김.
-  const bgSel = $('card-bg'); if (bgSel && bgSel.closest('.col')) bgSel.closest('.col').style.display = shopMode ? 'none' : '';
-});
-document.querySelectorAll('#shop-linkmode-seg [data-linkmode]').forEach(btn => btn.addEventListener('click', () => {
-  shopLinkMode = btn.dataset.linkmode;
-  document.querySelectorAll('#shop-linkmode-seg .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
-}));
-$('shop-fetch')?.addEventListener('click', async () => {
-  const link = $('shop-link').value.trim();
-  if (!link) { $('shop-msg').textContent = '상품 링크를 넣으세요.'; return; }
-  $('shop-msg').textContent = '상품 불러오는 중…'; $('shop-preview').classList.add('hidden');
-  try {
-    const r = await fetch('/api/partner/product?url=' + encodeURIComponent(link));
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || '불러오기 실패');
-    shopProduct = d.product;
-    $('shop-img').src = d.product.image || '';
-    $('shop-name').textContent = d.product.name || '';
-    $('shop-price').textContent = d.product.price ? d.product.price.toLocaleString('ko-KR') + '원' : '';
-    $('shop-preview').classList.remove('hidden');
-    $('shop-msg').innerHTML = '<span style="color:var(--teal)">✅ 상품 확인됨 — 아래에서 바로 만들 수 있어요</span>';
-    // 다이렉트 상품(제휴링크 없음)이면 다이렉트로 자동 고정.
-    if (!d.product.partnerUrl && d.product.shopUrl) {
-      shopLinkMode = 'direct';
-      document.querySelectorAll('#shop-linkmode-seg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.linkmode === 'direct'));
-    }
-  } catch (e) { $('shop-msg').textContent = '실패: ' + e.message; }
-});
+// 🛍 쇼핑 쇼츠는 상단 네비 독립 탭(/shop)으로 분리됨 — 카드뉴스 탭은 순수 주제 기반 카드만 만든다.
 
 window.startCardGen = async function () {
-  const productLink = shopMode ? $('shop-link').value.trim() : '';
   const topic = $('card-topic').value.trim();
-  if (shopMode && !productLink) { alert('상품 링크를 넣고 "상품 불러오기"를 눌러 확인하세요.'); return; }
-  if (!shopMode && !topic) { alert('카드뉴스 주제를 입력하세요.'); return; }
-  const bg = shopMode ? 'upload' : $('card-bg').value; // 쇼핑=상품사진 배경(서버가 다운로드)
-  if (!shopMode && bg === 'upload' && !cardImages.length) { alert('배경으로 쓸 이미지를 올리거나 다른 배경을 고르세요.'); return; }
+  if (!topic) { alert('카드뉴스 주제를 입력하세요.'); return; }
+  const bg = $('card-bg').value;
+  if (bg === 'upload' && !cardImages.length) { alert('배경으로 쓸 이미지를 올리거나 다른 배경을 고르세요.'); return; }
   const body = {
     topic, count: Number($('card-count').value), output: cardOutput, bg,
-    images: (!shopMode && bg === 'upload') ? cardImages : undefined,
+    images: (bg === 'upload') ? cardImages : undefined,
     narration: $('card-narration').checked, bgm: $('card-bgm').checked,
     presetId: selectedPreset, voice: $('voice').value,
     imageStyle: $('image-style') ? $('image-style').value : 'real',
     motion: $('card-motion') ? $('card-motion').value : 'auto',
     cardTheme: $('card-theme') ? $('card-theme').value : 'light',
     font: $('font') ? $('font').value : '', // 제목 폰트(모든 탭 공통)
-    ...(shopMode ? {productLink, linkMode: shopLinkMode} : {}),
   };
   cardPlanBody = body;
   // 1단계: 대본만 생성 → 편집(렌더 전에 문구 수정). 이미지·디자인은 제작 때 자동.
   const ed = $('card-editor');
   $('generate').disabled = true;
-  if (ed) { ed.classList.remove('hidden'); ed.innerHTML = '<p class="mini-state">' + (shopMode ? '상품 리뷰 대본 만드는 중… 🛍' : '카드 대본 만드는 중… ✍️') + '</p>'; ed.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+  if (ed) { ed.classList.remove('hidden'); ed.innerHTML = '<p class="mini-state">카드 대본 만드는 중… ✍️</p>'; ed.scrollIntoView({behavior: 'smooth', block: 'start'}); }
   try {
     const r = await fetch('/api/card-plan', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({topic, count: body.count, presetId: body.presetId, imageStyle: body.imageStyle, productLink: productLink || undefined, linkMode: shopMode ? shopLinkMode : undefined})});
+      body: JSON.stringify({topic, count: body.count, presetId: body.presetId, imageStyle: body.imageStyle})});
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || '대본 생성 실패');
     renderCardEditor(d.storyboard);
