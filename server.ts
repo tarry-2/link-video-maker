@@ -30,6 +30,7 @@ import {listCharacters, characterImagePath, createCharacter, deleteCharacter} fr
 import {instagramStatus, addInstagram, removeInstagram, renameInstagram, listInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
 import {facebookStatus, addFacebook, removeFacebook, renameFacebook, listFacebook, verifyFacebook, publishVideo as fbPublishVideo, publishPhotos as fbPublishPhotos, getFbStats, getUploadActivity as getFbActivity} from './lib/facebook';
 import {threadsStatus, removeThreads, renameThreads, publishVideo as thPublishVideo, publishText as thPublishText, getThreadsStats, getUploadActivity as getThActivity, maybeRefreshThreads, saveThreadsClient, threadsAuthUrl, exchangeThreadsCode} from './lib/threads';
+import {resolveProduct} from './lib/partner';
 import {pngToJpeg} from './lib/img-util';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -1323,6 +1324,16 @@ const server = http.createServer(async (req, res) => {
     try {
       const r = await thPublishText(text, undefined, accountId, link);
       return json(res, 200, r);
+    } catch (e: any) { return json(res, 502, {error: e.message}); }
+  }
+
+  // ── 상품 조회(쇼핑 쇼츠용) — 온파트너 제휴링크(/r/{code}) 또는 온종일팜 다이렉트 상품페이지 둘 다 자동판별 ──
+  if (p === '/api/partner/product' && req.method === 'GET') {
+    const input = (u.searchParams.get('code') || u.searchParams.get('url') || '').trim();
+    if (!input) return json(res, 400, {error: '온파트너 링크(.../r/코드) 또는 온종일팜 상품페이지 주소를 입력하세요.'});
+    try {
+      const product = await resolveProduct(input);
+      return json(res, 200, {ok: true, product});
     } catch (e: any) { return json(res, 502, {error: e.message}); }
   }
 
