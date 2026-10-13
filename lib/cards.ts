@@ -135,7 +135,8 @@ export async function generateShoppingStoryboard(
 ${bodyN}장 본문: body/list/number/quote를 섞어라.
    - 적어도 1장은 number 타입으로 '가격'을 크게(number="${product.price || ''}", unit="원", title="이 가격에?").
    - 나머지는 상품을 먹고싶게/갖고싶게 만드는 장면·이유(body 2~3문장 또는 list 3개).
-JSON만: {"title":"(영상 제목)","musicPrompt":"upbeat shopping bright","subject":"${product.name}","cards":[...]}`;
+★musicPrompt(배경음악, 영어·instrumental)는 상품 성격에 딱 맞는 분위기로: 음식·먹방=즐겁고 식욕 돋우는 밝고 경쾌함(warm upbeat mouth-watering cheerful), 생활용품·가전·잡화=쓰고 싶어지는 산뜻·세련(bright clean satisfying modern lifestyle), 추억·레트로 상품=따뜻한 노스탤지어(warm nostalgic). 어둡거나 긴장되는 무드 금지.
+JSON만: {"title":"(영상 제목)","musicPrompt":"(상품 성격에 맞춘 영어 BGM 묘사)","subject":"${product.name}","cards":[...]}`;
   let lastErr = 'AI 키를 확인하세요.';
   let sb: CardStoryboard | null = null;
   for (let attempt = 0; attempt < 3 && !sb; attempt++) {
