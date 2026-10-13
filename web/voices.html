@@ -137,6 +137,35 @@
         /* 가로 스크롤 힌트 문구 */
         .portfolio .pf-sub::after { content: " · 옆으로 넘겨 보세요 →"; color: var(--teal); font-weight: 700; }
       }
+      /* ── 카드에서 바로 올리기(보기 모드) ── 스테이지로 안 올라가도 그 자리서 발송 */
+      .pf-card-ops { display: flex; gap: 6px; padding: 0 12px 12px; }
+      .pf-card-ops button { flex: 1 1 0; min-width: 0; border: none; border-radius: 9px; padding: 7px 4px; font-size: 12px; font-weight: 800; color: #fff; cursor: pointer; white-space: nowrap; transition: filter .15s ease, transform .15s ease; }
+      .pf-card-ops button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+      .pf-card-ops button:disabled { opacity: .55; cursor: default; transform: none; }
+      .pf-card-ops .op-fb { background: #1877f2; }
+      .pf-card-ops .op-ig { background: linear-gradient(45deg,#f09433,#dc2743,#bc1888); }
+      .pf-card-ops .op-yt { background: linear-gradient(135deg,#ff3b3b,#cc0000); }
+      /* ── 여러 개 선택(선택 모드) ── 보기 모드와 색·구조로 확실히 구분 ── */
+      .selbar { position: sticky; top: 8px; z-index: 20; display: none; align-items: center; flex-wrap: wrap; gap: 8px 10px;
+        background: linear-gradient(135deg, var(--teal), var(--purple)); color: #fff; border: 2px solid rgba(255,255,255,.35);
+        border-radius: 14px; padding: 12px 14px; margin: 0 0 12px; box-shadow: 0 8px 24px rgba(107,76,240,.34); }
+      .selbar.on { display: flex; }
+      .selbar .sb-count { font-weight: 900; font-size: 14px; }
+      .selbar .sb-spacer { flex: 1 1 auto; }
+      .selbar button { border: none; border-radius: 10px; padding: 9px 12px; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+      .selbar .sb-ghost { background: rgba(255,255,255,.22); color: #fff; }
+      .selbar .sb-ghost:hover { background: rgba(255,255,255,.34); }
+      .selbar .sb-send { background: #fff; color: #1a1a2e; }
+      .selbar .sb-send:disabled { opacity: .5; cursor: default; }
+      .selbar .sb-prog { width: 100%; font-size: 12.5px; font-weight: 700; margin-top: 2px; }
+      .sel-toggle.on { background: linear-gradient(135deg, var(--teal), var(--purple)); color: #fff; border-color: transparent; }
+      .mypf-grid.selmode .pf-card-ops { display: none; }      /* 선택 모드엔 개별 올리기 숨김(헷갈림 방지) */
+      .mypf-grid.selmode .pf-thumb-card { cursor: pointer; }
+      .pf-check { display: none; position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%;
+        background: rgba(0,0,0,.5); border: 2px solid #fff; z-index: 4; align-items: center; justify-content: center; color: rgba(255,255,255,.55); font-weight: 900; font-size: 15px; }
+      .mypf-grid.selmode .pf-thumb-card .pf-check { display: flex; }
+      .pf-thumb-card.picked { outline: 3px solid var(--teal); outline-offset: 1px; border-radius: 16px; }
+      .pf-thumb-card.picked .pf-check { background: var(--teal); color: #fff; border-color: #fff; }
     </style>
   </head>
   <body>
@@ -200,6 +229,21 @@
             <select id="pf-select" class="input" aria-label="작업 선택"></select>
             <div id="pf-stage-info"></div>
           </div>
+        </div>
+
+        <!-- 여러 개 한 번에 올리기(벌크) — 보기 모드 ↔ 선택 모드 전환 -->
+        <div style="display:flex; justify-content:flex-end; margin:0 0 10px">
+          <button id="sel-toggle" class="ghost-btn small sel-toggle">☑ 여러 개 선택</button>
+        </div>
+        <div id="selbar" class="selbar">
+          <span class="sb-count" id="sb-count">0개 선택</span>
+          <button class="sb-ghost" id="sb-all">전체 선택</button>
+          <button class="sb-ghost" id="sb-none">해제</button>
+          <span class="sb-spacer"></span>
+          <button class="sb-send" data-bulk="fb" disabled>👍 페북</button>
+          <button class="sb-send" data-bulk="ig" disabled>📷 인스타</button>
+          <button class="sb-send" data-bulk="yt" disabled>▶ 유튜브</button>
+          <div class="sb-prog" id="sb-prog" hidden></div>
         </div>
 
         <!-- 썸네일 목록(탭하면 위 플레이어에서 재생) -->
@@ -302,6 +346,7 @@
       const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       const BADGE = { issue:'📰', info:'💡', sell:'🛍️', heal:'🌿', anime:'🎨' };
       let allItems = [], myItems = [], myShown = 0, canDelete = false, curIdx = 0, mediaFilter = 'all';
+      let selMode = false, picked = new Set(), bulkBusy = false; // 여러 개 선택(벌크 업로드) 상태
       const PAGE = 12;
       const isCard = it => it.media === 'card' || it.media === 'card-post';
       const isHighlight = it => it.media === 'highlight'; // 유튜브 하이라이트(별도 보관)
@@ -368,6 +413,9 @@
           const fig = document.createElement('figure');
           fig.className = 'pf-card pf-thumb-card';
           fig.dataset.idx = i;
+          fig.dataset.id = it.id;
+          fig.dataset.post = isPost ? '1' : '';
+          fig.dataset.land = it.orientation === 'landscape' ? '1' : '';
           const thumbBox = isPost
             ? `<div class="pf-thumb post"><img src="${esc(it.thumb || (it.images && it.images[0]) || '')}" alt="" loading="lazy">${(it.images && it.images.length) ? `<span class="pf-card-count">🎴 ${it.images.length}장</span>` : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}</div>`
             : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.motion ? '<span class="pf-motion-badge">🎬 영상</span>' : ''}${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}</div>`;
@@ -375,6 +423,14 @@
           fig.innerHTML = `${thumbBox}
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${it.num ? `<span class="pf-num">#${it.num}</span> ` : ''}${esc(it.title)}</h3>${madeTxt ? `<p class="pf-made">📅 ${esc(madeTxt)} 제작</p>` : ''}</figcaption>`;
           grid.appendChild(fig);
+          // 선택 모드용 체크 표시(썸네일 위 모서리) + 보기 모드용 '바로 올리기' 버튼.
+          const tb = fig.querySelector('.pf-thumb');
+          if (tb) tb.insertAdjacentHTML('beforeend', '<span class="pf-check">✓</span>');
+          const ops = isPost
+            ? `<button class="op-fb" data-op="fb">👍 페북</button><button class="op-ig" data-op="ig">📷 인스타</button>`
+            : `<button class="op-fb" data-op="fb">👍</button><button class="op-ig" data-op="ig">📷</button><button class="op-yt" data-op="yt">▶</button>`;
+          fig.insertAdjacentHTML('beforeend', `<div class="pf-card-ops">${ops}</div>`);
+          if (selMode && picked.has(it.id)) fig.classList.add('picked');
           if (!isPost) {
             // 썸네일 박스 비율도 실제 영상 비율 우선(저장된 orientation 틀려도 정확히 표시).
             const tv = fig.querySelector('.pf-thumb video'), tbox = fig.querySelector('.pf-thumb');
@@ -434,8 +490,109 @@
       $('pf-select').onchange = e => selectVideo(Number(e.target.value), false);
       $('mypf-grid').onclick = e => {
         const card = e.target.closest('.pf-thumb-card');
-        if (card) selectVideo(Number(card.dataset.idx), true);
+        if (!card) return;
+        // 보기 모드: 카드 아래 미니버튼 = 그 자리서 바로 올리기(스테이지 안 올라감).
+        const op = e.target.closest('[data-op]');
+        if (op && !selMode) {
+          op.dataset.id = card.dataset.id;               // uploadToX 는 btn.dataset.id 를 씀
+          const isPost = card.dataset.post === '1', isLand = card.dataset.land === '1';
+          if (op.dataset.op === 'fb') uploadToFacebook(op, isPost);
+          else if (op.dataset.op === 'ig') uploadToInstagram(op, isPost, isLand);
+          else if (op.dataset.op === 'yt') uploadToYouTube(op);
+          return;
+        }
+        // 선택 모드: 카드 클릭 = 선택 토글(스테이지 안 뜸).
+        if (selMode) { togglePick(card.dataset.id, card); return; }
+        // 보기 모드 기본: 스테이지에 로드.
+        selectVideo(Number(card.dataset.idx), true);
       };
+
+      // ── 여러 개 선택(벌크 업로드) ──
+      function updateSelCount() {
+        const n = picked.size;
+        if ($('sb-count')) $('sb-count').textContent = n + '개 선택';
+        [...document.querySelectorAll('.selbar .sb-send')].forEach(b => b.disabled = n === 0 || bulkBusy);
+        [...document.querySelectorAll('.selbar .sb-ghost')].forEach(b => b.disabled = bulkBusy);
+      }
+      function togglePick(id, card) {
+        if (!id || bulkBusy) return;
+        if (picked.has(id)) { picked.delete(id); card && card.classList.remove('picked'); }
+        else { picked.add(id); card && card.classList.add('picked'); }
+        updateSelCount();
+      }
+      $('sel-toggle').onclick = () => {
+        if (bulkBusy) return;
+        selMode = !selMode;
+        $('mypf-grid').classList.toggle('selmode', selMode);
+        $('selbar').classList.toggle('on', selMode);
+        $('sel-toggle').classList.toggle('on', selMode);
+        $('sel-toggle').textContent = selMode ? '✕ 선택 끝내기' : '☑ 여러 개 선택';
+        if (!selMode) { picked.clear(); document.querySelectorAll('.pf-thumb-card.picked').forEach(c => c.classList.remove('picked')); $('sb-prog').hidden = true; }
+        updateSelCount();
+      };
+      $('sb-all').onclick = () => {
+        if (bulkBusy) return;
+        myItems.forEach(it => picked.add(it.id));
+        document.querySelectorAll('.pf-thumb-card').forEach(c => c.classList.add('picked'));
+        updateSelCount();
+      };
+      $('sb-none').onclick = () => {
+        if (bulkBusy) return;
+        picked.clear();
+        document.querySelectorAll('.pf-thumb-card.picked').forEach(c => c.classList.remove('picked'));
+        updateSelCount();
+      };
+      $('selbar').onclick = async e => {
+        const b = e.target.closest('[data-bulk]'); if (!b || bulkBusy) return;
+        const plat = b.dataset.bulk;
+        const platName = plat === 'fb' ? '페이스북' : plat === 'ig' ? '인스타' : '유튜브';
+        let ids = myItems.filter(it => picked.has(it.id));
+        if (plat === 'yt') ids = ids.filter(it => it.media !== 'card-post'); // 유튜브는 영상만
+        if (!ids.length) { alert(plat === 'yt' ? '유튜브는 영상만 올릴 수 있어요(카드 게시물 제외).' : '선택된 항목이 없어요.'); return; }
+        const statusUrl = plat === 'fb' ? '/api/facebook/status' : plat === 'ig' ? '/api/instagram/status' : '/api/youtube/status';
+        let st; try { st = await (await fetch(statusUrl)).json(); } catch { st = {}; }
+        if (!st.connected) { alert('먼저 ⚙ 키 설정에서 ' + platName + ' 계정을 연결하세요.'); return; }
+        if (!confirm('선택한 ' + ids.length + '개를 ' + platName + '에 올릴까요?\n하나씩 순서대로 올라가며 몇 분 걸릴 수 있어요.')) return;
+        bulkBusy = true; updateSelCount();
+        const prog = $('sb-prog'); prog.hidden = false;
+        let ok = 0, fail = 0;
+        for (let i = 0; i < ids.length; i++) {
+          const it = ids[i];
+          prog.textContent = `올리는 중 ${i + 1}/${ids.length} · ✅${ok} ❌${fail} — ${it.title || ''}`;
+          try { await bulkUploadOne(plat, it); ok++; }
+          catch (err) { fail++; console.warn('[벌크 실패]', it.id, err && err.message); }
+          prog.textContent = `올리는 중 ${i + 1}/${ids.length} · ✅${ok} ❌${fail}`;
+          if (i < ids.length - 1) await new Promise(r => setTimeout(r, 1500)); // 과속(제재) 방지
+        }
+        prog.textContent = `완료 🎉 성공 ${ok} · 실패 ${fail}${fail ? ' (실패는 카드에서 개별로 다시 시도하세요)' : ''}`;
+        bulkBusy = false; updateSelCount();
+        loadMyVideos(curIdx); // 뱃지 갱신(picked 는 유지 안 됨 — 새로 로드)
+      };
+      async function bulkUploadOne(plat, it) {
+        const id = it.id;
+        const isPost = it.media === 'card-post', isLand = it.orientation === 'landscape';
+        if (plat === 'yt') {
+          const meta = await (await fetch('/api/youtube/meta/' + encodeURIComponent(id))).json();
+          if (meta.error) throw new Error(meta.error);
+          const r = await fetch('/api/youtube/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: meta.title, description: meta.description, tags: meta.tags || [], privacy: 'public' }) });
+          const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); return;
+        }
+        // 캡션(인스타·페북 공용 생성기)
+        const cap = await (await fetch('/api/instagram/caption/' + encodeURIComponent(id))).json();
+        if (cap.error) throw new Error(cap.error);
+        const caption = cap.caption || '';
+        if (plat === 'fb') {
+          const url = (isPost ? '/api/facebook/upload-photos/' : '/api/facebook/upload/') + encodeURIComponent(id);
+          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption }) });
+          const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); return;
+        }
+        // ig
+        const url = isPost ? '/api/instagram/upload-carousel/' + encodeURIComponent(id) : '/api/instagram/upload/' + encodeURIComponent(id);
+        const body = isPost ? { caption } : { kind: isLand ? 'feed' : 'reels', caption };
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패');
+      }
       // 큰 미리보기 액션(크게보기/유튜브/삭제) 위임
       $('pf-stage-info').onclick = async e => {
         const et = e.target.closest('.pf-edit-title');
