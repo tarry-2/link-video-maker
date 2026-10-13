@@ -2,6 +2,7 @@
 // 설정(client id/secret/refresh token)은 data 볼륨의 youtube.json에 저장(재배포해도 유지).
 import fs from 'node:fs';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {geminiGenerate} from './gemini';
 import {openaiJson} from './openai';
 
@@ -11,31 +12,71 @@ const FILE = path.join(DATA_DIR, 'youtube.json');
 export type YouTubeConfig = {
   clientId?: string;
   clientSecret?: string;
-  refreshToken?: string; // 연결 완료되면 저장(채널 업로드 권한)
-  channelTitle?: string; // 연결된 채널 이름(표시용)
+  refreshToken?: string; // (구버전 단일)
+  channelTitle?: string;
 };
+// ★멀티채널: client id/secret은 앱(프로젝트) 공용, refreshToken은 채널마다 1개.
+export type YouTubeAccount = {id: string; label?: string; refreshToken: string; channelTitle?: string; addedAt?: number};
+type YouTubeStore = {clientId?: string; clientSecret?: string; accounts: YouTubeAccount[]};
 
-export function loadYouTube(): YouTubeConfig {
-  try {
-    return JSON.parse(fs.readFileSync(FILE, 'utf8'));
-  } catch {
-    return {};
-  }
+function loadStore(): YouTubeStore {
+  let raw: any;
+  try { raw = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return {accounts: []}; }
+  if (raw && Array.isArray(raw.accounts)) return {clientId: raw.clientId, clientSecret: raw.clientSecret, accounts: raw.accounts.filter((a: any) => a && a.id && a.refreshToken)};
+  // 구버전 단일({clientId, clientSecret, refreshToken, channelTitle}) → 배열 마이그레이션
+  const store: YouTubeStore = {clientId: raw?.clientId, clientSecret: raw?.clientSecret, accounts: []};
+  if (raw && raw.refreshToken) store.accounts.push({id: 'legacy', label: raw.channelTitle || '내 채널', refreshToken: raw.refreshToken, channelTitle: raw.channelTitle, addedAt: Date.now()});
+  return store;
 }
-export function saveYouTube(patch: Partial<YouTubeConfig>) {
-  const cur = loadYouTube();
-  const next = {...cur, ...patch};
+function saveStore(store: YouTubeStore) {
   fs.mkdirSync(DATA_DIR, {recursive: true});
-  fs.writeFileSync(FILE + '.tmp', JSON.stringify(next));
+  fs.writeFileSync(FILE + '.tmp', JSON.stringify(store));
   fs.renameSync(FILE + '.tmp', FILE);
-  return next;
+}
+export function loadYouTube(): YouTubeConfig { // 하위호환(첫 채널)
+  const s = loadStore(); const a = s.accounts[0];
+  return {clientId: s.clientId, clientSecret: s.clientSecret, refreshToken: a?.refreshToken, channelTitle: a?.channelTitle};
+}
+export function listYouTube(): YouTubeAccount[] { return loadStore().accounts; }
+export function getYouTubeAccount(id?: string): YouTubeAccount | undefined {
+  const a = loadStore().accounts;
+  return id ? a.find((x) => x.id === id) : a[0];
+}
+// client id/secret만 저장(채널은 OAuth로 추가).
+export function saveYouTube(patch: Partial<YouTubeConfig>) {
+  const store = loadStore();
+  if (patch.clientId !== undefined) store.clientId = patch.clientId;
+  if (patch.clientSecret !== undefined) store.clientSecret = patch.clientSecret;
+  saveStore(store);
+  return store;
+}
+// OAuth로 받은 채널 추가(같은 채널명이면 토큰 갱신).
+export function addYtAccount(acc: {refreshToken: string; channelTitle?: string; label?: string}): YouTubeAccount {
+  const store = loadStore();
+  const exist = acc.channelTitle ? store.accounts.find((x) => x.channelTitle && x.channelTitle === acc.channelTitle) : undefined;
+  if (exist) { exist.refreshToken = acc.refreshToken; if (acc.label) exist.label = acc.label; return (saveStore(store), exist); }
+  const account: YouTubeAccount = {id: randomUUID(), label: acc.label || acc.channelTitle || '채널', refreshToken: acc.refreshToken, channelTitle: acc.channelTitle, addedAt: Date.now()};
+  store.accounts.push(account);
+  saveStore(store);
+  return account;
+}
+export function removeYouTube(id: string) {
+  const store = loadStore();
+  store.accounts = store.accounts.filter((x) => x.id !== id);
+  saveStore(store);
+}
+export function renameYouTube(id: string, label: string) {
+  const store = loadStore();
+  const a = store.accounts.find((x) => x.id === id);
+  if (a) { a.label = label; saveStore(store); }
 }
 export function youtubeStatus() {
-  const c = loadYouTube();
+  const s = loadStore();
   return {
-    hasClient: !!(c.clientId && c.clientSecret),
-    connected: !!c.refreshToken,
-    channelTitle: c.channelTitle || '',
+    hasClient: !!(s.clientId && s.clientSecret),
+    connected: s.accounts.length > 0,
+    channelTitle: s.accounts[0]?.channelTitle || '', // 하위호환
+    accounts: s.accounts.map((a) => ({id: a.id, label: a.label || a.channelTitle || '', channelTitle: a.channelTitle || ''})),
   };
 }
 
@@ -51,7 +92,7 @@ export function authUrl(redirectUri: string): string {
     response_type: 'code',
     scope: SCOPE,
     access_type: 'offline', // refresh token 받기
-    prompt: 'consent', // 매번 refresh token 확실히 받기
+    prompt: 'select_account consent', // ★멀티채널: 매번 계정 고르게 + refresh token 확실히 받기
   });
   return 'https://accounts.google.com/o/oauth2/v2/auth?' + p.toString();
 }
@@ -70,24 +111,23 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<v
   });
   const d: any = await r.json();
   if (!r.ok || !d.refresh_token) throw new Error('토큰 교환 실패: ' + (d.error_description || d.error || JSON.stringify(d)));
-  saveYouTube({refreshToken: d.refresh_token});
-  // 채널 이름도 받아 저장(표시용)
-  try {
-    const title = await fetchChannelTitle(d.access_token);
-    if (title) saveYouTube({channelTitle: title});
-  } catch {}
+  // ★멀티채널: 채널 이름 받아 '계정 추가'(append). 같은 채널 재로그인이면 토큰만 갱신.
+  let title = '';
+  try { title = (await fetchChannelTitle(d.access_token)) || ''; } catch {}
+  addYtAccount({refreshToken: d.refresh_token, channelTitle: title});
 }
 
-// refresh token → 단기 access token
-async function accessToken(): Promise<string> {
-  const c = loadYouTube();
-  if (!c.refreshToken || !c.clientId || !c.clientSecret) throw new Error('유튜브가 연결되지 않았습니다.');
+// refresh token → 단기 access token. ★멀티채널: accountId로 채널 지정(없으면 첫 채널).
+async function accessToken(accountId?: string): Promise<string> {
+  const store = loadStore();
+  const acc = accountId ? store.accounts.find((x) => x.id === accountId) : store.accounts[0];
+  if (!acc || !acc.refreshToken || !store.clientId || !store.clientSecret) throw new Error('유튜브가 연결되지 않았습니다.');
   const r = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {'Content-Type': 'application/x-www-form-urlencoded'},
     body: new URLSearchParams({
-      client_id: c.clientId, client_secret: c.clientSecret,
-      refresh_token: c.refreshToken, grant_type: 'refresh_token',
+      client_id: store.clientId, client_secret: store.clientSecret,
+      refresh_token: acc.refreshToken, grant_type: 'refresh_token',
     }),
   });
   const d: any = await r.json();
@@ -399,8 +439,8 @@ JSON만 출력: {"title":"...","description":"...","tags":["..."]}`;
 }
 
 // 4) 실제 업로드 — resumable 아닌 멀티파트(단순). 완성 mp4 경로와 메타를 받는다.
-export async function uploadVideo(filePath: string, meta: UploadMeta, thumbPath?: string): Promise<{id: string; url: string; thumbnail?: {set: boolean; status?: number; detail?: string}}> {
-  const token = await accessToken();
+export async function uploadVideo(filePath: string, meta: UploadMeta, thumbPath?: string, accountId?: string): Promise<{id: string; url: string; thumbnail?: {set: boolean; status?: number; detail?: string}}> {
+  const token = await accessToken(accountId);
   const stat = fs.statSync(filePath);
   const snippet = {
     snippet: {title: meta.title, description: meta.description, tags: meta.tags, categoryId: '22'},

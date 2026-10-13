@@ -24,11 +24,11 @@ import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
 import {listPortfolio, removePortfolio, updatePortfolioTitle, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, setPortfolioFacebook, setSampleFacebook, loadSampleFacebook, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
-import {youtubeStatus, saveYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getChannelVideos, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
+import {youtubeStatus, saveYouTube, removeYouTube, renameYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getChannelVideos, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys, head as r2Head} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
-import {instagramStatus, addInstagram, removeInstagram, listInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
-import {facebookStatus, addFacebook, removeFacebook, listFacebook, verifyFacebook, publishVideo as fbPublishVideo, publishPhotos as fbPublishPhotos, getFbStats, getUploadActivity as getFbActivity} from './lib/facebook';
+import {instagramStatus, addInstagram, removeInstagram, renameInstagram, listInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
+import {facebookStatus, addFacebook, removeFacebook, renameFacebook, listFacebook, verifyFacebook, publishVideo as fbPublishVideo, publishPhotos as fbPublishPhotos, getFbStats, getUploadActivity as getFbActivity} from './lib/facebook';
 import {pngToJpeg} from './lib/img-util';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -835,6 +835,18 @@ const server = http.createServer(async (req, res) => {
   // ── 유튜브: 연결 상태 ──
   if (p === '/api/youtube/status' && req.method === 'GET')
     return json(res, 200, youtubeStatus());
+  // 유튜브 채널 삭제/이름변경(멀티채널)
+  if (p.startsWith('/api/youtube/accounts/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(p.slice('/api/youtube/accounts/'.length));
+    removeYouTube(id);
+    return json(res, 200, {ok: true, accounts: youtubeStatus().accounts});
+  }
+  if (p.startsWith('/api/youtube/accounts/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(p.slice('/api/youtube/accounts/'.length));
+    const b = await readBody(req);
+    renameYouTube(id, String(b.label || '').trim());
+    return json(res, 200, {ok: true, accounts: youtubeStatus().accounts});
+  }
   // ── 성과 추적: 올린 유튜브 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──
   if (p === '/api/youtube/stats' && req.method === 'GET') {
     if (!youtubeStatus().connected) return json(res, 200, {connected: false, items: [], summary: null});
@@ -903,6 +915,7 @@ const server = http.createServer(async (req, res) => {
     if (!src) return json(res, 404, {error: '영상을 찾을 수 없습니다.'});
     const b = await readBody(req);
     const privacy = ['public', 'unlisted', 'private'].includes(b.privacy) ? b.privacy : 'public';
+    const accountId = String(b.accountId || '').trim() || undefined;
     let tmpCleanup = () => {};
     let thumbCleanup = () => {};
     try {
@@ -915,7 +928,7 @@ const server = http.createServer(async (req, res) => {
         description: String(b.description || '').slice(0, 4900),
         tags: Array.isArray(b.tags) ? b.tags.map((x: any) => String(x)).slice(0, 15) : [],
         privacy: privacy as any,
-      }, thumb?.file);
+      }, thumb?.file, accountId);
       try {
         if (src.kind === 'mine') { setPortfolioYouTube(id, r.url); saveProjectYouTube(id, r.url); }
         else setSampleYouTube(path.basename(id.slice('sample:'.length)), r.url);
@@ -1012,10 +1025,16 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {connected: true, username, id: acc.id, label: acc.label});
     } catch (e: any) { return json(res, 400, {error: e.message}); }
   }
-  // 인스타 계정 삭제(멀티계정)
+  // 인스타 계정 삭제/이름변경(멀티계정)
   if (p.startsWith('/api/instagram/accounts/') && req.method === 'DELETE') {
     const id = decodeURIComponent(p.slice('/api/instagram/accounts/'.length));
     removeInstagram(id);
+    return json(res, 200, {ok: true, accounts: instagramStatus().accounts});
+  }
+  if (p.startsWith('/api/instagram/accounts/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(p.slice('/api/instagram/accounts/'.length));
+    const b = await readBody(req);
+    renameInstagram(id, String(b.label || '').trim());
     return json(res, 200, {ok: true, accounts: instagramStatus().accounts});
   }
   // 카드 게시물(캐러셀) 인스타 업로드 — JPEG 변환 후 publishCarousel.
@@ -1122,10 +1141,16 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {connected: true, pageName, id: acc.id, label: acc.label});
     } catch (e: any) { return json(res, 400, {error: e.message}); }
   }
-  // 페북 계정(페이지) 삭제(멀티계정)
+  // 페북 계정(페이지) 삭제/이름변경(멀티계정)
   if (p.startsWith('/api/facebook/accounts/') && req.method === 'DELETE') {
     const id = decodeURIComponent(p.slice('/api/facebook/accounts/'.length));
     removeFacebook(id);
+    return json(res, 200, {ok: true, accounts: facebookStatus().accounts});
+  }
+  if (p.startsWith('/api/facebook/accounts/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(p.slice('/api/facebook/accounts/'.length));
+    const b = await readBody(req);
+    renameFacebook(id, String(b.label || '').trim());
     return json(res, 200, {ok: true, accounts: facebookStatus().accounts});
   }
   // 카드 게시물(여러 장 사진) 페북 업로드 — JPEG 변환 후 publishPhotos.
@@ -1253,6 +1278,11 @@ const server = http.createServer(async (req, res) => {
   }
   // ── 아카이브 긁기(📼 아카이브 탭) — 특정 방송 아카이브 채널에서 주제로 영상 목록을 가져온다. ──
   //   소스는 화이트리스트로만(임의 채널 긁기 방지). 실제 숏폼/롱폼 제작은 기존 하이라이트 엔진 재사용.
+  // ── 이미 하이라이트로 쓴 소재(sourceKey) 목록 — 검색결과에 '✓ 사용함' 배지용(중복 방지) ──
+  if (p === '/api/archive/used' && req.method === 'GET') {
+    const sourceKeys = Array.from(new Set(listPortfolio().map((x) => x.sourceKey).filter(Boolean)));
+    return json(res, 200, {sourceKeys});
+  }
   if (p === '/api/archive-search' && req.method === 'GET') {
     // 소스 화이트리스트(임의 채널 긁기 방지). label=짧게, search=채널내 검색 지원 여부(안되면 /videos 전체).
     const ARCHIVE_CHANNELS: Record<string, {channel: string; label: string; search: boolean}> = {
@@ -1264,6 +1294,11 @@ const server = http.createServer(async (req, res) => {
       // ★MBC 미스터리(공식, 101만 구독) = 신비한TV 서프라이즈 + 심야괴담회. '진짜 미스터리'(실제 미제사건·
       //   초자연·심령·외계인·실화 괴담)가 가득 — KBS 아카이브엔 없는 장르라 전용 소스로 추가(테리 지시).
       mbcmystery: {channel: 'mbcmystery', label: 'MBC 미스터리', search: true},
+      // ★옛날 가요(90~2000년대 아이돌) — KBS 옛날티비엔 적다. 방송사 공식 K-pop 채널 추가(테리 지시, 로컬 실측).
+      //   MBCkpop(음악캠프/음악중심)이 신화·핑클·god 등 '원본 무대'가 제일 많다. 채널 내 가수명 검색이 잘 먹힘.
+      mbckpop: {channel: 'MBCkpop', label: 'MBC 음악캠프(옛날가요)', search: true},
+      kbskpop: {channel: 'KBSKpop', label: 'KBS 뮤직뱅크', search: true},
+      sbskpop: {channel: 'SBSKPOP', label: 'SBS 인기가요', search: true},
     };
     const src = u.searchParams.get('src') || 'kbs';
     const q = (u.searchParams.get('q') || '').trim();

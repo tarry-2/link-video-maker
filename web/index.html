@@ -488,7 +488,8 @@
 
         <div id="youtube-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
           <h3 class="field-label">📺 유튜브 연결 <span id="yt-status" class="hint"></span></h3>
-          <p class="hint">완성 영상을 유튜브에 바로 올리려면 한 번만 연결하세요. (Google Cloud에서 발급한 클라이언트 ID/Secret 필요 — 연결 방법은 담당자에게 문의)</p>
+          <p class="hint">여러 채널을 추가할 수 있어요. 유튜브는 토큰이 아니라 구글 로그인이라, 채널마다 "채널 추가"를 눌러 그 채널로 로그인하세요. 올릴 때 채널을 골라 보냅니다.</p>
+          <div id="yt-accounts" class="acct-list"></div>
           <div class="key-field">
             <label>Google Client ID</label>
             <input id="yt-client-id" class="input" placeholder="새로 입력(비우면 유지)" />
@@ -499,7 +500,7 @@
           </div>
           <div class="voice-row">
             <button id="yt-save-config" class="ghost-btn small" type="button">ID/Secret 저장</button>
-            <button id="yt-connect" class="ghost-btn small" type="button">🔗 유튜브 계정 연결</button>
+            <button id="yt-connect" class="ghost-btn small" type="button">🔗 구글 로그인으로 채널 추가</button>
           </div>
           <p id="yt-msg" class="mini-state"></p>
         </div>

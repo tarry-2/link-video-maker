@@ -694,13 +694,21 @@
     if (risk === 'caution') return {cls: 'caution', label: '⚠️ 저작권 주의'};
     return {cls: 'ok', label: '🆗 무난'};
   }
+  // ★이미 하이라이트로 만든 영상 표시 — 소재가 많아 중복을 피하려고 '✓ 사용함' 배지를 붙인다(테리 지시).
+  //   포폴 sourceKey('yt:'+videoId / 'upload:'+제목)와 대조. 제작 후 갱신.
+  let usedKeys = new Set();
+  async function loadUsedKeys() {
+    try { const d = await (await fetch('/api/archive/used')).json(); usedKeys = new Set(d.sourceKeys || []); } catch {}
+  }
   function cardHtml(v) {
     const risk = v.risk || (v.isCc ? 'cc' : 'ok');
     const r = riskInfo(risk);
-    return `<button type="button" class="hl-card" data-id="${v.videoId}" data-title="${esc(v.title)}" data-channel="${esc(v.channel)}" data-dur="${v.durationSec}" data-cc="${risk === 'cc' ? '1' : '0'}" data-risk="${esc(risk)}">
+    const used = usedKeys.has('yt:' + v.videoId);
+    return `<button type="button" class="hl-card${used ? ' used' : ''}" data-id="${v.videoId}" data-title="${esc(v.title)}" data-channel="${esc(v.channel)}" data-dur="${v.durationSec}" data-cc="${risk === 'cc' ? '1' : '0'}" data-risk="${esc(risk)}">
       <img src="${v.thumb}" alt="" loading="lazy" />
       <div class="hl-play">▶ 미리보기</div>
       <span class="hl-risk ${r.cls}">${r.label}</span>
+      ${used ? '<span class="hl-used">✓ 사용함</span>' : ''}
       <div class="hl-meta"><b>${esc(v.title)}</b><span>${esc(v.channel)} · ${fmtDur(v.durationSec)} · 조회 ${Number(v.views).toLocaleString('ko-KR')}</span></div>
     </button>`;
   }
@@ -791,6 +799,7 @@
       query = q; pageToken = ''; loadedCount = 0;
       box.innerHTML = ''; picked = null; $('hl-picked').textContent = ''; renderCountSeg();
       st.textContent = `${region === 'global' ? '해외' : '한국'} 재사용 영상을 찾는 중…`;
+      await loadUsedKeys(); // '✓ 사용함' 배지 최신화
     } else st.textContent = '더 불러오는 중…';
     $('hl-more')?.remove();
     try {
@@ -908,14 +917,28 @@
   // 가로 페이지네이션 — 밑으로 길어지지 않게 한 페이지(12개)씩 보여주고 ◀ 1 2 3 ▶ 로 넘긴다.
   const ARC_PER_PAGE = 12;
   let arcQuery = '', arcAll = [], arcSort = 'view', arcServerMore = false, arcLoading = false, arcPage = 0, arcServerOffset = 0;
-  function renderArcChips() {
+  // 옛날가요 소스(음악캠프·뮤직뱅크·인기가요)용 가수명 칩 — 채널 안에서 가수명 검색이 잘 먹힌다(단어 혼동 적음).
+  const ARC_SINGERS = [
+    {ko:'H.O.T', q:'H.O.T'}, {ko:'젝스키스', q:'젝스키스'}, {ko:'신화', q:'신화'}, {ko:'god', q:'god'},
+    {ko:'핑클', q:'핑클'}, {ko:'S.E.S', q:'S.E.S'}, {ko:'베이비복스', q:'베이비복스'}, {ko:'터보', q:'터보'},
+    {ko:'쿨', q:'쿨'}, {ko:'DJ DOC', q:'DJ DOC'}, {ko:'클론', q:'클론'}, {ko:'NRG', q:'NRG'},
+    {ko:'유승준', q:'유승준'}, {ko:'엄정화', q:'엄정화'}, {ko:'이정현', q:'이정현'}, {ko:'김현정', q:'김현정'},
+    {ko:'보아', q:'보아'}, {ko:'동방신기', q:'동방신기'}, {ko:'핑클', q:'핑클'}, {ko:'태사자', q:'태사자'},
+  ];
+  // mode: 'kpop'=가수칩만 / 그 외=장르+주제(옛날티비).
+  function renderArcChips(mode) {
     const mk = (c) => `<button type="button" class="hl-cat hl-arc-cat" data-q="${esc(c.q)}" data-ko="${esc(c.ko)}">${c.ko}</button>`;
-    if ($('hl-arc-genres')) $('hl-arc-genres').innerHTML = ARC_GENRES.map(mk).join('');
-    if ($('hl-arc-topics')) $('hl-arc-topics').innerHTML = ARC_TOPICS.map(mk).join('');
+    if (mode === 'kpop') {
+      if ($('hl-arc-genres')) $('hl-arc-genres').innerHTML = '';
+      if ($('hl-arc-topics')) $('hl-arc-topics').innerHTML = ARC_SINGERS.map(mk).join('');
+    } else {
+      if ($('hl-arc-genres')) $('hl-arc-genres').innerHTML = ARC_GENRES.map(mk).join('');
+      if ($('hl-arc-topics')) $('hl-arc-topics').innerHTML = ARC_TOPICS.map(mk).join('');
+    }
     document.querySelectorAll('.hl-arc-cat').forEach((b) => b.addEventListener('click', () => {
       document.querySelectorAll('.hl-arc-cat').forEach((x) => x.classList.remove('active')); b.classList.add('active');
       cat = b.dataset.ko; if ($('hl-arc-query')) $('hl-arc-query').value = '';
-      addLog(`📼 아카이브: ${cat} (옛날티비)`);
+      addLog(`📼 아카이브: ${cat}`);
       archiveSearch(b.dataset.q);
     }));
   }
@@ -1009,6 +1032,7 @@
     picked = null; $('hl-picked').textContent = ''; $('hl-results').innerHTML = ''; renderCountSeg();
     $('hl-sort-row')?.classList.add('hidden'); $('hl-arc-pager')?.classList.add('hidden');
     st.textContent = '아카이브에서 가져오는 중…';
+    await loadUsedKeys(); // '✓ 사용함' 배지 최신화(방금 만든 것도 반영)
     query = arcQuery || (document.querySelector('.hl-arc-src.active')?.textContent.trim() || '아카이브'); // 제작 로그/상태용
     const ok = await fetchArcBatch();
     if (!ok) return;
@@ -1022,13 +1046,20 @@
   document.querySelectorAll('.hl-arc-src').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-arc-src').forEach((x) => x.classList.remove('active')); b.classList.add('active');
     archiveSrc = b.dataset.src || 'kbs';
-    // ★옛날티비(kbs)만 온갖 장르가 섞여 있어 장르·주제 칩이 필요하다. 나머지(드라마·뉴스·다큐·예능)는
-    //   채널 자체가 이미 한 장르라 장르·주제 필터가 무의미·복잡 → 숨기고 탭 누르면 바로 전체목록 로드(테리 지시).
+    // ★옛날티비(kbs)=장르+주제 칩 / 옛날가요(음악캠프·뮤직뱅크·인기가요)=가수 칩 / 단일채널(뉴스·드라마 등)=칩 없이 최신목록.
+    const isKpop = ['mbckpop', 'kbskpop', 'sbskpop'].includes(archiveSrc);
     const isMixed = archiveSrc === 'kbs';
-    ['#hl-arc-genres', '#hl-arc-topics', '#hl-arc-genre-label', '#hl-arc-topic-label'].forEach((sel) => document.querySelector(sel)?.classList.toggle('hidden', !isMixed));
+    const showChips = isMixed || isKpop;
+    renderArcChips(isKpop ? 'kpop' : 'kbs'); // 칩 다시 그림(가수/장르)
+    document.querySelector('#hl-arc-genres')?.classList.toggle('hidden', !isMixed); // 가요는 장르 없음
+    document.querySelector('#hl-arc-genre-label')?.classList.toggle('hidden', !isMixed);
+    document.querySelector('#hl-arc-topics')?.classList.toggle('hidden', !showChips);
+    document.querySelector('#hl-arc-topic-label')?.classList.toggle('hidden', !showChips);
+    if ($('hl-arc-topic-label')) $('hl-arc-topic-label').innerHTML = isKpop ? '🎤 가수 <span class="hint">— 누르면 그 가수 무대가 떠요</span>' : '🏷 주제';
     document.querySelectorAll('.hl-arc-cat.active').forEach((x) => x.classList.remove('active'));
     $('hl-results').innerHTML = ''; $('hl-arc-pager')?.classList.add('hidden');
-    if (!isMixed) { addLog(`📼 ${b.textContent.trim()} — 최신 영상 불러오는 중…`); archiveSearch(''); } // 단일 채널=바로 전체목록
+    if (isKpop) { if ($('hl-search-state')) $('hl-search-state').textContent = '가수를 고르거나 직접 검색하세요.'; }
+    else if (!isMixed) { addLog(`📼 ${b.textContent.trim()} — 최신 영상 불러오는 중…`); archiveSearch(''); } // 단일 채널=바로 전체목록
     else if ($('hl-search-state')) $('hl-search-state').textContent = '장르를 고르거나 검색하세요.';
   }));
   $('hl-arc-search')?.addEventListener('click', () => { document.querySelector('.hl-arc-cat.active')?.classList.remove('active'); archiveSearch(); });

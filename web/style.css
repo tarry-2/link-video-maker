@@ -587,3 +587,11 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .acct-row .acct-grow { flex: 1 1 auto; min-width: 0; overflow: hidden; }
 .acct-row .acct-del { border: none; background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 8px; }
 .acct-row .acct-del:hover { background: rgba(255,0,0,.1); color: #e5484d; }
+.acct-row .acct-ren { border: none; background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; padding: 2px 6px; border-radius: 8px; }
+.acct-row .acct-ren:hover { background: rgba(107,76,240,.12); color: var(--teal); }
+
+/* 이미 하이라이트로 쓴 영상 표시(중복 방지) — ✓ 사용함 배지 + 카드 흐리게 */
+.hl-card .hl-used { position: absolute; left: 8px; top: 8px; z-index: 2; font-size: 10px; font-weight: 800; border-radius: 999px; padding: 3px 8px; background: #1a9d63; color: #fff; box-shadow: 0 2px 8px rgba(26,157,99,.4); pointer-events: none; }
+.hl-card.used { opacity: .62; }
+.hl-card.used:hover { opacity: 1; }
+.hl-card.used img { filter: grayscale(.35); }

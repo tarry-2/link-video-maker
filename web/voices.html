@@ -561,8 +561,8 @@
         const statusUrl = plat === 'fb' ? '/api/facebook/status' : plat === 'ig' ? '/api/instagram/status' : '/api/youtube/status';
         let st; try { st = await (await fetch(statusUrl)).json(); } catch { st = {}; }
         if (!st.connected) { alert('먼저 ⚙ 키 설정에서 ' + platName + ' 계정을 연결하세요.'); return; }
-        // 대상 계정 선택(2개 이상이면 팝업). 유튜브는 단일 계정.
-        const accIds = plat === 'yt' ? [undefined] : await pickAccounts(st.accounts || []);
+        // 대상 계정 선택(이름으로 체크). 3사 모두 멀티계정.
+        const accIds = await pickAccounts(st.accounts || []);
         if (!accIds) return; // 취소
         const totalOps = ids.length * accIds.length;
         if (!confirm(`선택한 ${ids.length}개를 ${platName}${accIds.length > 1 ? ' ' + accIds.length + '개 계정' : ''}에 올릴까요? (총 ${totalOps}건)\n하나씩 순서대로 올라가며 몇 분 걸릴 수 있어요.`)) return;
@@ -808,9 +808,9 @@
       // ── 업로드 대상 계정 선택(멀티계정 공용) ──
       // 모달 안에 넣는 체크박스(계정 2개 이상일 때만). 1개면 빈 문자열 → 기본 계정 사용.
       function acctPickerHtml(accounts) {
-        if (!accounts || accounts.length <= 1) return '';
-        const rows = accounts.map((a, i) => `<label class="acct-pick"><input type="checkbox" class="acct-cb" value="${esc(a.id)}" ${i === 0 ? 'checked' : ''}><span>${esc(a.label || a.username || a.pageName || a.id)}</span></label>`).join('');
-        return `<div class="field-label">보낼 계정 (여러 개 선택 가능)</div><div class="acct-pick-box">${rows}</div>`;
+        if (!accounts || !accounts.length) return ''; // 계정 없음(연결 전) → 생략
+        const rows = accounts.map((a, i) => `<label class="acct-pick"><input type="checkbox" class="acct-cb" value="${esc(a.id)}" ${i === 0 ? 'checked' : ''}><span>${esc(a.label || a.username || a.pageName || a.channelTitle || a.id)}</span></label>`).join('');
+        return `<div class="field-label">보낼 계정 (이름으로 체크 · 여러 개 가능)</div><div class="acct-pick-box">${rows}</div>`;
       }
       function pickedAcctIds(scope) {
         const cbs = [...scope.querySelectorAll('.acct-cb')];
@@ -821,9 +821,9 @@
       // 벌크용: 계정 선택 팝업(2개 이상일 때). 1개면 바로 그 계정. 반환 = id 배열 또는 null(취소).
       function pickAccounts(accounts) {
         return new Promise(resolve => {
-          if (!accounts || accounts.length <= 1) { resolve(accounts && accounts.length ? [accounts[0].id] : [undefined]); return; }
+          if (!accounts || !accounts.length) { resolve([undefined]); return; } // 계정 없음 → 기본
           const box = document.createElement('div'); box.className = 'load-pop';
-          const rows = accounts.map(a => `<label class="acct-pick"><input type="checkbox" class="acct-cb" value="${esc(a.id)}" checked><span>${esc(a.label || a.username || a.pageName || a.id)}</span></label>`).join('');
+          const rows = accounts.map(a => `<label class="acct-pick"><input type="checkbox" class="acct-cb" value="${esc(a.id)}" checked><span>${esc(a.label || a.username || a.pageName || a.channelTitle || a.id)}</span></label>`).join('');
           box.innerHTML = `<div class="modal-box" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto">
             <h2 style="margin-bottom:4px">보낼 계정 선택</h2><p class="sub small">체크한 계정 전부에 올라갑니다.</p>
             <div class="acct-pick-box">${rows}</div>
@@ -850,17 +850,18 @@
           const meta = await r.json();
           if (!r.ok) throw new Error(meta.error || '메타 생성 실패');
           hideLoading();
-          openYtModal(id, meta, st.channelTitle);
+          openYtModal(id, meta, st.channelTitle, st.accounts || []);
         } catch (e) { hideLoading(); alert(e.message); }
         finally { btn.disabled = false; }
       }
-      function openYtModal(id, meta, channel) {
+      function openYtModal(id, meta, channel, accounts) {
         let box = $('yt-modal');
         if (!box) { box = document.createElement('div'); box.id = 'yt-modal'; box.className = 'modal'; document.body.appendChild(box); }
         box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50';
         box.innerHTML = `<div class="modal-box" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">
           <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>📺 유튜브 올리기</h2><button class="ghost-btn" data-yt="close">✕</button></div>
-          <p class="sub small">${channel ? '채널: <b>' + esc(channel) + '</b> · ' : ''}제목·설명은 수정할 수 있어요.</p>
+          <p class="sub small">제목·설명은 수정할 수 있어요.</p>
+          ${acctPickerHtml(accounts)}
           <label class="field-label">제목<input id="yt-title" class="input" maxlength="100" value="${esc(meta.title || '')}" /></label>
           <label class="field-label">설명<textarea id="yt-desc" class="input" rows="6" maxlength="4900">${esc(meta.description || '')}</textarea></label>
           <label class="field-label">태그(쉼표로 구분)<input id="yt-tags" class="input" value="${esc((meta.tags || []).join(', '))}" /></label>
@@ -874,17 +875,26 @@
           const act = e.target.closest('[data-yt]')?.dataset.yt;
           if (act === 'close' || e.target === box) { box.remove(); return; }
           if (act === 'upload') {
-            const up = e.target; up.disabled = true; up.textContent = '올리는 중… (잠시 걸려요)';
-            $('yt-up-msg').textContent = '';
-            try {
-              const r = await fetch('/api/youtube/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: $('yt-title').value, description: $('yt-desc').value, tags: $('yt-tags').value.split(',').map(s => s.trim()).filter(Boolean), privacy: $('yt-privacy').value }) });
-              const d = await r.json();
-              if (!r.ok) throw new Error(d.error || '업로드 실패');
-              $('yt-up-msg').innerHTML = `✅ 업로드 완료!<br><a href="${d.url}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:#ff0000;color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 유튜브에서 열기</a><br><span style="font-size:12px;color:var(--muted)">${d.url}</span>`;
-              up.textContent = '완료 🎉'; up.disabled = true;
-              applyUploadBadge(id, 'yt', d.url); // 리로드 없이 그 카드만 배지(배열·스크롤 유지)
-            } catch (err) { $('yt-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '유튜브에 올리기'; }
+            const accIds = pickedAcctIds(box);
+            if (!accIds.length) { $('yt-up-msg').textContent = '보낼 채널을 하나 이상 선택하세요.'; return; }
+            const up = e.target; up.disabled = true;
+            const body0 = { title: $('yt-title').value, description: $('yt-desc').value, tags: $('yt-tags').value.split(',').map(s => s.trim()).filter(Boolean), privacy: $('yt-privacy').value };
+            let ok = 0, fail = 0, link = '';
+            for (let i = 0; i < accIds.length; i++) {
+              up.textContent = `올리는 중… ${i + 1}/${accIds.length}`;
+              $('yt-up-msg').textContent = '유튜브에 올리는 중이에요…';
+              try {
+                const r = await fetch('/api/youtube/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body0, accountId: accIds[i] }) });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || '업로드 실패');
+                ok++; if (d.url) link = d.url;
+              } catch (err) { fail++; console.warn('[유튜브 실패]', accIds[i], err && err.message); }
+              if (i < accIds.length - 1) await new Promise(r => setTimeout(r, 1500));
+            }
+            if (ok) applyUploadBadge(id, 'yt', link);
+            $('yt-up-msg').innerHTML = (ok ? `✅ ${ok}개 채널 업로드 완료!` + (fail ? ` · ❌ ${fail}개 실패` : '') : `❌ 전부 실패(${fail}개)`)
+              + (link ? `<br><a href="${link}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:#ff0000;color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 유튜브에서 열기</a>` : '');
+            up.textContent = ok ? '완료 🎉' : '다시 시도'; up.disabled = ok > 0;
           }
         };
       }

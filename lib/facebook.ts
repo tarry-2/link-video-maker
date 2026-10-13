@@ -70,6 +70,11 @@ export function removeFacebook(id: string) {
   store.accounts = store.accounts.filter((x) => x.id !== id);
   saveStore(store);
 }
+export function renameFacebook(id: string, label: string) {
+  const store = loadStore();
+  const a = store.accounts.find((x) => x.id === id);
+  if (a) { a.label = label; saveStore(store); }
+}
 export function facebookStatus() {
   const accounts = listFacebook();
   const first = accounts[0];

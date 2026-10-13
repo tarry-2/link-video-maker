@@ -92,6 +92,11 @@ export function removeInstagram(id: string) {
   store.accounts = store.accounts.filter((x) => x.id !== id);
   saveStore(store);
 }
+export function renameInstagram(id: string, label: string) {
+  const store = loadStore();
+  const a = store.accounts.find((x) => x.id === id);
+  if (a) { a.label = label; saveStore(store); }
+}
 // 특정 계정 필드 갱신(토큰 자동갱신용). id로 찾아 patch.
 function patchInstagram(id: string, patch: Partial<InstagramAccount>) {
   const store = loadStore();

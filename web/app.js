@@ -1186,9 +1186,11 @@ async function refreshYtStatus() {
   try {
     const s = await (await fetch('/api/youtube/status')).json();
     const st = $('yt-status');
-    if (s.connected) st.innerHTML = `<span style="color:var(--teal)">● 연결됨${s.channelTitle ? ' · ' + s.channelTitle : ''}</span>`;
-    else if (s.hasClient) st.innerHTML = '<span style="color:#e0a030">ID/Secret 저장됨 — 계정 연결 필요</span>';
+    const accts = s.accounts || [];
+    if (s.connected) st.innerHTML = `<span style="color:var(--teal)">● ${accts.length}개 채널 연결됨</span>`;
+    else if (s.hasClient) st.innerHTML = '<span style="color:#e0a030">ID/Secret 저장됨 — 채널 추가 필요</span>';
     else st.textContent = '미연결';
+    renderAcctList('yt-accounts', 'youtube', accts);
     $('yt-connect').disabled = !s.hasClient;
   } catch {}
 }
@@ -1212,14 +1214,21 @@ $('yt-connect')?.addEventListener('click', async () => {
   } catch (e) { $('yt-msg').textContent = e.message; }
 });
 // ── 인스타 연결 ──
-// 멀티계정 목록 렌더(인스타/페북 공용)
+// 멀티계정 목록 렌더(유튜브/인스타/페북 공용) — 이름(라벨)·✎이름변경·✕삭제
 function renderAcctList(boxId, platform, accts) {
   const box = $(boxId); if (!box) return;
   box.innerHTML = (accts || []).map(a => {
-    const name = a.label || a.username || a.pageName || '(이름없음)';
-    const sub = platform === 'instagram' ? ('@' + (a.username || a.igUserId || '')) : (a.pageName || a.pageId || '');
-    return `<div class="acct-row"><div class="acct-grow"><div class="acct-name">${esc2(name)}</div><div class="acct-sub">${esc2(sub)}</div></div><button class="acct-del" data-acct-del="${esc2(a.id)}" data-platform="${platform}" title="삭제">✕</button></div>`;
+    const name = a.label || a.username || a.pageName || a.channelTitle || '(이름없음)';
+    const sub = platform === 'instagram' ? ('@' + (a.username || a.igUserId || '')) : platform === 'youtube' ? (a.channelTitle || '') : (a.pageName || a.pageId || '');
+    return `<div class="acct-row"><div class="acct-grow"><div class="acct-name">${esc2(name)}</div>${sub ? `<div class="acct-sub">${esc2(sub)}</div>` : ''}</div>
+      <button class="acct-ren" data-acct-ren="${esc2(a.id)}" data-platform="${platform}" title="이름 변경">✎</button>
+      <button class="acct-del" data-acct-del="${esc2(a.id)}" data-platform="${platform}" title="삭제">✕</button></div>`;
   }).join('');
+}
+function refreshAcctPlatform(platform) {
+  if (platform === 'instagram') refreshIgStatus();
+  else if (platform === 'facebook') refreshFbStatus();
+  else refreshYtStatus();
 }
 async function refreshIgStatus() {
   const st = $('ig-status'); if (!st) return;
@@ -1232,14 +1241,24 @@ async function refreshIgStatus() {
     if (s.connected) refreshIgActivity();
   } catch {}
 }
-// 계정 삭제(인스타/페북 공용) — 목록의 ✕ 위임
+// 계정 이름변경(✎)·삭제(✕) 위임 — 유튜브/인스타/페북 공용
 document.addEventListener('click', async (e) => {
+  const rb = e.target.closest('[data-acct-ren]');
+  if (rb) {
+    const platform = rb.dataset.platform, id = rb.dataset.acctRen;
+    const nn = prompt('계정 이름(표시용)을 입력하세요'); if (nn == null || !nn.trim()) return;
+    try {
+      await fetch('/api/' + platform + '/accounts/' + encodeURIComponent(id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: nn.trim() }) });
+      refreshAcctPlatform(platform);
+    } catch {}
+    return;
+  }
   const b = e.target.closest('[data-acct-del]'); if (!b) return;
   const platform = b.dataset.platform, id = b.dataset.acctDel;
   if (!confirm('이 계정을 목록에서 삭제할까요? (올린 게시물은 그대로 남아요)')) return;
   try {
     await fetch('/api/' + platform + '/accounts/' + encodeURIComponent(id), { method: 'DELETE' });
-    if (platform === 'instagram') refreshIgStatus(); else refreshFbStatus();
+    refreshAcctPlatform(platform);
   } catch {}
 });
 // 인스타 업로드 페이스 — 오늘 몇 개·마지막 게시 시각(실제 인스타 기준).
