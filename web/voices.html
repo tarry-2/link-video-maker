@@ -1128,7 +1128,7 @@
       let perfPlat = null;
       // 플랫폼별 추가 지표(각 API가 실제로 주는 것 전부, 공식 기준). 기본 KPI=조회·좋아요·댓글.
       const PLAT_META = {
-        instagram: {label: '📷 인스타', url: '/api/instagram/stats', extra: [['saved', '저장'], ['shares', '공유'], ['reposts', '리포스트'], ['reach', '도달'], ['interactions', '총 상호작용']]},
+        instagram: {label: '📷 인스타', url: '/api/instagram/stats', extra: [['saved', '저장'], ['shares', '공유'], ['reach', '도달'], ['interactions', '총 상호작용']]},
         youtube: {label: '▶️ 유튜브', url: '/api/youtube/stats', extra: [['shares', '공유']]},
         facebook: {label: '👍 페북', url: '/api/facebook/stats', extra: [['shares', '공유'], ['reactions', '반응']]},
         threads: {label: '🧵 스레드', url: '/api/threads/stats', extra: [['shares', '공유'], ['reposts', '리포스트'], ['quotes', '인용']]},
@@ -1171,7 +1171,7 @@
           : plat === 'facebook'
           ? '페북 숫자가 0이면 페이지 연결 권한(pages_read_engagement) 문제일 수 있어요. 진단으로 실제 응답을 확인하세요.'
           : plat === 'instagram'
-          ? '인스타 저장·공유·리포스트는 <b>Facebook 로그인으로 연결된 비즈니스 계정</b>에서만 떠요(리포스트 = 내 영상이 리포스트된 수). 안 뜨면 진단을 확인하세요.'
+          ? '숫자가 0이면 인사이트 권한(instagram_business_manage_insights)이 토큰에 없을 수 있어요. 진단으로 확인하세요.'
           : '';
         if (!d || !d.connected) { box.innerHTML = `<p class="perf-empty">${meta.label} 아직 연결 안 됨 — 영상 만들기 화면 ⚙ 키 설정에서 연결하세요.</p>`; return; }
         if (!d.summary || !d.summary.total) { box.innerHTML = `<p class="perf-empty">${meta.label}에 올린 게시물이 없거나 성과 데이터가 아직 없어요.${whyHint ? '<br>' + whyHint : ''}</p><p style="margin-top:8px">${diagLink}</p>`; return; }
@@ -1189,7 +1189,7 @@
         const voiceChips = (s.byVoice || []).filter(v => v.avg > 0).map(v => `<span class="yt-chip">🎙 ${esc(v.name)} <b>평균 ${fmtNum(v.avg)}</b></span>`).join('');
         const catChips = (s.byCategory || []).filter(c => c.avg > 0).map(c => `<span class="yt-chip">${esc(c.name)} <b>평균 ${fmtNum(c.avg)}</b></span>`).join('');
         const ytNote = plat === 'youtube' ? '<p class="mini-state" style="margin-top:6px">유튜브 공유수는 애널리틱스 기준(최근 1~2일 반영 지연 가능)이에요. 저장(재생목록) 수는 유튜브가 API로 공개하지 않아 표시할 수 없어요.</p>' : '';
-        const igNote = plat === 'instagram' ? '<p class="mini-state" style="margin-top:6px">저장·공유·리포스트는 Facebook 로그인으로 연결된 비즈니스 계정에서만 집계돼요(리포스트 = 내 영상이 리포스트된 횟수). 0이면 위 🔧 진단으로 확인하세요.</p>' : '';
+        const igNote = '';
         box.innerHTML = `
           <div class="yt-kpis">${kpis}</div>${ytNote}${igNote}
           ${bars ? `<div class="yt-sec-title">📈 영상별 조회수</div><div class="perf-bars">${bars}</div>` : ''}
