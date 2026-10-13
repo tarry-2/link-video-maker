@@ -126,6 +126,13 @@
             <button type="button" class="hl-cat hl-arc-src" data-src="ebs" data-search="1">📚 EBS 다큐</button>
             <button type="button" class="hl-cat hl-arc-src" data-src="mbc" data-search="1">🎥 MBC 예능</button>
           </div>
+          <!-- ★음악방송(가요) 전용 경고 — 유튜브는 음원 Content ID로 '차단(영상 잠김)'됨. 옛날가요 소스일 때만 표시. -->
+          <div id="hl-music-warn" class="hidden" style="margin-top:10px;padding:14px 16px;border-radius:12px;background:#fde3e4;border:2px solid #e5484d;color:#8f1a22;font-size:13.5px;line-height:1.55;font-weight:600">
+            🚫 <b style="font-size:15px">음악방송은 유튜브에 올리면 "차단"돼요 (영상 잠김)</b><br>
+            유튜브는 <b>노래(음원)</b>를 지문처럼 스캔해서, 화면을 편집해도 원곡이 들리면 <b>영상이 통째로 막혀요</b>(수익이관이 아니라 차단).<br>
+            ✅ <b>인스타·페북은 스캔이 느슨해 보통 통과</b> → 음악방송은 <b style="color:#b3121b">인스타·페북 위주</b>로 올리세요.<br>
+            ✅ 유튜브에도 꼭 올리려면 아래 <b>'원본 소리 제거'</b>를 켜세요(단, 노래가 안 들려 밋밋해짐).
+          </div>
           <p class="hint warn" style="margin-top:4px">⚠️ <b>저작권 주의</b> — 방송사가 공개한 아카이브지만 <b>드라마·예능·영화·가요·외주 애니처럼 원저작권자(배우·음악)가 따로인 콘텐츠</b>는 유튜브 Content ID에 걸릴 수 있어요(다큐·뉴스는 상대적으로 안전).<br>• <b>실측상 1분(59초) 미만이면 유튜브 "쇼츠 전세계 차단"을 피해요</b>(1~3분이 가장 위험). 아래 길이를 <b>59초 이하</b>로 하세요.<br>• <b>📷 인스타(릴스)는 유튜브보다 저작권 스캔이 느슨해 보통 안 걸려요</b> — 저작권 애매한 소재는 <b>인스타 위주</b>로 올리는 걸 추천해요.<br>• 그래도 걸리면 원본 소리를 제거하세요. 출처는 자동으로 붙어요.</p>
 
           <label id="hl-arc-genre-label" class="field-label" style="margin-top:14px">🎭 장르 <span class="hint">— 누르면 그 분야 영상이 쫙 떠요</span></label>

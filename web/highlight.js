@@ -1081,6 +1081,7 @@
     const isKpop = ['mbckpop', 'kbskpop', 'sbskpop'].includes(archiveSrc);
     const isMixed = archiveSrc === 'kbs';
     const showChips = isMixed || isKpop;
+    $('hl-music-warn')?.classList.toggle('hidden', !isKpop); // 음악방송=유튜브 차단 경고(가요 소스만)
     renderArcChips(isKpop ? 'kpop' : 'kbs'); // 칩 다시 그림(가수/장르)
     document.querySelector('#hl-arc-genres')?.classList.toggle('hidden', !isMixed); // 가요는 장르 없음
     document.querySelector('#hl-arc-genre-label')?.classList.toggle('hidden', !isMixed);
@@ -1421,6 +1422,16 @@
     //     덮어썼지만, 테리 지시로 강제 락 제거. 저작권 주의 영상이면 '안내만' 띄우고 길이는 건드리지 않음.
     if ((picked.risk === 'caution' || picked.risk === 'archive') && sec >= 60) {
       addLog(`ℹ️ 저작권 주의 영상이고 길이가 ${sec}초예요 — 1~3분 쇼츠는 Content ID에 걸리면 "전세계 차단" 위험이 있어요. 차단을 피하려면 59초 미만을 권장합니다(걸려도 원본 소리를 제거하면 풀려요). 지금 고른 길이 그대로 진행할게요.`, 'warn');
+    }
+    // ★음악방송(가요) 경고 — 유튜브는 음원 Content ID로 '차단(영상 잠김)'됨. 원본 소리를 살린 채면 제작 직전 재확인.
+    const isMusicSrc = ['mbckpop', 'kbskpop', 'sbskpop'].includes(archiveSrc)
+      || /음악캠프|음악중심|뮤직뱅크|인기가요|가요|kpop|k-pop|music\s*(core|bank)/i.test(picked.channel || picked.title || '');
+    if (isMusicSrc && !muteOriginal) {
+      if (!confirm('🚫 음악방송은 유튜브에 올리면 "차단(영상 잠김)"될 가능성이 매우 높아요.\n\n유튜브는 노래(음원)를 스캔해서 원곡이 들리면 영상을 통째로 막아요(편집해도 못 피함).\n\n• 인스타·페북은 보통 통과 → 음악방송은 인스타·페북 위주로 올리세요.\n• 유튜브에도 올리려면 취소하고 "원본 소리 제거"를 켜세요.\n\n이대로 (원본 소리 살린 채) 제작할까요?')) {
+        addLog('음악방송 제작을 취소했어요. 인스타·페북 위주로 올리거나, "원본 소리 제거"를 켜세요.', 'warn');
+        return;
+      }
+      addLog('🚫 음악방송 — 유튜브는 차단될 수 있어요. 인스타·페북 위주로 올리는 걸 권장합니다.', 'warn');
     }
     addLog('──────── 하이라이트 제작 시작 ────────', 'done');
     addLog(`• 소재: ${picked.mine ? '📁 내 영상(저작권 자유)' : (mode === 'archive' ? '📼 ' + (picked.channel || '공개 아카이브') + ' · ' + (cat || '직접 검색') : (mode === 'url' ? 'URL 직접 입력' : (region === 'global' ? '해외' : '한국') + ' · ' + (cat || '직접 검색')))}`);
