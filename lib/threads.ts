@@ -93,7 +93,9 @@ export function threadsStatus() {
 }
 
 // ── OAuth(유튜브처럼 버튼 한 번으로 연결) ──
-const OAUTH_SCOPE = 'threads_basic,threads_content_publish';
+// threads_manage_insights 필수 — 없으면 /insights가 권한거부로 성과가 전부 0이 된다(조회·좋아요·공유·리포스트·인용 못 긁음).
+// ★기존 연결 토큰엔 이 권한이 없으므로 재로그인(재인증) 필요. Meta 앱 Threads use case에도 이 권한을 추가해야 동의창에 뜬다.
+const OAUTH_SCOPE = 'threads_basic,threads_content_publish,threads_manage_insights';
 export function saveThreadsClient(appId?: string, appSecret?: string) {
   const store = loadStore();
   if (appId) store.appId = appId.trim();

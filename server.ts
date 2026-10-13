@@ -949,8 +949,8 @@ const server = http.createServer(async (req, res) => {
     const items = withId
       .map((x) => ({...x, ...(stats[x.videoId] || {views: 0, likes: 0, comments: 0, shares: 0})}))
       .sort((a, b) => b.views - a.views);
-    // 유튜브는 공유/저장을 Data API가 공개하지 않음(비공개) → 조회·좋아요·댓글만.
-    return json(res, 200, {connected: true, items, summary: perfSummary(items), ...(diag ? {debug: diag} : {})});
+    // 유튜브 공유수(shares)는 Analytics API로 긁어와 집계·표시한다. 저장(saved)은 Data API가 공개하지 않아 불가.
+    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['shares']), ...(diag ? {debug: diag} : {})});
   }
   // ── 유튜브: Client ID/Secret 저장 ──
   if (p === '/api/youtube/config' && req.method === 'POST') {
@@ -1044,7 +1044,7 @@ const server = http.createServer(async (req, res) => {
     ];
     const withUrl = all.filter((x) => x.url);
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 instagramUrl(permalink) 저장된 게 없음']} : {})});
-    let byPermalink: Record<string, {views: number; likes: number; comments: number; saved?: number; shares?: number}> = {};
+    let byPermalink: Record<string, {views: number; likes: number; comments: number; saved?: number; shares?: number; reposts?: number; reach?: number; totalInteractions?: number}> = {};
     try { byPermalink = await getInstaStats(diag); }
     catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message, ...(debug ? {debug: [...(diag || []), '예외: ' + e.message]} : {})}); }
     if (diag) {
@@ -1055,9 +1055,9 @@ const server = http.createServer(async (req, res) => {
       diag.push(`permalink 매칭 성공 ${matched}/${withUrl.length}개 (0이면 키 불일치)`);
     }
     const items = withUrl
-      .map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, saved: 0, shares: 0}, ...(byPermalink[x.url] || {})}))
+      .map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, saved: 0, shares: 0, reposts: 0, reach: 0, interactions: 0}, ...(byPermalink[x.url] || {})}))
       .sort((a, b) => b.views - a.views || b.likes - a.likes);
-    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['saved', 'shares']), ...(debug ? {debug: diag} : {})});
+    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['saved', 'shares', 'reposts', 'reach', 'interactions']), ...(debug ? {debug: diag} : {})});
   }
   // 인스타 연결(계정 추가 — 여러 개 등록 가능. 같은 계정이면 토큰 갱신)
   if (p === '/api/instagram/connect' && req.method === 'POST') {
@@ -1162,9 +1162,9 @@ const server = http.createServer(async (req, res) => {
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 facebookUrl 저장된 게 없음']} : {})});
     const diag: string[] = [];
     const stats = await getFbStats(debug ? diag : undefined);
-    const items = withUrl.map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, shares: 0}, ...(stats[x.url] || {})}))
+    const items = withUrl.map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, shares: 0, reactions: 0}, ...(stats[x.url] || {})}))
       .sort((a: any, b: any) => b.views - a.views || b.likes - a.likes);
-    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['shares']), ...(debug ? {debug: diag} : {})});
+    return json(res, 200, {connected: true, items, summary: perfSummary(items, ['shares', 'reactions']), ...(debug ? {debug: diag} : {})});
   }
   if (p === '/api/facebook/connect' && req.method === 'POST') {
     const b = await readBody(req);

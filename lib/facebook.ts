@@ -226,16 +226,19 @@ async function activityForAccount(c: FacebookAccount): Promise<{today: number; l
 }
 
 // 성과 추적: 내 페이지 영상의 조회수·좋아요·댓글·공유를 permalink 키로 반환.
-export async function getFbStats(diag?: string[]): Promise<Record<string, {views: number; likes: number; comments: number; shares: number}>> {
-  const byPermalink: Record<string, {views: number; likes: number; comments: number; shares: number}> = {};
+// 공식: 공유/반응/좋아요/댓글은 video_insights가 아니라 영상(객체) fields로 긁는다.
+// views(총 재생)·likes(좋아요)·comments(댓글)·shares(공유)·reactions(전체 반응=좋아요+하트+웃음…). 하나도 안 빠뜨리게 전부.
+export type FbStat = {views: number; likes: number; comments: number; shares: number; reactions: number};
+export async function getFbStats(diag?: string[]): Promise<Record<string, FbStat>> {
+  const byPermalink: Record<string, FbStat> = {};
   const accounts = listFacebook();
   if (!accounts.length) { diag?.push('연결 안 됨: 계정 없음'); return byPermalink; }
   for (const c of accounts) await fbStatsForAccount(c, byPermalink, diag);
   return byPermalink;
 }
-async function fbStatsForAccount(c: FacebookAccount, byPermalink: Record<string, {views: number; likes: number; comments: number; shares: number}>, diag?: string[]): Promise<void> {
+async function fbStatsForAccount(c: FacebookAccount, byPermalink: Record<string, FbStat>, diag?: string[]): Promise<void> {
   const token = c.pageAccessToken!;
-  let url = `${BASE}/${API}/${c.pageId}/videos?fields=id,permalink_url,views,likes.summary(true),comments.summary(true)&limit=100&access_token=${encodeURIComponent(token)}`;
+  let url = `${BASE}/${API}/${c.pageId}/videos?fields=id,permalink_url,views,likes.summary(true),comments.summary(true),reactions.summary(true),shares&limit=100&access_token=${encodeURIComponent(token)}`;
   for (let pg = 0; pg < 3 && url; pg++) {
     try {
       const r = await fetch(url, {cache: 'no-store'});
@@ -250,7 +253,8 @@ async function fbStatsForAccount(c: FacebookAccount, byPermalink: Record<string,
           views: Number(m.views || 0),
           likes: Number(m.likes?.summary?.total_count || 0),
           comments: Number(m.comments?.summary?.total_count || 0),
-          shares: 0,
+          shares: Number(m.shares?.count || 0),
+          reactions: Number(m.reactions?.summary?.total_count || 0),
         };
       }
       url = d.paging?.next || '';

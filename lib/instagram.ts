@@ -385,7 +385,7 @@ async function igActivityForAccount(c: InstagramAccount): Promise<{today: number
 // 성과 추적: 내 인스타 미디어의 조회수·좋아요·댓글을 permalink 키로 반환.
 // 좋아요/댓글은 미디어 목록 fields로 1콜(확실), 조회수(릴스 재생)는 미디어별 insights(views).
 // diag(옵션): 진단 로그 배열을 넘기면 Meta API 실제 응답/에러를 담아준다(삼키지 않음). debug=1 용.
-export type InstaStat = {views: number; likes: number; comments: number; saved: number; shares: number};
+export type InstaStat = {views: number; likes: number; comments: number; saved: number; shares: number; reposts: number; reach: number; interactions: number};
 export async function getInstaStats(
   diag?: string[],
 ): Promise<Record<string, InstaStat>> {
@@ -417,31 +417,38 @@ async function igStatsForAccount(c: InstagramAccount, byPermalink: Record<string
     } catch (e: any) { diag?.push(`❌ media fetch 예외: ${e.message}`); break; }
   }
   diag?.push(`총 미디어 ${media.length}개 · 첫 permalink=${media[0]?.permalink || '(없음)'} · 첫 좋아요=${media[0]?.likes ?? '?'}`);
-  // 2) 각 미디어 insights(조회수·저장·공유). 좋아요/댓글은 미디어 목록이 확실. 실패해도 그건 유지.
-  //    metric=views,saved,shares 한 콜 시도 → 일부 메트릭 미지원으로 전체 400이면 views만 재시도(안전).
-  const parseIns = (data: any): {views: number; saved: number; shares: number} => {
-    const out = {views: 0, saved: 0, shares: 0};
+  // 2) 각 미디어 insights — 공식 media insights 전 지표(조회수·도달·저장·공유·리포스트·총상호작용).
+  //    좋아요/댓글은 미디어 목록 fields가 확실해 그걸 쓰고, insights는 나머지를 채운다.
+  //    reposts는 2026.9 신설 metric·reach/total_interactions는 미디어 타입에 따라 미지원일 수 있어
+  //    큰 세트→중간→views 순으로 단계 폴백(일부 미지원으로 전체 400 나도 나머지는 살림). insights 권한=instagram_business_manage_insights.
+  type Ins = {views: number; saved: number; shares: number; reposts: number; reach: number; interactions: number};
+  const parseIns = (data: any): Ins => {
+    const out: Ins = {views: 0, saved: 0, shares: 0, reposts: 0, reach: 0, interactions: 0};
     for (const row of (data?.data || [])) {
       const v = Number(row?.values?.[0]?.value ?? row?.total_value?.value ?? 0);
-      if (row.name === 'views') out.views = v; else if (row.name === 'saved') out.saved = v; else if (row.name === 'shares') out.shares = v;
+      switch (row.name) {
+        case 'views': out.views = v; break;
+        case 'saved': out.saved = v; break;
+        case 'shares': out.shares = v; break;
+        case 'reposts': out.reposts = v; break;
+        case 'reach': out.reach = v; break;
+        case 'total_interactions': out.interactions = v; break;
+      }
     }
     return out;
   };
+  const METRIC_SETS = ['views,reach,saved,shares,reposts,total_interactions', 'views,saved,shares', 'views'];
   let insightNoted = false;
   for (const m of media) {
-    let ins = {views: 0, saved: 0, shares: 0};
+    let ins: Ins = {views: 0, saved: 0, shares: 0, reposts: 0, reach: 0, interactions: 0};
     try {
-      let ir = await fetch(`${base}/${API}/${m.id}/insights?metric=views,saved,shares&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
-      let idata: any = await ir.json();
-      if (ir.ok) ins = parseIns(idata);
-      else {
-        // 폴백: 조회수만(저장·공유 미지원 환경).
-        ir = await fetch(`${base}/${API}/${m.id}/insights?metric=views&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
-        idata = await ir.json();
-        if (ir.ok) ins.views = Number(idata.data?.[0]?.values?.[0]?.value ?? idata.data?.[0]?.total_value?.value ?? 0);
-        else if (!insightNoted) { const err = idata?.error || idata; diag?.push(`⚠️ insights 실패 HTTP ${ir.status} (code=${err?.code ?? '?'}): ${String(err?.message || JSON.stringify(err)).slice(0, 300)}`); insightNoted = true; }
+      for (let si = 0; si < METRIC_SETS.length; si++) {
+        const ir = await fetch(`${base}/${API}/${m.id}/insights?metric=${METRIC_SETS[si]}&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+        const idata: any = await ir.json();
+        if (ir.ok) { ins = parseIns(idata); break; }
+        if (si === METRIC_SETS.length - 1 && !insightNoted) { const err = idata?.error || idata; diag?.push(`⚠️ insights 실패 HTTP ${ir.status} (code=${err?.code ?? '?'}): ${String(err?.message || JSON.stringify(err)).slice(0, 300)}`); insightNoted = true; }
       }
     } catch (e: any) { if (!insightNoted) { diag?.push(`⚠️ insights 예외: ${e.message}`); insightNoted = true; } }
-    if (m.permalink) byPermalink[m.permalink] = {views: ins.views, likes: m.likes, comments: m.comments, saved: ins.saved, shares: ins.shares};
+    if (m.permalink) byPermalink[m.permalink] = {views: ins.views, likes: m.likes, comments: m.comments, saved: ins.saved, shares: ins.shares, reposts: ins.reposts, reach: ins.reach, interactions: ins.interactions};
   }
 }
