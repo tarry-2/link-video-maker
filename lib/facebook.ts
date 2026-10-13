@@ -238,13 +238,24 @@ export async function getFbStats(diag?: string[]): Promise<Record<string, FbStat
 }
 async function fbStatsForAccount(c: FacebookAccount, byPermalink: Record<string, FbStat>, diag?: string[]): Promise<void> {
   const token = c.pageAccessToken!;
-  let url = `${BASE}/${API}/${c.pageId}/videos?fields=id,permalink_url,views,likes.summary(true),comments.summary(true),reactions.summary(true),shares&limit=100&access_token=${encodeURIComponent(token)}`;
+  // 전체 필드(공유·반응 포함) → 실패하면 공유·반응을 빼고 재시도. 필드 하나가 권한/미지원이면 videos 호출 전체가
+  //   400이 돼 성과가 통째로 0이 되는 걸 막는다(조회·좋아요·댓글은 무조건 살림). shares/reactions는 되는 환경에서만.
+  const FULL = 'id,permalink_url,views,likes.summary(true),comments.summary(true),reactions.summary(true),shares';
+  const MIN = 'id,permalink_url,views,likes.summary(true),comments.summary(true)';
+  let fields = FULL;
+  const mkUrl = (f: string) => `${BASE}/${API}/${c.pageId}/videos?fields=${f}&limit=100&access_token=${encodeURIComponent(token)}`;
+  let url = mkUrl(fields);
   for (let pg = 0; pg < 3 && url; pg++) {
     try {
-      const r = await fetch(url, {cache: 'no-store'});
-      const d: any = await r.json();
+      let r = await fetch(url, {cache: 'no-store'});
+      let d: any = await r.json();
+      if (!r.ok && fields === FULL) {
+        diag?.push(`⚠️ videos 전체필드 실패(HTTP ${r.status}: ${String(d?.error?.message || '').slice(0, 160)}) → 공유·반응 빼고 재시도`);
+        fields = MIN; url = mkUrl(fields);
+        r = await fetch(url, {cache: 'no-store'}); d = await r.json();
+      }
       if (!r.ok) { diag?.push(`❌ videos 호출 실패 HTTP ${r.status}: ${String(d?.error?.message || JSON.stringify(d)).slice(0, 300)}`); break; }
-      diag?.push(`videos 페이지${pg + 1}: ${(d.data || []).length}개`);
+      diag?.push(`videos 페이지${pg + 1}: ${(d.data || []).length}개 (필드=${fields === FULL ? '전체' : '기본'})`);
       for (const m of (d.data || [])) {
         let permalink = m.permalink_url || '';
         if (permalink && !permalink.startsWith('http')) permalink = 'https://www.facebook.com' + permalink;
