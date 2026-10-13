@@ -128,6 +128,23 @@ export async function makeCardVideo(keys: CardKeys, opts: CardOpts): Promise<{ou
     }
   }
 
+  // ★업로드/쇼핑 배경은 public/uploads/ 에 있어 렌더 전용 폴더(buildRenderPublic=jobRel만 복사)에 안 들어간다
+  //   → staticFile이 못 찾아 "Error loading image" 로 렌더 실패(쇼핑 상품사진·수동 업로드 공통 버그).
+  //   해결: uploads/ 로 시작하는 배경을 이 작업의 pubRel(jobs/card-{id}) 폴더로 복사하고 경로를 그쪽으로 바꾼다.
+  for (let i = 0; i < bgRel.length; i++) {
+    const b = bgRel[i];
+    if (!b || !b.startsWith('uploads/')) continue;
+    try {
+      const srcAbs = abs(b);
+      if (!fs.existsSync(srcAbs)) { log(`[배경 ${i + 1}] ⚠️ 업로드 이미지를 찾지 못해 단색 배경으로`); bgRel[i] = undefined; continue; }
+      const ext = path.extname(b) || '.jpg';
+      const destRel = `${pubRel}/bg-up-${i}${ext}`;
+      await mkdir(abs(pubRel), {recursive: true});
+      fs.copyFileSync(srcAbs, abs(destRel));
+      bgRel[i] = destRel;
+    } catch (e: any) { log(`[배경 ${i + 1}] ⚠️ 업로드 이미지 복사 실패(${e?.message || e}) → 단색 배경`); bgRel[i] = undefined; }
+  }
+
   // 나레이션(토글) — ON이면 통짜 TTS + 카드별 구간으로 길이 산정.
   let voiceSrc: string | undefined;
   let ranges: [number, number][] = [];
