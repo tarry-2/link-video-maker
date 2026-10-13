@@ -207,7 +207,7 @@ export async function publishVideo(
     access_token: token,
   };
   if (linkAttachment) createParams.link_attachment = linkAttachment;
-  const cr = await fetch(`${HOST}/${API}/${c.userId}/threads`, {method: 'POST', body: new URLSearchParams(createParams)});
+  const cr = await fetch(`${HOST}/${API}/me/threads`, {method: 'POST', body: new URLSearchParams(createParams)});
   const cd: any = await cr.json();
   if (!cr.ok || !cd.id) {
     const e = cd?.error || {};
@@ -220,7 +220,7 @@ export async function publishVideo(
   await waitFinished(cd.id, token, log);
 
   log?.('[스레드] 게시 중…');
-  const pd: any = await publishWithRetry(c.userId, cd.id, token, log);
+  const pd: any = await publishWithRetry('me', cd.id, token, log);
   log?.('[스레드] 게시 완료!');
   return {permalink: await permalinkOf(pd.id, token), id: pd.id};
 }
@@ -235,13 +235,13 @@ export async function publishText(
   log?.('[스레드] 글 컨테이너 생성 중…');
   const createParams: Record<string, string> = {media_type: 'TEXT', text: (text || '').slice(0, 500), access_token: token};
   if (linkAttachment) createParams.link_attachment = linkAttachment;
-  const cr = await fetch(`${HOST}/${API}/${c.userId}/threads`, {method: 'POST', body: new URLSearchParams(createParams)});
+  const cr = await fetch(`${HOST}/${API}/me/threads`, {method: 'POST', body: new URLSearchParams(createParams)});
   const cd: any = await cr.json();
   if (!cr.ok || !cd.id) throw new Error('글 컨테이너 생성 실패: ' + (cd?.error?.message || JSON.stringify(cd).slice(0, 200)));
   // 텍스트는 즉시 발행 가능하나 공식 권장대로 짧게 대기 후 발행.
   await new Promise((r) => setTimeout(r, 1500));
   log?.('[스레드] 게시 중…');
-  const pd: any = await publishWithRetry(c.userId, cd.id, token, log);
+  const pd: any = await publishWithRetry('me', cd.id, token, log);
   log?.('[스레드] 게시 완료!');
   return {permalink: await permalinkOf(pd.id, token), id: pd.id};
 }
@@ -292,12 +292,12 @@ async function thActivityForAccount(c: ThreadsAccount): Promise<{today: number; 
   // 팔로워 수(계정 insights). 실패해도 무시.
   let followers: number | undefined;
   try {
-    const fr = await fetch(`${HOST}/${API}/${c.userId}/threads_insights?metric=followers_count&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+    const fr = await fetch(`${HOST}/${API}/me/threads_insights?metric=followers_count&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
     const fd: any = await fr.json();
     if (fr.ok) followers = Number(fd?.data?.[0]?.total_value?.value ?? 0);
   } catch {}
   try {
-    const r = await fetch(`${HOST}/${API}/${c.userId}/threads?fields=id,timestamp&limit=100&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
+    const r = await fetch(`${HOST}/${API}/me/threads?fields=id,timestamp&limit=100&access_token=${encodeURIComponent(token)}`, {cache: 'no-store'});
     const d: any = await r.json();
     if (!r.ok) return {today: 0, lastAt: null, total: 0, followers, error: d?.error?.message || `API 오류(${r.status})`};
     const times: string[] = (d.data || []).map((m: any) => m.timestamp).filter(Boolean).sort().reverse();
@@ -320,7 +320,7 @@ export async function getThreadsStats(diag?: string[]): Promise<Record<string, {
 async function thStatsForAccount(c: ThreadsAccount, byPermalink: Record<string, {views: number; likes: number; comments: number}>, diag?: string[]): Promise<void> {
   const token = c.accessToken!;
   const media: {id: string; permalink: string}[] = [];
-  let url = `${HOST}/${API}/${c.userId}/threads?fields=id,permalink&limit=100&access_token=${encodeURIComponent(token)}`;
+  let url = `${HOST}/${API}/me/threads?fields=id,permalink&limit=100&access_token=${encodeURIComponent(token)}`;
   for (let pg = 0; pg < 3 && url; pg++) {
     try {
       const r = await fetch(url, {cache: 'no-store'});
