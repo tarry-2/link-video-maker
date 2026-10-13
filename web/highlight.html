@@ -259,6 +259,16 @@
           </div>
           <p class="hint hl-clip-only" id="hl-cm-note" style="margin-top:4px">원본에 'AI 해설(내 관점)'을 깔면 유튜브가 '리뷰·논평'으로 인정해 재사용 수익화에 유리합니다. 원본 소리는 자동으로 줄어듭니다.</p>
 
+          <!-- 해설 길이(커버리지) — 끝까지 / 80% / 60%. 짧게 하면 뒷부분은 원곡·무대 소리가 커지며 감상(테리). -->
+          <div id="hl-cov-row" class="hl-clip-only" style="margin-top:12px">
+            <label class="field-label">🎚 해설 길이 <span class="hint">— 짧게 하면 뒷부분은 원곡·현장 소리가 커지며 매끄럽게 마무리돼요</span></label>
+            <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+              <button type="button" class="seg-btn hl-cov active" data-cov="1">끝까지</button>
+              <button type="button" class="seg-btn hl-cov" data-cov="0.8">80%까지</button>
+              <button type="button" class="seg-btn hl-cov" data-cov="0.6">60%까지</button>
+            </div>
+          </div>
+
           <!-- 영어 번역 자막(이중 자막) — 해설 켤 때만. 한국어 카라오케 아래 영어 문장 함께 -->
           <div id="hl-en-row" class="hidden hl-clip-only" style="margin-top:12px">
             <label class="field-label">🌐 영어 자막 함께 <span class="hint">— 해외 시청자용 (한국어 + English)</span></label>

@@ -28,7 +28,13 @@ export const Thumbnail: React.FC<ThumbnailData> = ({image, big, small, badge, ac
   const land = width > height;
   // 단어별로 쪼개서 번갈아 색칠(흰/강조) → 리듬감. 아주 큰 폰트.
   const words = big.split(/\s+/).filter(Boolean);
-  const bigSize = Math.round(width * (land ? 0.095 : 0.165));
+  // ★긴 제목/후킹이 프레임 밖으로 잘리던 문제(테리) — 글자 수에 따라 폰트를 자동 축소해 '항상' 들어오게.
+  //   기준 글자수(세로 14·가로 18) 넘으면 비례로 줄이되 최소 52%까지. 짧으면 기존 초대형 유지.
+  const bigBase = width * (land ? 0.095 : 0.165);
+  const bigChars = big.replace(/\s+/g, '').length;
+  const bigThresh = land ? 18 : 14;
+  const bigScale = bigChars > bigThresh ? Math.max(0.52, bigThresh / bigChars) : 1;
+  const bigSize = Math.round(bigBase * bigScale);
   // 윗줄은 한 줄 유지라, 글자 수가 많으면 폰트를 줄여 화면폭을 안 넘게(대략 글자폭=폰트*1.05).
   const smallBase = width * (land ? 0.042 : 0.072);
   const smallFit = small ? Math.min(smallBase, (width * 0.9) / (small.length * 1.05)) : smallBase;
@@ -133,6 +139,8 @@ export const Thumbnail: React.FC<ThumbnailData> = ({image, big, small, badge, ac
                 color: i % 2 === 1 ? accentColor : '#fff',
                 textShadow: outline(ol),
                 WebkitTextStroke: `${Math.round(ol * 0.3)}px #000`,
+                overflowWrap: 'anywhere',
+                wordBreak: 'keep-all',
               }}
             >
               {wd}

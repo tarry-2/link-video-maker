@@ -130,7 +130,7 @@ async function clipVisionFrames(clipAbs: string, durSec: number, workDir: string
 //   원본 대사(transcript)를 근거로 맥락·논평을 더한다(단순 중계/낭독 금지).
 async function writeCommentary(
   geminiKeys: string[], title: string, transcript: string, hook: string, clipSec: number,
-  log?: (m: string) => void, images?: GeminiImage[], episodeIdx = 0,
+  log?: (m: string) => void, images?: GeminiImage[], episodeIdx = 0, handoff = false,
 ): Promise<string> {
   if (!geminiKeys.length) { log?.('[하이라이트] 해설 생략: Gemini 키가 없습니다.'); return ''; }
   // ★분량을 클립 길이에 '꽉' 채운다 — 한국어 나레이션 ~4.9자/초(TTS 실측, 끝까지 말이 이어지게).
@@ -154,7 +154,9 @@ ${sceneContext({title, hook, transcript, hasVision: !!images?.length})}
 ${contentStrategy()}
 ${RULE.answer}
 ${RULE.factTruth}
-- 답/정보를 분명히 준 뒤 마지막 한마디로만 짧은 여운.
+${handoff
+  ? `- ★이 해설은 영상 ${clipSec}초쯤에서 끝나고, 그 뒤 남은 부분은 '원본 소리(노래·무대·현장음)'가 그대로 흐른다. 그러니 할 말을 ${clipSec}초 안에 깔끔히 맺고, 마지막 문장은 반드시 원본으로 자연스럽게 넘기는 매끄러운 멘트로 끝내라(예: "자, 그럼 지금부터 함께 보시죠", "한번 들어보세요", "끝까지 감상해 보세요"). 말을 뚝 끊지 말고 '넘기는' 느낌으로.`
+  : '- 답/정보를 분명히 준 뒤 마지막 한마디로만 짧은 여운.'}
 ${RULE.polite}
 - 해시태그·이모지·따옴표 없이 '읽을 문장'만.
 JSON만 출력: {"commentary":"..."}`;
@@ -257,7 +259,7 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; font?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; source?: 'search' | 'url' | 'upload' | 'archive'; onClip?: (c: {projectId: string; file: string; title: string; score: number; reason?: string}) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; narrationCoverage?: number; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; font?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; source?: 'search' | 'url' | 'upload' | 'archive'; onClip?: (c: {projectId: string; file: string; title: string; score: number; reason?: string}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -333,8 +335,12 @@ export async function makeHighlights(
       // 해설 길이도 '길이 락' 안에 맞춘다 — 영상이 capFrames에서 잘리므로 나레이션이 그보다 길면 뒷말이 뚝 끊긴다.
       //   캡의 92%를 목표 길이로(여운 1.3초 + 여유). 사용자가 59초로 맞췄으면 해설은 ~54초 분량으로 생성.
       const capSec = capFrames / FPS;
-      const narrTargetSec = Math.max(5, Math.min(Math.round(durSec), Math.floor(capSec * 0.92)));
-      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log, visionFrames, episodeNo - 1);
+      // ★나레이션 커버리지(테리): 1.0=끝까지 / 0.8 / 0.6 — 뒷부분은 원본 소리(노래·무대)가 커지며 재생된다.
+      const coverage = Math.max(0.3, Math.min(1, opts.narrationCoverage ?? 1));
+      const handoff = coverage < 0.95; // 중간에 끝나면 '자, 들어보시죠' 식 매끄러운 마무리
+      const narrTargetSec = Math.max(5, Math.min(Math.round(durSec), Math.floor(capSec * 0.92 * coverage)));
+      if (handoff) log(`[하이라이트] ${i + 1}편 해설 ${Math.round(coverage * 100)}%까지(${narrTargetSec}초) — 나머지는 원본 소리로 마무리`);
+      const commentary = await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log, visionFrames, episodeNo - 1, handoff);
       commentaryText = commentary || '';
       if (commentary && k.elevenlabs) {
         log(`[하이라이트] ${i + 1}편 해설 나레이션 생성…`);
@@ -447,8 +453,9 @@ export async function makeHighlights(
       if (bgOk) {
         try {
           await renderThumbnail(
+            // ★하드컷을 18→28자로 완화(잘림 방지) — Thumbnail이 글자 수에 맞춰 폰트를 자동 축소해 프레임 안에 넣는다.
             {image: `${jobRel}/${bgName}`,
-              big: hookTopFinal ? hookTopFinal.slice(0, 18) : cleanTitle(meta.title, 18),
+              big: hookTopFinal ? hookTopFinal.slice(0, 28) : cleanTitle(meta.title, 28),
               small: '',
               badge: (hookAccentFinal || '').slice(0, 8),
               accentColor: tpl.accentColor},
@@ -832,7 +839,7 @@ export async function reRenderHighlight(
     if (bgOk) {
       try {
         // 썸네일 문구 — 사용자가 썸네일칸을 직접 고쳤으면 그걸, 아니면 후킹으로 자동.
-        const thBig = (overrides.thumbBig !== undefined && overrides.thumbBig.trim() ? overrides.thumbBig : (hookTop || e.baseTitle || '')).slice(0, 18);
+        const thBig = (overrides.thumbBig !== undefined && overrides.thumbBig.trim() ? overrides.thumbBig : (hookTop || e.baseTitle || '')).slice(0, 28);
         const thBadge = (overrides.thumbBadge !== undefined ? overrides.thumbBadge : (hookAccent || '')).slice(0, 8);
         await renderThumbnail({image: `${jobRel}/${bgName}`, big: thBig, small: '', badge: thBadge, accentColor: tpl.accentColor}, thumbAbs, log, publicDir, orientation);
         thumbOk = fs.existsSync(thumbAbs);

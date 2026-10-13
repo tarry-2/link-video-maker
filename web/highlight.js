@@ -549,6 +549,7 @@
   // 세로일 때만 "세로 변환 방식" 노출(가로는 무의미).
   function applyReframeRow() { const r = $('hl-reframe-row'); if (r) r.style.display = orient === 'portrait' ? '' : 'none'; }
   let commentary = 1, voice = ''; // 해설 넣기(0/1) · 해설 목소리 — 기본 ON(재업로드 강등 탈출·수익화 유리)
+  let narrationCoverage = 1; // 해설 길이(1=끝까지 / 0.8 / 0.6) — 짧게 하면 뒷부분 원곡·현장음 감상
   let font = ''; // 제목 폰트(모든 탭 공통). 빈값=자동(템플릿 폰트)
   let captionEn = 0; // 영어 번역 자막 함께(0/1, 해설 켤 때만)
   let license = 'cc'; // 영상 범위: cc(안전·재사용 허가만) / all(전체)
@@ -565,7 +566,7 @@
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, captionEn, voice, font, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
+        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, narrationCoverage, captionEn, voice, font, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
         makeMode, rmOut, rmClips, rmStyle, rmCount, // 재창작 설정도 저장(탭 나갔다 와도 유지 — 테리 지시)
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
@@ -597,13 +598,16 @@
     // 해설(commentary) 기본값을 ON으로 바꿈(재업로드 강등 탈출). 기존 사용자(cmV2 없음)는 1회 ON으로 이행,
     //   이후엔 사용자가 끈 선택을 존중(cmV2 플래그가 저장됨).
     commentary = s.cmV2 ? (s.commentary ? 1 : 0) : 1; voice = s.voice || '';
+    narrationCoverage = [1, 0.8, 0.6].includes(Number(s.narrationCoverage)) ? Number(s.narrationCoverage) : 1;
     font = s.font || '';
     document.querySelectorAll('#hl-font-picker .font-chip').forEach((b) => b.classList.toggle('active', (b.dataset.font || '') === font));
     captionEn = s.captionEn ? 1 : 0;
     picked = s.picked || null;
     document.querySelectorAll('.hl-cm').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === commentary));
+    document.querySelectorAll('.hl-cov').forEach((b) => b.classList.toggle('active', Number(b.dataset.cov) === narrationCoverage));
     $('hl-voice-row')?.classList.toggle('hidden', !commentary);
     $('hl-en-row')?.classList.toggle('hidden', !commentary);
+    $('hl-cov-row')?.classList.toggle('hidden', !commentary);
     document.querySelectorAll('.hl-en').forEach((b) => b.classList.toggle('active', Number(b.dataset.en) === captionEn));
     // 재창작 설정 복원(탭 나갔다 와도 유지). applyMakeMode가 clip-only 숨김·버튼문구·목소리행까지 다시 맞춘다.
     makeMode = s.makeMode === 'remake' ? 'remake' : 'clip';
@@ -1159,7 +1163,11 @@
   // 해설 넣기 토글
   document.querySelectorAll('.hl-cm').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-cm').forEach((x) => x.classList.remove('active')); b.classList.add('active');
-    commentary = Number(b.dataset.c); $('hl-voice-row')?.classList.toggle('hidden', !commentary); $('hl-en-row')?.classList.toggle('hidden', !commentary); saveState();
+    commentary = Number(b.dataset.c); $('hl-voice-row')?.classList.toggle('hidden', !commentary); $('hl-en-row')?.classList.toggle('hidden', !commentary); $('hl-cov-row')?.classList.toggle('hidden', !commentary); saveState();
+  }));
+  document.querySelectorAll('.hl-cov').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-cov').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+    narrationCoverage = Number(b.dataset.cov) || 1; saveState();
   }));
   document.querySelectorAll('.hl-en').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-en').forEach((x) => x.classList.remove('active')); b.classList.add('active'); captionEn = Number(b.dataset.en); saveState();
@@ -1395,6 +1403,7 @@
     addLog(`• 화면 방향: ${orient === 'landscape' ? '가로 16:9' : '세로 9:16'}${orient === 'portrait' ? ' · ' + (reframeMode === 'letterbox' ? '전체 보존(블러)' : '인물 꽉채움') : ''}`);
     addLog(`• 만들 편수: ${count}편`);
     addLog(`• 해설: ${commentary ? 'AI 해설 입힘 (' + ($('hl-voice')?.selectedOptions[0]?.textContent || voice) + ')' : '원본 그대로'}`);
+    if (commentary && narrationCoverage < 1) addLog(`• 해설 길이: ${Math.round(narrationCoverage * 100)}%까지 — 뒷부분은 원곡·현장 소리로 마무리`);
     addLog(`• 원본 소리: ${muteOriginal ? '제거(저작권 회피)' : '살리기'}`);
     addLog(`• 무음 제거: ${removeSilence ? '✂️ 켜짐(템포 UP)' : '끄기'}`);
     addLog(`• AI B-roll: ${broll ? '🖼 켜짐(이미지 생성 — 비용 발생)' : '끄기'}`);
@@ -1412,7 +1421,7 @@
     try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
     // 소재 출처(작업내역 탭별 이원화) — 내 영상 업로드면 upload, 그 외는 현재 모드(search/url/archive).
     const src = picked.mine ? 'upload' : (['url', 'archive'].includes(mode) ? mode : 'search');
-    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, font, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, captionEn: !!captionEn, source: src, voice, isCc: picked.isCc !== false};
+    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, font, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, narrationCoverage, captionEn: !!captionEn, source: src, voice, isCc: picked.isCc !== false};
     lastEndpoint = '/api/generate-highlights';
     generate(lastBody, lastEndpoint);
   });

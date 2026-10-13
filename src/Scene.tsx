@@ -166,8 +166,25 @@ export const Scene: React.FC<SceneData> = ({
     const olTop = lightBg ? 0 : 3;
     return (
       <AbsoluteFill style={{backgroundColor: '#000'}}>
-        {/* 원본 소리: muteOriginal=완전 제거(저작권 소리지문 회피) / duckAudio=해설 때 줄임(0.2) / 기본=원음. */}
-        <OffthreadVideo src={staticFile(video)} muted={muteOriginal} volume={muteOriginal ? 0 : (duckAudio ? 0.2 : 1)} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+        {/* 원본 소리: muteOriginal=완전 제거 / duckAudio=해설 때 0.2로 줄임 / 기본=원음.
+            ★해설이 끝나는 지점(마지막 자막 단어 end) 이후엔 원본 소리를 0.2→1.0으로 올려 '원곡/무대'가 또렷이 들리게
+            한다(나레이션 커버리지 60/80% 때 뒷부분 감상용 — 테리). 100%면 사실상 끝까지 깔려 차이 없음. */}
+        <OffthreadVideo
+          src={staticFile(video)}
+          muted={muteOriginal}
+          volume={
+            muteOriginal
+              ? 0
+              : !duckAudio
+                ? 1
+                : (f) => {
+                    const narrEnd = words.length ? words[words.length - 1].e : 0;
+                    if (!narrEnd) return 0.2;
+                    return interpolate(f, [narrEnd, narrEnd + 15], [0.2, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+                  }
+          }
+          style={{width: '100%', height: '100%', objectFit: 'cover'}}
+        />
         {/* 상단 후킹 — 템플릿별 컨테이너 + 등장 스케일 팝 */}
         {(hookTop || hookAccent) && (
           <div style={{

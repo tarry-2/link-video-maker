@@ -2392,6 +2392,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const clipSec = Math.max(15, Math.min(600, Number(b.clipSec) || 30)); // 최대 10분(커스텀)
     const orientation = b.orientation === 'landscape' ? 'landscape' : 'portrait';
     const commentary = !!b.commentary; // 해설 나레이션 입히기(수익화 변형 가치)
+    const narrationCoverage = [1, 0.8, 0.6].includes(Number(b.narrationCoverage)) ? Number(b.narrationCoverage) : 1; // 해설 커버리지(끝까지/80/60%)
     const voice = typeof b.voice === 'string' ? b.voice : undefined;
     const reframe = b.reframe === 'letterbox' ? 'letterbox' : 'track'; // 세로 변환 방식(기본=인물 추적)
     const muteOriginal = !!b.muteOriginal; // 원본 소리 완전 제거(저작권 소리지문 회피)
@@ -2410,7 +2411,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       try {
         job.kind = 'highlight';
         job.clips = []; // 완성되는 편마다 누적(먼저 끝난 편을 SSE로 바로 흘림)
-        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, voice, reframe, muteOriginal, localFile, template, font, removeSilence, broll, captionEn, source, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
+        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, narrationCoverage, voice, reframe, muteOriginal, localFile, template, font, removeSilence, broll, captionEn, source, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
           onClip: (c) => { if (!job.clips!.some((x) => x.projectId === c.projectId)) job.clips!.push(c); }});
         if (localFile) { try { fs.rmSync(localFile, {force: true}); } catch {} } // 업로드 원본은 작업 끝나면 정리
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }
