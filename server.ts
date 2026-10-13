@@ -2095,7 +2095,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
     let idx: any[] = [];
     try { idx = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8')); } catch {}
     idx.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    return json(res, 200, {items: idx.map((it, i) => ({id: it.id, num: i + 1, url: `/api/shop/library/img?id=${it.id}`}))});
+    return json(res, 200, {items: idx.map((it, i) => ({id: it.id, num: i + 1, kind: it.kind || 'image', url: `/api/shop/library/img?id=${it.id}`}))});
   }
   if (p === '/api/shop/library/img' && req.method === 'GET') {
     const id = String(u.searchParams.get('id') || '').replace(/[^a-z0-9]/gi, '');
@@ -2106,27 +2106,31 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
     const ext = it?.ext || 'jpg';
     const f = path.join(dir, id + '.' + ext);
     if (!id || !fs.existsSync(f)) return json(res, 404, {error: '없음'});
-    const ct = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-    return serveFile(res, f, ct);
+    const cts: Record<string, string> = {png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg', jpeg: 'image/jpeg', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', m4v: 'video/x-m4v'};
+    return serveFile(res, f, cts[ext] || 'application/octet-stream');
   }
   if (p === '/api/shop/library/upload' && req.method === 'POST') {
     const b = await readBody(req);
-    const imgs: string[] = Array.isArray(b.images) ? b.images : [];
-    if (!imgs.length) return json(res, 400, {error: '이미지가 없습니다.'});
+    // images·videos 둘 다 받음(한 라이브러리에 사진·영상 함께). 구버전 호환으로 images만 와도 됨.
+    const items: string[] = [...(Array.isArray(b.images) ? b.images : []), ...(Array.isArray(b.videos) ? b.videos : [])];
+    if (!items.length) return json(res, 400, {error: '올릴 파일이 없습니다.'});
     const dir = path.join(STUDIO_DATA_DIR, 'shop-lib');
     fs.mkdirSync(dir, {recursive: true});
     let idx: any[] = [];
     try { idx = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8')); } catch {}
     let added = 0; const errs: string[] = [];
-    for (const durl of imgs) {
-      const m = String(durl).match(/^data:image\/([\w.+-]+);base64,([\s\S]+)$/);
+    for (const durl of items) {
+      const m = String(durl).match(/^data:(image|video)\/([\w.+-]+);base64,([\s\S]+)$/);
       if (!m) { errs.push('형식불일치'); continue; }
-      const ext = /png/i.test(m[1]) ? 'png' : /webp/i.test(m[1]) ? 'webp' : 'jpg';
+      const kind = m[1]; const sub = m[2].toLowerCase();
+      const ext = kind === 'video'
+        ? (/quicktime/.test(sub) ? 'mov' : /webm/.test(sub) ? 'webm' : /m4v|x-m4v/.test(sub) ? 'm4v' : 'mp4')
+        : (/png/.test(sub) ? 'png' : /webp/.test(sub) ? 'webp' : 'jpg');
       const id = randomUUID().slice(0, 8);
       try {
         // 영상만들기와 동일 — 원본 그대로 저장(리사이즈·변환 없음).
-        fs.writeFileSync(path.join(dir, id + '.' + ext), Buffer.from(m[2], 'base64'));
-        idx.push({id, ext, createdAt: Date.now() + added});
+        fs.writeFileSync(path.join(dir, id + '.' + ext), Buffer.from(m[3], 'base64'));
+        idx.push({id, ext, kind, createdAt: Date.now() + added});
         added++;
       } catch (e: any) { errs.push(String(e?.message || e).slice(0, 120)); }
     }
