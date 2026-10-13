@@ -117,6 +117,14 @@ export const Scene: React.FC<SceneData> = ({
   const hookIn = spring({frame, fps, config: {damping: 16, mass: 0.6}});
   const hookY = interpolate(hookIn, [0, 1], [40, 0]);
 
+  // ★후킹 글자 잘림 방지(테리): 글자 수에 따라 폰트를 자동 축소해 긴 후킹도 항상 프레임 안에 들어오게.
+  //   fullBleed(하이라이트)·일반 영상 상단 후킹 공용. 짧으면 기존 크기 유지, 길면 비례 축소(최소 55%).
+  const fitSize = (text: string, baseSize: number, thresh: number) => {
+    const n = (text || '').replace(/\s+/g, '').length;
+    const scale = n > thresh ? Math.max(0.55, thresh / n) : 1;
+    return Math.round(baseSize * scale);
+  };
+
   // ★역동적 켄번스(Veo 없이 공짜 생동감): 장면마다 다른 움직임(줌인/줌아웃/팬) + 미세 흔들림.
   const p = ((motion ?? 0) % 4 + 4) % 4;
   const dur = durationInFrames || 90;
@@ -164,6 +172,10 @@ export const Scene: React.FC<SceneData> = ({
     // 글자 외곽선 — 밝은 배경(버블)이면 가늘게(검은 테두리 과하지 않게).
     const lightBg = T.hookStyle === 'bubble';
     const olTop = lightBg ? 0 : 3;
+    // ★후킹 글자 잘림 방지(테리): 긴 후킹이 한 줄 폭을 넘어 끝이 프레임 밖으로 밀려 짤리던 문제.
+    //   글자 수에 따라 폰트 자동 축소(두 줄까지 허용 기준). 윗줄 세로20·가로24, 아랫줄 세로16·가로20.
+    const htSize = fitSize(hookTop, L.fsHookTop, land ? 24 : 20);
+    const haSize = fitSize(hookAccent, L.fsHookAccent, land ? 20 : 16);
     return (
       <AbsoluteFill style={{backgroundColor: '#000'}}>
         {/* 원본 소리: muteOriginal=완전 제거 / duckAudio=해설 때 0.2로 줄임 / 기본=원음.
@@ -194,13 +206,13 @@ export const Scene: React.FC<SceneData> = ({
             opacity: hookIn,
           }}>
             <div style={hookContainerStyle}>
-              {hookTop && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: L.fsHookTop, color: T.textColor,
+              {hookTop && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: htSize, color: T.textColor,
                 lineHeight: 1.08, textShadow: olTop ? outline(olTop) : 'none', letterSpacing: -1,
-                wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookTop}</div>}
-              {hookAccent && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: L.fsHookAccent, color: T.accentColor,
+                whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{hookTop}</div>}
+              {hookAccent && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: haSize, color: T.accentColor,
                 lineHeight: 1.12, marginTop: 4,
                 textShadow: lightBg ? 'none' : `0 3px 14px ${T.accentColor}66, ${outline(olTop)}`,
-                letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookAccent}</div>}
+                letterSpacing: -1, whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{hookAccent}</div>}
             </div>
           </div>
         )}
@@ -316,13 +328,14 @@ export const Scene: React.FC<SceneData> = ({
         <div
           style={{
             fontFamily: titleFont + ', "Noto Color Emoji"',
-            fontSize: L.fsHookTop,
+            fontSize: fitSize(hookTop, L.fsHookTop, land ? 24 : 20),
             lineHeight: 1.12,
             color: '#fff',
             textShadow: outline(5),
             letterSpacing: -1,
+            whiteSpace: 'normal',
             wordBreak: 'keep-all',
-            overflowWrap: 'anywhere',
+            overflowWrap: 'break-word',
           }}
         >
           {hookTop}
@@ -330,14 +343,15 @@ export const Scene: React.FC<SceneData> = ({
         <div
           style={{
             fontFamily: titleFont + ', "Noto Color Emoji"',
-            fontSize: L.fsHookAccent,
+            fontSize: fitSize(hookAccent, L.fsHookAccent, land ? 20 : 16),
             lineHeight: 1.12,
             color: accentColor,
             textShadow: outline(6),
             marginTop: 6,
             letterSpacing: -1,
+            whiteSpace: 'normal',
             wordBreak: 'keep-all',
-            overflowWrap: 'anywhere',
+            overflowWrap: 'break-word',
           }}
         >
           {hookAccent}
