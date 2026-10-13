@@ -279,13 +279,26 @@ async function hasVideoStream(file: string): Promise<boolean> {
 //   영상이 짧아 N개가 안 나오면 '나오는 만큼만' 반환(한 편 덜 만들어도 각 편은 제 길이).
 function splitEvenly(durationSec: number, n: number, clipSec: number): Highlight[] {
   const hs: Highlight[] = [];
+  // ★n편으로 '영상 전체를 나누려는' 경우(예: 248초를 124초 2편) — n등분하면 각 편이 clipSec의 80% 이상이면
+  //   그냥 영상을 n조각으로 쪼갠다(전체를 빠짐없이 커버). 예전엔 floor((dur-2)/clipSec)로 따져 248/124가
+  //   1.98→1편이 돼 "1편밖에 안 됨" 버그가 났다(테리). 각 편 길이는 상위 hard cap(clipSec)으로 제한된다.
+  const partLen = durationSec / n;
+  if (partLen >= clipSec * 0.8) {
+    for (let i = 0; i < n; i++) {
+      const start = Math.floor(i * partLen);
+      const end = i === n - 1 ? durationSec : Math.floor((i + 1) * partLen);
+      hs.push({start: Math.max(0, start), end: Math.min(durationSec, end), hookTop: '', hookAccent: '', reason: '', score: 60});
+    }
+    return hs;
+  }
+  // 영상이 n*clipSec보다 충분히 길면 — 온전한 clipSec짜리 k개를 균등 배치(기존 동작).
   const usable = Math.max(0, durationSec - 2);
-  const maxFit = Math.floor(usable / clipSec); // 온전한 clipSec짜리가 최대 몇 개 들어가나
+  const maxFit = Math.floor(usable / clipSec);
   const k = Math.max(0, Math.min(n, maxFit));
   if (k === 0) return hs; // 영상이 clipSec보다도 짧으면 순차분할로는 한 편도 안 만듦(상위에서 처리)
-  const gap = Math.floor(usable / k); // k개를 균등 배치(각 구간은 온전한 clipSec)
+  const gap = Math.floor(usable / k);
   for (let i = 0; i < k; i++) {
-    const start = Math.min(usable - clipSec, i * gap); // 마지막 편도 clipSec 확보되는 위치
+    const start = Math.min(usable - clipSec, i * gap);
     hs.push({start: Math.max(0, start), end: Math.min(durationSec, start + clipSec), hookTop: '', hookAccent: '', reason: '', score: 60});
   }
   return hs;
@@ -426,7 +439,8 @@ JSON만 출력: {"highlights":[{"start":0,"end":${clipSec},"hookTop":"...","hook
   if (hs.length < n) {
     const need = n - hs.length;
     if (hs.length) log(`[하이라이트] AI가 ${hs.length}개 골랐고, 최대 ${need}개를 겹치지 않게 더 채웁니다.`);
-    const extra = splitEvenly(durationSec, n * 2, clipSec).filter((e) =>
+    // n등분(영상 전체를 n조각) 후 기존 채택과 안 겹치는 것만 — 248초 2편처럼 '전체를 나눠 채우기'가 제대로 되게.
+    const extra = splitEvenly(durationSec, n, clipSec).filter((e) =>
       !hs.some((h) => e.start < h.end && e.end > h.start)); // 시간대가 실제로 겹치면 제외
     hs = dropOverlaps(hs.concat(extra)).slice(0, n); // 합친 뒤에도 다시 겹침 제거(추가분끼리도)
   }

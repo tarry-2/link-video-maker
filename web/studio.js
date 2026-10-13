@@ -186,6 +186,70 @@
       }
     };
   }
+  // 👍 페이스북 올리기
+  async function openFacebook(btn) {
+    if (!current?.output) return;
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = '👍 준비 중…';
+    try {
+      const st = await (await fetch('/api/facebook/status')).json();
+      if (!st.connected) { message('먼저 ⚙ 키 설정에서 페이스북 페이지를 연결하세요.', true); btn.disabled = false; btn.textContent = orig; return; }
+      btn.textContent = '👍 글 만드는 중…';
+      const d = await api('/api/instagram/caption/' + current.id, undefined);
+      let box = el('fb-modal');
+      if (!box) { box = document.createElement('div'); box.id = 'fb-modal'; box.className = 'modal hidden'; document.body.appendChild(box); }
+      box.innerHTML = `<div class="modal-box">
+        <div class="modal-head"><h2>👍 페이스북 올리기</h2><button class="ghost-btn" data-fb="close">✕</button></div>
+        <label class="field-label">글 내용<textarea id="fb-caption" class="input" rows="8" maxlength="5000">${escape(d.caption || '')}</textarea></label>
+        <button class="primary-btn" data-fb="upload">페이스북에 올리기</button>
+        <p id="fb-up-msg" class="mini-state">영상 처리 때문에 1~2분 걸릴 수 있어요.</p></div>`;
+      box.classList.remove('hidden');
+      box.onclick = async e => {
+        const act = e.target.closest('[data-fb]')?.dataset.fb;
+        if (act === 'close' || e.target === box) { box.classList.add('hidden'); return; }
+        if (act === 'upload') {
+          const up = e.target; up.disabled = true; up.textContent = '올리는 중…'; el('fb-up-msg').textContent = '페북이 영상을 받아 처리하는 중…';
+          try {
+            const r = await api('/api/facebook/upload/' + current.id, {caption: el('fb-caption').value});
+            el('fb-up-msg').innerHTML = r.permalink ? `✅ 게시 완료! <a href="${r.permalink}" target="_blank" style="color:var(--teal)">페이스북에서 열기</a>` : '✅ 게시 완료!';
+            up.textContent = '완료 🎉';
+          } catch (err) { el('fb-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '페이스북에 올리기'; }
+        }
+      };
+    } catch (e) { report(e); } finally { btn.disabled = false; btn.textContent = orig; }
+  }
+  // 🧵 스레드 올리기
+  async function openThreads(btn) {
+    if (!current?.output) return;
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = '🧵 준비 중…';
+    try {
+      const st = await (await fetch('/api/threads/status')).json();
+      if (!st.connected) { message('먼저 ⚙ 키 설정에서 스레드 계정을 연결하세요.', true); btn.disabled = false; btn.textContent = orig; return; }
+      btn.textContent = '🧵 글 만드는 중…';
+      const d = await api('/api/instagram/caption/' + current.id, undefined);
+      let box = el('th-modal');
+      if (!box) { box = document.createElement('div'); box.id = 'th-modal'; box.className = 'modal hidden'; document.body.appendChild(box); }
+      box.innerHTML = `<div class="modal-box">
+        <div class="modal-head"><h2>🧵 스레드 올리기</h2><button class="ghost-btn" data-th="close">✕</button></div>
+        <p class="sub small">글은 500자까지. 링크를 넣으면 글 아래 미리보기로 붙어요.</p>
+        <label class="field-label">글 내용<textarea id="th-caption" class="input" rows="7" maxlength="500">${escape((d.caption || '').slice(0, 500))}</textarea></label>
+        <label class="field-label">첨부 링크(선택)<input id="th-link" class="input" placeholder="예: https://..." /></label>
+        <button class="primary-btn" data-th="upload">스레드에 올리기</button>
+        <p id="th-up-msg" class="mini-state">영상 처리 때문에 30초~1분 걸릴 수 있어요.</p></div>`;
+      box.classList.remove('hidden');
+      box.onclick = async e => {
+        const act = e.target.closest('[data-th]')?.dataset.th;
+        if (act === 'close' || e.target === box) { box.classList.add('hidden'); return; }
+        if (act === 'upload') {
+          const up = e.target; up.disabled = true; up.textContent = '올리는 중…'; el('th-up-msg').textContent = '스레드가 영상을 받아 처리하는 중…';
+          try {
+            const r = await api('/api/threads/upload/' + current.id, {caption: el('th-caption').value, link: el('th-link').value.trim()});
+            el('th-up-msg').innerHTML = r.permalink ? `✅ 게시 완료! <a href="${r.permalink}" target="_blank" style="color:var(--teal)">스레드에서 열기</a>` : '✅ 게시 완료!';
+            up.textContent = '완료 🎉';
+          } catch (err) { el('th-up-msg').textContent = '실패: ' + err.message; up.disabled = false; up.textContent = '스레드에 올리기'; }
+        }
+      };
+    } catch (e) { report(e); } finally { btn.disabled = false; btn.textContent = orig; }
+  }
   function celebrate() {
     const c = document.createElement('div'); c.className = 'confetti';
     const colors = ['#17b5a4', '#7c5cff', '#ff4d8d', '#FFE24B', '#ff8a5c', '#4fe0d0'];
@@ -371,7 +435,7 @@
         <button class="ghost-btn" data-action="save" ${disabled}>대본 수정 저장</button>
         <button class="primary-btn" data-action="render" ${disabled}>${p.status === 'failed' ? '완료된 단계부터 이어서 재시작' : '2. 검토한 대본으로 최종 제작'}</button>
         <p class="mini-state">나레이션 수정은 해당 장면 음성을 다시 생성합니다. 상단 문구·색상만 바꾸면 음성을 재사용합니다. 장면별 음성은 이어지는 억양이 달라질 수 있습니다.</p>` : !busy ? '<button class="primary-btn" data-action="render">대본 작성 재시작</button>' : ''}
-      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><button class="primary-btn" data-action="download">⬇ 영상 다운로드</button><div class="result-actions"><button class="ghost-btn" data-action="add-portfolio">🎬 포트폴리오에 추가</button><button class="btn-yt" data-action="youtube">📺 유튜브 올리기</button><button class="btn-ig" data-action="instagram">📷 인스타 올리기</button></div><p class="mini-state">앱에서 안 열리면 위 영상을 꾹 눌러 "동영상 저장"을 쓰세요. 포트폴리오는 완성 시 자동 등록되며, 필요하면 위 버튼으로 다시 넣을 수 있어요.</p></div>` : ''}
+      ${p.output ? `<div class="studio-result"><h3>${p.outputRevision === p.revision ? '완성 영상' : '이전 완성본 — 수정 사항은 최종 제작 후 반영됩니다'}</h3><video class="result-video" controls preload="metadata" src="${asset(p, p.output)}"></video><button class="primary-btn" data-action="download">⬇ 영상 다운로드</button><div class="result-actions"><button class="ghost-btn" data-action="add-portfolio">🎬 포트폴리오에 추가</button><button class="btn-yt" data-action="youtube">📺 유튜브 올리기</button><button class="btn-ig" data-action="instagram">📷 인스타 올리기</button><button class="ghost-btn" data-action="facebook">👍 페북 올리기</button><button class="ghost-btn" data-action="threads">🧵 스레드 올리기</button></div><p class="mini-state">앱에서 안 열리면 위 영상을 꾹 눌러 "동영상 저장"을 쓰세요. 포트폴리오는 완성 시 자동 등록되며, 필요하면 위 버튼으로 다시 넣을 수 있어요.</p></div>` : ''}
       <details ${busy || p.status === 'failed' ? 'open' : ''}><summary>제작 로그</summary><div class="scene-actions"><button class="ghost-btn" data-action="copy-log">로그 복사</button><button class="ghost-btn" data-action="expand-log">크게 보기</button></div><pre class="log">${escape(p.logs.join('\n'))}</pre></details>`;
     el('generate').disabled = busy;
     tickElapsed();
@@ -441,6 +505,8 @@
     }
     if (button.dataset.action === 'youtube') { openYouTube(button); return; }
     if (button.dataset.action === 'instagram') { openInstagram(button); return; }
+    if (button.dataset.action === 'facebook') { openFacebook(button); return; }
+    if (button.dataset.action === 'threads') { openThreads(button); return; }
     if (loading || active(current)) return;
     loading = true;
     try {

@@ -1006,8 +1006,58 @@ async function cardInstagram(btn, id, carousel) {
       }; });
   } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = orig; }
 }
+// 👍 페이스북 올리기(완성 영상)
+async function cardFacebook(btn, id) {
+  if (!id) return;
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '👍 준비 중…';
+  try {
+    const st = await (await fetch('/api/facebook/status')).json();
+    if (!st.connected) { alert('먼저 ⚙ 키 설정에서 페이스북 페이지를 연결하세요.'); return; }
+    btn.textContent = '👍 글 만드는 중…';
+    const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id)); const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '글 생성 실패');
+    cardModal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>👍 페이스북 올리기</h2><button class="ghost-btn" data-x="close">✕</button></div>
+      <label class="field-label">글 내용<textarea id="cu-c" class="input" rows="8" maxlength="5000">${esc2(d.caption || '')}</textarea></label>
+      <button class="primary-btn" data-up="1">페이스북에 올리기</button><p id="cu-msg" class="mini-state">영상 처리 때문에 1~2분 걸릴 수 있어요.</p>`,
+      (box) => { box.querySelector('[data-up]').onclick = async (ev) => {
+        const up = ev.target; up.disabled = true; up.textContent = '올리는 중…'; box.querySelector('#cu-msg').textContent = '처리 중…';
+        try {
+          const rr = await fetch('/api/facebook/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: box.querySelector('#cu-c').value }) });
+          const dd = await rr.json(); if (!rr.ok) throw new Error(dd.error || '업로드 실패');
+          box.querySelector('#cu-msg').innerHTML = dd.permalink ? `✅ 완료! <a href="${dd.permalink}" target="_blank" style="color:var(--teal)">페이스북에서 열기</a>` : '✅ 게시 완료!'; up.textContent = '완료 🎉';
+        } catch (e) { box.querySelector('#cu-msg').textContent = '실패: ' + e.message; up.disabled = false; up.textContent = '페이스북에 올리기'; }
+      }; });
+  } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = orig; }
+}
+// 🧵 스레드 올리기(완성 영상)
+async function cardThreads(btn, id) {
+  if (!id) return;
+  const orig = btn.textContent; btn.disabled = true; btn.textContent = '🧵 준비 중…';
+  try {
+    const st = await (await fetch('/api/threads/status')).json();
+    if (!st.connected) { alert('먼저 ⚙ 키 설정에서 스레드 계정을 연결하세요.'); return; }
+    btn.textContent = '🧵 글 만드는 중…';
+    const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id)); const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '글 생성 실패');
+    cardModal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>🧵 스레드 올리기</h2><button class="ghost-btn" data-x="close">✕</button></div>
+      <p class="sub small">글은 500자까지. 링크를 넣으면 글 아래 미리보기로 붙어요.</p>
+      <label class="field-label">글 내용<textarea id="cu-c" class="input" rows="7" maxlength="500">${esc2((d.caption || '').slice(0, 500))}</textarea></label>
+      <label class="field-label">첨부 링크(선택)<input id="cu-link" class="input" placeholder="예: https://..." /></label>
+      <button class="primary-btn" data-up="1">스레드에 올리기</button><p id="cu-msg" class="mini-state">영상 처리 때문에 30초~1분 걸릴 수 있어요.</p>`,
+      (box) => { box.querySelector('[data-up]').onclick = async (ev) => {
+        const up = ev.target; up.disabled = true; up.textContent = '올리는 중…'; box.querySelector('#cu-msg').textContent = '처리 중…';
+        try {
+          const rr = await fetch('/api/threads/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: box.querySelector('#cu-c').value, link: box.querySelector('#cu-link').value.trim() }) });
+          const dd = await rr.json(); if (!rr.ok) throw new Error(dd.error || '업로드 실패');
+          box.querySelector('#cu-msg').innerHTML = dd.permalink ? `✅ 완료! <a href="${dd.permalink}" target="_blank" style="color:var(--teal)">스레드에서 열기</a>` : '✅ 게시 완료!'; up.textContent = '완료 🎉';
+        } catch (e) { box.querySelector('#cu-msg').textContent = '실패: ' + e.message; up.disabled = false; up.textContent = '스레드에 올리기'; }
+      }; });
+  } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = orig; }
+}
 $('cv-yt')?.addEventListener('click', (e) => cardYouTube(e.currentTarget));
 $('cv-ig')?.addEventListener('click', (e) => cardInstagram(e.currentTarget, cardVidUpId, false));
+$('cv-fb')?.addEventListener('click', (e) => cardFacebook(e.currentTarget, cardVidUpId));
+$('cv-th')?.addEventListener('click', (e) => cardThreads(e.currentTarget, cardVidUpId));
 $('cp-ig')?.addEventListener('click', (e) => cardInstagram(e.currentTarget, cardUpId, true));
 
 // ── 화면비 UI 동기화: 쇼츠(<90초)=세로 9:16 / 롱폼(≥90초)=가로 16:9 ──

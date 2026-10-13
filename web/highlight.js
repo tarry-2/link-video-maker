@@ -206,11 +206,13 @@
             <button class="ghost-btn small hl-yt" data-id="${c.projectId}">📺 유튜브</button>
             <button class="ghost-btn small hl-ig" data-id="${c.projectId}">📷 인스타</button>
             <button class="ghost-btn small hl-fb" data-id="${c.projectId}">👍 페북</button>
+            <button class="ghost-btn small hl-th" data-id="${c.projectId}">🧵 스레드</button>
           </div>
         </div>`).join('')}</div>`;
     box.querySelectorAll('.hl-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
     box.querySelectorAll('.hl-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, orient === 'landscape'));
     box.querySelectorAll('.hl-fb').forEach((b) => b.onclick = () => uploadFacebook(b, b.dataset.id));
+    box.querySelectorAll('.hl-th').forEach((b) => b.onclick = () => uploadThreads(b, b.dataset.id));
     box.querySelectorAll('.hl-edit').forEach((b) => b.onclick = () => openEditModal(b.dataset.id));
     box.scrollIntoView({behavior: 'smooth'});
   }
@@ -421,6 +423,30 @@
         }; });
     } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = orig; }
   }
+  // ── 🧵 스레드 올리기 ──
+  async function uploadThreads(btn, id) {
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = '🧵 준비 중…';
+    try {
+      const st = await (await fetch('/api/threads/status')).json();
+      if (!st.connected) { alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 스레드 계정을 연결하세요.'); return; }
+      btn.textContent = '🧵 글 만드는 중…';
+      const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id)); const d = await r.json();
+      if (!r.ok) throw new Error(d.error || '글 생성 실패');
+      modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>🧵 스레드 올리기</h2><button class="ghost-btn" data-x="close">✕</button></div>
+        <p class="mini-state">글은 500자까지. 링크를 넣으면 글 아래 미리보기로 붙어요.</p>
+        <label class="field-label">글 내용<textarea id="cu-c" class="input" rows="7" maxlength="500">${esc((d.caption || '').slice(0, 500))}</textarea></label>
+        <label class="field-label">첨부 링크(선택)<input id="cu-link" class="input" placeholder="예: https://..." /></label>
+        <button class="primary-btn" data-up="1">스레드에 올리기</button><p id="cu-msg" class="mini-state">영상 처리에 30초~1분 걸릴 수 있어요.</p>`,
+        (box) => { box.querySelector('[data-up]').onclick = async (ev) => {
+          const up = ev.target; up.disabled = true; up.textContent = '올리는 중…'; box.querySelector('#cu-msg').textContent = '처리 중…';
+          try {
+            const rr = await fetch('/api/threads/upload/' + encodeURIComponent(id), {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({caption: box.querySelector('#cu-c').value, link: box.querySelector('#cu-link').value.trim()})});
+            const dd = await rr.json(); if (!rr.ok) throw new Error(dd.error || '업로드 실패');
+            box.querySelector('#cu-msg').innerHTML = dd.permalink ? `✅ 완료! <a href="${dd.permalink}" target="_blank" style="color:var(--teal)">스레드에서 열기</a>` : '✅ 게시 완료!'; up.textContent = '완료 🎉'; loadHistory();
+          } catch (e) { box.querySelector('#cu-msg').textContent = '실패: ' + e.message; up.disabled = false; up.textContent = '스레드에 올리기'; }
+        }; });
+    } catch (e) { alert(e.message); } finally { btn.disabled = false; btn.textContent = orig; }
+  }
 
   // ── 작업 내역(하이라이트만) ──
   // 작업내역 소스별 분류(탭 이원화) — 주제검색 / 영상URL / 내 영상 / 아카이브.
@@ -445,6 +471,7 @@
         <button type="button" class="ghost-btn small hh-yt" data-id="${esc(it.id)}">📺</button>
         <button type="button" class="ghost-btn small hh-ig" data-id="${esc(it.id)}" data-land="${it.orientation === 'landscape' ? '1' : ''}">📷</button>
         <button type="button" class="ghost-btn small hh-fb" data-id="${esc(it.id)}">👍</button>
+        <button type="button" class="ghost-btn small hh-th" data-id="${esc(it.id)}">🧵</button>
         <button type="button" class="ghost-btn small hh-del" data-id="${esc(it.id)}">🗑</button>
       </span></div>`;
   }
@@ -514,6 +541,7 @@
     box.querySelectorAll('.hh-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
     box.querySelectorAll('.hh-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, !!b.dataset.land));
     box.querySelectorAll('.hh-fb').forEach((b) => b.onclick = () => uploadFacebook(b, b.dataset.id));
+    box.querySelectorAll('.hh-th').forEach((b) => b.onclick = () => uploadThreads(b, b.dataset.id));
     box.querySelectorAll('.hh-del').forEach((b) => b.onclick = () => del(b.dataset.id));
   }
   async function loadHistory() {
@@ -552,6 +580,7 @@
           <button type="button" class="ghost-btn small rh-yt" data-id="${esc(it.id)}">📺</button>
           <button type="button" class="ghost-btn small rh-ig" data-id="${esc(it.id)}" data-land="${it.orientation === 'landscape' ? '1' : ''}">📷</button>
           <button type="button" class="ghost-btn small rh-fb" data-id="${esc(it.id)}">👍</button>
+          <button type="button" class="ghost-btn small rh-th" data-id="${esc(it.id)}">🧵</button>
           <button type="button" class="ghost-btn small rh-del" data-id="${esc(it.id)}">🗑</button>
         </span></div>`;
     }).join('');
@@ -559,6 +588,7 @@
     box.querySelectorAll('.rh-yt').forEach((b) => b.onclick = () => uploadYouTube(b, b.dataset.id));
     box.querySelectorAll('.rh-ig').forEach((b) => b.onclick = () => uploadInstagram(b, b.dataset.id, !!b.dataset.land));
     box.querySelectorAll('.rh-fb').forEach((b) => b.onclick = () => uploadFacebook(b, b.dataset.id));
+    box.querySelectorAll('.rh-th').forEach((b) => b.onclick = () => uploadThreads(b, b.dataset.id));
     box.querySelectorAll('.rh-del').forEach((b) => b.onclick = () => del(b.dataset.id));
   }
   async function del(id) {
