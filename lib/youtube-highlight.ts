@@ -277,11 +277,12 @@ export async function makeHighlights(
   log(`[하이라이트] ${clips.length}개 구간 확보 — 후킹 자막 얹어 완성합니다.`);
 
   // 출처 표기. 본인 영상=출처 불필요. CC 영상이면 (Creative Commons BY) 명시. 비-CC면 거짓표기 없이 출처만.
+  //   ★도메인(원본 URL)은 넣지 않는다 — 채널명만 표기(테리: 원본으로 트래픽 유출 방지). 저작권 표기 의무는 채널명 크레딧으로 충족.
   const attribution = isMine
     ? ''
     : (meta.isCc === false
-      ? `출처: ${meta.channel} — https://youtu.be/${videoId}`
-      : `출처: ${meta.channel} — https://youtu.be/${videoId} (Creative Commons BY)`);
+      ? `출처: ${meta.channel}`
+      : `출처: ${meta.channel} (Creative Commons BY)`);
   const results: HighlightJobResult = [];
 
   // 소재 식별키(포폴 저장·'✓ 사용함' 배지용). 유튜브/아카이브=videoId, 업로드=영상 제목.

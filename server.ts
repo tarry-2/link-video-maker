@@ -282,21 +282,27 @@ async function ensureInstaVideoR2(id: string): Promise<string> {
   setSampleR2(base, key);
   return key;
 }
-// 재사용(CC BY) 하이라이트의 출처 문구 — 상세설명·캡션에 반드시 포함(저작권 표기 의무).
+// 출처에서 원본 도메인(URL)만 제거 — 채널명·CC 표기는 남기고 링크만 뺀다(테리: 원본으로 트래픽 유출 방지).
+//   "출처: MBC 음악캠프 — https://youtu.be/xxx (Creative Commons BY)" → "출처: MBC 음악캠프 (Creative Commons BY)".
+//   생성부(youtube-highlight)에서 이미 URL을 안 넣지만, 기존 저장값(URL 포함)도 읽을 때 떼어 모든 진입점 통일.
+function stripAttrUrl(s: string): string {
+  return s.replace(/\s*[—–-]\s*https?:\/\/\S+/gi, '').replace(/[ \t]{2,}/g, ' ').trim();
+}
+// 재사용(CC BY) 하이라이트의 출처 문구 — 상세설명·캡션에 반드시 포함(저작권 표기 의무). 도메인은 뺀다(stripAttrUrl).
 //   project.json.attribution 우선, 없으면 attribution.txt 폴백. 하이라이트가 아니면 빈 문자열.
 function readAttribution(id: string): string {
   if (!/^[0-9a-f-]{36}$/.test(id)) return '';
   const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
   try {
     const a = JSON.parse(fs.readFileSync(path.join(dir, 'project.json'), 'utf8')).attribution;
-    if (a) return String(a).trim();
+    if (a) return stripAttrUrl(String(a).trim());
   } catch {}
   try {
     const f = path.join(dir, 'attribution.txt');
-    if (fs.existsSync(f)) return fs.readFileSync(f, 'utf8').trim();
+    if (fs.existsSync(f)) return stripAttrUrl(fs.readFileSync(f, 'utf8').trim());
   } catch {}
   // ★project.json·attribution.txt가 날아가도(ENOSPC) 포트폴리오에 저장해둔 출처로 폴백.
-  try { const it = listPortfolio().find((x) => x.projectId === id); if (it?.attribution) return String(it.attribution).trim(); } catch {}
+  try { const it = listPortfolio().find((x) => x.projectId === id); if (it?.attribution) return stripAttrUrl(String(it.attribution).trim()); } catch {}
   return '';
 }
 // 카드 게시물(캐러셀) 메타 — project.json에서 제목·나레이션(캡션 생성용) 읽기.
