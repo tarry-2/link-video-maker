@@ -36,7 +36,8 @@
   let style = 'real', voice = '';
   let count = 6, dur = 30, cardVideo = true, narr = true, bgm = true;
   let product = null;
-  let mediaFiles = [];         // 내 사진·영상(dataURL + type)
+  let mediaFiles = [];         // 영상 클립(일회성 업로드)
+  let libItems = [], libSel = new Set();  // 📚 이미지 라이브러리(영속) 목록·선택 id들
   let curJobId = null, curES = null, startTs = 0, tickTimer = null, lastLogAt = 0;
   let shownResultId = null, resultTimer = null, lastJobId = null;
 
@@ -53,6 +54,7 @@
     document.querySelectorAll('#sh-format .seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.fmt === fmt));
     $('sh-card-opts').classList.toggle('hidden', fmt !== 'card');
     $('sh-media-opts').classList.toggle('hidden', fmt !== 'media');
+    if (fmt === 'media') loadLibrary();
     // 길이 선택은 AI 나레이션형·내 사진영상에서 노출(카드형은 카드 수로 길이 결정).
     $('sh-dur-opts').classList.toggle('hidden', fmt === 'card');
     // 그림체는 AI가 장면을 그릴 때만 의미(카드형·AI나레이션형). 내 미디어는 내 사진이라 숨김.
@@ -116,6 +118,51 @@
     box.querySelectorAll('[data-rm]').forEach((b) => b.onclick = () => { mediaFiles.splice(Number(b.dataset.rm), 1); renderMediaPreview(); });
   }
 
+  // ── 📚 이미지 라이브러리(올려두고 골라서 제작) ──
+  function fileToDataURL(f) { return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.onerror = rej; fr.readAsDataURL(f); }); }
+  function blobToDataURL(b) { return new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.readAsDataURL(b); }); }
+  async function loadLibrary() {
+    try {
+      const d = await (await fetch('/api/shop/library', {cache: 'no-store'})).json();
+      libItems = d.items || [];
+      const ids = new Set(libItems.map((it) => it.id));
+      [...libSel].forEach((id) => { if (!ids.has(id)) libSel.delete(id); }); // 지워진 건 선택에서 제거
+      renderLibGrid();
+    } catch {}
+  }
+  function renderLibGrid() {
+    const grid = $('sh-lib-grid'); if (!grid) return;
+    const empty = $('sh-lib-empty'); if (empty) empty.style.display = libItems.length ? 'none' : '';
+    const cnt = $('sh-lib-count'); if (cnt) cnt.textContent = libItems.length ? `${libItems.length}장 · 선택 ${libSel.size}` : '';
+    grid.innerHTML = libItems.map((it) => {
+      const sel = libSel.has(it.id);
+      return `<div data-id="${it.id}" style="position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;cursor:pointer;border:3px solid ${sel ? 'var(--teal,#15b8a6)' : 'transparent'}">
+        <img src="${it.url}" loading="lazy" style="width:100%;height:100%;object-fit:cover"/>
+        <span style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;font-weight:700;padding:1px 5px;border-radius:6px">${it.num}</span>
+        ${sel ? '<span style="position:absolute;bottom:2px;right:2px;background:var(--teal,#15b8a6);color:#fff;font-size:12px;width:18px;height:18px;line-height:18px;text-align:center;border-radius:50%">✓</span>' : ''}
+        <button type="button" data-del="${it.id}" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;width:18px;height:18px;line-height:18px;border-radius:50%;cursor:pointer;font-size:11px">✕</button>
+      </div>`;
+    }).join('');
+    grid.querySelectorAll('[data-id]').forEach((el) => {
+      el.onclick = (e) => { if (e.target.dataset.del !== undefined) return; const id = el.dataset.id; if (libSel.has(id)) libSel.delete(id); else libSel.add(id); renderLibGrid(); };
+    });
+    grid.querySelectorAll('[data-del]').forEach((b) => {
+      b.onclick = async (e) => { e.stopPropagation(); if (!confirm('이 사진을 라이브러리에서 지울까요?')) return; try { await fetch('/api/shop/library/delete', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: b.dataset.del})}); } catch {} loadLibrary(); };
+    });
+  }
+  async function collectLibSelected() { const out = []; for (const id of libSel) { try { const blob = await (await fetch('/api/shop/library/img?id=' + id)).blob(); out.push(await blobToDataURL(blob)); } catch {} } return out; }
+  $('sh-lib-file')?.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []); if (!files.length) return;
+    const cnt = $('sh-lib-count'); if (cnt) cnt.textContent = `${files.length}장 올리는 중…`;
+    const images = []; for (const f of files) { try { images.push(await fileToDataURL(f)); } catch {} }
+    try { const r = await fetch('/api/shop/library/upload', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({images})}); const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); } catch (err) { alert('업로드 실패: ' + err.message); }
+    e.target.value = ''; loadLibrary();
+  });
+  $('sh-lib-selall')?.addEventListener('click', () => { libItems.forEach((it) => libSel.add(it.id)); renderLibGrid(); });
+  $('sh-lib-selnone')?.addEventListener('click', () => { libSel.clear(); renderLibGrid(); });
+  $('sh-lib-delsel')?.addEventListener('click', async () => { if (!libSel.size) return; if (!confirm(`선택한 ${libSel.size}장을 지울까요?`)) return; try { await fetch('/api/shop/library/delete', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ids: [...libSel]})}); } catch {} libSel.clear(); loadLibrary(); });
+  $('sh-lib-delall')?.addEventListener('click', async () => { if (!libItems.length) return; if (!confirm('라이브러리를 전부 비울까요?')) return; try { await fetch('/api/shop/library/delete', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({all: true})}); } catch {} libSel.clear(); loadLibrary(); });
+
   // ── 상품 불러오기 ──
   $('sh-fetch').addEventListener('click', async () => {
     const link = $('sh-link').value.trim();
@@ -171,11 +218,15 @@
     try {
       let url, body;
       if (fmt === 'media') {
-        if (!mediaFiles.length) { addLog('⚠️ 올릴 사진이나 영상을 먼저 추가하세요.'); $('sh-make').disabled = false; $('sh-stop').classList.add('hidden'); stopTick(); return; }
+        addLog('고른 라이브러리 사진 불러오는 중…');
+        const libUrls = await collectLibSelected();
+        const upImgs = mediaFiles.filter((m) => m.type === 'image').map((m) => m.url);
+        const images = [...libUrls, ...upImgs];
+        const videos = mediaFiles.filter((m) => m.type === 'video').map((m) => m.url);
+        if (!images.length && !videos.length) { addLog('⚠️ 라이브러리에서 사진을 고르거나(✓) 영상을 올리세요.'); $('sh-make').disabled = false; $('sh-stop').classList.add('hidden'); stopTick(); return; }
+        addLog(`사진 ${images.length}장${videos.length ? ' · 영상 ' + videos.length : ''}으로 제작`);
         url = '/api/generate-shopping-video';
-        body = {productLink, linkMode, duration: dur, voice: voice || undefined, narration: narr, bgm,
-          images: mediaFiles.filter((m) => m.type === 'image').map((m) => m.url),
-          videos: mediaFiles.filter((m) => m.type === 'video').map((m) => m.url)};
+        body = {productLink, linkMode, duration: dur, voice: voice || undefined, narration: narr, bgm, images, videos};
       } else if (fmt === 'narration') {
         url = '/api/generate-shopping-video';
         body = {productLink, linkMode, duration: dur, imageStyle: style, narration: narr, bgm, voice: voice || undefined};

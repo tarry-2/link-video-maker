@@ -14,3 +14,14 @@ export function pngToJpeg(srcPath: string, outPath: string): Promise<void> {
     p.on('close', (code) => (code === 0 ? resolve() : reject(new Error('JPEG 변환 실패: ' + err.slice(-200)))));
   });
 }
+
+// 라이브러리/업로드용 — 긴 변 width 이하로 줄이고 고화질 JPEG로. 원본보다 크게 늘리진 않음(min).
+export function resizeJpeg(srcPath: string, outPath: string, width = 1080): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const p = spawn(FFMPEG, ['-y', '-i', srcPath, '-vf', `scale='min(${width},iw)':-2`, '-q:v', '3', '-frames:v', '1', '-update', '1', outPath]);
+    let err = '';
+    p.stderr.on('data', (d) => { err += d.toString(); });
+    p.on('error', reject);
+    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error('리사이즈 실패: ' + err.slice(-200)))));
+  });
+}

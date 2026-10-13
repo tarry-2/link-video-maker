@@ -38,6 +38,8 @@ const ROOT = process.cwd();
 const STUDIO_DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(ROOT, 'data');
 // 부팅 시 저장해둔 유튜브 쿠키가 있으면 yt-dlp가 쓰도록 경로 지정(재배포해도 볼륨에 유지).
 try { const _ck = path.join(STUDIO_DATA_DIR, 'yt-cookies.txt'); if (!process.env.YT_COOKIES_FILE && fs.existsSync(_ck)) process.env.YT_COOKIES_FILE = _ck; } catch {}
+// .env의 FFMPEG/FFPROBE 경로를 process.env에 주입 — raw ffmpeg(img-util 등)가 PATH 없이도 쓰게.
+try { const _e = loadEnv(); if (_e.FFMPEG_PATH && !process.env.FFMPEG_PATH) process.env.FFMPEG_PATH = _e.FFMPEG_PATH; if (_e.FFPROBE_PATH && !process.env.FFPROBE_PATH) process.env.FFPROBE_PATH = _e.FFPROBE_PATH; } catch {}
 const OUT_DIR = path.join(ROOT, 'out');
 const SAMPLE_DIR = path.join(ROOT, 'public', 'voice-samples');
 
@@ -2084,6 +2086,69 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
       }
     })();
     return json(res, 202, {id});
+  }
+
+  // ── 🛍 쇼핑 이미지 라이브러리 — 사진을 올려두고(영속) 쇼핑쇼츠 만들 때 골라 쓴다.
+  //    번호는 목록 응답 때 createdAt 순으로 재계산(저장 안 함) → 중간을 지우면 자동으로 당겨진다. ──
+  if (p === '/api/shop/library' && req.method === 'GET') {
+    const dir = path.join(STUDIO_DATA_DIR, 'shop-lib');
+    let idx: any[] = [];
+    try { idx = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8')); } catch {}
+    idx.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    return json(res, 200, {items: idx.map((it, i) => ({id: it.id, num: i + 1, url: `/api/shop/library/img?id=${it.id}`}))});
+  }
+  if (p === '/api/shop/library/img' && req.method === 'GET') {
+    const id = String(u.searchParams.get('id') || '').replace(/[^a-z0-9]/gi, '');
+    const dir = path.join(STUDIO_DATA_DIR, 'shop-lib');
+    let idx: any[] = [];
+    try { idx = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8')); } catch {}
+    const it = idx.find((x) => x.id === id);
+    const ext = it?.ext || 'jpg';
+    const f = path.join(dir, id + '.' + ext);
+    if (!id || !fs.existsSync(f)) return json(res, 404, {error: '없음'});
+    const ct = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    return serveFile(res, f, ct);
+  }
+  if (p === '/api/shop/library/upload' && req.method === 'POST') {
+    const b = await readBody(req);
+    const imgs: string[] = Array.isArray(b.images) ? b.images : [];
+    if (!imgs.length) return json(res, 400, {error: '이미지가 없습니다.'});
+    const dir = path.join(STUDIO_DATA_DIR, 'shop-lib');
+    fs.mkdirSync(dir, {recursive: true});
+    let idx: any[] = [];
+    try { idx = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8')); } catch {}
+    let added = 0; const errs: string[] = [];
+    for (const durl of imgs) {
+      const m = String(durl).match(/^data:image\/([\w.+-]+);base64,([\s\S]+)$/);
+      if (!m) { errs.push('형식불일치'); continue; }
+      const ext = /png/i.test(m[1]) ? 'png' : /webp/i.test(m[1]) ? 'webp' : 'jpg';
+      const id = randomUUID().slice(0, 8);
+      try {
+        // 영상만들기와 동일 — 원본 그대로 저장(리사이즈·변환 없음).
+        fs.writeFileSync(path.join(dir, id + '.' + ext), Buffer.from(m[2], 'base64'));
+        idx.push({id, ext, createdAt: Date.now() + added});
+        added++;
+      } catch (e: any) { errs.push(String(e?.message || e).slice(0, 120)); }
+    }
+    fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify(idx));
+    return json(res, 200, {ok: true, added, errs: errs.slice(0, 3)});
+  }
+  if (p === '/api/shop/library/delete' && req.method === 'POST') {
+    const b = await readBody(req);
+    const dir = path.join(STUDIO_DATA_DIR, 'shop-lib');
+    let idx: any[] = [];
+    try { idx = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8')); } catch {}
+    const rm = (it: any) => { try { fs.unlinkSync(path.join(dir, it.id + '.' + (it.ext || 'jpg'))); } catch {} };
+    if (b.all) {
+      for (const it of idx) rm(it);
+      idx = [];
+    } else {
+      const ids: string[] = Array.isArray(b.ids) ? b.ids.map(String) : (b.id ? [String(b.id)] : []);
+      for (const it of idx) if (ids.includes(it.id)) rm(it);
+      idx = idx.filter((it) => !ids.includes(it.id));
+    }
+    fs.writeFileSync(path.join(dir, 'index.json'), JSON.stringify(idx));
+    return json(res, 200, {ok: true, count: idx.length});
   }
 
   // ── 🎭 재창작(리메이크): 인기 영상(서프라이즈 등)의 제목·자막을 '내용 소스'로 받아 우리 이미지·목소리·자막으로

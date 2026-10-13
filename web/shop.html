@@ -108,12 +108,24 @@
           </div>
           <label class="hint" style="display:block;margin-top:10px"><input type="checkbox" id="sh-card-video" checked /> 영상(릴스)로 만들기 <span class="hint">— 끄면 캐러셀 이미지(게시물)</span></label>
         </div>
-        <!-- 📸 내 사진·영상 전용 업로드 -->
+        <!-- 📚 이미지 라이브러리(올려두고 골라서 제작) + 영상은 일회성 업로드 -->
         <div class="field hidden" id="sh-media-opts">
-          <span class="field-label">내 사진·영상 올리기 <span class="hint">(먹음직한 사진·요리 영상·언박싱 등 — 여러 개 가능)</span></span>
-          <input id="sh-media-file" type="file" accept="image/*,video/*" multiple class="input" style="padding:8px" />
-          <div id="sh-media-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
-          <p class="shop-fmt-note">올린 사진·영상으로 <b>후킹·나레이션·자막</b>을 자동으로 입혀 진짜 판매 영상을 만들어요.</p>
+          <span class="field-label">📚 내 이미지 라이브러리 <span class="hint">(올려두고 골라서 제작 · 여러 장 선택 가능)</span></span>
+          <div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap;align-items:center">
+            <label class="ghost-btn" style="cursor:pointer;margin:0">➕ 사진 올리기<input id="sh-lib-file" type="file" accept="image/*" multiple hidden /></label>
+            <button id="sh-lib-selall" class="ghost-btn" type="button">전체선택</button>
+            <button id="sh-lib-selnone" class="ghost-btn" type="button">선택해제</button>
+            <button id="sh-lib-delsel" class="ghost-btn" type="button">선택삭제</button>
+            <button id="sh-lib-delall" class="ghost-btn" type="button" style="color:#d33">🗑 전체삭제</button>
+            <span id="sh-lib-count" class="hint"></span>
+          </div>
+          <div id="sh-lib-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px"></div>
+          <p class="hint" id="sh-lib-empty">아직 사진이 없어요. "➕ 사진 올리기"로 올려두면 다음에도 골라 쓸 수 있어요.</p>
+          <details style="margin-top:12px"><summary class="hint" style="cursor:pointer">🎬 영상 클립도 쓸래요(일회성 업로드)</summary>
+            <input id="sh-media-file" type="file" accept="video/*" multiple class="input" style="padding:8px;margin-top:6px" />
+            <div id="sh-media-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+          </details>
+          <p class="shop-fmt-note">고른 사진·영상으로 <b>후킹·나레이션·자막</b>을 자동으로 입혀 진짜 판매 영상을 만들어요.</p>
         </div>
         <!-- 길이(AI 나레이션형·내 사진영상 공용) -->
         <div class="field hidden" id="sh-dur-opts">
