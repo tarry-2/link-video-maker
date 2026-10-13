@@ -537,6 +537,19 @@
           <p id="fb-msg" class="mini-state"></p>
         </div>
 
+        <div id="threads-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
+          <h3 class="field-label">🧵 스레드 연결 <span id="th-status" class="hint"></span></h3>
+          <p id="th-activity" class="mini-state"></p>
+          <p class="hint">여러 계정을 추가할 수 있어요. 올릴 때 계정을 골라 보냅니다. ★스레드는 글·영상에 링크를 자유롭게 붙일 수 있어 쇼핑/제휴 링크에 최적이에요. (토큰만 입력하면 계정 자동 조회 · threads_content_publish)</p>
+          <div id="th-accounts" class="acct-list"></div>
+          <label class="field-label">계정 이름(표시용, 선택)<input id="th-label" class="input" placeholder="예: 영희 스레드" /></label>
+          <label class="field-label">스레드 액세스 토큰<input id="th-token" class="input" type="password" placeholder="긴 수명 토큰 (threads_content_publish)" /></label>
+          <div class="voice-row">
+            <button id="th-connect" class="ghost-btn small" type="button">🔗 스레드 계정 추가</button>
+          </div>
+          <p id="th-msg" class="mini-state"></p>
+        </div>
+
         <button id="save-keys" class="primary-btn">저장</button>
         <p id="settings-msg" class="mini-state"></p>
       </div>

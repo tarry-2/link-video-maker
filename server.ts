@@ -23,12 +23,13 @@ import {VOICES, ttsEleven} from './lib/tts';
 import {geminiGenerate} from './lib/gemini';
 import {openaiJson} from './lib/openai';
 import {loadEnv, saveEnv, pipelineKeys, maskKey} from './lib/keys';
-import {listPortfolio, removePortfolio, updatePortfolioTitle, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, setPortfolioFacebook, setSampleFacebook, loadSampleFacebook, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
+import {listPortfolio, removePortfolio, updatePortfolioTitle, addPortfolio, setPortfolioYouTube, setSampleYouTube, loadSampleYouTube, setPortfolioInstagram, setSampleInstagram, loadSampleInstagram, setPortfolioFacebook, setSampleFacebook, loadSampleFacebook, setPortfolioThreads, setSampleThreads, loadSampleThreads, loadSampleR2, setSampleR2, SAMPLES} from './lib/portfolio';
 import {youtubeStatus, saveYouTube, removeYouTube, renameYouTube, authUrl, exchangeCode, generateMeta, uploadVideo, extractVideoId, getVideoStats, getChannelVideos, getUploadActivity as getYtActivity, searchCreativeCommons, getVideoMeta} from './lib/youtube';
 import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as deleteR2Key, listKeys, head as r2Head} from './lib/storage';
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, addInstagram, removeInstagram, renameInstagram, listInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
 import {facebookStatus, addFacebook, removeFacebook, renameFacebook, listFacebook, verifyFacebook, publishVideo as fbPublishVideo, publishPhotos as fbPublishPhotos, getFbStats, getUploadActivity as getFbActivity} from './lib/facebook';
+import {threadsStatus, addThreads, removeThreads, renameThreads, verifyThreads, publishVideo as thPublishVideo, publishText as thPublishText, getThreadsStats, getUploadActivity as getThActivity, maybeRefreshThreads} from './lib/threads';
 import {pngToJpeg} from './lib/img-util';
 
 const PORT = Number(process.env.PORT) || 4000;
@@ -219,6 +220,20 @@ function saveProjectFacebook(projectId: string, url: string) {
 function readProjectFacebook(projectId: string): string {
   try {
     return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).facebookUrl || '';
+  } catch { return ''; }
+}
+// ── 스레드 링크도 동일 방식으로 project.json에 보강(배지 안정화) ──
+function saveProjectThreads(projectId: string, url: string) {
+  try {
+    const pj = path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json');
+    const proj = JSON.parse(fs.readFileSync(pj, 'utf8'));
+    proj.threadsUrl = url;
+    fs.writeFileSync(pj, JSON.stringify(proj));
+  } catch {}
+}
+function readProjectThreads(projectId: string): string {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(STUDIO_DATA_DIR, 'studio', projectId, 'project.json'), 'utf8')).threadsUrl || '';
   } catch { return ''; }
 }
 // project.json에서 완성영상 R2 키(있으면 R2에서 서빙).
@@ -693,6 +708,7 @@ const server = http.createServer(async (req, res) => {
         youtubeUrl: it.youtubeUrl || readProjectYouTube(it.projectId),
         instagramUrl: it.instagramUrl || readProjectInstagram(it.projectId),
         facebookUrl: it.facebookUrl || readProjectFacebook(it.projectId),
+        threadsUrl: it.threadsUrl || readProjectThreads(it.projectId),
         orientation: it.orientation || 'portrait', // 레거시(없음)=세로 폴백
         video: isPost ? '' : `/portfolio-item/${it.projectId}.mp4`,
         images: isPost ? (it.images || []).map((_, i) => `/portfolio-card/${it.projectId}/${i + 1}.png`) : undefined,
@@ -709,6 +725,7 @@ const server = http.createServer(async (req, res) => {
     const sampleYt = loadSampleYouTube();
     const sampleIg = loadSampleInstagram();
     const sampleFb = loadSampleFacebook();
+    const sampleTh = loadSampleThreads();
     const samples = SAMPLES.map((s) => ({
       id: 'sample:' + s.file,
       kind: 'sample' as const,
@@ -721,6 +738,7 @@ const server = http.createServer(async (req, res) => {
       youtubeUrl: sampleYt[s.file] || '',
       instagramUrl: sampleIg[s.file] || '', // 샘플도 인스타 업로드 시 R2 백필 후 배지 기록
       facebookUrl: sampleFb[s.file] || '', // 샘플도 페북 업로드 시 배지 기록
+      threadsUrl: sampleTh[s.file] || '', // 샘플도 스레드 게시 시 배지 기록
       orientation: s.orientation || 'portrait', // 샘플은 전부 세로(9:16)
       video: `/portfolio/${s.file}`,
       thumb: '', // 샘플은 썸네일 파일 없음(영상 메타프레임 사용)
@@ -966,8 +984,8 @@ const server = http.createServer(async (req, res) => {
       ...listPortfolio().map((it) => it.youtubeUrl || readProjectYouTube(it.projectId)),
       ...SAMPLES.map((s) => sampleYt[s.file] || ''),
     ].filter(Boolean).map((u) => extractVideoId(u)).filter(Boolean);
-    const [youtube, instagram, facebook] = await Promise.all([getYtActivity(ytIds), getUploadActivity(), getFbActivity()]);
-    return json(res, 200, {produced: todayProducedCount(), youtube, instagram, facebook});
+    const [youtube, instagram, facebook, threads] = await Promise.all([getYtActivity(ytIds), getUploadActivity(), getFbActivity(), getThActivity()]);
+    return json(res, 200, {produced: todayProducedCount(), youtube, instagram, facebook, threads});
   }
   // ── 성과 추적: 올린 인스타 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──
   if (p === '/api/instagram/stats' && req.method === 'GET') {
@@ -1189,6 +1207,97 @@ const server = http.createServer(async (req, res) => {
         if (isSample) setSampleFacebook(path.basename(id.slice('sample:'.length)), r.permalink);
         else { setPortfolioFacebook(id, r.permalink); saveProjectFacebook(id, r.permalink); }
       }
+      return json(res, 200, r);
+    } catch (e: any) { return json(res, 502, {error: e.message}); }
+  }
+
+  // ── 스레드(Threads) 발송 (인스타·페북과 동일 플로우, 링크 자유롭게 붙음) ──
+  if (p === '/api/threads/status' && req.method === 'GET') return json(res, 200, threadsStatus());
+  if (p === '/api/threads/activity' && req.method === 'GET') return json(res, 200, await getThActivity());
+  if (p === '/api/threads/stats' && req.method === 'GET') {
+    const debug = u.searchParams.get('debug') === '1';
+    if (!threadsStatus().connected) return json(res, 200, {connected: false, items: [], summary: null, ...(debug ? {debug: ['연결 안 됨(status)']} : {})});
+    const sampleTh = loadSampleThreads();
+    const withUrl = [
+      ...listPortfolio().map((it) => ({id: it.projectId, title: it.title, voice: it.voice, category: it.category, goal: it.goal, url: it.threadsUrl || readProjectThreads(it.projectId)})),
+      ...SAMPLES.map((s) => ({id: 'sample:' + s.file, title: s.title, voice: s.voice, category: s.category, goal: s.goal, url: sampleTh[s.file] || ''})),
+    ].filter((x) => x.url);
+    if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 threadsUrl 저장된 게 없음']} : {})});
+    const diag: string[] = [];
+    const stats = await getThreadsStats(debug ? diag : undefined);
+    const items = withUrl.map((x) => ({...x, ...(stats[x.url] || {views: 0, likes: 0, comments: 0})}))
+      .sort((a: any, b: any) => b.views - a.views || b.likes - a.likes);
+    const avgBy = (key: 'voice' | 'category') => {
+      const m: Record<string, number[]> = {};
+      for (const it of items) (m[(it as any)[key]] = m[(it as any)[key]] || []).push((it as any).views || (it as any).likes);
+      return Object.entries(m).map(([name, v]) => ({name, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), count: v.length})).sort((a, b) => b.avg - a.avg);
+    };
+    const summary = {
+      total: items.length,
+      totalViews: items.reduce((n: number, x: any) => n + x.views, 0),
+      totalLikes: items.reduce((n: number, x: any) => n + x.likes, 0),
+      top3: items.slice(0, 3),
+      byVoice: avgBy('voice').slice(0, 5),
+      byCategory: avgBy('category').slice(0, 5),
+    };
+    return json(res, 200, {connected: true, items, summary, ...(debug ? {debug: diag} : {})});
+  }
+  // 스레드 계정 연결 — 토큰만 입력받고 /me로 userId·username 자동 조회(인스타보다 간편).
+  if (p === '/api/threads/connect' && req.method === 'POST') {
+    const b = await readBody(req);
+    const accessToken = String(b.accessToken || '').trim();
+    const label = String(b.label || '').trim() || undefined;
+    if (!accessToken) return json(res, 400, {error: '스레드 액세스 토큰을 입력하세요.'});
+    try {
+      const {userId, username} = await verifyThreads(accessToken);
+      const acc = addThreads({userId, accessToken, username, label});
+      return json(res, 200, {connected: true, username, id: acc.id, label: acc.label});
+    } catch (e: any) { return json(res, 400, {error: e.message}); }
+  }
+  if (p.startsWith('/api/threads/accounts/') && req.method === 'DELETE') {
+    const id = decodeURIComponent(p.slice('/api/threads/accounts/'.length));
+    removeThreads(id);
+    return json(res, 200, {ok: true, accounts: threadsStatus().accounts});
+  }
+  if (p.startsWith('/api/threads/accounts/') && req.method === 'PATCH') {
+    const id = decodeURIComponent(p.slice('/api/threads/accounts/'.length));
+    const b = await readBody(req);
+    renameThreads(id, String(b.label || '').trim());
+    return json(res, 200, {ok: true, accounts: threadsStatus().accounts});
+  }
+  // 스레드 영상 게시 — 완성 영상이 R2에 있어야 함(공개 presigned URL). text=글(500자), link=붙일 링크(온파트너 등).
+  if (p.startsWith('/api/threads/upload/') && req.method === 'POST') {
+    const id = decodeURIComponent(p.slice('/api/threads/upload/'.length));
+    const isSample = id.startsWith('sample:');
+    if (!isSample && !/^[0-9a-f-]{36}$/.test(id)) return json(res, 400, {error: '올릴 수 없는 영상입니다.'});
+    if (!threadsStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 스레드 계정을 연결하세요.'});
+    const r2key = await ensureInstaVideoR2(id); // 인스타·페북과 같은 R2 백필 재사용
+    if (!r2key) return json(res, 400, {error: '영상 파일을 찾을 수 없어요. 너무 오래돼 정리됐을 수 있어요 — 다시 제작해 주세요.'});
+    const b = await readBody(req);
+    const caption = String(b.caption || b.text || '').trim();
+    const link = String(b.link || '').trim() || undefined;
+    const accountId = String(b.accountId || '').trim() || undefined;
+    try {
+      const url = await presignGet(r2key, 3600);
+      if (!url) return json(res, 502, {error: '영상 임시 링크 생성 실패.'});
+      const r = await thPublishVideo(url, caption, undefined, accountId, link);
+      if (r.permalink) {
+        if (isSample) setSampleThreads(path.basename(id.slice('sample:'.length)), r.permalink);
+        else { setPortfolioThreads(id, r.permalink); saveProjectThreads(id, r.permalink); }
+      }
+      return json(res, 200, r);
+    } catch (e: any) { return json(res, 502, {error: e.message}); }
+  }
+  // 스레드 글(텍스트+링크) 게시 — 영상 없이 글만(쇼핑 글 등).
+  if (p === '/api/threads/post-text' && req.method === 'POST') {
+    if (!threadsStatus().connected) return json(res, 400, {error: '먼저 키 설정에서 스레드 계정을 연결하세요.'});
+    const b = await readBody(req);
+    const text = String(b.text || b.caption || '').trim();
+    const link = String(b.link || '').trim() || undefined;
+    const accountId = String(b.accountId || '').trim() || undefined;
+    if (!text && !link) return json(res, 400, {error: '글 내용이나 링크를 입력하세요.'});
+    try {
+      const r = await thPublishText(text, undefined, accountId, link);
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
   }
@@ -2653,7 +2762,10 @@ JSON만: {"hookTop":"...","hookAccent":"..."}`;
 server.listen(PORT, () => {
   console.log(`\n🎬 OnVideo 웹 → http://localhost:${PORT}\n`);
   // 인스타 토큰 자동 갱신: 부팅 시 1회 + 24시간마다(45일 넘으면 ig_refresh_token으로 연장 → 재발급 불필요).
-  const igRefresh = () => maybeRefreshInstagram((m) => console.log(m)).catch(() => {});
+  const igRefresh = () => {
+    maybeRefreshInstagram((m) => console.log(m)).catch(() => {});
+    maybeRefreshThreads((m) => console.log(m)).catch(() => {}); // 스레드 토큰도 45일↑면 th_refresh_token 연장
+  };
   igRefresh();
   setInterval(igRefresh, 24 * 60 * 60 * 1000);
   // ★디스크 유지보수: 30분마다 오래된 작업·버려진 업로드 정리 → 볼륨이 꽉 차 ENOSPC 나는 걸 원천 차단.

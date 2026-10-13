@@ -1099,6 +1099,7 @@ $('settings-btn').onclick = async () => {
   refreshYtStatus();
   refreshIgStatus();
   refreshFbStatus();
+  refreshThStatus();
   refreshRunpod();
   // 저장된 키 상태는 뒤에서 채운다(실패해도 입력엔 영향 없음).
   try {
@@ -1219,7 +1220,7 @@ function renderAcctList(boxId, platform, accts) {
   const box = $(boxId); if (!box) return;
   box.innerHTML = (accts || []).map(a => {
     const name = a.label || a.username || a.pageName || a.channelTitle || '(이름없음)';
-    const sub = platform === 'instagram' ? ('@' + (a.username || a.igUserId || '')) : platform === 'youtube' ? (a.channelTitle || '') : (a.pageName || a.pageId || '');
+    const sub = (platform === 'instagram' || platform === 'threads') ? ('@' + (a.username || a.igUserId || a.userId || '')) : platform === 'youtube' ? (a.channelTitle || '') : (a.pageName || a.pageId || '');
     return `<div class="acct-row"><div class="acct-grow"><div class="acct-name">${esc2(name)}</div>${sub ? `<div class="acct-sub">${esc2(sub)}</div>` : ''}</div>
       <button class="acct-ren" data-acct-ren="${esc2(a.id)}" data-platform="${platform}" title="이름 변경">✎</button>
       <button class="acct-del" data-acct-del="${esc2(a.id)}" data-platform="${platform}" title="삭제">✕</button></div>`;
@@ -1228,6 +1229,7 @@ function renderAcctList(boxId, platform, accts) {
 function refreshAcctPlatform(platform) {
   if (platform === 'instagram') refreshIgStatus();
   else if (platform === 'facebook') refreshFbStatus();
+  else if (platform === 'threads') refreshThStatus();
   else refreshYtStatus();
 }
 async function refreshIgStatus() {
@@ -1335,6 +1337,47 @@ $('fb-connect')?.addEventListener('click', async () => {
     $('fb-token').value = ''; $('fb-page-id').value = ''; if ($('fb-label')) $('fb-label').value = '';
     refreshFbStatus();
   } catch (e) { $('fb-msg').textContent = '실패: ' + e.message; }
+});
+// ── 스레드(Threads) 연결 — 토큰만 입력(인스타보다 간편, /me로 계정 자동 조회) ──
+async function refreshThStatus() {
+  const st = $('th-status'); if (!st) return;
+  try {
+    const s = await (await fetch('/api/threads/status')).json();
+    const accts = s.accounts || [];
+    if (s.connected) { st.innerHTML = `<span style="color:var(--teal)">● ${accts.length}개 연결됨</span>`; refreshThActivity(); }
+    else st.textContent = '미연결';
+    renderAcctList('th-accounts', 'threads', accts);
+  } catch {}
+}
+async function refreshThActivity() {
+  const el = $('th-activity'); if (!el) return;
+  try {
+    const a = await (await fetch('/api/threads/activity')).json();
+    if (a.error) { el.innerHTML = `<span style="color:var(--muted)">📅 업로드 현황 확인 불가 — ${a.error}</span>`; return; }
+    let last = '없음';
+    if (a.lastAt) {
+      const d = new Date(a.lastAt);
+      const hhmm = d.toLocaleTimeString('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit'});
+      const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+      const ago = mins < 1 ? '방금' : mins < 60 ? `${mins}분 전` : mins < 1440 ? `${Math.floor(mins / 60)}시간 전` : `${Math.floor(mins / 1440)}일 전`;
+      last = `${hhmm} (${ago})`;
+    }
+    el.innerHTML = `<span style="color:var(--teal)">📅 오늘 <b>${a.today}</b>개 올림 · 마지막 게시 ${last} · 총 ${a.total}개</span>`;
+  } catch {}
+}
+$('th-connect')?.addEventListener('click', async () => {
+  const accessToken = $('th-token').value.trim();
+  const label = $('th-label') ? $('th-label').value.trim() : '';
+  if (!accessToken) { $('th-msg').textContent = '스레드 액세스 토큰을 입력하세요.'; return; }
+  $('th-msg').textContent = '연결 확인 중…';
+  try {
+    const r = await fetch('/api/threads/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessToken, label }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '연결 실패');
+    $('th-msg').innerHTML = `<span style="color:var(--teal)">✅ 추가됐습니다 · @${d.username || d.label}</span>`;
+    $('th-token').value = ''; if ($('th-label')) $('th-label').value = '';
+    refreshThStatus();
+  } catch (e) { $('th-msg').textContent = '실패: ' + e.message; }
 });
 $('save-keys').onclick = async () => {
   // 1) 단가를 localStorage에 저장(studio.js가 onvideo-unit-rates에서 읽어씀)

@@ -52,6 +52,8 @@
       .pf-yt:disabled { opacity: .5; cursor: default; transform: none; box-shadow: none; }
       .pf-fb { background: linear-gradient(135deg,#1877f2,#0a5fd1); color: #fff; box-shadow: 0 3px 12px rgba(24,119,242,.34); }
       .pf-fb:hover { box-shadow: 0 7px 20px rgba(24,119,242,.5); filter: brightness(1.06); }
+      .pf-th { background: linear-gradient(135deg,#333,#000); color: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.34); }
+      .pf-th:hover { box-shadow: 0 7px 20px rgba(0,0,0,.5); filter: brightness(1.3); }
       .pf-del { background: transparent !important; border: 1.5px solid var(--line) !important; color: var(--muted); }
       .pf-del:hover { border-color: #ff6b5e !important; color: #ff6b5e; }
       .pf-yt-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #ff4d4d; text-decoration: none; }
@@ -64,9 +66,11 @@
       .pf-yt-badge { position: absolute; top: 8px; right: 8px; background: #ff0000; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-ig-badge { position: absolute; top: 8px; left: 8px; background: linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-fb-badge { position: absolute; top: 8px; left: 42px; background: #1877f2; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
+      .pf-th-badge { position: absolute; top: 8px; left: 76px; background: #000; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-motion-badge { position: absolute; bottom: 8px; left: 8px; background: linear-gradient(120deg,#6b4cf0,#12a998); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-ig-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #dc2743; text-decoration: none; }
       .pf-fb-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #1877f2; text-decoration: none; }
+      .pf-th-link { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: #000; text-decoration: none; }
       .pf-num { display: inline-block; font-weight: 800; color: var(--teal); background: color-mix(in srgb, var(--teal) 14%, transparent); padding: 0 6px; border-radius: 6px; margin-right: 2px; }
       /* 📊 성과 패널 */
       .yt-stats { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; margin-bottom: 18px; }
@@ -145,6 +149,7 @@
       .pf-card-ops .op-fb { background: #1877f2; }
       .pf-card-ops .op-ig { background: linear-gradient(45deg,#f09433,#dc2743,#bc1888); }
       .pf-card-ops .op-yt { background: linear-gradient(135deg,#ff3b3b,#cc0000); }
+      .pf-card-ops .op-th { background: linear-gradient(135deg,#333,#000); }
       /* ── 여러 개 선택(선택 모드) ── 보기 모드와 색·구조로 확실히 구분 ── */
       .selbar { position: sticky; top: 8px; z-index: 20; display: none; align-items: center; flex-wrap: wrap; gap: 8px 10px;
         background: linear-gradient(135deg, var(--teal), var(--purple)); color: #fff; border: 2px solid rgba(255,255,255,.35);
@@ -251,6 +256,7 @@
           <span class="sb-spacer"></span>
           <button class="sb-send" data-bulk="fb" disabled>👍 페북</button>
           <button class="sb-send" data-bulk="ig" disabled>📷 인스타</button>
+          <button class="sb-send" data-bulk="th" disabled>🧵 스레드</button>
           <button class="sb-send" data-bulk="yt" disabled>▶ 유튜브</button>
           <div class="sb-prog" id="sb-prog" hidden></div>
         </div>
@@ -426,8 +432,8 @@
           fig.dataset.post = isPost ? '1' : '';
           fig.dataset.land = it.orientation === 'landscape' ? '1' : '';
           const thumbBox = isPost
-            ? `<div class="pf-thumb post"><img src="${esc(it.thumb || (it.images && it.images[0]) || '')}" alt="" loading="lazy">${(it.images && it.images.length) ? `<span class="pf-card-count">🎴 ${it.images.length}장</span>` : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}</div>`
-            : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.motion ? '<span class="pf-motion-badge">🎬 영상</span>' : ''}${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}</div>`;
+            ? `<div class="pf-thumb post"><img src="${esc(it.thumb || (it.images && it.images[0]) || '')}" alt="" loading="lazy">${(it.images && it.images.length) ? `<span class="pf-card-count">🎴 ${it.images.length}장</span>` : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}${it.threadsUrl ? '<span class="pf-th-badge">TH</span>' : ''}</div>`
+            : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.motion ? '<span class="pf-motion-badge">🎬 영상</span>' : ''}${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}${it.threadsUrl ? '<span class="pf-th-badge">TH</span>' : ''}</div>`;
           const madeTxt = it.createdAt ? new Date(it.createdAt).toLocaleDateString('ko-KR', {year: 'numeric', month: 'long', day: 'numeric'}) : '';
           fig.innerHTML = `${thumbBox}
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${it.num ? `<span class="pf-num">#${it.num}</span> ` : ''}${esc(it.title)}</h3>${madeTxt ? `<p class="pf-made">📅 ${esc(madeTxt)} 제작</p>` : ''}</figcaption>`;
@@ -437,7 +443,7 @@
           if (tb) tb.insertAdjacentHTML('beforeend', '<span class="pf-check">✓</span>');
           const ops = isPost
             ? `<button class="op-fb" data-op="fb">👍 페북</button><button class="op-ig" data-op="ig">📷 인스타</button>`
-            : `<button class="op-fb" data-op="fb">👍</button><button class="op-ig" data-op="ig">📷</button><button class="op-yt" data-op="yt">▶</button>`;
+            : `<button class="op-fb" data-op="fb">👍</button><button class="op-ig" data-op="ig">📷</button><button class="op-th" data-op="th">🧵</button><button class="op-yt" data-op="yt">▶</button>`;
           fig.insertAdjacentHTML('beforeend', `<div class="pf-card-ops">${ops}</div>`);
           if (selMode && picked.has(it.id)) fig.classList.add('picked');
           if (!isPost) {
@@ -479,6 +485,7 @@
              <button class="pf-yt" data-id="${esc(it.id)}">📺 유튜브 올리기</button>
              <button class="pf-ig" data-id="${esc(it.id)}">📷 인스타 올리기</button>
              <button class="pf-fb" data-id="${esc(it.id)}">👍 페북 올리기</button>
+             <button class="pf-th" data-id="${esc(it.id)}">🧵 스레드 올리기</button>
              <a class="pf-dl" href="${it.video}" download="${esc(it.title)}.mp4">⬇ 다운로드</a>
              ${canDel ? `<button class="pf-edit" data-id="${esc(it.id)}">✏️ 수정</button>` : ''}
              ${canDel ? `<button class="pf-del" data-id="${esc(it.id)}">🗑 삭제</button>` : ''}`;
@@ -491,6 +498,7 @@
           ${it.youtubeUrl ? `<a class="pf-yt-link" href="${esc(it.youtubeUrl)}" target="_blank">▶ 유튜브에서 보기</a>` : ''}
           ${it.instagramUrl ? `<a class="pf-ig-link" href="${esc(it.instagramUrl)}" target="_blank">▶ 인스타에서 보기</a>` : ''}
           ${it.facebookUrl ? `<a class="pf-fb-link" href="${esc(it.facebookUrl)}" target="_blank">▶ 페이스북에서 보기</a>` : ''}
+          ${it.threadsUrl ? `<a class="pf-th-link" href="${esc(it.threadsUrl)}" target="_blank">▶ 스레드에서 보기</a>` : ''}
           <div class="pf-actions">${actions}</div>`;
         document.querySelectorAll('.pf-thumb-card').forEach(c => c.classList.toggle('sel', Number(c.dataset.idx) === idx));
         if (doScroll) $('my-videos').scrollIntoView({behavior:'smooth', block:'start'});
@@ -507,6 +515,7 @@
           const isPost = card.dataset.post === '1', isLand = card.dataset.land === '1';
           if (op.dataset.op === 'fb') uploadToFacebook(op, isPost);
           else if (op.dataset.op === 'ig') uploadToInstagram(op, isPost, isLand);
+          else if (op.dataset.op === 'th') uploadToThreads(op, isPost);
           else if (op.dataset.op === 'yt') uploadToYouTube(op);
           return;
         }
@@ -554,11 +563,11 @@
       $('selbar').onclick = async e => {
         const b = e.target.closest('[data-bulk]'); if (!b || bulkBusy) return;
         const plat = b.dataset.bulk;
-        const platName = plat === 'fb' ? '페이스북' : plat === 'ig' ? '인스타' : '유튜브';
+        const platName = plat === 'fb' ? '페이스북' : plat === 'ig' ? '인스타' : plat === 'th' ? '스레드' : '유튜브';
         let ids = myItems.filter(it => picked.has(it.id));
-        if (plat === 'yt') ids = ids.filter(it => it.media !== 'card-post'); // 유튜브는 영상만
-        if (!ids.length) { alert(plat === 'yt' ? '유튜브는 영상만 올릴 수 있어요(카드 게시물 제외).' : '선택된 항목이 없어요.'); return; }
-        const statusUrl = plat === 'fb' ? '/api/facebook/status' : plat === 'ig' ? '/api/instagram/status' : '/api/youtube/status';
+        if (plat === 'yt' || plat === 'th') ids = ids.filter(it => it.media !== 'card-post'); // 유튜브·스레드는 영상만
+        if (!ids.length) { alert((plat === 'yt' || plat === 'th') ? platName + '은(는) 영상만 올릴 수 있어요(카드 게시물 제외).' : '선택된 항목이 없어요.'); return; }
+        const statusUrl = plat === 'fb' ? '/api/facebook/status' : plat === 'ig' ? '/api/instagram/status' : plat === 'th' ? '/api/threads/status' : '/api/youtube/status';
         let st; try { st = await (await fetch(statusUrl)).json(); } catch { st = {}; }
         if (!st.connected) { alert('먼저 ⚙ 키 설정에서 ' + platName + ' 계정을 연결하세요.'); return; }
         // 대상 계정 선택(이름으로 체크). 3사 모두 멀티계정.
@@ -602,6 +611,10 @@
           const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption, accountId }) });
           const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); return d.permalink || '';
         }
+        if (plat === 'th') {
+          const r = await fetch('/api/threads/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption, accountId }) });
+          const d = await r.json(); if (!r.ok) throw new Error(d.error || '업로드 실패'); return d.permalink || '';
+        }
         // ig
         const url = isPost ? '/api/instagram/upload-carousel/' + encodeURIComponent(id) : '/api/instagram/upload/' + encodeURIComponent(id);
         const body = isPost ? { caption, accountId } : { kind: isLand ? 'feed' : 'reels', caption, accountId };
@@ -643,6 +656,8 @@
           const isPost = cur && cur.media === 'card-post';
           uploadToFacebook(fb, isPost); return;
         }
+        const th = e.target.closest('.pf-th');
+        if (th) { uploadToThreads(th, false); return; }
         const del = e.target.closest('.pf-del');
         if (del) { if (confirm('이 영상을 포트폴리오에서 삭제할까요? (원본 작업은 남아 있어요)')) fetch('/api/portfolio/' + encodeURIComponent(del.dataset.id), { method: 'DELETE' }).then(r => { if (r.ok) loadMyVideos(Math.max(0, curIdx - 1)); }); }
       };
@@ -794,12 +809,12 @@
 
       // ── 올린 뒤 그리드 리로드 없이 그 카드 배지만 제자리 갱신(배열·스크롤 유지) ──
       function applyUploadBadge(id, platform, url) {
-        [allItems, myItems].forEach(arr => { const it = arr.find(x => x.id === id); if (it) { if (platform === 'yt') it.youtubeUrl = url; else if (platform === 'ig') it.instagramUrl = url; else it.facebookUrl = url; } });
+        [allItems, myItems].forEach(arr => { const it = arr.find(x => x.id === id); if (it) { if (platform === 'yt') it.youtubeUrl = url; else if (platform === 'ig') it.instagramUrl = url; else if (platform === 'th') it.threadsUrl = url; else it.facebookUrl = url; } });
         const card = document.querySelector('.pf-thumb-card[data-id="' + id + '"]');
         if (card) {
           const thumb = card.querySelector('.pf-thumb');
-          const cls = platform === 'yt' ? 'pf-yt-badge' : platform === 'ig' ? 'pf-ig-badge' : 'pf-fb-badge';
-          const lbl = platform === 'yt' ? 'YT' : platform === 'ig' ? 'IG' : 'FB';
+          const cls = platform === 'yt' ? 'pf-yt-badge' : platform === 'ig' ? 'pf-ig-badge' : platform === 'th' ? 'pf-th-badge' : 'pf-fb-badge';
+          const lbl = platform === 'yt' ? 'YT' : platform === 'ig' ? 'IG' : platform === 'th' ? 'TH' : 'FB';
           if (thumb && !thumb.querySelector('.' + cls)) thumb.insertAdjacentHTML('beforeend', `<span class="${cls}">${lbl}</span>`);
         }
         if (myItems[curIdx] && myItems[curIdx].id === id) selectVideo(curIdx, false); // 스테이지면 갱신
@@ -1017,6 +1032,65 @@
           }
         };
       }
+      // ── 포트폴리오에서 스레드 올리기(영상, 링크 자유롭게 첨부) ──
+      async function uploadToThreads(btn, isPost) {
+        const id = btn.dataset.id;
+        if (isPost) { alert('스레드는 아직 영상만 올릴 수 있어요(카드 게시물 제외).'); return; }
+        if (btn.disabled) return; btn.disabled = true;
+        showLoading('🧵 스레드 준비 중…');
+        try {
+          const st = await (await fetch('/api/threads/status')).json();
+          if (!st.connected) { hideLoading(); alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 스레드 계정을 연결하세요.'); btn.disabled = false; return; }
+          setLoading('🧵 글 만드는 중…');
+          // 캡션은 인스타 캡션 생성기를 공용 재사용(스레드는 500자 제한 — 서버에서 자동으로 맞춰 자름).
+          const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id));
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || '글 생성 실패');
+          hideLoading();
+          openThPfModal(id, d.caption || '', st.accounts || []);
+        } catch (e) { hideLoading(); alert(e.message); }
+        finally { btn.disabled = false; }
+      }
+      function openThPfModal(id, caption, accounts) {
+        let box = $('th-modal');
+        if (!box) { box = document.createElement('div'); box.id = 'th-modal'; box.className = 'modal'; document.body.appendChild(box); }
+        box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50';
+        box.innerHTML = `<div class="modal-box" style="background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto">
+          <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>🧵 스레드 올리기</h2><button class="ghost-btn" data-th="close">✕</button></div>
+          <p class="sub small">글은 500자까지 올라가요(넘으면 자동으로 잘려요). 링크를 넣으면 글 아래 미리보기로 붙어요 — 쇼핑·제휴 링크에 좋아요.</p>
+          ${acctPickerHtml(accounts)}
+          <label class="field-label">글 내용<textarea id="th-caption" class="input" rows="7" maxlength="500">${esc((caption || '').slice(0, 500))}</textarea></label>
+          <label class="field-label">첨부 링크(선택)<input id="th-link" class="input" placeholder="예: https://partner.yuanfnb.com/r/XXXX" /></label>
+          <button class="primary-btn" data-th="upload">스레드에 올리기</button>
+          <p id="th-up-msg" class="mini-state">영상 처리 때문에 30초~1분 걸릴 수 있어요.</p>
+        </div>`;
+        box.onclick = async e => {
+          const act = e.target.closest('[data-th]')?.dataset.th;
+          if (act === 'close' || e.target === box) { box.remove(); return; }
+          if (act === 'upload') {
+            const accIds = pickedAcctIds(box);
+            if (!accIds.length) { $('th-up-msg').textContent = '보낼 계정을 하나 이상 선택하세요.'; return; }
+            const up = e.target; up.disabled = true;
+            const cap = $('th-caption').value, link = $('th-link').value.trim();
+            let ok = 0, fail = 0, perma = '';
+            for (let i = 0; i < accIds.length; i++) {
+              up.textContent = `올리는 중… ${i + 1}/${accIds.length}`;
+              $('th-up-msg').textContent = '스레드가 영상을 받아 처리하는 중…';
+              try {
+                const r = await fetch('/api/threads/upload/' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: cap, link, accountId: accIds[i] }) });
+                const d = await r.json();
+                if (!r.ok) throw new Error(d.error || '업로드 실패');
+                ok++; if (d.permalink) perma = d.permalink;
+              } catch (err) { fail++; console.warn('[스레드 실패]', accIds[i], err && err.message); }
+              if (i < accIds.length - 1) await new Promise(r => setTimeout(r, 1500));
+            }
+            if (ok) applyUploadBadge(id, 'th', perma);
+            $('th-up-msg').innerHTML = (ok ? `✅ ${ok}개 계정 게시 완료!` + (fail ? ` · ❌ ${fail}개 실패` : '') : `❌ 전부 실패(${fail}개)`)
+              + (perma ? `<br><a href="${perma}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 16px;background:#000;color:#fff;border-radius:8px;font-weight:800;text-decoration:none">▶ 스레드에서 열기</a>` : '');
+            up.textContent = ok ? '완료 🎉' : '다시 시도'; up.disabled = ok > 0;
+          }
+        };
+      }
       // ── 숫자 축약(1234→1.2천, 12345→1.2만) ──
       function fmtNum(n) {
         n = Number(n) || 0;
@@ -1079,7 +1153,7 @@
         const el = document.getElementById('today-activity'); if (!el) return;
         try {
           const a = await (await fetch('/api/activity/today')).json();
-          const yt = a.youtube || {}, ig = a.instagram || {}, fb = a.facebook || {};
+          const yt = a.youtube || {}, ig = a.instagram || {}, fb = a.facebook || {}, th = a.threads || {};
           const col = (emoji, label, x, isProduce, followLbl) => {
             const num = isProduce ? (a.produced || 0) : (x.error ? '–' : (x.today || 0));
             // 마지막 올린 시각 · 총 몇 개 올렸는지 · 팔로워/구독자 수(연결된 채널만)
@@ -1099,6 +1173,7 @@
               ${col('▶️', '유튜브', yt, false, '구독자')}
               ${col('📷', '인스타', ig, false, '팔로워')}
               ${col('👍', '페이스북', fb, false, '팔로워')}
+              ${col('🧵', '스레드', th, false, '팔로워')}
             </div>`;
         } catch (e) {}
       }

@@ -17,6 +17,7 @@ export type PortfolioItem = {
   youtubeUrl?: string; // 유튜브 업로드 완료 시 링크
   instagramUrl?: string; // 인스타 업로드 완료 시 permalink
   facebookUrl?: string; // 페이스북 게시 완료 시 permalink
+  threadsUrl?: string; // 스레드 게시 완료 시 permalink
   orientation?: 'portrait' | 'landscape'; // 화면비(롱폼=landscape). 없으면 세로 폴백(레거시).
   // ★작업내역 분리: 영상(video) / 카드영상(card) / 카드게시물=캐러셀(card-post) / 유튜브하이라이트(highlight). 없으면 video(레거시).
   kind?: 'video' | 'card' | 'card-post' | 'highlight';
@@ -58,6 +59,13 @@ export function setPortfolioFacebook(projectId: string, facebookUrl: string) {
   if (it) { it.facebookUrl = facebookUrl; save(items); }
 }
 
+// 특정 항목에 스레드 링크 기록(게시 완료 후).
+export function setPortfolioThreads(projectId: string, threadsUrl: string) {
+  const items = listPortfolio();
+  const it = items.find((x) => x.projectId === projectId);
+  if (it) { it.threadsUrl = threadsUrl; save(items); }
+}
+
 // 샘플 영상의 유튜브 링크는 별도 파일에 기록(샘플은 portfolio.json에 없으므로).
 const SAMPLE_YT_FILE = path.join(DATA_DIR, 'sample-youtube.json');
 export function loadSampleYouTube(): Record<string, string> {
@@ -95,6 +103,19 @@ export function setSampleFacebook(file: string, facebookUrl: string) {
   fs.mkdirSync(DATA_DIR, {recursive: true});
   fs.writeFileSync(SAMPLE_FB_FILE + '.tmp', JSON.stringify(m));
   fs.renameSync(SAMPLE_FB_FILE + '.tmp', SAMPLE_FB_FILE);
+}
+
+// 샘플 영상의 스레드 링크(배지용) — 페북과 동일 방식.
+const SAMPLE_TH_FILE = path.join(DATA_DIR, 'sample-threads.json');
+export function loadSampleThreads(): Record<string, string> {
+  try { return JSON.parse(fs.readFileSync(SAMPLE_TH_FILE, 'utf8')); } catch { return {}; }
+}
+export function setSampleThreads(file: string, threadsUrl: string) {
+  const m = loadSampleThreads();
+  m[file] = threadsUrl;
+  fs.mkdirSync(DATA_DIR, {recursive: true});
+  fs.writeFileSync(SAMPLE_TH_FILE + '.tmp', JSON.stringify(m));
+  fs.renameSync(SAMPLE_TH_FILE + '.tmp', SAMPLE_TH_FILE);
 }
 
 // 샘플 영상을 인스타로 보낼 때 R2 백필 키 기록(public/portfolio 파일 → R2, 한 번만 올리고 재사용).
