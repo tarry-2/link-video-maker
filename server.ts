@@ -1458,6 +1458,10 @@ const server = http.createServer(async (req, res) => {
       kbscult: {channel: 'id:UCHlSeJxRIXZWMARC2oMwmcQ', label: 'KBS 교양', search: true},
       kbsdrama: {channel: 'KBSdrama', label: 'KBS 드라마', search: true},
       kbsnews: {channel: 'newskbs', label: 'KBS 뉴스', search: true},
+      // ★한국군 액션 — 국군 공식 채널. 정부 제작물은 공공누리(출처표시로 상업·변형 OK). 한국어라 재창작 없이 바로 사용.
+      //   해병대=상륙·강하·산악전 액션 금광. 로컬 yt-dlp 실측 OK(테리 지시). 육군훈련소는 한글핸들이라 채널ID로.
+      rokmc: {channel: 'rokmchq', label: '대한민국 해병대', search: true},
+      katc: {channel: 'id:UC_FGopKf5IVUpGs4EFb-pSQ', label: '육군훈련소', search: true},
       // ★해외 액션(퍼블릭 도메인) — 미군/미정부 제작물은 세금으로 만든 '퍼블릭 도메인'이라 저작권 0(전투·훈련·미사일·상륙).
       //   영어 영상이라 '재창작'으로 한국어 나레이션 얹어 쓰는 걸 추천. 로컬 yt-dlp 실측 OK(테리 지시).
       dvids: {channel: 'DVIDSVIDEO', label: '미군 밀리터리(DVIDS)', search: true},
