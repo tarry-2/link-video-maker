@@ -98,6 +98,21 @@ body {
 .arc-pg.nav { font-size: 12px; }
 .arc-pg:disabled { opacity: 0.4; cursor: default; }
 .arc-pg.dots { border: none; background: none; cursor: default; min-width: 18px; }
+/* 아카이브 소스 그룹(탭) + 저작권 배지 — 유튜브 안전/주의/음악을 한눈에 */
+.arc-src-group { width: 100%; margin-bottom: 11px; }
+.arc-src-grouplabel { display: block; font-size: 12px; font-weight: 800; margin: 0 0 5px; letter-spacing: -0.2px; }
+.arc-src-grouplabel.safe { color: #0a7d3c; }
+.arc-src-grouplabel.warn { color: #b86b00; }
+.arc-src-grouplabel.music { color: #b3121b; }
+.arc-src-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.hl-arc-src.safe { border-color: #7bc99a; }
+.hl-arc-src.warn { border-color: #e6b566; }
+.hl-arc-src.music { border-color: #e59aa0; }
+.hl-arc-src.safe::after, .hl-arc-src.warn::after, .hl-arc-src.music::after { margin-left: 6px; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 6px; vertical-align: middle; }
+.hl-arc-src.safe::after { content: "🔒 유튜브"; background: #d4f3e0; color: #0a7d3c; }
+.hl-arc-src.warn::after { content: "⚠ 59초"; background: #fce6c8; color: #b86b00; }
+.hl-arc-src.music::after { content: "📷 인스타"; background: #fbdfe1; color: #b3121b; }
+.hl-arc-src.active::after { background: rgba(255,255,255,0.28) !important; color: #fff !important; }
 /* 검색 결과: 모바일=1열, 태블릿/PC=2열 */
 .hl-results { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; max-height: 480px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .hl-card { position: relative; display: flex; gap: 10px; align-items: center; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card2); cursor: pointer; }

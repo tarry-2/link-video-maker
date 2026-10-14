@@ -1453,8 +1453,15 @@ const server = http.createServer(async (req, res) => {
     // 소스 화이트리스트(임의 채널 긁기 방지). label=짧게, search=채널내 검색 지원 여부(안되면 /videos 전체).
     const ARCHIVE_CHANNELS: Record<string, {channel: string; label: string; search: boolean}> = {
       kbs: {channel: 'KBSArchive', label: '옛날티비', search: true},
+      // ★KBS 교양(인간극장·아침마당·토크·충격실화) — 말 위주라 유튜브 음원 ContentID가 안 걸리는 '안전 금광'(테리 지시, 로컬 yt-dlp 실측 OK).
+      //   한글 핸들이라 @검색이 안 먹혀 채널ID로 지정.
+      kbscult: {channel: 'id:UCHlSeJxRIXZWMARC2oMwmcQ', label: 'KBS 교양', search: true},
       kbsdrama: {channel: 'KBSdrama', label: 'KBS 드라마', search: true},
       kbsnews: {channel: 'newskbs', label: 'KBS 뉴스', search: true},
+      // ★해외 액션(퍼블릭 도메인) — 미군/미정부 제작물은 세금으로 만든 '퍼블릭 도메인'이라 저작권 0(전투·훈련·미사일·상륙).
+      //   영어 영상이라 '재창작'으로 한국어 나레이션 얹어 쓰는 걸 추천. 로컬 yt-dlp 실측 OK(테리 지시).
+      dvids: {channel: 'DVIDSVIDEO', label: '미군 밀리터리(DVIDS)', search: true},
+      usarmy: {channel: 'USArmy', label: '미 육군', search: true},
       ebs: {channel: 'EBSDocumentary', label: 'EBS 다큐', search: true},
       mbc: {channel: 'MBCentertainment', label: 'MBC 예능', search: true}, // MBC 예능(구해줘홈즈 등) — 모던코리아는 공개영상 1개뿐이라 제외
       // ★MBC 미스터리(공식, 101만 구독) = 신비한TV 서프라이즈 + 심야괴담회. '진짜 미스터리'(실제 미제사건·

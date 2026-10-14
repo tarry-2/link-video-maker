@@ -116,16 +116,39 @@
         <!-- ▸ 아카이브 패널 — 방송사 공식 공개 아카이브(옛날티비/KBS)에서 추억의 영상을 가져온다. -->
         <div id="hl-archive-panel" class="hidden" style="margin-top:14px">
           <label class="field-label">📼 아카이브 소스 <span class="hint">— 방송사가 공식 공개한 영상이에요. 탭을 골라요</span></label>
-          <div id="hl-arc-src-tabs" class="hl-cats" style="margin-top:6px">
-            <button type="button" class="hl-cat hl-arc-src active" data-src="kbs" data-search="1">📺 옛날티비</button>
-            <button type="button" class="hl-cat hl-arc-src" data-src="mbckpop" data-search="1">🎤 옛날가요(음악캠프)</button>
-            <button type="button" class="hl-cat hl-arc-src" data-src="kbskpop" data-search="1">🎵 뮤직뱅크</button>
-            <button type="button" class="hl-cat hl-arc-src" data-src="sbskpop" data-search="1">🎶 인기가요</button>
-            <button type="button" class="hl-cat hl-arc-src" data-src="mbcmystery" data-search="1">🔮 미스터리(서프라이즈·심야괴담회)</button>
-            <button type="button" class="hl-cat hl-arc-src" data-src="kbsdrama" data-search="1">🎬 KBS 드라마</button>
-            <button type="button" class="hl-cat hl-arc-src" data-src="kbsnews" data-search="1">📰 KBS 뉴스</button>
-            <button type="button" class="hl-cat hl-arc-src" data-src="ebs" data-search="1">📚 EBS 다큐</button>
-            <button type="button" class="hl-cat hl-arc-src" data-src="mbc" data-search="1">🎥 MBC 예능</button>
+          <div id="hl-arc-src-tabs" style="margin-top:6px">
+            <div class="arc-src-group">
+              <span class="arc-src-grouplabel safe">🔒 유튜브 추천 — 말 위주라 음원 저작권 안 걸림</span>
+              <div class="arc-src-row">
+                <button type="button" class="hl-cat hl-arc-src safe active" data-src="kbs" data-search="1">📺 옛날티비</button>
+                <button type="button" class="hl-cat hl-arc-src safe" data-src="kbscult" data-search="1">🎙 KBS 교양(인간극장·토크)</button>
+                <button type="button" class="hl-cat hl-arc-src safe" data-src="kbsnews" data-search="1">📰 KBS 뉴스</button>
+                <button type="button" class="hl-cat hl-arc-src safe" data-src="ebs" data-search="1">📚 EBS 다큐</button>
+              </div>
+            </div>
+            <div class="arc-src-group">
+              <span class="arc-src-grouplabel warn">⚠️ 유튜브 가능하지만 59초 이하로 — 배우·영상 저작권 주의</span>
+              <div class="arc-src-row">
+                <button type="button" class="hl-cat hl-arc-src warn" data-src="mbcmystery" data-search="1">🔮 미스터리(서프라이즈·심야괴담회)</button>
+                <button type="button" class="hl-cat hl-arc-src warn" data-src="kbsdrama" data-search="1">🎬 KBS 드라마</button>
+                <button type="button" class="hl-cat hl-arc-src warn" data-src="mbc" data-search="1">🎥 MBC 예능</button>
+              </div>
+            </div>
+            <div class="arc-src-group">
+              <span class="arc-src-grouplabel safe">🪖 해외 액션 — 퍼블릭도메인(저작권 0) · 영어라 '재창작'으로 한국어 얹어 쓰기 추천</span>
+              <div class="arc-src-row">
+                <button type="button" class="hl-cat hl-arc-src safe" data-src="dvids" data-search="1">🪖 미군 밀리터리(DVIDS)</button>
+                <button type="button" class="hl-cat hl-arc-src safe" data-src="usarmy" data-search="1">🎖 미 육군</button>
+              </div>
+            </div>
+            <div class="arc-src-group">
+              <span class="arc-src-grouplabel music">🎵 인스타·스레드 전용 — 유튜브는 음원 차단</span>
+              <div class="arc-src-row">
+                <button type="button" class="hl-cat hl-arc-src music" data-src="mbckpop" data-search="1">🎤 옛날가요(음악캠프)</button>
+                <button type="button" class="hl-cat hl-arc-src music" data-src="kbskpop" data-search="1">🎵 뮤직뱅크</button>
+                <button type="button" class="hl-cat hl-arc-src music" data-src="sbskpop" data-search="1">🎶 인기가요</button>
+              </div>
+            </div>
           </div>
           <!-- ★음악방송(가요) 전용 경고 — 유튜브는 음원 Content ID로 '차단(영상 잠김)'됨. 옛날가요 소스일 때만 표시. -->
           <div id="hl-music-warn" class="hidden" style="margin-top:10px;padding:14px 16px;border-radius:12px;background:#fde3e4;border:2px solid #e5484d;color:#8f1a22;font-size:13.5px;line-height:1.55;font-weight:600">
