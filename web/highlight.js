@@ -739,14 +739,15 @@
   function maxClips(durationSec, clipSec) { return Math.max(1, Math.min(10, Math.floor((durationSec * 0.9) / Math.max(clipSec, 15)))); }
   function renderCountSeg() {
     const seg = $('hl-count-seg'); if (!seg) return;
-    // 영상 선택 전엔 기본(1~10편) 다 보이고, 선택하면 그 영상 길이에 맞게 최대편수까지만.
-    const max = picked ? maxClips(picked.durationSec, sec) : 10;
-    if (count > max) count = max;
-    const opts = []; for (const n of [1,2,3,5,8,10]) if (n <= max) opts.push(n);
-    if (!opts.includes(max)) opts.push(max);
+    // ★편 수는 네가 직접 고른다(1~10 자유). AI가 편 길이 보고 멋대로 1편으로 묶지 않는다(테리 2026-10-14).
+    //   길이 강제 제거 — 저작권 안전한 군대 등은 5분 길게 1편도, 짧게 여러 편도 마음대로. 길이 대비 '추천'은 안내만.
+    const rec = picked ? maxClips(picked.durationSec, sec) : 0;
+    const opts = [1, 2, 3, 5, 8, 10];
     seg.innerHTML = opts.map((n) => `<button type="button" class="seg-btn hl-count ${n === count ? 'active' : ''}" data-n="${n}">${n}편</button>`).join('');
     seg.querySelectorAll('.hl-count').forEach((b) => b.addEventListener('click', () => { seg.querySelectorAll('.hl-count').forEach((x) => x.classList.remove('active')); b.classList.add('active'); count = Number(b.dataset.n); saveState(); }));
-    if ($('hl-maxnote')) $('hl-maxnote').textContent = picked ? `— 이 영상(${fmtDur(picked.durationSec)})에서 최대 ${max}편까지 추천` : '— 영상을 고르면 그 길이에 맞게 추천해요';
+    if ($('hl-maxnote')) $('hl-maxnote').textContent = picked
+      ? `— 직접 고르세요 (이 영상 ${fmtDur(picked.durationSec)}엔 ${rec}편쯤이 겹침 없이 적당)`
+      : '— 몇 편 만들지 직접 고르세요';
   }
   // 저작권 위험도 뱃지: cc(안전)·ok(무난)·caution(주의)
   function riskInfo(risk) {
