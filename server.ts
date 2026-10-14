@@ -1458,10 +1458,17 @@ const server = http.createServer(async (req, res) => {
       kbscult: {channel: 'id:UCHlSeJxRIXZWMARC2oMwmcQ', label: 'KBS 교양', search: true},
       kbsdrama: {channel: 'KBSdrama', label: 'KBS 드라마', search: true},
       kbsnews: {channel: 'newskbs', label: 'KBS 뉴스', search: true},
+      ktvarchive: {channel: 'KTV_archive', label: 'KTV 근현대사', search: true}, // 한국정책방송원 공개 아카이브(근현대사·추억) 300+편.
       // ★한국군 액션 — 국군 공식 채널. 정부 제작물은 공공누리(출처표시로 상업·변형 OK). 한국어라 재창작 없이 바로 사용.
       //   해병대=상륙·강하·산악전 액션 금광. 로컬 yt-dlp 실측 OK(테리 지시). 육군훈련소는 한글핸들이라 채널ID로.
       rokmc: {channel: 'rokmchq', label: '대한민국 해병대', search: true},
       katc: {channel: 'id:UC_FGopKf5IVUpGs4EFb-pSQ', label: '육군훈련소', search: true},
+      kfn: {channel: 'id:UCXNMgSZqmfX1_K8Uf4l4sog', label: '국방부 전쟁다큐(KFN)', search: true},
+      mnd: {channel: 'id:UCoreZRRtVpu521wZNJWfUqQ', label: '국방부', search: true},
+      // ★경찰·소방·해경 — 실화 추격·구조 액션. 공공누리(출처표시로 상업 OK). 300+편 실측.
+      police: {channel: 'id:UC7-PyZbi_QIthI3WFtopzLw', label: '경찰청', search: true},
+      fire: {channel: 'id:UCbPBCZhgG_kX_1Wb0cdu5lw', label: '소방청', search: true},
+      coastguard: {channel: 'id:UCl6GW0nhB6UIL05h2oF3vRA', label: '해양경찰청', search: true},
       // ★해외 액션(퍼블릭 도메인) — 미군/미정부 제작물은 세금으로 만든 '퍼블릭 도메인'이라 저작권 0(전투·훈련·미사일·상륙).
       //   영어 영상이라 '재창작'으로 한국어 나레이션 얹어 쓰는 걸 추천. 로컬 yt-dlp 실측 OK(테리 지시).
       dvids: {channel: 'id:UC7oc5q7BkRIlfgsDzwJQnCw', label: '미군 종합(DVIDS)', search: true}, // user/dvidshub 본채널(300+편). @DVIDSVIDEO는 8편뿐 서브라 폐기.
