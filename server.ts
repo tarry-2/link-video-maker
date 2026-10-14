@@ -1464,7 +1464,8 @@ const server = http.createServer(async (req, res) => {
       katc: {channel: 'id:UC_FGopKf5IVUpGs4EFb-pSQ', label: '육군훈련소', search: true},
       // ★해외 액션(퍼블릭 도메인) — 미군/미정부 제작물은 세금으로 만든 '퍼블릭 도메인'이라 저작권 0(전투·훈련·미사일·상륙).
       //   영어 영상이라 '재창작'으로 한국어 나레이션 얹어 쓰는 걸 추천. 로컬 yt-dlp 실측 OK(테리 지시).
-      dvids: {channel: 'DVIDSVIDEO', label: '미군 밀리터리(DVIDS)', search: true},
+      dvids: {channel: 'id:UC7oc5q7BkRIlfgsDzwJQnCw', label: '미군 종합(DVIDS)', search: true}, // user/dvidshub 본채널(300+편). @DVIDSVIDEO는 8편뿐 서브라 폐기.
+      usmc: {channel: 'marines', label: '미 해병대', search: true},
       usarmy: {channel: 'USArmy', label: '미 육군', search: true},
       ebs: {channel: 'EBSDocumentary', label: 'EBS 다큐', search: true},
       mbc: {channel: 'MBCentertainment', label: 'MBC 예능', search: true}, // MBC 예능(구해줘홈즈 등) — 모던코리아는 공개영상 1개뿐이라 제외
