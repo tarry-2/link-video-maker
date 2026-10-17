@@ -63,6 +63,7 @@
       .pf-thumb { position: relative; aspect-ratio: 9/16; background: #000; border-radius: 12px 12px 0 0; overflow: hidden; }
       .pf-thumb.land { aspect-ratio: 16/9; } /* 롱폼=가로 썸네일 */
       .pf-thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+      .pf-thumb .pf-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
       .pf-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 34px; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); opacity: .92; }
       .pf-yt-badge { position: absolute; top: 8px; right: 8px; background: #ff0000; color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
       .pf-ig-badge { position: absolute; top: 8px; left: 8px; background: linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px; }
@@ -458,7 +459,7 @@
           fig.dataset.land = it.orientation === 'landscape' ? '1' : '';
           const thumbBox = isPost
             ? `<div class="pf-thumb post"><img src="${esc(it.thumb || (it.images && it.images[0]) || '')}" alt="" loading="lazy">${(it.images && it.images.length) ? `<span class="pf-card-count">🎴 ${it.images.length}장</span>` : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}${it.threadsUrl ? '<span class="pf-th-badge">TH</span>' : ''}</div>`
-            : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}"><video ${it.thumb ? `poster="${it.thumb}"` : ''} src="${it.video}#t=0.5" playsinline preload="metadata" muted></video><span class="pf-play">▶</span>${it.motion ? '<span class="pf-motion-badge">🎬 영상</span>' : ''}${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}${it.threadsUrl ? '<span class="pf-th-badge">TH</span>' : ''}</div>`;
+            : `<div class="pf-thumb${it.orientation === 'landscape' ? ' land' : ''}">${it.thumb ? `<img class="pf-poster" src="${esc(it.thumb)}" alt="" loading="lazy" decoding="async"><video data-src="${esc(it.video)}" playsinline preload="none" muted></video>` : `<video src="${esc(it.video)}#t=0.5" playsinline preload="metadata" muted></video>`}<span class="pf-play">▶</span>${it.motion ? '<span class="pf-motion-badge">🎬 영상</span>' : ''}${it.youtubeUrl ? '<span class="pf-yt-badge">YT</span>' : ''}${it.instagramUrl ? '<span class="pf-ig-badge">IG</span>' : ''}${it.facebookUrl ? '<span class="pf-fb-badge">FB</span>' : ''}${it.threadsUrl ? '<span class="pf-th-badge">TH</span>' : ''}</div>`;
           const madeTxt = it.createdAt ? new Date(it.createdAt).toLocaleDateString('ko-KR', {year: 'numeric', month: 'long', day: 'numeric'}) : '';
           fig.innerHTML = `${thumbBox}
             <figcaption><span class="pf-badge ${esc(it.goal)}">${BADGE[it.goal] || '🎬'} ${esc(it.category)}</span><h3>${it.num ? `<span class="pf-num">#${it.num}</span> ` : ''}${esc(it.title)}</h3>${madeTxt ? `<p class="pf-made">📅 ${esc(madeTxt)} 제작</p>` : ''}</figcaption>`;

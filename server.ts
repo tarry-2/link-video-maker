@@ -861,6 +861,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (!thumb && !thumbR2) { res.writeHead(404); return res.end('not found'); }
     if (thumbR2) {
+      // ★R2 직접(presign 302) — 서버가 썸네일을 하나씩 중계하면 포폴 136개가 순차로 느려진다.
+      //   브라우저가 R2에서 직접(병렬) 받게 리다이렉트. presign 실패 시에만 기존 중계로 폴백.
+      try {
+        const url = await presignGet(thumbR2, 21600);
+        if (url) { res.writeHead(302, {Location: url, 'Cache-Control': 'public, max-age=3600'}); return res.end(); }
+      } catch {}
       const got = await getStream(thumbR2);
       if (!got) { res.writeHead(404); return res.end('not found'); }
       const ct = /\.jpg$|\.jpeg$/i.test(thumbR2) ? 'image/jpeg' : 'image/png';
