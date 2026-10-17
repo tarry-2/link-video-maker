@@ -562,6 +562,25 @@
           <p id="th-msg" class="mini-state"></p>
         </div>
 
+        <div id="password-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
+          <h3 class="field-label">🔒 로그인 비밀번호 변경</h3>
+          <p class="hint">이 앱에 들어올 때 쓰는 비밀번호를 바꿉니다. 바꾼 비번은 서버에 암호화(해시)로 저장돼 재배포해도 유지돼요.</p>
+          <div class="key-field">
+            <label>현재 비밀번호</label>
+            <input id="pw-current" class="input" type="password" placeholder="지금 쓰는 비밀번호" autocomplete="current-password" />
+          </div>
+          <div class="key-field">
+            <label>새 비밀번호 <span class="hint">(6자 이상)</span></label>
+            <input id="pw-next" class="input" type="password" placeholder="새 비밀번호" autocomplete="new-password" />
+          </div>
+          <div class="key-field">
+            <label>새 비밀번호 확인</label>
+            <input id="pw-confirm" class="input" type="password" placeholder="새 비밀번호 다시" autocomplete="new-password" />
+          </div>
+          <button id="pw-save" class="ghost-btn small" type="button">비밀번호 변경</button>
+          <p id="pw-msg" class="mini-state"></p>
+        </div>
+
         <button id="save-keys" class="primary-btn">저장</button>
         <p id="settings-msg" class="mini-state"></p>
       </div>

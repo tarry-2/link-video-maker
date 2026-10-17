@@ -4,7 +4,7 @@ import {handleStudio, todayProducedCount, studio} from './lib/studio-http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {randomUUID, createHmac, timingSafeEqual} from 'node:crypto';
+import {randomUUID, createHmac, timingSafeEqual, scryptSync, randomBytes} from 'node:crypto';
 import {execFileSync as cpExecFileSync} from 'node:child_process';
 import {makeVideo} from './lib/pipeline';
 import {generateStoryboard, type Storyboard} from './lib/script';
@@ -60,6 +60,39 @@ function sign(v: string) {
   return createHmac('sha256', SESSION_SECRET).update(v).digest('hex');
 }
 
+// ── 비밀번호 변경 지원 ──
+// 비번은 두 소스 중 하나. ①사용자가 '키설정'에서 바꾼 비번 = data 볼륨에 scrypt 해시로 저장(평문 저장 안 함)
+//   ②아직 안 바꿨으면 환경변수 ADMIN_PASSWORD(초기값). 저장 파일이 있으면 그게 '항상 우선'(env는 초기값일 뿐).
+//   이렇게 해야 재배포해도(볼륨 유지) 바꾼 비번이 살아있고, 로그인·게이트·세션갱신 전부 '같은 소스'를 본다.
+const PW_FILE = path.join(STUDIO_DATA_DIR, 'admin-pw.json');
+function storedPw(): {salt: string; hash: string} | null {
+  try { if (fs.existsSync(PW_FILE)) return JSON.parse(fs.readFileSync(PW_FILE, 'utf8')); } catch {}
+  return null;
+}
+// 비번이 '설정되어 있는가'(저장 비번 or env 초기값). false면 로컬 개발로 보고 로그인 생략.
+function passwordSet(): boolean { return !!(storedPw() || ADMIN_PASSWORD); }
+// 입력 비번이 맞는지 — 저장 해시가 있으면 scrypt 비교, 없으면 env 평문 비교. 둘 다 timing-safe.
+function verifyPassword(input: string): boolean {
+  const st = storedPw();
+  if (st) {
+    try {
+      const got = scryptSync(String(input), Buffer.from(st.salt, 'hex'), 32);
+      const exp = Buffer.from(st.hash, 'hex');
+      return got.length === exp.length && timingSafeEqual(got, exp);
+    } catch { return false; }
+  }
+  if (!ADMIN_PASSWORD) return false;
+  const a = Buffer.from(String(input)); const exp = Buffer.from(ADMIN_PASSWORD);
+  return a.length === exp.length && timingSafeEqual(a, exp);
+}
+// 새 비번 저장(scrypt 해시). 저장 후부터는 이 비번이 env보다 우선.
+function setPassword(next: string): void {
+  const salt = randomBytes(16);
+  const hash = scryptSync(String(next), salt, 32);
+  try { fs.mkdirSync(STUDIO_DATA_DIR, {recursive: true}); } catch {}
+  fs.writeFileSync(PW_FILE, JSON.stringify({salt: salt.toString('hex'), hash: hash.toString('hex')}));
+}
+
 // 대본편집: 클라이언트가 보낸 편집 카드 대본을 안전하게 정리(길이·개수 제한, 타입/문자열만). 유효치 않으면 undefined→AI 생성.
 function sanitizeCardStoryboard(raw: any): any {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.cards) || !raw.cards.length) return undefined;
@@ -94,7 +127,7 @@ function validToken(tok: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 function authed(req: http.IncomingMessage): boolean {
-  if (!ADMIN_PASSWORD) return true; // 비번 미설정(로컬) = 통과
+  if (!passwordSet()) return true; // 비번 미설정(로컬) = 통과
   const cookie = req.headers.cookie || '';
   const m = cookie.match(new RegExp(COOKIE + '=([^;]+)'));
   return m ? validToken(decodeURIComponent(m[1])) : false;
@@ -620,13 +653,11 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, {version: v});
   }
   // ── 로그인 상태 확인 ──
-  if (p === '/api/auth') return json(res, 200, {required: !!ADMIN_PASSWORD, ok: authed(req)});
+  if (p === '/api/auth') return json(res, 200, {required: passwordSet(), ok: authed(req)});
   // ── 로그인 ──
   if (p === '/api/login' && req.method === 'POST') {
     const b = await readBody(req);
-    const a = Buffer.from(String(b.password || ''));
-    const exp = Buffer.from(ADMIN_PASSWORD);
-    const ok = ADMIN_PASSWORD && a.length === exp.length && timingSafeEqual(a, exp);
+    const ok = passwordSet() && verifyPassword(String(b.password || ''));
     if (!ok) return json(res, 401, {error: '비밀번호를 확인하세요.'});
     const secure = (req.headers['x-forwarded-proto'] === 'https') ? ' Secure;' : '';
     // 세션 30일 — 긴 제작(수십 분~시간) 중 자리 비워도 안 끊기게. 아래 인증 통과 요청마다 자동 갱신(rolling)도 함.
@@ -919,7 +950,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 401, {error: '로그인이 필요합니다.'});
   // ★세션 자동 갱신(rolling) — 로그인된 상태로 API를 쓸 때마다 쿠키 만료를 30일 뒤로 밀어준다.
   //   긴 제작 중 주기 폴링(jobs/current)이 계속 요청하므로, 자리 비워도 세션이 안 끊긴다.
-  if (p.startsWith('/api/') && ADMIN_PASSWORD && authed(req)) {
+  if (p.startsWith('/api/') && passwordSet() && authed(req)) {
     const secure = (req.headers['x-forwarded-proto'] === 'https') ? ' Secure;' : '';
     const ck = (req.headers.cookie || '').match(new RegExp(COOKIE + '=([^;]+)'));
     if (ck) res.setHeader('Set-Cookie', `${COOKIE}=${ck[1]}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MAX_AGE};${secure}`);
@@ -1844,6 +1875,17 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
   if (p === '/api/settings' && req.method === 'POST') {
     const b = await readBody(req);
     saveEnv(b);
+    return json(res, 200, {ok: true});
+  }
+  // ── 비밀번호 변경(로그인 필요 구역) — 현재 비번 확인 후 새 비번을 해시로 저장. ──
+  //   이 블록은 '로그인 필요' 게이트(위 917줄) 아래라, 세션 없는 외부(anon)는 여기 닿기 전에 401로 막힌다.
+  if (p === '/api/password' && req.method === 'POST') {
+    const b = await readBody(req);
+    const cur = String(b.current || ''), next = String(b.next || '');
+    // 비번이 이미 설정돼 있으면 현재 비번이 맞아야 변경 가능(세션 탈취 상황에서도 비번 교체 막음).
+    if (passwordSet() && !verifyPassword(cur)) return json(res, 401, {error: '현재 비밀번호가 올바르지 않습니다.'});
+    if (next.length < 6) return json(res, 400, {error: '새 비밀번호는 6자 이상이어야 합니다.'});
+    try { setPassword(next); } catch (e: any) { return json(res, 500, {error: '저장 실패: ' + (e?.message || '')}); }
     return json(res, 200, {ok: true});
   }
 

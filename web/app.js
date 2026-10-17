@@ -1460,6 +1460,25 @@ $('save-keys').onclick = async () => {
   setTimeout(() => $('settings-modal').classList.add('hidden'), 800);
 };
 
+// ── 비밀번호 변경 ──
+if ($('pw-save')) $('pw-save').onclick = async () => {
+  const cur = $('pw-current').value, next = $('pw-next').value, conf = $('pw-confirm').value;
+  const msg = $('pw-msg');
+  if (next.length < 6) { msg.textContent = '새 비밀번호는 6자 이상이어야 합니다.'; return; }
+  if (next !== conf) { msg.textContent = '새 비밀번호 확인이 일치하지 않습니다.'; return; }
+  msg.textContent = '변경 중…';
+  try {
+    const r = await fetch('/api/password', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current: cur, next }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { msg.textContent = j.error || '변경에 실패했습니다.'; return; }
+    msg.textContent = '✅ 비밀번호를 변경했습니다. 다음 로그인부터 새 비밀번호를 쓰세요.';
+    $('pw-current').value = $('pw-next').value = $('pw-confirm').value = '';
+  } catch (e) { msg.textContent = '변경 실패: ' + (e && e.message || e); }
+};
+
 // ── 로그인 ──
 // 로그인되지 않았으면 true(로그인 필요), 로그인/불필요면 false 반환.
 async function checkAuth() {
