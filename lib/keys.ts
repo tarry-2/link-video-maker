@@ -12,6 +12,7 @@ export type StoredKeys = {
   RUNPOD_API_KEY?: string;
   FAL_KEY?: string; // Seedance(영화) 생성용
   FAL_ADMIN_KEY?: string; // Seedance 잔액 조회용(admin 권한, 선택)
+  YOUTUBE_API_KEY?: string; // 유튜브 검색·메타 조회용(계정 토큰과 무관 — 토큰 만료돼도 검색이 안 죽게)
 };
 
 const KEY_NAMES = [
@@ -22,6 +23,7 @@ const KEY_NAMES = [
   'RUNPOD_API_KEY',
   'FAL_KEY',
   'FAL_ADMIN_KEY',
+  'YOUTUBE_API_KEY',
 ];
 
 export function loadEnv(): Record<string, string> {

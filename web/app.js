@@ -1121,6 +1121,7 @@ const KEY_META = [
   { k: 'FAL_KEY', label: 'fal.ai (이미지 생성 — 충전액 먼저)', desc: '이미지 생성에 먼저 쓰여요(충전해둔 fal 크레딧 소진까지). 소진되면 Replicate로 자동 전환돼요. 영화(움직임)는 Replicate/RunPod가 맡아요.', link: 'https://fal.ai/dashboard/keys', topup: 'https://fal.ai/dashboard/billing', balance: true },
   { k: 'FAL_ADMIN_KEY', label: 'fal.ai Admin 키 (잔액 조회용·선택)', desc: '아래 「잔액확인」이 "권한 없음"이면, fal에서 Admin 권한 키를 하나 더 만들어 여기에 넣으세요.', link: 'https://fal.ai/dashboard/keys' },
   { k: 'RUNPOD_API_KEY', label: 'RunPod (영화 — 풍경 컷 GPU)', desc: 'Wan2.2 영상 클립용 클라우드 GPU. 풍경 장면에 크레딧 소진까지 쓰여요(소진되면 Replicate로 자동 전환). 인물 장면은 Replicate Seedance.', link: 'https://www.runpod.io/console/user/settings', topup: 'https://www.runpod.io/console/user/billing' },
+  { k: 'YOUTUBE_API_KEY', label: 'YouTube API 키 (하이라이트 검색 — 강력 권장)', desc: '하이라이트 소재 검색에 써요. 이걸 넣으면 유튜브 계정 연결(로그인)이 만료·해지돼도 검색이 안 죽어요. Google Cloud Console에서 "YouTube Data API v3"를 켜고 "API 키"를 만들면 됩니다(무료).', link: 'https://console.cloud.google.com/apis/credentials' },
 ];
 
 $('settings-btn').onclick = async () => {

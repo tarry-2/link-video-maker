@@ -5,6 +5,30 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {geminiGenerate} from './gemini';
 import {openaiJson} from './openai';
+import {loadEnv} from './keys';
+
+// ── 공개 Data API 호출(검색·메타·공개통계) ──
+// ★근본: 유튜브 API 키가 있으면 그걸로 호출한다 = 업로드용 계정 OAuth 토큰이 만료·해지돼도 검색이 안 죽는다.
+//   (검색·영상메타·공개통계는 전부 '공개 데이터'라 API 키만으로 충분하다.) API 키가 없으면 기존 OAuth로 폴백(하위호환).
+//   유튜브 업로드/본인채널 Analytics 같은 '비공개' 작업만 OAuth가 꼭 필요하고, 그건 이 헬퍼를 안 쓴다.
+async function ytGet(apiPath: string, params: URLSearchParams): Promise<any> {
+  const key = (loadEnv().YOUTUBE_API_KEY || '').trim();
+  let r: Response;
+  if (key) {
+    params.set('key', key);
+    r = await fetch(`https://www.googleapis.com/youtube/v3/${apiPath}?${params.toString()}`, {cache: 'no-store'});
+  } else {
+    const token = await accessToken(); // 폴백: 유튜브 계정 OAuth 토큰
+    r = await fetch(`https://www.googleapis.com/youtube/v3/${apiPath}?${params.toString()}`, {headers: {Authorization: `Bearer ${token}`}, cache: 'no-store'});
+  }
+  const d: any = await r.json();
+  if (!r.ok) {
+    const msg = d?.error?.message || r.status;
+    if (!key) throw new Error(`${msg} — 유튜브 계정 토큰이 만료됐어요. ⚙ 키 설정에서 'YouTube API 키'를 넣으면 계정과 무관하게 검색이 됩니다(또는 유튜브 재연결).`);
+    throw new Error(String(msg));
+  }
+  return d;
+}
 
 const DATA_DIR = process.env.STUDIO_DATA_DIR || path.join(process.cwd(), 'data');
 const FILE = path.join(DATA_DIR, 'youtube.json');
@@ -170,7 +194,6 @@ function riskOf(license: string, categoryId: string, channelTitle: string, title
 }
 export async function searchCreativeCommons(query: string, opts: {max?: number; minSec?: number; maxSec?: number; region?: string; language?: string; order?: string; pageToken?: string; license?: 'cc' | 'any'} = {}): Promise<{videos: CcVideo[]; nextPageToken?: string}> {
   if (!query.trim()) throw new Error('검색어를 입력하세요.');
-  const token = await accessToken();
   const max = Math.min(50, Math.max(5, opts.max || 24)); // 한 페이지 최대 50(유튜브 상한)
   // 정렬: viewCount(조회수순=잘나가는 것 위로)·date(최신)·relevance(관련도). 기본 조회수순.
   const order = ['viewCount', 'date', 'relevance', 'rating'].includes(String(opts.order)) ? String(opts.order) : 'viewCount';
@@ -186,21 +209,13 @@ export async function searchCreativeCommons(query: string, opts: {max?: number; 
   if (opts.region) sp.set('regionCode', opts.region);
   if (opts.language) sp.set('relevanceLanguage', opts.language);
   if (opts.pageToken) sp.set('pageToken', opts.pageToken);
-  const sr = await fetch('https://www.googleapis.com/youtube/v3/search?' + sp.toString(), {
-    headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
-  });
-  const sd: any = await sr.json();
-  if (!sr.ok) throw new Error('유튜브 검색 실패: ' + (sd?.error?.message || sr.status));
+  const sd: any = await ytGet('search', sp);
   const nextPageToken: string | undefined = sd.nextPageToken || undefined;
   const ids: string[] = (sd.items || []).map((it: any) => it.id?.videoId).filter(Boolean);
   if (!ids.length) return {videos: [], nextPageToken};
   // 2) videos.list — 길이(duration)·조회수·라이선스·카테고리 가져와 필터/정렬/위험도에 사용.
   const vp = new URLSearchParams({part: 'contentDetails,statistics,snippet,status', id: ids.join(',')});
-  const vr = await fetch('https://www.googleapis.com/youtube/v3/videos?' + vp.toString(), {
-    headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
-  });
-  const vd: any = await vr.json();
-  if (!vr.ok) throw new Error('영상 정보 조회 실패: ' + (vd?.error?.message || vr.status));
+  const vd: any = await ytGet('videos', vp);
   const minSec = opts.minSec ?? 0;
   const maxSec = opts.maxSec ?? 3600;
   const out: CcVideo[] = [];
@@ -228,13 +243,8 @@ export async function searchCreativeCommons(query: string, opts: {max?: number; 
 export type VideoMeta = CcVideo & {license: string; isCc: boolean; risk: RiskLevel};
 export async function getVideoMeta(videoId: string): Promise<VideoMeta> {
   if (!/^[\w-]{11}$/.test(videoId)) throw new Error('유튜브 영상 URL을 확인하세요.');
-  const token = await accessToken();
   const vp = new URLSearchParams({part: 'contentDetails,statistics,snippet,status', id: videoId});
-  const vr = await fetch('https://www.googleapis.com/youtube/v3/videos?' + vp.toString(), {
-    headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
-  });
-  const vd: any = await vr.json();
-  if (!vr.ok) throw new Error('영상 정보 조회 실패: ' + (vd?.error?.message || vr.status));
+  const vd: any = await ytGet('videos', vp);
   const it = (vd.items || [])[0];
   if (!it) throw new Error('영상을 찾을 수 없어요. URL이 맞는지(비공개·삭제·연령제한 영상은 안 돼요) 확인하세요.');
   const sn = it.snippet || {};
@@ -265,15 +275,10 @@ export async function getVideoStats(ids: string[], diag?: string[]): Promise<Rec
   const uniq = [...new Set(ids.filter(Boolean))];
   if (!uniq.length) return out;
   const uniqSet = new Set(uniq);
-  const token = await accessToken();
-  // 1) Data API — 존재 보장(조회·좋아요·댓글). 공유수는 없음(0).
+  // 1) Data API — 존재 보장(조회·좋아요·댓글). 공유수는 없음(0). 공개 데이터라 API 키로(없으면 OAuth 폴백).
   for (let i = 0; i < uniq.length; i += 50) {
     const batch = uniq.slice(i, i + 50);
-    const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${batch.join(',')}`, {
-      headers: {Authorization: `Bearer ${token}`}, cache: 'no-store',
-    });
-    const d: any = await r.json();
-    if (!r.ok) throw new Error('유튜브 통계 조회 실패: ' + (d?.error?.message || ''));
+    const d: any = await ytGet('videos', new URLSearchParams({part: 'statistics', id: batch.join(',')}));
     for (const it of (d.items || [])) {
       const s = it.statistics || {};
       out[it.id] = {views: Number(s.viewCount || 0), likes: Number(s.likeCount || 0), comments: Number(s.commentCount || 0), shares: 0};
@@ -285,6 +290,7 @@ export async function getVideoStats(ids: string[], diag?: string[]): Promise<Rec
   //   그대로 덮으면 방금 오른 조회수가 옛날 값으로 깎여 "성과가 최신이 안 됨 / 스튜디오와 불일치"가 생긴다.
   //   → views·likes·comments는 '둘 중 큰 값'(실시간 아래로 안 내려감), shares만 Analytics로.
   try {
+    const token = await accessToken(); // Analytics(본인채널)는 OAuth 필수 — 토큰 없으면 catch로 Data API 값만 유지
     const today = new Date().toISOString().slice(0, 10);
     let start = 1, overlaid = 0;
     for (let page = 0; page < 10; page++) {

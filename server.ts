@@ -1863,6 +1863,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
         runpod: !!e.RUNPOD_API_KEY,
         fal: !!e.FAL_KEY,
         falAdmin: !!e.FAL_ADMIN_KEY,
+        youtubeApi: !!e.YOUTUBE_API_KEY,
       },
       geminiCount: (e.GEMINI_KEYS || '').split(/[,\n]+/).filter(Boolean).length,
     });
@@ -1877,6 +1878,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
       RUNPOD_API_KEY: maskKey(e.RUNPOD_API_KEY),
       FAL_KEY: maskKey(e.FAL_KEY),
       FAL_ADMIN_KEY: maskKey(e.FAL_ADMIN_KEY),
+      YOUTUBE_API_KEY: maskKey(e.YOUTUBE_API_KEY),
     });
   }
   if (p === '/api/settings' && req.method === 'POST') {
