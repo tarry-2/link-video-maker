@@ -1095,7 +1095,9 @@ const server = http.createServer(async (req, res) => {
       ...listPortfolio().map((it) => it.youtubeUrl || readProjectYouTube(it.projectId)),
       ...SAMPLES.map((s) => sampleYt[s.file] || ''),
     ].filter(Boolean).map((u) => extractVideoId(u)).filter(Boolean);
-    const [youtube, instagram, facebook, threads] = await Promise.all([getYtActivity(ytIds), getUploadActivity(), getFbActivity(), getThActivity()]);
+    // ★allSettled — 한 플랫폼 활동 조회가 실패(토큰 만료 등)해도 나머지는 그대로 보여준다(화면이 에러로 안 막힘).
+    const r = await Promise.allSettled([getYtActivity(ytIds), getUploadActivity(), getFbActivity(), getThActivity()]);
+    const [youtube, instagram, facebook, threads] = r.map((x) => x.status === 'fulfilled' ? x.value : null);
     return json(res, 200, {produced: todayProducedCount(), youtube, instagram, facebook, threads});
   }
   // ── 성과 추적: 올린 인스타 영상의 조회수·좋아요·댓글 집계(공개, voices.html이 로드) ──

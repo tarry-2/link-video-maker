@@ -1220,7 +1220,7 @@
             const lines = isProduce
               ? ['완성']
               : (x.error
-                ? [esc(x.error)]
+                ? ['연결 확인 필요']
                 : ['마지막 ' + fmtLast(x), '총 ' + (x.total || 0) + '개 올림', (x.followers != null ? '👥 ' + followLbl + ' ' + fmtNum(x.followers) : '')].filter(Boolean));
             const sub = lines.map(t => `<span style="display:block">${t}</span>`).join('');
             return `<div class="yt-kpi"><div class="num">${num}</div><div class="lbl">${emoji} ${label}<br><span style="font-size:11px;color:var(--muted);font-weight:600">${sub}</span></div></div>`;
