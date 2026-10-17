@@ -62,6 +62,37 @@ function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 
   });
 }
 
+// yt-dlp 실행 래퍼 — ★프록시 터널 장애(502/ProxyError/NO_HOST/잔액소진 등) 시 프록시를 빼고 1회 직접 재시도한다.
+//   주거용 프록시가 죽거나 크레딧이 떨어져도 '전부 실패'하지 않고 쿠키로 다운로드를 시도한다(봇차단은 감수).
+//   모든 yt-dlp 호출(메타·자막·샘플·구간·오디오·아카이브)이 이 래퍼를 쓰므로 한 곳에서 프록시 장애를 방어.
+const PROXY_ERR = /ProxyError|Tunnel connection failed|NO_HOST_CONNECTION|Cannot connect to proxy|ProxyConnectionError|407 Proxy|\b502\b|\b503\b/i;
+async function ytRun(args: string[], log: (m: string) => void, timeoutMs?: number, onLine?: (l: string) => void, cancelled?: () => boolean): Promise<string> {
+  const pi = args.indexOf('--proxy');
+  // 프록시(DataImpulse 주거 IP)는 가끔 게이트웨이가 순간적으로 502/NO_HOST를 뱉는다(노드 가용성 변동).
+  //   ★근본 대응 = 같은 프록시로 간격을 두고 2회 더 재시도해 '일시 장애'를 흡수한다(직접 연결은 봇차단 위험이라 안 씀).
+  //   세 번 다 프록시가 죽어 있을 때만 '최후의 수단'으로 프록시 없이 1회 시도한다(봇차단 감수, 전부 실패보다는 나음).
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await run(YTDLP, args, log, timeoutMs, onLine, cancelled);
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (/사용자가 중단/.test(msg)) throw e;
+      if (pi < 0 || !PROXY_ERR.test(msg)) throw e; // 프록시 무관 오류는 그대로
+      if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
+      if (attempt < 2) {
+        const wait = (attempt + 1) * 5;
+        log(`[하이라이트] ⚠️ 프록시 일시 오류 — ${wait}초 후 같은 프록시로 재시도(${attempt + 1}/2)`);
+        await new Promise((r) => setTimeout(r, wait * 1000));
+        continue;
+      }
+      log('[하이라이트] ⚠️ 프록시가 계속 응답 없음 → 최후로 프록시 없이 직접 시도(봇차단 가능)');
+      const noProxy = args.slice(); noProxy.splice(pi, 2);
+      return await run(YTDLP, noProxy, log, timeoutMs, onLine, cancelled);
+    }
+  }
+  throw new Error('프록시 재시도 실패');
+}
+
 // yt-dlp가 서버에 있는지(없으면 친절한 안내).
 export async function ytdlpAvailable(): Promise<boolean> {
   try { await run(YTDLP, ['--version'], () => {}, 10000); return true; } catch { return false; }
@@ -122,7 +153,7 @@ export async function searchArchiveChannel(
   const fetchFrom = async (path: string): Promise<any[]> => {
     const url = base + path;
     try {
-      const out = await run(YTDLP, [...flat, '--flat-playlist', '--playlist-start', String(start), '--playlist-end', String(end), '-J', url], () => {}, 60000);
+      const out = await ytRun([...flat, '--flat-playlist', '--playlist-start', String(start), '--playlist-end', String(end), '-J', url], () => {}, 60000);
       const data = JSON.parse(out);
       return Array.isArray(data?.entries) ? data.entries : [];
     } catch (e: any) { lastErr = (e?.message || '').replace(/\s+/g, ' ').slice(-220); return []; }
@@ -163,7 +194,7 @@ async function fetchMetaAndSubs(
     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
-      const out = await run(YTDLP, [...common, ...ca, '--skip-download', '--write-subs', '--write-auto-subs',
+      const out = await ytRun([...common, ...ca, '--skip-download', '--write-subs', '--write-auto-subs',
         '--sub-langs', 'en,ko', '--sub-format', 'vtt', '--print', '%(duration)s', '-o', base + '.%(ext)s', url], log, 120000, undefined, cancelled);
       const d = parseInt(String(out).trim().split(/\s+/).pop() || '', 10);
       if (Number.isFinite(d) && d > 0) duration = d;
@@ -202,7 +233,7 @@ export async function sampleForAnalysis(videoId: string, dir: string, log: (m: s
     for (const client of CLIENTS) {
       const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
       try {
-        await run(YTDLP, [...common, ...ca, '-f', VFMT(360), ...VSORT,
+        await ytRun([...common, ...ca, '-f', VFMT(360), ...VSORT,
           '--download-sections', '*30-45', '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], () => {}, 90000);
       } catch { continue; }
       const f = find();
@@ -227,7 +258,7 @@ async function downloadSection(
     const prev = findFile(); if (prev) { try { fs.rmSync(prev, {force: true}); } catch {} }
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
-      await run(YTDLP, [...common, ...ca, '-f', VFMT(1080), ...VSORT,
+      await ytRun([...common, ...ca, '-f', VFMT(1080), ...VSORT,
         '--download-sections', section, '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], log, 300000, undefined, cancelled);
     } catch (e: any) {
       lastErr = (e?.message || '').slice(0, 200);
@@ -782,7 +813,7 @@ export async function fetchSourceTranscript(
     const prev = find(); if (prev) { try { fs.rmSync(prev, {force: true}); } catch {} }
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
-      await run(YTDLP, [...common, ...ca, '-f', 'bestaudio/best', '-x', '--audio-format', 'mp3',
+      await ytRun([...common, ...ca, '-f', 'bestaudio/best', '-x', '--audio-format', 'mp3',
         '--download-sections', `*0-${maxSec}`, '-o', outBase + '.%(ext)s', url], () => {}, 240000, undefined, cancelled);
       const f = find(); if (f && fs.statSync(f).size > 2000) { got = f; break; }
     } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; }
