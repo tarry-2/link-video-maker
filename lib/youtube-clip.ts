@@ -14,6 +14,31 @@ import {sttWords} from './align';
 const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 
+// ★★근본: 유튜브 포맷은 반드시 h264(avc1)+aac 우선으로 받는다. 코덱 방어 단일 출처.
+//   유튜브는 영상을 여러 코덱으로 제공하는데, 최신 영상(특히 음악)은 기본 베스트가 'av1'(av01)로 떨어진다.
+//   라이브 서버(Debian ffmpeg)는 av1 디코딩이 깨지거나 극도로 느려 → 크롭(cutClip)·리프레임 단계에서
+//   "Error while processing the decoded data for stream #0:0 / Conversion failed!"로 전부 터진다
+//   (블러·레터박스 폴백이 '둘 다' 죽는 건 둘 다 비디오 디코딩이 선행이기 때문 — 필터 문제가 아니었다).
+//   h264는 어떤 ffmpeg에서나 디코딩되고 빠르며, 오디오까지 aac(m4a)로 받으면 opus→aac 재인코딩 부담도 사라진다.
+//   avc1이 없는 희귀 영상에서만 최후로 아무 코덱이나 받는다(그마저 못 받는 것보단 낫다).
+const VFMT = (maxH: number) =>
+  `bv*[vcodec^=avc1][height<=${maxH}]+ba[acodec^=mp4a]/` + // 최선: h264 영상 + aac 오디오 (av1·opus 둘 다 회피)
+  `bv*[vcodec^=avc1][height<=${maxH}]+ba/` +               // h264 영상 + 아무 오디오
+  `b[vcodec^=avc1][height<=${maxH}]/` +                    // h264 progressive
+  `bv*[height<=${maxH}]+ba/b[height<=${maxH}]/b`;          // 최후: 아무 코덱(av1일 수 있음 — 경고 로그로 추적)
+// yt-dlp 포맷 '정렬' 안전벨트 — 후보 안에서 h264·aac를 가장 선호하게(위 셀렉터와 이중 방어).
+const VSORT = ['-S', 'vcodec:h264,acodec:aac'];
+
+// ffmpeg stderr에서 '진짜 원인' 줄만 뽑는다 — Qavg/frame=/kb\/s 같은 통계 라인에 묻혀 원인이 안 보이던 문제 해결.
+//   (기존 slice(-180)은 끝쪽 통계만 남아 "왜 터졌는지"를 가렸다. 테리 진단로그 규칙.)
+function ffErr(msg: string): string {
+  const lines = (msg || '').split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+  const hit = lines.filter((l) => /error|invalid|unable|failed|not (found|supported)|no such|decod|unsupported|cannot|denied/i.test(l)
+    && !/^\[?(aac|libx264|libopus|mp4|out#|frame=)/i.test(l) && !/Qavg|frames left in the queue|kb\/s|global headers/i.test(l));
+  const pick = (hit.length ? hit : lines).slice(-3).join(' | ');
+  return pick.replace(/\s+/g, ' ').slice(-240);
+}
+
 export type Highlight = {start: number; end: number; hookTop: string; hookAccent: string; reason: string; score: number; whole?: boolean};
 export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string; transcript?: string; score: number; reason?: string; whole?: boolean};
 
@@ -177,7 +202,7 @@ export async function sampleForAnalysis(videoId: string, dir: string, log: (m: s
     for (const client of CLIENTS) {
       const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
       try {
-        await run(YTDLP, [...common, ...ca, '-f', 'bv*[height<=360]+ba/b[height<=360]/worst',
+        await run(YTDLP, [...common, ...ca, '-f', VFMT(360), ...VSORT,
           '--download-sections', '*30-45', '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], () => {}, 90000);
       } catch { continue; }
       const f = find();
@@ -202,7 +227,7 @@ async function downloadSection(
     const prev = findFile(); if (prev) { try { fs.rmSync(prev, {force: true}); } catch {} }
     const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
     try {
-      await run(YTDLP, [...common, ...ca, '-f', 'bv*[height<=1080]+ba/b[height<=1080]/b',
+      await run(YTDLP, [...common, ...ca, '-f', VFMT(1080), ...VSORT,
         '--download-sections', section, '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], log, 300000, undefined, cancelled);
     } catch (e: any) {
       lastErr = (e?.message || '').slice(0, 200);
@@ -219,6 +244,16 @@ async function downloadSection(
       log(`[하이라이트] ${client} 구간: 받은 파일에 영상이 없어요(깨짐) → 다음 방식 시도`);
       try { fs.rmSync(f, {force: true}); } catch {}
       continue;
+    }
+    // ★2차 방어: 혹시 avc1이 없어 최후폴백으로 av1/vp9을 받았으면, 여기서 h264로 안전 트랜스코드한다.
+    //   (라이브 서버 ffmpeg가 av1을 못 디코딩해 하위 크롭·리프레임이 전부 터지던 참사를 원천 차단 — 한 곳에서.)
+    //   avc1을 받은 정상 경우(대부분)엔 아무 일도 안 하므로 추가 비용·화질 손실 없음.
+    const vcodec = await probeVCodec(f);
+    if (/av01|av1|vp0?9/i.test(vcodec)) {
+      log(`[하이라이트] ⚠️ 받은 영상이 ${vcodec} 코덱 — 호환성을 위해 h264로 변환합니다(한 번만).`);
+      const safe = await toH264(f, log, cancelled);
+      if (safe) return safe;
+      log(`[하이라이트] h264 변환 실패 → 원본 그대로 진행(크롭에서 재시도)`);
     }
     return f; // 영상 트랙이 확인된 유효 파일
   }
@@ -506,17 +541,44 @@ async function cutClip(videoPath: string, outPath: string, orientation: 'portrai
   };
   // crf 20 = 선명(화질 고정). ★preset ultrafast — 이 크롭 결과는 '중간물'로, 뒤 renderHighlightFast가 다시
   //   재인코딩(후킹·자막 합성)하므로 여기선 속도 최우선이어도 최종 화질에 영향 없다(crf 동일). 파일만 조금 커짐.
-  const tail = ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', outPath];
+  // 오디오는 48kHz 스테레오 aac로 정규화 — opus 등 입력 샘플포맷·채널 차이로 인한 인코딩 실패를 막는다.
+  const tail = ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', outPath];
   try {
     await run(FFMPEG, ['-y', '-i', videoPath, ...args, ...tail], log, 420000, onLine, cancelled);
   } catch (e: any) {
     if (/사용자가 중단/.test(e?.message || '') || !fallbackArgs) throw e;
-    // 블러 배경 필터가 이 원본에서 터졌다 → 입력 해상도를 찍어 원인을 남기고, 단순 검은 레터박스로 재시도(무회귀).
+    // 블러 배경 필터가 이 원본에서 터졌다 → 입력 해상도·코덱을 찍어 원인을 남기고, 단순 검은 레터박스로 재시도(무회귀).
     let dims = '';
-    try { const wh = await probeWH(videoPath); if (wh) dims = ` (입력 ${wh})`; } catch {}
-    log(`[하이라이트]   세로 블러 실패${dims} → 검은 레터박스로 재시도: ` + (e?.message || '').replace(/\s+/g, ' ').slice(-180));
+    try { const wh = await probeWH(videoPath); const vc = await probeVCodec(videoPath); if (wh) dims = ` (입력 ${wh}${vc ? ' ' + vc : ''})`; } catch {}
+    log(`[하이라이트]   세로 블러 실패${dims} → 검은 레터박스로 재시도: ${ffErr(e?.message || '')}`);
     await run(FFMPEG, ['-y', '-i', videoPath, ...fallbackArgs, ...tail], log, 420000, onLine, cancelled);
   }
+}
+
+// 비디오 코덱 이름(av1/avc1/vp9 등) — 호환성 판단용. 실패 시 빈 문자열.
+async function probeVCodec(src: string): Promise<string> {
+  const probe = (process.env.FFPROBE_PATH || FFMPEG.replace(/ffmpeg$/, 'ffprobe'));
+  try {
+    const out = await run(probe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_name', '-of', 'default=nw=1:nk=1', src], () => {}, 15000);
+    return out.trim();
+  } catch { return ''; }
+}
+
+// av1/vp9 등 서버에서 깨질 수 있는 코덱을 h264+aac로 안전 변환(스트림은 그대로, 코덱만). 실패 시 null.
+//   crop/scale 없이 '코덱만' 바꾸므로 뒤 cutClip의 재인코딩 화질과 동일(여기선 화면 안 건드림).
+async function toH264(src: string, log: (m: string) => void, cancelled?: () => boolean): Promise<string | null> {
+  const out = src.replace(/\.(mp4|mkv|webm)$/i, '') + '.h264.mp4';
+  try {
+    await run(FFMPEG, ['-y', '-i', src,
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2',
+      '-movflags', '+faststart', out], () => {}, 600000, undefined, cancelled);
+    if (fs.existsSync(out) && fs.statSync(out).size > 1000) { try { fs.rmSync(src, {force: true}); } catch {} return out; }
+  } catch (e: any) {
+    if (/사용자가 중단/.test(e?.message || '')) throw e;
+    log(`[하이라이트]   h264 변환 오류: ${ffErr(e?.message || '')}`);
+  }
+  return null;
 }
 
 // 영상 해상도(WxH) — 실패 진단용. ffprobe 없으면 빈 문자열.
@@ -542,9 +604,9 @@ async function cutSectionLocal(src: string, dir: string, idx: number, start: num
       () => {}, 120000, undefined, cancelled);
     if (fs.existsSync(out) && fs.statSync(out).size > 1000) return out;
   } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; }
-  // 복사 실패(코덱/컨테이너 호환 문제) 시에만 재인코딩 폴백(무회귀).
+  // 복사 실패(코덱/컨테이너 호환 문제) 시에만 재인코딩 폴백(무회귀). 오디오는 48k 스테레오 aac로 정규화.
   await run(FFMPEG, ['-y', '-ss', String(ss), '-to', String(to), '-i', src,
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out],
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', out],
     () => {}, 240000, undefined, cancelled);
   if (!fs.existsSync(out)) throw new Error('구간 추출 실패');
   return out;
@@ -607,7 +669,7 @@ async function tightenSilence(
   const out = path.join(dir, `tight-${idx}.mp4`);
   try {
     await run(FFMPEG, ['-y', '-i', input, '-filter_complex', fc, '-map', '[v]', '-map', '[a]',
-      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out],
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '20', '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', out],
       () => {}, 300000, undefined, cancelled);
   } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; log('[무음제거] 처리 실패 — 원본 유지: ' + (e?.message || '').slice(0, 80)); return input; }
   if (!fs.existsSync(out)) return input;
@@ -680,7 +742,7 @@ export async function extractHighlights(
       results.push({file, start: h.start, end: effEnd, hookTop: h.hookTop, hookAccent: h.hookAccent, transcript: sliceTranscript(subText, h.start, h.end), score: h.score, reason: h.reason, whole: h.whole});
     } catch (e: any) {
       if (/사용자가 중단/.test(e?.message || '')) throw new Error('사용자가 중단했습니다.'); // 중단이면 다음 컷 말고 즉시 종료
-      log(`[하이라이트] ${i + 1}번 구간 실패(건너뜀): ` + (e?.message || '').slice(0, 120));
+      log(`[하이라이트] ${i + 1}번 구간 실패(건너뜀): ${ffErr(e?.message || '')}`);
     }
   }
   if (!results.length) throw new Error('클립을 하나도 만들지 못했습니다.');
