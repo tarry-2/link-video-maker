@@ -1006,8 +1006,10 @@ const server = http.createServer(async (req, res) => {
     } catch (e: any) { diag?.push('⚠️ 채널 목록 병합 실패(포트폴리오 기준 유지): ' + (e?.message || e)); }
     if (!withId.length) return json(res, 200, {connected: true, items: [], summary: null});
     let stats: Record<string, {views: number; likes: number; comments: number; shares: number}> = {};
+    // ★성과(조회수) 조회가 실패(계정 토큰 만료 등)해도 화면을 에러로 덮지 않는다 — 영상 목록은 그대로 보여주고
+    //   성과 숫자만 0으로 둔다(검색·제작은 API 키라 무관). 토큰 만료 하나로 포폴 전체가 막히던 문제 해결.
     try { stats = await getVideoStats(withId.map((x) => x.videoId), diag); }
-    catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message, ...(diag ? {debug: [...diag, '예외:' + e.message]} : {})}); }
+    catch (e: any) { diag?.push('성과 조회 실패(목록만 표시): ' + (e?.message || e)); stats = {}; }
     const items = withId
       .map((x) => ({...x, ...(stats[x.videoId] || {views: 0, likes: 0, comments: 0, shares: 0})}))
       .sort((a, b) => b.views - a.views);
@@ -1110,8 +1112,9 @@ const server = http.createServer(async (req, res) => {
     const withUrl = all.filter((x) => x.url);
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 instagramUrl(permalink) 저장된 게 없음']} : {})});
     let byPermalink: Record<string, {views: number; likes: number; comments: number; saved?: number; shares?: number; reposts?: number; reach?: number; totalInteractions?: number}> = {};
+    // ★인스타도 유튜브와 동일 — 성과 조회 실패(토큰 만료 등)해도 목록은 보여주고 성과만 0으로(화면 안 덮음).
     try { byPermalink = await getInstaStats(diag); }
-    catch (e: any) { return json(res, 200, {connected: true, items: [], summary: null, error: e.message, ...(debug ? {debug: [...(diag || []), '예외: ' + e.message]} : {})}); }
+    catch (e: any) { diag?.push('인스타 성과 조회 실패(목록만 표시): ' + (e?.message || e)); byPermalink = {}; }
     if (diag) {
       const apiKeys = Object.keys(byPermalink);
       diag.push(`우리가 저장한 permalink ${withUrl.length}개: ${withUrl.map((x) => x.url).slice(0, 5).join(' , ')}`);
@@ -1229,7 +1232,9 @@ const server = http.createServer(async (req, res) => {
     ].filter((x) => x.url);
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 facebookUrl 저장된 게 없음']} : {})});
     const diag: string[] = [];
-    const stats = await getFbStats(debug ? diag : undefined);
+    let stats: Record<string, any> = {};
+    try { stats = await getFbStats(debug ? diag : undefined); }
+    catch (e: any) { diag.push('페북 성과 조회 실패(목록만 표시): ' + (e?.message || e)); }
     if (debug) {
       const keys = Object.keys(stats);
       diag.push(`우리가 저장한 facebookUrl ${withUrl.length}개: ${withUrl.map((x) => x.url).slice(0, 5).join(' , ')}`);
@@ -1320,7 +1325,9 @@ const server = http.createServer(async (req, res) => {
     ].filter((x) => x.url);
     if (!withUrl.length) return json(res, 200, {connected: true, items: [], summary: null, ...(debug ? {debug: ['올린 영상 중 threadsUrl 저장된 게 없음']} : {})});
     const diag: string[] = [];
-    const stats = await getThreadsStats(debug ? diag : undefined);
+    let stats: Record<string, any> = {};
+    try { stats = await getThreadsStats(debug ? diag : undefined); }
+    catch (e: any) { diag.push('스레드 성과 조회 실패(목록만 표시): ' + (e?.message || e)); }
     const items = withUrl.map((x) => ({...x, ...{views: 0, likes: 0, comments: 0, shares: 0, reposts: 0, quotes: 0}, ...(stats[x.url] || {})}))
       .sort((a: any, b: any) => b.views - a.views || b.likes - a.likes);
     const thBody = {connected: true, items, summary: perfSummary(items, ['shares', 'reposts', 'quotes']), ...(debug ? {debug: diag} : {})};
