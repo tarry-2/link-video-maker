@@ -62,8 +62,8 @@ function sign(v: string) {
 
 // ── 비밀번호 변경 지원 ──
 // 비번은 두 소스 중 하나. ①사용자가 '키설정'에서 바꾼 비번 = data 볼륨에 scrypt 해시로 저장(평문 저장 안 함)
-//   ②아직 안 바꿨으면 환경변수 ADMIN_PASSWORD(초기값). 저장 파일이 있으면 그게 '항상 우선'(env는 초기값일 뿐).
-//   이렇게 해야 재배포해도(볼륨 유지) 바꾼 비번이 살아있고, 로그인·게이트·세션갱신 전부 '같은 소스'를 본다.
+//   ②환경변수 ADMIN_PASSWORD = '마스터 복구 비번'으로 항상 유효(바꾼 비번을 까먹어도 이걸로 들어가 재설정).
+//   재배포해도(볼륨 유지) 바꾼 비번이 살아있고, 로그인·게이트·세션갱신 전부 '같은 소스(verifyPassword)'를 본다.
 const PW_FILE = path.join(STUDIO_DATA_DIR, 'admin-pw.json');
 function storedPw(): {salt: string; hash: string} | null {
   try { if (fs.existsSync(PW_FILE)) return JSON.parse(fs.readFileSync(PW_FILE, 'utf8')); } catch {}
@@ -71,21 +71,26 @@ function storedPw(): {salt: string; hash: string} | null {
 }
 // 비번이 '설정되어 있는가'(저장 비번 or env 초기값). false면 로컬 개발로 보고 로그인 생략.
 function passwordSet(): boolean { return !!(storedPw() || ADMIN_PASSWORD); }
-// 입력 비번이 맞는지 — 저장 해시가 있으면 scrypt 비교, 없으면 env 평문 비교. 둘 다 timing-safe.
+// 입력 비번이 맞는지 — ①사용자가 바꾼 저장 비번(scrypt) 또는 ②env ADMIN_PASSWORD(마스터 복구 비번) 중
+//   하나라도 맞으면 통과. ★env는 '항상 유효한 복구용'으로 남긴다 — 바꾼 비번을 까먹어도 Railway의
+//   ADMIN_PASSWORD로 로그인해 재설정할 수 있어야 하기 때문(비번 영구 분실=서비스 잠김 사고 방지).
+//   둘 다 timing-safe 비교. 저장 비번이 없으면 env만으로 판단.
 function verifyPassword(input: string): boolean {
   const st = storedPw();
   if (st) {
     try {
       const got = scryptSync(String(input), Buffer.from(st.salt, 'hex'), 32);
       const exp = Buffer.from(st.hash, 'hex');
-      return got.length === exp.length && timingSafeEqual(got, exp);
-    } catch { return false; }
+      if (got.length === exp.length && timingSafeEqual(got, exp)) return true;
+    } catch {}
   }
-  if (!ADMIN_PASSWORD) return false;
-  const a = Buffer.from(String(input)); const exp = Buffer.from(ADMIN_PASSWORD);
-  return a.length === exp.length && timingSafeEqual(a, exp);
+  if (ADMIN_PASSWORD) { // 마스터 복구 비번(저장 비번과 무관하게 항상 허용)
+    const a = Buffer.from(String(input)); const exp = Buffer.from(ADMIN_PASSWORD);
+    if (a.length === exp.length && timingSafeEqual(a, exp)) return true;
+  }
+  return false;
 }
-// 새 비번 저장(scrypt 해시). 저장 후부터는 이 비번이 env보다 우선.
+// 새 비번 저장(scrypt 해시). 저장 후 이 비번으로 로그인되며, env ADMIN_PASSWORD는 복구용으로 계속 유효.
 function setPassword(next: string): void {
   const salt = randomBytes(16);
   const hash = scryptSync(String(next), salt, 32);
@@ -698,6 +703,8 @@ const server = http.createServer(async (req, res) => {
     return serveFile(res, path.join(ROOT, 'web', 'highlight.js'), 'application/javascript; charset=utf-8');
   if (p === '/create.js')
     return serveFile(res, path.join(ROOT, 'web', 'create.js'), 'application/javascript; charset=utf-8');
+  if (p === '/wake.js') // 통합 화면 꺼짐 방지 매니저(모든 페이지 공통)
+    return serveFile(res, path.join(ROOT, 'web', 'wake.js'), 'application/javascript; charset=utf-8');
 
   // ── 정적 ──
   // 루트(/) = 마케팅 랜딩페이지. 앱(대시보드)은 /app 으로. "시작하기"가 /app 으로 보낸다.

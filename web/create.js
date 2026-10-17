@@ -726,19 +726,8 @@
     } catch {}
   }
 
-  // 🔆 작업 중 화면 꺼짐 방지(Screen Wake Lock) — 창작 제작 진행 중(curJobId)이면 화면을 켜둔다(다른 탭과 동일).
-  //   wake lock은 백그라운드 가면 자동 해제되므로 3초마다 + 복귀 시 상태를 맞춘다. 단일 소스=curJobId.
-  let _wakeLock = null;
-  async function _wakeSync() {
-    try {
-      if (curJobId && !_wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
-        _wakeLock = await navigator.wakeLock.request('screen');
-        _wakeLock.addEventListener('release', () => { _wakeLock = null; });
-      } else if (!curJobId && _wakeLock) {
-        await _wakeLock.release(); _wakeLock = null;
-      }
-    } catch { _wakeLock = null; }
-  }
+  // 🔆 제작 진행 상태만 통합 매니저(wake.js)에 신고 — 화면 꺼짐 방지는 wake.js가 전담(편집·수정 모달·장시간 작업 자동 포함).
+  function _wakeSync() { try { if (window.OnVideoWake) curJobId ? OnVideoWake.on('job') : OnVideoWake.off('job'); } catch {} }
   setInterval(_wakeSync, 3000);
   document.addEventListener('visibilitychange', _wakeSync);
 

@@ -564,7 +564,7 @@
 
         <div id="password-section" style="margin-top:8px; padding-top:16px; border-top:1px solid var(--line)">
           <h3 class="field-label">🔒 로그인 비밀번호 변경</h3>
-          <p class="hint">이 앱에 들어올 때 쓰는 비밀번호를 바꿉니다. 바꾼 비번은 서버에 암호화(해시)로 저장돼 재배포해도 유지돼요.</p>
+          <p class="hint">이 앱에 들어올 때 쓰는 비밀번호를 바꿉니다. 바꾼 비번은 서버에 암호화(해시)로 저장돼 재배포해도 유지돼요. <strong>혹시 바꾼 비번을 잊어도</strong> 서버에 설정된 '복구 비밀번호(ADMIN_PASSWORD)'로 로그인해 다시 바꿀 수 있어요 — 잠길 걱정 없어요.</p>
           <div class="key-field">
             <label>현재 비밀번호</label>
             <input id="pw-current" class="input" type="password" placeholder="지금 쓰는 비밀번호" autocomplete="current-password" />
@@ -600,6 +600,7 @@
       </div>
     </div>
 
+    <script src="/wake.js"></script>
     <script src="/font-preview.js"></script>
     <script src="/app.js"></script>
     <script src="/studio.js"></script>
