@@ -172,6 +172,8 @@
       var rm = t.getAttribute && t.getAttribute('data-rm');
       if (rm && confirm('"' + rm + '" 계정을 뺄까요? (세션도 끊겨요)')) api('/api/secret/account/remove', { label: rm }).then(function (r) { lastAccJson = ''; renderAccounts(r.accounts, r.account); });
     });
+    // 버전 배지(재배포 확인용)
+    fetch('/api/version').then(function (r) { return r.json(); }).then(function (j) { if (j && j.version) $('ver-badge').textContent = 'v' + j.version; }).catch(function () {});
     tick();
     timer = setInterval(tick, 2000);
   }
