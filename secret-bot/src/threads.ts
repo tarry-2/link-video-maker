@@ -21,9 +21,19 @@ export function threadsSessionExists(account: string): boolean { return hasSessi
 //   🔴 TODO(실측): 로그인/비로그인 구분 셀렉터 확정. 지금은 '로그인' 링크 유무로 추정.
 async function isLoggedIn(page: Page): Promise<boolean> {
   try {
-    const loginLink = await page.$('a[href*="/login"], a[href*="instagram.com/accounts/login"]');
-    const composer = await page.$('[aria-label*="글"], [aria-label*="Post"], svg[aria-label*="New"]');
-    return !loginLink || !!composer;
+    if (/\/login/.test(page.url())) return false;
+    // 로그인 폼(비번칸)이 보이면 = 안 됨.
+    if (await page.$('input[autocomplete="current-password"], input[type="password"]')) return false;
+    // ★로그인 안내 모달/버튼이 보이면 = 비로그인(검색 페이지에 "Instagram으로 계속하기" 오버레이가 뜨는 거짓양성 차단).
+    const hasLoginPrompt = await page.evaluate(() => {
+      const t = document.body.innerText || "";
+      if (/로그인 또는 가입하기|Instagram으로 계속하기|사용자 이름으로 로그인|Log in or sign up/i.test(t)) return true;
+      return false;
+    });
+    if (hasLoginPrompt) return false;
+    // 로그인된 신호: 새 글 작성 버튼 등.
+    const composer = await page.$('[aria-label="새로운 스레드 게시물"], svg[aria-label*="새 글"], a[href="/compose"], [aria-label*="프로필"]');
+    return !!composer;
   } catch { return false; }
 }
 
@@ -89,32 +99,32 @@ export async function threadsLogin(account: string, opts: { id?: string; pw?: st
     if (!(opts.id && opts.pw)) {
       log("[연결] 저장된 비번이 없어요 — 창에서 직접 로그인해 주세요(최대 120초).");
     } else {
-      // ★스레드 '직접 로그인'은 "예기치 못한 오류"가 남(테리 실측) → "Instagram으로 로그인"을 눌러 인스타 폼에서 로그인.
-      log("[연결] 'Instagram으로 로그인' 버튼 찾는 중…");
-      const igBtn = page.locator('div[role="button"]:has-text("Instagram"), a:has-text("Instagram"), button:has-text("Instagram"), [role="button"]:has-text("인스타그램")').first();
-      if (await igBtn.isVisible({ timeout: 8000 }).catch(() => false)) {
-        await igBtn.click().catch(() => {});
-        log("[연결] ✅ 'Instagram으로 로그인' 클릭 — 인스타 로그인 화면으로 이동");
-        await sleep(rd(1500, 2800));
-      } else {
-        log("[연결] ⚠️ 'Instagram으로 로그인' 버튼을 못 찾았어요(DOM 실측 필요). 창을 확인해 주세요.");
+      // ★스레드 로그인 폼은 /login에 바로 있다(실측 2026-10-19): 아이디=autocomplete="username"(ph "사용자 이름, 전화번호 또는 이메일"),
+      //   비번=autocomplete="current-password", 제출=input[type=submit]/"로그인" 버튼. 인스타 경유 안 함(그건 "Instagram으로 계속하기" 별도 옵션).
+      let idField = page.locator('input[autocomplete="username"], input[placeholder*="사용자 이름"], input[name="username"]').first();
+      // 폼이 바로 안 보이면 "사용자 이름으로 로그인" 버튼을 눌러 폼을 띄운다(모달 형태 대응).
+      if (!(await idField.isVisible({ timeout: 4000 }).catch(() => false))) {
+        const unBtn = page.locator('div[role="button"]:has-text("사용자 이름으로 로그인"), button:has-text("사용자 이름으로 로그인"), :has-text("사용자 이름으로 로그인")').first();
+        if (await unBtn.isVisible({ timeout: 3000 }).catch(() => false)) { log("[연결] '사용자 이름으로 로그인' 클릭…"); await unBtn.click().catch(() => {}); await sleep(rd(1200, 2000)); }
+        idField = page.locator('input[autocomplete="username"], input[placeholder*="사용자 이름"], input[name="username"]').first();
       }
-      // 인스타 로그인 폼(퍼블리 검증 셀렉터) — 아이디/비번 입력(사람 타이핑).
-      const idField = page.locator('input[name="username"], input[autocomplete="username"]').first();
-      if (!(await idField.isVisible({ timeout: 15000 }).catch(() => false))) {
-        log("[연결] ⚠️ 아이디 입력칸이 안 보여요 — 이미 인스타 로그인 상태거나 화면이 달라요. 창을 확인해 주세요.");
+      if (!(await idField.isVisible({ timeout: 10000 }).catch(() => false))) {
+        log("[연결] ⚠️ 아이디 입력칸이 안 보여요 — 창에서 직접 로그인해 주세요(최대 120초). 로그인하면 자동 저장됩니다.");
       } else {
         log("[연결] 아이디 입력 중…");
         await idField.click().catch(() => {});
         for (const ch of opts.id) await page.keyboard.type(ch, { delay: rd(70, 160) });
         await sleep(rd(300, 600));
         log("[연결] 비밀번호 입력 중…");
-        const pwField = page.locator('input[name="password"], input[type="password"]').first();
+        const pwField = page.locator('input[autocomplete="current-password"], input[type="password"]').first();
         await pwField.click().catch(() => {});
         for (const ch of opts.pw) await page.keyboard.type(ch, { delay: rd(70, 160) });
         await sleep(rd(300, 600));
         log("[연결] 로그인 제출…");
-        await page.keyboard.press("Enter").catch(() => {});
+        // "로그인" 버튼 클릭(없으면 Enter).
+        const loginBtn = page.locator('div[role="button"]:has-text("로그인"), button:has-text("로그인"), input[type="submit"]').first();
+        if (await loginBtn.isVisible({ timeout: 2000 }).catch(() => false)) await loginBtn.click().catch(() => {});
+        else await page.keyboard.press("Enter").catch(() => {});
         await sleep(3500);
         // 에러 메시지 즉시 확인 — 비번 틀림/아이디 없음 구분(테리 요구).
         const err = await extractLoginError(page);

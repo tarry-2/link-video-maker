@@ -154,6 +154,7 @@
     $('theme-toggle').addEventListener('click', function () { theme = theme === 'light' ? 'dark' : 'light'; localStorage.setItem('ovsec-theme', theme); applyTheme(); });
     // 계정 관리
     $('b-acct-add').addEventListener('click', function () { var f = $('acct-form'); f.style.display = f.style.display === 'none' ? 'block' : 'none'; });
+    $('a-pw-eye').addEventListener('click', function () { var i = $('a-pw'); var show = i.type === 'password'; i.type = show ? 'text' : 'password'; this.textContent = show ? '🙈' : '👁'; i.focus(); });
     $('a-save').addEventListener('click', function () {
       var label = $('a-label').value.trim() || 'main', id = $('a-id').value.trim(), pw = $('a-pw').value;
       if (!id || !pw) { alert('아이디와 비밀번호를 입력하세요'); return; }
