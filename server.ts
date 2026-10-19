@@ -647,6 +647,32 @@ function diskReport(topN = 20): {volume: string; usedMB: number | null; dirs: {p
   return {volume: STUDIO_DATA_DIR, usedMB, dirs: out.slice(0, topN)};
 }
 
+// ── 시크릿 봇(스레드 자동 공감댓글) 상태 ──
+//   로컬 맥 봇(secret-bot/)이 /api/secret/poll로 할 일을 받아 실행하고, /api/secret/report로 로그·스샷·카운트를 올린다.
+//   시크릿 탭 UI는 /api/secret/state를 폴링해 그대로 보여준다. 봇↔서버는 OVBOT_TOKEN으로만 통신(숨김 유지).
+type SecretLog = {t: number; m: string; shot?: string};
+type SecretState = {
+  status: 'idle' | 'running' | 'paused' | 'stopped';
+  platform: 'threads';
+  keyword: string; account: string;
+  dailyLimit: number; termSec: number; proxyOn: boolean; visible: boolean;
+  logs: SecretLog[]; count: number; startedAt: number; lastAt: number;
+};
+const SECRET_FILE = path.join(STUDIO_DATA_DIR, 'secret-bot.json');
+const OVBOT_TOKEN = process.env.OVBOT_TOKEN || 'onvideo-secret-bot';
+function defaultSecret(): SecretState {
+  return {status: 'idle', platform: 'threads', keyword: '', account: 'main', dailyLimit: 20, termSec: 180, proxyOn: false, visible: true, logs: [], count: 0, startedAt: 0, lastAt: 0};
+}
+const secretState: SecretState = (() => {
+  try { return {...defaultSecret(), ...JSON.parse(fs.readFileSync(SECRET_FILE, 'utf8'))}; } catch { return defaultSecret(); }
+})();
+function saveSecret() { try { fs.writeFileSync(SECRET_FILE, JSON.stringify(secretState)); } catch {} }
+function secretLog(m: string, shot?: string) {
+  secretState.logs.push({t: Date.now(), m, shot});
+  if (secretState.logs.length > 400) secretState.logs = secretState.logs.slice(-400); // 스샷 많으면 무거워져 상한
+  secretState.lastAt = Date.now(); saveSecret();
+}
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url || '/', `http://localhost:${PORT}`);
   const p = u.pathname;
@@ -657,6 +683,74 @@ const server = http.createServer(async (req, res) => {
     try { v = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || '?'; } catch {}
     return json(res, 200, {version: v});
   }
+  // ── 시크릿 봇 API ──
+  //   UI용(로그인 세션 필요): state 조회 + control(시작/정지/일시정지/이어/취소/로그비우기).
+  if (p === '/api/secret/state' && req.method === 'GET') {
+    if (!authed(req)) return json(res, 401, {error: '인증 필요'});
+    return json(res, 200, secretState);
+  }
+  if (p === '/api/secret/control' && req.method === 'POST') {
+    if (!authed(req)) return json(res, 401, {error: '인증 필요'});
+    const b = await readBody(req);
+    const act = String(b.action || '');
+    if (act === 'start') {
+      secretState.keyword = String(b.keyword || '').trim();
+      if (!secretState.keyword) return json(res, 400, {error: '키워드를 입력하세요'});
+      secretState.dailyLimit = Math.max(1, Math.min(500, Number(b.dailyLimit) || 20));
+      secretState.termSec = Math.max(30, Math.min(3600, Number(b.termSec) || 180));
+      secretState.proxyOn = !!b.proxyOn;
+      secretState.visible = b.visible !== false;
+      secretState.account = String(b.account || 'main').slice(0, 40) || 'main';
+      secretState.status = 'running'; secretState.count = 0; secretState.startedAt = Date.now();
+      secretLog(`▶ 시작 — "${secretState.keyword}" (하루 ${secretState.dailyLimit}개 · 텀 ${secretState.termSec}초 · 프록시 ${secretState.proxyOn ? 'ON' : 'OFF(집 IP)'} · 창보기 ${secretState.visible ? 'ON' : 'OFF'})`);
+    } else if (act === 'pause') { secretState.status = 'paused'; secretLog('⏸ 일시정지'); }
+    else if (act === 'resume') { secretState.status = 'running'; secretLog('▶ 이어하기'); }
+    else if (act === 'stop') { secretState.status = 'stopped'; secretLog('■ 정지'); }
+    else if (act === 'cancel') { secretState.status = 'stopped'; secretState.count = 0; secretLog('✕ 취소'); }
+    else if (act === 'clear') { secretState.logs = []; }
+    else return json(res, 400, {error: '알 수 없는 동작'});
+    saveSecret();
+    return json(res, 200, secretState);
+  }
+  //   봇용(OVBOT_TOKEN 필요): poll(할 일 받기) · report(진행 보고) · gen-comment(AI 공감댓글).
+  if (p === '/api/secret/poll' && req.method === 'GET') {
+    if (u.searchParams.get('token') !== OVBOT_TOKEN) return json(res, 403, {error: 'forbidden'});
+    return json(res, 200, {
+      status: secretState.status, keyword: secretState.keyword, account: secretState.account,
+      dailyLimit: secretState.dailyLimit, termSec: secretState.termSec, proxyOn: secretState.proxyOn,
+      visible: secretState.visible, count: secretState.count,
+    });
+  }
+  if (p === '/api/secret/report' && req.method === 'POST') {
+    if (u.searchParams.get('token') !== OVBOT_TOKEN) return json(res, 403, {error: 'forbidden'});
+    const b = await readBody(req);
+    if (Array.isArray(b.logs)) for (const l of b.logs) secretLog(String(l.m ?? l), l.shot);
+    else if (b.m) secretLog(String(b.m), b.shot);
+    if (typeof b.count === 'number') { secretState.count = b.count; saveSecret(); }
+    if (b.status && ['running', 'paused', 'stopped', 'idle'].includes(b.status)) { secretState.status = b.status; saveSecret(); }
+    return json(res, 200, {status: secretState.status});
+  }
+  if (p === '/api/secret/gen-comment' && req.method === 'POST') {
+    if (u.searchParams.get('token') !== OVBOT_TOKEN) return json(res, 403, {error: 'forbidden'});
+    const b = await readBody(req);
+    const postText = String(b.postText || '').slice(0, 1000);
+    const k = pipelineKeys();
+    if (!k.gemini.length || !postText) return json(res, 200, {comment: ''});
+    const prompt = `너는 스레드(Threads) 유저다. 아래 '남이 쓴 글'에 달 짧고 자연스러운 '공감 댓글' 하나를 만들어라.
+글: "${postText}"
+[규칙]
+- 진짜 사람이 공감해서 다는 말투. 1~2문장, 40자 안팎으로 짧게.
+- 그 글만의 '구체적 디테일'에 반응(영혼 없는 "공감돼요" 금지).
+- 홍보·링크·해시태그·이모지 범벅·복붙티 금지. 글 톤(반말/존댓말)에 맞춰.
+JSON만: {"comment":"..."}`;
+    let comment = '';
+    try {
+      const raw = await geminiGenerate(k.gemini, prompt, {json: true, maxTokens: 300, temperature: 0.9});
+      comment = String(JSON.parse(raw.replace(/```json|```/g, '').trim()).comment || '').slice(0, 200);
+    } catch {}
+    return json(res, 200, {comment});
+  }
+
   // ── 로그인 상태 확인 ──
   if (p === '/api/auth') return json(res, 200, {required: passwordSet(), ok: authed(req)});
   // ── 로그인 ──
