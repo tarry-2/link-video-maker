@@ -164,12 +164,22 @@ export async function threadsSearch(account: string, keyword: string, opts: { li
     log(`[스레드] "${keyword}" 검색 중…`);
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     await sleep(rd(1500, 2500));
+    // ★내 계정 username 알아내기 — 프로필 링크(사이드바 "프로필" 또는 내 아바타 href=/@내아이디)에서.
+    //   이걸로 '내 글'은 검색 결과에서 제외한다(테리: 봇이 내 글에 댓글 다는 사고 방지).
+    const myUser = await page.evaluate(() => {
+      const a = document.querySelector('a[href^="/@"][role="link"], a[aria-label*="프로필"][href^="/@"]') as HTMLAnchorElement | null;
+      // 네비게이션의 프로필 링크들 중 하나(보통 여러 /@링크 중 내 것). 가장 흔한 /@xxx를 못 특정하면 빈값.
+      const links = Array.from(document.querySelectorAll('nav a[href^="/@"], [role="navigation"] a[href^="/@"]')) as HTMLAnchorElement[];
+      const nav = links[0] || a;
+      const m = nav && nav.getAttribute("href")?.match(/^\/@([^/?]+)/);
+      return m ? m[1] : "";
+    }).catch(() => "");
+    if (myUser) log(`[스레드] (내 계정 @${myUser} — 내 글은 건너뜁니다)`);
     // 스크롤로 더 로드(무한 스크롤) — best effort.
     for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, 1400); await sleep(rd(700, 1200)); }
-    const items = await page.evaluate((max: number) => {
+    const items = await page.evaluate((args: { max: number; me: string }) => {
       const out: { author: string; text: string; url: string }[] = [];
       const seen = new Set<string>();
-      // 🔴 TODO(실측): 글 카드 루트 셀렉터. 지금은 permalink(/@user/post/) 링크를 기준으로 수집(추정).
       const links = Array.from(document.querySelectorAll('a[href*="/post/"]')) as HTMLAnchorElement[];
       for (const a of links) {
         const href = a.href;
@@ -178,12 +188,13 @@ export async function threadsSearch(account: string, keyword: string, opts: { li
         const text = (card?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 400);
         const am = href.match(/\/@([^/]+)\//); const author = am ? am[1] : "";
         if (!text) continue;
+        if (args.me && author && author.toLowerCase() === args.me.toLowerCase()) continue; // 내 글 제외
         seen.add(href);
         out.push({ author, text, url: href });
-        if (out.length >= max) break;
+        if (out.length >= args.max) break;
       }
       return out;
-    }, limit as number);
+    }, { max: limit, me: myUser });
     log(`[스레드] ${items.length}개 글 확보.`);
     return { ok: true, items };
   } catch (e: any) {
