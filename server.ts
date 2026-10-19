@@ -658,6 +658,9 @@ type SecretState = {
   keyword: string; account: string;
   accounts: SecretAcct[];
   dailyLimit: number; termSec: number; proxyOn: boolean; visible: boolean;
+  // 공감 활동 토글(테리: 체크한 대로만) — 좋아요·댓글·팔로우 + 댓글 소스(AI/정해진 문구 로테이션).
+  doLike: boolean; doComment: boolean; doFollow: boolean;
+  commentMode: 'ai' | 'fixed'; fixedComments: string[];
   logs: SecretLog[]; count: number; startedAt: number; lastAt: number;
 };
 const SECRET_FILE = path.join(STUDIO_DATA_DIR, 'secret-bot.json');
@@ -665,7 +668,8 @@ const OVBOT_TOKEN = process.env.OVBOT_TOKEN || 'onvideo-secret-bot';
 // ★비번은 '디스크에 저장하지 않는다' — UI가 계정 추가하면 여기(메모리)에 담아 봇이 poll로 1회 가져가고 즉시 지운다.
 let secretPendingLogin: {label: string; id: string; pw: string} | null = null;
 function defaultSecret(): SecretState {
-  return {status: 'idle', platform: 'threads', keyword: '', account: 'main', accounts: [], dailyLimit: 20, termSec: 180, proxyOn: false, visible: true, logs: [], count: 0, startedAt: 0, lastAt: 0};
+  return {status: 'idle', platform: 'threads', keyword: '', account: 'main', accounts: [], dailyLimit: 20, termSec: 180, proxyOn: false, visible: true,
+    doLike: true, doComment: true, doFollow: false, commentMode: 'ai', fixedComments: [], logs: [], count: 0, startedAt: 0, lastAt: 0};
 }
 const secretState: SecretState = (() => {
   try { return {...defaultSecret(), ...JSON.parse(fs.readFileSync(SECRET_FILE, 'utf8'))}; } catch { return defaultSecret(); }
@@ -705,8 +709,18 @@ const server = http.createServer(async (req, res) => {
       secretState.proxyOn = !!b.proxyOn;
       secretState.visible = b.visible !== false;
       secretState.account = String(b.account || 'main').slice(0, 40) || 'main';
+      secretState.doLike = b.doLike !== false;
+      secretState.doComment = b.doComment !== false;
+      secretState.doFollow = !!b.doFollow;
+      secretState.commentMode = b.commentMode === 'fixed' ? 'fixed' : 'ai';
+      secretState.fixedComments = Array.isArray(b.fixedComments)
+        ? b.fixedComments.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 50)
+        : String(b.fixedComments || '').split(/\n+/).map((s) => s.trim()).filter(Boolean).slice(0, 50);
+      if (secretState.doComment && secretState.commentMode === 'fixed' && !secretState.fixedComments.length)
+        return json(res, 400, {error: '정해진 문구를 한 줄에 하나씩 입력하세요'});
       secretState.status = 'running'; secretState.count = 0; secretState.startedAt = Date.now();
-      secretLog(`▶ 시작 — "${secretState.keyword}" (하루 ${secretState.dailyLimit}개 · 텀 ${secretState.termSec}초 · 프록시 ${secretState.proxyOn ? 'ON' : 'OFF(집 IP)'} · 창보기 ${secretState.visible ? 'ON' : 'OFF'})`);
+      const acts = [secretState.doLike && '좋아요', secretState.doComment && `댓글(${secretState.commentMode === 'ai' ? 'AI' : '정해진문구'})`, secretState.doFollow && '팔로우'].filter(Boolean).join('+') || '없음';
+      secretLog(`▶ 시작 — "${secretState.keyword}" · 활동 ${acts} (하루 ${secretState.dailyLimit}개 · 텀 ${secretState.termSec}초 · 프록시 ${secretState.proxyOn ? 'ON' : 'OFF(집 IP)'} · 창보기 ${secretState.visible ? 'ON' : 'OFF'})`);
     } else if (act === 'pause') { secretState.status = 'paused'; secretLog('⏸ 일시정지'); }
     else if (act === 'resume') { secretState.status = 'running'; secretLog('▶ 이어하기'); }
     else if (act === 'stop') { secretState.status = 'stopped'; secretLog('■ 정지'); }
@@ -755,6 +769,8 @@ const server = http.createServer(async (req, res) => {
       status: secretState.status, keyword: secretState.keyword, account: secretState.account,
       dailyLimit: secretState.dailyLimit, termSec: secretState.termSec, proxyOn: secretState.proxyOn,
       visible: secretState.visible, count: secretState.count,
+      doLike: secretState.doLike, doComment: secretState.doComment, doFollow: secretState.doFollow,
+      commentMode: secretState.commentMode, fixedComments: secretState.fixedComments,
       accounts: secretState.accounts, pendingLogin: pend,
     });
   }

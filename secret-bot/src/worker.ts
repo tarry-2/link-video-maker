@@ -1,7 +1,7 @@
 // 폴링 워커 — 온비디오(클라우드) 작업큐를 폴링해 스레드 공감댓글을 실행한다.
 //   poll(할 일) → 로그인 확인 → 키워드 검색 → 글마다 AI 공감댓글 생성 요청 → 댓글 등록 → report(로그·스샷·카운트).
 //   사람처럼: 글 사이 랜덤 텀, 하루 한도, 정지/일시정지 즉시 반영. (control-tower poll-worker 패턴)
-import { threadsLogin, threadsSearch, threadsComment, threadsSessionExists } from "./threads";
+import { threadsLogin, threadsSearch, threadsEngage, threadsSessionExists } from "./threads";
 import { sleep, ProxyOpt } from "./browser";
 
 const BASE = (process.env.OVBOT_BASE || "https://video.xn--zk5biyyw.com").replace(/\/$/, "");
@@ -11,6 +11,8 @@ type Job = {
   status: "idle" | "running" | "paused" | "stopped";
   keyword: string; account: string; dailyLimit: number; termSec: number;
   proxyOn: boolean; visible: boolean; count: number;
+  doLike?: boolean; doComment?: boolean; doFollow?: boolean;
+  commentMode?: "ai" | "fixed"; fixedComments?: string[];
   accounts?: { label: string; username: string; loggedIn: boolean }[];
   pendingLogin?: { label: string; id: string; pw: string } | null;
 };
@@ -35,6 +37,7 @@ async function genComment(postText: string): Promise<string> {
 
 const done = new Set<string>(); // 이번 가동에서 이미 댓글 단 글(중복 방지)
 let kwIdx = 0; // 여러 키워드 라운드로빈 인덱스
+let fixedIdx = 0; // 정해진 문구 로테이션 인덱스
 
 // 세션 확인만 — 자동 로그인은 '계정 추가(pendingLogin)' 경로가 담당한다(퍼블리식).
 async function ensureLogin(account: string): Promise<boolean> {
@@ -84,13 +87,29 @@ export async function loop(): Promise<void> {
       done.add(post.url);
 
       await log(`📄 글 발견 @${post.author}: "${post.text.slice(0, 40)}…"`);
-      const comment = await genComment(post.text);
-      if (!comment) { await log("   (댓글 생성 실패 — 건너뜀)"); continue; }
-      await log(`   💬 "${comment}"`);
 
-      const r = await threadsComment({ account: job.account, postUrl: post.url, text: comment, visible: job.visible, proxy, log });
-      if (r.ok) { count++; await report({ logs: [{ m: `   ✅ 등록 완료 (${count}/${job.dailyLimit})`, shot: r.shot }], count }); }
-      else { await report({ logs: [{ m: `   ⚠️ 실패: ${r.reason || ""}`, shot: r.shot }] }); }
+      // 댓글 내용 결정(토글): AI 자동 or 정해진 문구 로테이션.
+      let comment: string | null = null;
+      if (job.doComment !== false) {
+        if (job.commentMode === "fixed") {
+          const fc = job.fixedComments || [];
+          if (fc.length) { comment = fc[fixedIdx % fc.length]; fixedIdx++; }
+        } else {
+          comment = await genComment(post.text);
+          if (!comment) await log("   (AI 댓글 생성 실패 — 댓글 없이 진행)");
+        }
+        if (comment) await log(`   💬 "${comment}"`);
+      }
+      // 활동 아무것도 안 하면 건너뜀.
+      if (!job.doLike && !job.doFollow && !comment) { await log("   (할 활동 없음 — 건너뜀)"); continue; }
+
+      const r = await threadsEngage({ account: job.account, postUrl: post.url, visible: job.visible, proxy, log,
+        doLike: job.doLike !== false, doFollow: !!job.doFollow, comment });
+      if (r.ok) {
+        count++;
+        const did = [r.liked && "👍", r.followed && "➕", r.commented && "💬"].filter(Boolean).join("");
+        await report({ logs: [{ m: `   ✅ 완료 ${did} (${count}/${job.dailyLimit})`, shot: r.shot }], count });
+      } else { await report({ logs: [{ m: `   ⚠️ 실패: ${r.reason || ""}`, shot: r.shot }] }); }
 
       // 사람처럼 랜덤 텀(기본 termSec ~ 1.5배)
       const wait = job.termSec * 1000 + Math.floor(Math.random() * job.termSec * 500);

@@ -24,7 +24,8 @@
     el.addEventListener('click', function () { el.classList.toggle('on'); });
     return { on: function () { return el.classList.contains('on'); }, set: function (v) { el.classList.toggle('on', !!v); } };
   }
-  var tgProxy, tgVisible;
+  var tgProxy, tgVisible, tgLike, tgComment, tgFollow;
+  var commentMode = 'ai';
 
   // ── API ──
   function api(path, body) {
@@ -125,8 +126,23 @@
   // ── 폴링 ──
   var timer = null;
   function tick() { api('/api/secret/state').then(function (s) { if (s && !s.error) render(s); }); }
+  function setCommentMode(m) {
+    commentMode = m;
+    $('cm-ai').style.borderColor = m === 'ai' ? 'var(--neon)' : 'var(--line)';
+    $('cm-ai').style.color = m === 'ai' ? 'var(--neon)' : 'var(--tx)';
+    $('cm-fixed').style.borderColor = m === 'fixed' ? 'var(--neon)' : 'var(--line)';
+    $('cm-fixed').style.color = m === 'fixed' ? 'var(--neon)' : 'var(--tx)';
+    $('fixed-box').style.display = m === 'fixed' ? 'block' : 'none';
+  }
+  function syncCommentBox() { $('comment-box').style.display = tgComment.on() ? 'block' : 'none'; }
+
   function start() {
     tgProxy = bindToggle('tg-proxy'); tgVisible = bindToggle('tg-visible');
+    tgLike = bindToggle('tg-like'); tgComment = bindToggle('tg-comment'); tgFollow = bindToggle('tg-follow');
+    $('tg-comment').addEventListener('click', syncCommentBox);
+    $('cm-ai').addEventListener('click', function () { setCommentMode('ai'); });
+    $('cm-fixed').addEventListener('click', function () { setCommentMode('fixed'); });
+    setCommentMode('ai'); syncCommentBox();
     $('b-start').addEventListener('click', function () {
       var kw = $('f-keyword').value.trim();
       if (!kw) { $('f-keyword').focus(); return; }
@@ -134,6 +150,8 @@
         keyword: kw, account: ($('f-acct-sel').value || 'main'),
         dailyLimit: +$('f-limit').value || 20, termSec: +$('f-term').value || 180,
         proxyOn: tgProxy.on(), visible: tgVisible.on(),
+        doLike: tgLike.on(), doComment: tgComment.on(), doFollow: tgFollow.on(),
+        commentMode: commentMode, fixedComments: $('f-fixed').value,
       });
     });
     $('b-pause').addEventListener('click', function () { control('pause'); });

@@ -191,44 +191,65 @@ export async function threadsSearch(account: string, keyword: string, opts: { li
   } finally { await context.close().catch(() => {}); }
 }
 
-// 글에 공감 댓글(답글) 등록. 단계별 steps 기록 + 등록 직후 스샷.
-//   ★실측(2026-10-19): 스레드 글 페이지엔 답글 입력창(contenteditable, placeholder "님에게 답글 남기기...")이
-//   하단에 '바로' 있다(별도 reply 버튼 클릭 불필요). 게시 버튼 텍스트는 정확히 "게시"("게시물 인용/옵션"과 구분 필요).
-export async function threadsComment(opts: { account: string; postUrl: string; text: string; visible?: boolean; proxy?: ProxyOpt; log?: Log }): Promise<CommentResult> {
+// 글에 공감 활동 — 좋아요·팔로우·댓글을 '토글대로' 한 페이지에서 수행(테리: 체크한 것만).
+//   ★실측(2026-10-19): 좋아요=svg[aria-label="좋아요"], 팔로우=버튼 텍스트 "팔로우"(정확, "팔로잉" 구분),
+//   댓글="답글" 영역 열고 입력 후 게시 버튼 텍스트 정확히 "게시"("게시물 인용/옵션" 구분).
+export async function threadsEngage(opts: {
+  account: string; postUrl: string; visible?: boolean; proxy?: ProxyOpt; log?: Log;
+  doLike?: boolean; doFollow?: boolean; comment?: string | null; // comment null/빈값=댓글 안 함
+}): Promise<CommentResult & { liked?: boolean; followed?: boolean; commented?: boolean }> {
   const log = opts.log || (() => {});
   const steps: string[] = [];
   const context = await launchProfile(opts.account, opts.visible !== false, opts.proxy);
+  let liked = false, followed = false, commented = false;
   try {
     const page = await context.newPage();
     if (opts.visible !== false) await page.bringToFront().catch(() => {});
     await page.goto(opts.postUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
     steps.push("글 페이지 열기✅"); await sleep(rd(1500, 2500));
     if (!(await isLoggedIn(page))) { return { ok: false, reason: "세션 만료 — 재로그인 필요", steps, shot: await shot(page) }; }
-    // 1) 답글 입력창(placeholder "답글 남기기") — 글 페이지에 바로 있음. 없으면 "답글" 버튼으로 연다(폴백).
-    let editor = page.locator('[contenteditable="true"][aria-placeholder*="답글"], [contenteditable="true"][data-placeholder*="답글"], div[aria-label*="답글 남기기"] [contenteditable="true"]').first();
-    if (!(await editor.isVisible({ timeout: 4000 }).catch(() => false))) {
-      const rb = page.locator('div[role="button"]:has-text("답글"), [aria-label*="답글"]').first();
-      if (await rb.isVisible({ timeout: 2000 }).catch(() => false)) { await rb.click().catch(() => {}); await sleep(rd(700, 1200)); }
-      editor = page.locator('[contenteditable="true"]').last();
+
+    // 1) 좋아요(공감) — 이미 눌렀으면 aria-label이 "좋아요 취소"라 안 잡힘 → 자연 스킵.
+    if (opts.doLike) {
+      const like = page.locator('svg[aria-label="좋아요"]').first();
+      if (await like.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await like.click().catch(() => {}); liked = true; steps.push("좋아요✅"); await sleep(rd(500, 1000));
+        log("[스레드] 👍 좋아요");
+      } else { log("[스레드] (이미 좋아요했거나 버튼 없음)"); }
     }
-    if (!(await editor.isVisible({ timeout: 4000 }).catch(() => false))) {
-      return { ok: false, reason: "댓글 입력창을 못 찾음", steps, shot: await shot(page) };
+
+    // 2) 팔로우 — "팔로우" 정확 매칭(이미 "팔로잉"이면 스킵). 글 작성자 팔로우.
+    if (opts.doFollow) {
+      const fb = page.locator('div[role="button"]:text-is("팔로우"), button:text-is("팔로우")').first();
+      if (await fb.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await fb.click().catch(() => {}); followed = true; steps.push("팔로우✅"); await sleep(rd(600, 1100));
+        log("[스레드] ➕ 팔로우");
+      } else { log("[스레드] (이미 팔로잉이거나 버튼 없음)"); }
     }
-    // 2) 입력(사람 타이핑)
-    await editor.click().catch(() => {});
-    for (const ch of opts.text) await page.keyboard.type(ch, { delay: rd(30, 90) });
-    steps.push("댓글 입력✅"); await sleep(rd(600, 1100));
-    // 3) 게시(정확히 "게시" — "게시물 인용/옵션" 제외)
-    const postBtn = page.locator('div[role="button"]:text-is("게시"), button:text-is("게시")').first();
-    if (!(await postBtn.isVisible({ timeout: 4000 }).catch(() => false))) {
-      return { ok: false, reason: "게시 버튼을 못 찾음", steps, shot: await shot(page) };
+
+    // 3) 댓글 — "답글" 영역 열고 입력 후 "게시".
+    if (opts.comment && opts.comment.trim()) {
+      const rb = page.locator('div[role="button"]:has-text("답글"), svg[aria-label="답글"]').first();
+      if (await rb.isVisible({ timeout: 3000 }).catch(() => false)) { await rb.click().catch(() => {}); await sleep(rd(900, 1500)); }
+      const editor = page.locator('[contenteditable="true"]').last();
+      if (!(await editor.isVisible({ timeout: 4000 }).catch(() => false))) {
+        return { ok: false, reason: "댓글 입력창을 못 찾음", steps, shot: await shot(page), liked, followed };
+      }
+      await editor.click().catch(() => {});
+      for (const ch of opts.comment) await page.keyboard.type(ch, { delay: rd(30, 90) });
+      steps.push("댓글 입력✅"); await sleep(rd(600, 1100));
+      const postBtn = page.locator('div[role="button"]:text-is("게시"), button:text-is("게시")').first();
+      if (!(await postBtn.isVisible({ timeout: 4000 }).catch(() => false))) {
+        return { ok: false, reason: "게시 버튼을 못 찾음", steps, shot: await shot(page), liked, followed };
+      }
+      await postBtn.click().catch(() => {}); commented = true; steps.push("게시✅"); await sleep(rd(2000, 3200));
+      log("[스레드] 💬 댓글 게시");
     }
-    await postBtn.click().catch(() => {}); steps.push("게시 클릭✅"); await sleep(rd(2000, 3200));
+
     const s = await shot(page);
-    log(`[스레드] ✅ 댓글 등록: ${opts.postUrl}`);
-    return { ok: true, url: opts.postUrl, steps, shot: s };
+    return { ok: true, url: opts.postUrl, steps, shot: s, liked, followed, commented };
   } catch (e: any) {
-    return { ok: false, reason: e?.message || String(e), steps };
+    return { ok: false, reason: e?.message || String(e), steps, liked, followed };
   } finally { await context.close().catch(() => {}); }
 }
 
