@@ -47,6 +47,7 @@
   }
   function render(s) {
     if (!s || !s.status) return;
+    if (s.accounts) renderAccounts(s.accounts, s.account);
     var running = s.status === 'running', paused = s.status === 'paused';
     var led = $('led'); led.className = 'led' + (running ? ' on' : paused ? ' pause' : '');
     $('st-badge').textContent = running ? '가동중' : paused ? '일시정지' : (s.status === 'stopped' ? '정지' : '대기');
@@ -85,6 +86,31 @@
   }
   function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
 
+  // ── 테마(라이트/다크) ──
+  var theme = localStorage.getItem('ovsec-theme') || 'dark';
+  function applyTheme() { document.body.setAttribute('data-theme', theme); var b = $('theme-toggle'); if (b) b.textContent = theme === 'light' ? '☀' : '☾'; }
+
+  // ── 계정 목록 렌더(변경 있을 때만) ──
+  var lastAccJson = '';
+  function renderAccounts(accs, sel) {
+    accs = accs || [];
+    var key = JSON.stringify(accs) + '|' + (sel || '');
+    if (key === lastAccJson) return; // 변경 없으면 skip(select 조작 방해 방지)
+    lastAccJson = key;
+    var selEl = $('f-acct-sel');
+    if (document.activeElement !== selEl) {
+      selEl.innerHTML = accs.length
+        ? accs.map(function (a) { return '<option value="' + esc(a.label) + '"' + (a.label === sel ? ' selected' : '') + '>' + esc(a.label) + (a.loggedIn ? ' ✓' : ' (로그인 필요)') + '</option>'; }).join('')
+        : '<option value="">계정 없음 — 아래에서 추가하세요</option>';
+    }
+    $('acct-list').innerHTML = accs.map(function (a) {
+      return '<div style="display:flex;align-items:center;gap:8px;font-size:11px;padding:3px 0">' +
+        '<span style="color:' + (a.loggedIn ? 'var(--neon)' : 'var(--amber)') + '">' + (a.loggedIn ? '●' : '○') + '</span>' +
+        '<span style="flex:1;color:var(--tx)">' + esc(a.label) + ' <i style="color:var(--dim2);font-style:normal">@' + esc(a.username || '') + '</i></span>' +
+        '<button data-rm="' + esc(a.label) + '" style="background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:10px;padding:2px 7px">삭제</button></div>';
+    }).join('');
+  }
+
   // ── 모달(크게보기) ──
   function bigImg(src) { $('modal-body').innerHTML = '<img src="' + src + '">'; $('modal').classList.add('show'); }
   function bigText(txt) { $('modal-body').innerHTML = '<pre></pre>'; $('modal-body').querySelector('pre').textContent = txt; $('modal').classList.add('show'); }
@@ -102,7 +128,7 @@
       var kw = $('f-keyword').value.trim();
       if (!kw) { $('f-keyword').focus(); return; }
       control('start', {
-        keyword: kw, account: $('f-account').value.trim() || 'main',
+        keyword: kw, account: ($('f-acct-sel').value || 'main'),
         dailyLimit: +$('f-limit').value || 20, termSec: +$('f-term').value || 180,
         proxyOn: tgProxy.on(), visible: tgVisible.on(),
       });
@@ -119,6 +145,25 @@
     $('b-big').addEventListener('click', function () {
       var txt = Array.prototype.map.call($('log').querySelectorAll('.ln'), function (ln) { return ln.textContent; }).join('\n');
       bigText(txt);
+    });
+    // 테마
+    applyTheme();
+    $('theme-toggle').addEventListener('click', function () { theme = theme === 'light' ? 'dark' : 'light'; localStorage.setItem('ovsec-theme', theme); applyTheme(); });
+    // 계정 관리
+    $('b-acct-add').addEventListener('click', function () { var f = $('acct-form'); f.style.display = f.style.display === 'none' ? 'block' : 'none'; });
+    $('a-save').addEventListener('click', function () {
+      var label = $('a-label').value.trim() || 'main', id = $('a-id').value.trim(), pw = $('a-pw').value;
+      if (!id || !pw) { alert('아이디와 비밀번호를 입력하세요'); return; }
+      api('/api/secret/account/add', { label: label, id: id, pw: pw }).then(function (r) {
+        if (r.error) { alert(r.error); return; }
+        $('a-pw').value = ''; $('a-id').value = ''; $('acct-form').style.display = 'none';
+        lastAccJson = ''; renderAccounts(r.accounts, r.account);
+      });
+    });
+    $('f-acct-sel').addEventListener('change', function () { if (this.value) api('/api/secret/account/select', { label: this.value }); });
+    $('acct-list').addEventListener('click', function (e) {
+      var rm = e.target.getAttribute && e.target.getAttribute('data-rm');
+      if (rm && confirm('"' + rm + '" 계정을 뺄까요? (세션도 끊겨요)')) api('/api/secret/account/remove', { label: rm }).then(function (r) { lastAccJson = ''; renderAccounts(r.accounts, r.account); });
     });
     tick();
     timer = setInterval(tick, 2000);

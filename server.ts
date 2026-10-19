@@ -651,17 +651,21 @@ function diskReport(topN = 20): {volume: string; usedMB: number | null; dirs: {p
 //   로컬 맥 봇(secret-bot/)이 /api/secret/poll로 할 일을 받아 실행하고, /api/secret/report로 로그·스샷·카운트를 올린다.
 //   시크릿 탭 UI는 /api/secret/state를 폴링해 그대로 보여준다. 봇↔서버는 OVBOT_TOKEN으로만 통신(숨김 유지).
 type SecretLog = {t: number; m: string; shot?: string};
+type SecretAcct = {label: string; username: string; loggedIn: boolean};
 type SecretState = {
   status: 'idle' | 'running' | 'paused' | 'stopped';
   platform: 'threads';
   keyword: string; account: string;
+  accounts: SecretAcct[];
   dailyLimit: number; termSec: number; proxyOn: boolean; visible: boolean;
   logs: SecretLog[]; count: number; startedAt: number; lastAt: number;
 };
 const SECRET_FILE = path.join(STUDIO_DATA_DIR, 'secret-bot.json');
 const OVBOT_TOKEN = process.env.OVBOT_TOKEN || 'onvideo-secret-bot';
+// ★비번은 '디스크에 저장하지 않는다' — UI가 계정 추가하면 여기(메모리)에 담아 봇이 poll로 1회 가져가고 즉시 지운다.
+let secretPendingLogin: {label: string; id: string; pw: string} | null = null;
 function defaultSecret(): SecretState {
-  return {status: 'idle', platform: 'threads', keyword: '', account: 'main', dailyLimit: 20, termSec: 180, proxyOn: false, visible: true, logs: [], count: 0, startedAt: 0, lastAt: 0};
+  return {status: 'idle', platform: 'threads', keyword: '', account: 'main', accounts: [], dailyLimit: 20, termSec: 180, proxyOn: false, visible: true, logs: [], count: 0, startedAt: 0, lastAt: 0};
 }
 const secretState: SecretState = (() => {
   try { return {...defaultSecret(), ...JSON.parse(fs.readFileSync(SECRET_FILE, 'utf8'))}; } catch { return defaultSecret(); }
@@ -712,13 +716,46 @@ const server = http.createServer(async (req, res) => {
     saveSecret();
     return json(res, 200, secretState);
   }
+  //   계정 관리(로그인 필요) — 추가(아이디/비번)·선택·삭제. ★비번은 디스크 저장 안 하고 봇에 1회 전달.
+  if (p === '/api/secret/account/add' && req.method === 'POST') {
+    if (!authed(req)) return json(res, 401, {error: '인증 필요'});
+    const b = await readBody(req);
+    const label = (String(b.label || '').trim().slice(0, 40)) || 'main';
+    const id = String(b.id || '').trim(); const pw = String(b.pw || '');
+    if (!id || !pw) return json(res, 400, {error: '아이디와 비밀번호를 입력하세요'});
+    secretPendingLogin = {label, id, pw};
+    if (!secretState.accounts.some((a) => a.label === label)) secretState.accounts.push({label, username: id, loggedIn: false});
+    else secretState.accounts = secretState.accounts.map((a) => a.label === label ? {...a, username: id, loggedIn: false} : a);
+    secretState.account = label;
+    secretLog(`🔑 계정 "${label}" 로그인 요청 — 봇이 자동 로그인합니다(2단계 인증은 창에서).`);
+    saveSecret();
+    return json(res, 200, {accounts: secretState.accounts, account: secretState.account});
+  }
+  if (p === '/api/secret/account/select' && req.method === 'POST') {
+    if (!authed(req)) return json(res, 401, {error: '인증 필요'});
+    const b = await readBody(req);
+    secretState.account = (String(b.label || 'main').slice(0, 40)) || 'main';
+    saveSecret();
+    return json(res, 200, {account: secretState.account, accounts: secretState.accounts});
+  }
+  if (p === '/api/secret/account/remove' && req.method === 'POST') {
+    if (!authed(req)) return json(res, 401, {error: '인증 필요'});
+    const b = await readBody(req);
+    const label = String(b.label || '');
+    secretState.accounts = secretState.accounts.filter((a) => a.label !== label);
+    if (secretState.account === label) secretState.account = secretState.accounts[0]?.label || 'main';
+    saveSecret();
+    return json(res, 200, {accounts: secretState.accounts, account: secretState.account});
+  }
   //   봇용(OVBOT_TOKEN 필요): poll(할 일 받기) · report(진행 보고) · gen-comment(AI 공감댓글).
   if (p === '/api/secret/poll' && req.method === 'GET') {
     if (u.searchParams.get('token') !== OVBOT_TOKEN) return json(res, 403, {error: 'forbidden'});
+    const pend = secretPendingLogin; secretPendingLogin = null; // 1회 전달(소비) — 봇이 받아 자동 로그인
     return json(res, 200, {
       status: secretState.status, keyword: secretState.keyword, account: secretState.account,
       dailyLimit: secretState.dailyLimit, termSec: secretState.termSec, proxyOn: secretState.proxyOn,
       visible: secretState.visible, count: secretState.count,
+      accounts: secretState.accounts, pendingLogin: pend,
     });
   }
   if (p === '/api/secret/report' && req.method === 'POST') {
@@ -728,6 +765,11 @@ const server = http.createServer(async (req, res) => {
     else if (b.m) secretLog(String(b.m), b.shot);
     if (typeof b.count === 'number') { secretState.count = b.count; saveSecret(); }
     if (b.status && ['running', 'paused', 'stopped', 'idle'].includes(b.status)) { secretState.status = b.status; saveSecret(); }
+    if (b.loginDone && b.loginDone.label) { // 봇이 자동 로그인 끝냄 → 계정 로그인 상태 갱신
+      const ld = b.loginDone;
+      secretState.accounts = secretState.accounts.map((a) => a.label === ld.label ? {...a, loggedIn: !!ld.ok, username: ld.username || a.username} : a);
+      saveSecret();
+    }
     return json(res, 200, {status: secretState.status});
   }
   if (p === '/api/secret/gen-comment' && req.method === 'POST') {

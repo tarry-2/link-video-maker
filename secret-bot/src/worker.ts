@@ -11,6 +11,8 @@ type Job = {
   status: "idle" | "running" | "paused" | "stopped";
   keyword: string; account: string; dailyLimit: number; termSec: number;
   proxyOn: boolean; visible: boolean; count: number;
+  accounts?: { label: string; username: string; loggedIn: boolean }[];
+  pendingLogin?: { label: string; id: string; pw: string } | null;
 };
 
 function api(path: string, init?: any): Promise<Response> {
@@ -20,7 +22,7 @@ function api(path: string, init?: any): Promise<Response> {
 async function poll(): Promise<Job | null> {
   try { return await (await api("/api/secret/poll")).json(); } catch { return null; }
 }
-async function report(body: { logs?: { m: string; shot?: string }[]; count?: number; status?: string }): Promise<void> {
+async function report(body: { logs?: { m: string; shot?: string }[]; count?: number; status?: string; loginDone?: { label: string; ok: boolean; username: string } }): Promise<void> {
   try { await api("/api/secret/report", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); } catch {}
 }
 const log = (m: string, shot?: string) => report({ logs: [{ m, shot }] });
@@ -32,16 +34,12 @@ async function genComment(postText: string): Promise<string> {
 }
 
 const done = new Set<string>(); // 이번 가동에서 이미 댓글 단 글(중복 방지)
-let loggedIn = false;
 
-async function ensureLogin(account: string, visible: boolean, proxy: ProxyOpt): Promise<boolean> {
-  if (loggedIn && threadsSessionExists(account)) return true;
-  await log("🔑 스레드 로그인 확인 중…");
-  const r = await threadsLogin(account, { visible, proxy, log });
-  loggedIn = r.ok;
-  if (!r.ok) await report({ logs: [{ m: "⚠️ 로그인 필요 — 창에서 로그인해 주세요: " + (r.reason || "") }], status: "paused" });
-  else if (r.already) await log("🔑 세션 유지됨(재로그인 안 함).");
-  return r.ok;
+// 세션 확인만 — 자동 로그인은 '계정 추가(pendingLogin)' 경로가 담당한다(퍼블리식).
+async function ensureLogin(account: string): Promise<boolean> {
+  if (threadsSessionExists(account)) return true;
+  await report({ logs: [{ m: `⚠️ "${account}" 로그인 안 됨 — 콘솔에서 계정(아이디·비번)을 추가하세요.` }], status: "paused" });
+  return false;
 }
 
 export async function loop(): Promise<void> {
@@ -49,10 +47,19 @@ export async function loop(): Promise<void> {
   for (;;) {
     const job = await poll();
     if (!job) { await sleep(5000); continue; }
-    if (job.status !== "running") { await sleep(4000); continue; }
 
+    // 계정 추가(자동 로그인 요청) — 아이디/비번으로 봇이 자동 로그인(2단계 인증은 창에서). 퍼블리식.
+    if (job.pendingLogin && job.pendingLogin.id) {
+      const { label, id, pw } = job.pendingLogin;
+      await log(`🔑 계정 "${label}" 자동 로그인 시작…`);
+      const r = await threadsLogin(label, { id, pw, visible: job.visible !== false, proxy: { on: job.proxyOn, seed: label }, log });
+      await report({ loginDone: { label, ok: r.ok, username: id }, logs: [{ m: r.ok ? `✅ "${label}" 로그인 성공 — 세션 유지됩니다` : `⚠️ "${label}" 로그인 실패: ${r.reason || ""}` }] });
+      continue;
+    }
+
+    if (job.status !== "running") { await sleep(4000); continue; }
     const proxy: ProxyOpt = { on: job.proxyOn, seed: job.account };
-    if (!(await ensureLogin(job.account, job.visible, proxy))) { await sleep(8000); continue; }
+    if (!(await ensureLogin(job.account))) { await sleep(8000); continue; }
 
     if (job.count >= job.dailyLimit) {
       await report({ logs: [{ m: `✅ 오늘 목표(${job.dailyLimit}개) 달성 — 쉬는 중` }], status: "paused" });
