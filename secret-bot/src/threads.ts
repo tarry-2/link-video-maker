@@ -220,21 +220,34 @@ export async function threadsEngage(opts: {
       await editor.click().catch(() => {});
       for (const ch of opts.comment) await page.keyboard.type(ch, { delay: rd(30, 90) });
       steps.push("댓글 입력✅"); await sleep(rd(600, 1100));
-      // ★실측(2026-10-19): 입력하면 전송 버튼이 "답글"(Reply) 텍스트로 나타난다("게시"는 새 글용·폴백).
-      //   "답글2/답글1"(카운트)와 구분하려 정확 매칭(:text-is). 입력창 근처의 것(.last()).
-      const postBtn = page.locator('div[role="button"]:text-is("답글"), button:text-is("답글"), div[role="button"]:text-is("게시")').last();
-      if (!(await postBtn.isVisible({ timeout: 4000 }).catch(() => false))) {
-        return { ok: false, reason: "전송(답글) 버튼을 못 찾음", steps, shot: await shot(page), liked, followed };
+      // ★실측(2026-10-19): 전송은 ①Cmd+Enter(스레드 데스크톱 단축키) 먼저 → ②실패 시 전송 버튼 클릭.
+      //   전송 버튼 = div[role=button]에 svg[aria-label="답글"] 든 것(텍스트 매칭 불가, "답글2" 카운트와 구분).
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+Enter" : "Control+Enter").catch(() => {});
+      await sleep(rd(1500, 2500));
+      // 입력창이 비었으면(aria-placeholder 상태 복귀) 전송 성공으로 간주.
+      let sent = await page.evaluate(() => {
+        const ce = document.querySelector('[contenteditable="true"][aria-placeholder*="답글"]') as HTMLElement | null;
+        return !ce || (ce.textContent || "").trim().length === 0;
+      }).catch(() => false);
+      if (!sent) {
+        const postBtn = page.locator('div[role="button"]:has(svg[aria-label="답글"])').last();
+        if (await postBtn.isVisible({ timeout: 3000 }).catch(() => false)) { await postBtn.click().catch(() => {}); await sleep(rd(1800, 2800)); sent = true; }
       }
-      await postBtn.click().catch(() => {}); commented = true; steps.push("댓글 전송✅"); await sleep(rd(2000, 3200));
+      if (!sent) { return { ok: false, reason: "댓글 전송 버튼을 못 찾음", steps, shot: await shot(page), liked, followed }; }
+      commented = true; steps.push("댓글 전송✅");
       log("[스레드] 💬 댓글 게시");
     }
 
-    // 2) 좋아요(공감) — 이미 눌렀으면 aria-label이 "좋아요 취소"라 안 잡힘 → 자연 스킵.
+    // 2) 좋아요(공감) — ★실측: svg[aria-label="좋아요"]는 <a role="link"> 안에 있다. svg 직접 클릭은 토글 안 됨
+    //   → 조상 a(링크)를 클릭해야 실제로 눌린다. 이미 눌렀으면 aria-label이 "좋아요 취소"라 안 잡힘 → 자연 스킵.
     if (opts.doLike) {
-      const like = page.locator('svg[aria-label="좋아요"]').first();
-      if (await like.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await like.click().catch(() => {}); liked = true; steps.push("좋아요✅"); await sleep(rd(500, 1000));
+      const likeLink = page.locator('a[role="link"]:has(svg[aria-label="좋아요"]), div[role="button"]:has(svg[aria-label="좋아요"])').first();
+      const likeSvg = page.locator('svg[aria-label="좋아요"]').first();
+      if (await likeLink.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await likeLink.click().catch(() => {}); liked = true; steps.push("좋아요✅"); await sleep(rd(600, 1100));
+        log("[스레드] 👍 좋아요");
+      } else if (await likeSvg.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await likeSvg.click({ force: true }).catch(() => {}); liked = true; steps.push("좋아요✅"); await sleep(rd(600, 1100));
         log("[스레드] 👍 좋아요");
       } else { log("[스레드] (이미 좋아요했거나 버튼 없음)"); }
     }
