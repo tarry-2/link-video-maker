@@ -191,8 +191,9 @@ export async function threadsSearch(account: string, keyword: string, opts: { li
   } finally { await context.close().catch(() => {}); }
 }
 
-// 글에 공감 댓글(답글) 등록. 단계별 steps 기록(테리 "1~100 다 보여야") + 등록 직후 스샷.
-//   🔴 TODO(실측): reply 버튼·댓글 입력창·게시 버튼 셀렉터 확정.
+// 글에 공감 댓글(답글) 등록. 단계별 steps 기록 + 등록 직후 스샷.
+//   ★실측(2026-10-19): 스레드 글 페이지엔 답글 입력창(contenteditable, placeholder "님에게 답글 남기기...")이
+//   하단에 '바로' 있다(별도 reply 버튼 클릭 불필요). 게시 버튼 텍스트는 정확히 "게시"("게시물 인용/옵션"과 구분 필요).
 export async function threadsComment(opts: { account: string; postUrl: string; text: string; visible?: boolean; proxy?: ProxyOpt; log?: Log }): Promise<CommentResult> {
   const log = opts.log || (() => {});
   const steps: string[] = [];
@@ -201,22 +202,28 @@ export async function threadsComment(opts: { account: string; postUrl: string; t
     const page = await context.newPage();
     if (opts.visible !== false) await page.bringToFront().catch(() => {});
     await page.goto(opts.postUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    steps.push("글 페이지 열기✅"); await sleep(rd(1200, 2200));
+    steps.push("글 페이지 열기✅"); await sleep(rd(1500, 2500));
     if (!(await isLoggedIn(page))) { return { ok: false, reason: "세션 만료 — 재로그인 필요", steps, shot: await shot(page) }; }
-    // 1) reply 버튼
-    const replyBtn = await page.$('svg[aria-label*="답글"], svg[aria-label*="Reply"], [aria-label*="Reply"]');
-    if (!replyBtn) { return { ok: false, reason: "답글 버튼을 못 찾음(DOM 실측 필요)", steps, shot: await shot(page) }; }
-    await replyBtn.click().catch(() => {}); steps.push("답글 열기✅"); await sleep(rd(600, 1100));
-    // 2) 댓글 입력(사람 타이핑)
-    const editor = await page.$('[contenteditable="true"], textarea');
-    if (!editor) { return { ok: false, reason: "댓글 입력창을 못 찾음(DOM 실측 필요)", steps, shot: await shot(page) }; }
+    // 1) 답글 입력창(placeholder "답글 남기기") — 글 페이지에 바로 있음. 없으면 "답글" 버튼으로 연다(폴백).
+    let editor = page.locator('[contenteditable="true"][aria-placeholder*="답글"], [contenteditable="true"][data-placeholder*="답글"], div[aria-label*="답글 남기기"] [contenteditable="true"]').first();
+    if (!(await editor.isVisible({ timeout: 4000 }).catch(() => false))) {
+      const rb = page.locator('div[role="button"]:has-text("답글"), [aria-label*="답글"]').first();
+      if (await rb.isVisible({ timeout: 2000 }).catch(() => false)) { await rb.click().catch(() => {}); await sleep(rd(700, 1200)); }
+      editor = page.locator('[contenteditable="true"]').last();
+    }
+    if (!(await editor.isVisible({ timeout: 4000 }).catch(() => false))) {
+      return { ok: false, reason: "댓글 입력창을 못 찾음", steps, shot: await shot(page) };
+    }
+    // 2) 입력(사람 타이핑)
     await editor.click().catch(() => {});
     for (const ch of opts.text) await page.keyboard.type(ch, { delay: rd(30, 90) });
-    steps.push("댓글 입력✅"); await sleep(rd(500, 900));
-    // 3) 게시
-    const postBtn = await page.$('[aria-label*="게시"], div[role="button"]:has-text("게시"), div[role="button"]:has-text("Post")');
-    if (!postBtn) { return { ok: false, reason: "게시 버튼을 못 찾음(DOM 실측 필요)", steps, shot: await shot(page) }; }
-    await postBtn.click().catch(() => {}); steps.push("게시 클릭✅"); await sleep(rd(1500, 2500));
+    steps.push("댓글 입력✅"); await sleep(rd(600, 1100));
+    // 3) 게시(정확히 "게시" — "게시물 인용/옵션" 제외)
+    const postBtn = page.locator('div[role="button"]:text-is("게시"), button:text-is("게시")').first();
+    if (!(await postBtn.isVisible({ timeout: 4000 }).catch(() => false))) {
+      return { ok: false, reason: "게시 버튼을 못 찾음", steps, shot: await shot(page) };
+    }
+    await postBtn.click().catch(() => {}); steps.push("게시 클릭✅"); await sleep(rd(2000, 3200));
     const s = await shot(page);
     log(`[스레드] ✅ 댓글 등록: ${opts.postUrl}`);
     return { ok: true, url: opts.postUrl, steps, shot: s };

@@ -34,6 +34,7 @@ async function genComment(postText: string): Promise<string> {
 }
 
 const done = new Set<string>(); // 이번 가동에서 이미 댓글 단 글(중복 방지)
+let kwIdx = 0; // 여러 키워드 라운드로빈 인덱스
 
 // 세션 확인만 — 자동 로그인은 '계정 추가(pendingLogin)' 경로가 담당한다(퍼블리식).
 async function ensureLogin(account: string): Promise<boolean> {
@@ -66,8 +67,12 @@ export async function loop(): Promise<void> {
       await sleep(10000); continue;
     }
 
-    await log(`🔍 "${job.keyword}" 글 찾는 중…`);
-    const s = await threadsSearch(job.account, job.keyword, { limit: 15, proxy, log });
+    // 여러 키워드(쉼표/줄바꿈/중점으로 구분) → 돌아가며 하나씩 검색.
+    const kws = job.keyword.split(/[,\n·]+/).map((k) => k.trim()).filter(Boolean);
+    const kw = kws.length ? kws[kwIdx % kws.length] : job.keyword;
+    kwIdx++;
+    await log(`🔍 "${kw}" 글 찾는 중…${kws.length > 1 ? ` (키워드 ${kws.length}개 순환)` : ""}`);
+    const s = await threadsSearch(job.account, kw, { limit: 15, proxy, log });
     if (!s.ok || !s.items.length) { await log("글을 못 찾음 — 잠시 후 다시 검색"); await sleep(15000); continue; }
 
     let count = job.count;
