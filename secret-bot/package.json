@@ -1,0 +1,26 @@
+{
+  "name": "onvideo-secret-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "온비디오 시크릿 봇 — 스레드/인스타 키워드 자동 공감댓글(로컬 맥 headed 브라우저). 온비디오 작업큐를 폴링해 실행.",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "ts-node-dev --respawn src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "setup": "npm install && npx playwright install chromium"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "playwright": "^1.43.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.5",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5"
+  }
+}
