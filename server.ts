@@ -769,7 +769,7 @@ JSON만: {"comment":"..."}`;
 
   // ── 🔒 기능 페이지 진입 차단 — 비번(세션) 없으면 랜딩으로. 대시보드·기능·관리 화면은 로그인 필수. ──
   //   랜딩(/)·로그인/버전 API·정적 자산·포트폴리오 쇼케이스(랜딩 캐러셀용)는 공개로 남긴다.
-  const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html', '/create', '/create.html', '/shop', '/shop.html']);
+  const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html', '/create', '/create.html', '/shop', '/shop.html', '/secret', '/secret.html']);
   if (GATED_PAGES.has(p) && !authed(req)) {
     res.writeHead(302, {Location: '/?login=1'});
     return res.end();
@@ -793,6 +793,11 @@ JSON만: {"comment":"..."}`;
     return serveFile(res, path.join(ROOT, 'web', 'shop.html'), 'text/html; charset=utf-8');
   if (p === '/shop.js')
     return serveFile(res, path.join(ROOT, 'web', 'shop.js'), 'application/javascript; charset=utf-8');
+  // 🔒 시크릿 콘솔(숨김) — 로그인(GATED) + UI 345678 이중 게이트. 메뉴에 노출 안 함.
+  if (p === '/secret' || p === '/secret.html')
+    return serveFile(res, path.join(ROOT, 'web', 'secret.html'), 'text/html; charset=utf-8');
+  if (p === '/secret.js')
+    return serveFile(res, path.join(ROOT, 'web', 'secret.js'), 'application/javascript; charset=utf-8');
   if (p === '/highlight.js')
     return serveFile(res, path.join(ROOT, 'web', 'highlight.js'), 'application/javascript; charset=utf-8');
   if (p === '/create.js')

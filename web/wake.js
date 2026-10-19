@@ -55,3 +55,20 @@
     sync,
   };
 })();
+
+// 🔒 숨김 콘솔 진입 — 왼쪽 로고(.wordmark) 7번 연속 클릭 → 코드(345678) → /secret. (다른 사용자 눈엔 안 띔)
+(function () {
+  let n = 0, t = 0;
+  document.addEventListener('click', function (e) {
+    const w = e.target && e.target.closest && e.target.closest('.wordmark');
+    if (!w) return;
+    const now = Date.now();
+    if (now - t > 1200) n = 0; // 1.2초 넘게 끊기면 카운트 리셋
+    t = now; n++;
+    if (n >= 7) {
+      n = 0;
+      const c = prompt('접근 코드');
+      if (c === '345678') location.href = '/secret';
+    }
+  });
+})();

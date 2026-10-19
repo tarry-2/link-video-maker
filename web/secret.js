@@ -1,0 +1,126 @@
+// 시크릿 콘솔 — /api/secret/state 폴링해 상태·로그·스샷을 그리고, control로 봇을 조작한다.
+//   진입 게이트(345678)는 클라이언트 표시용(숨김 유지). 실제 데이터는 온비디오 로그인 세션으로 보호됨.
+(function () {
+  'use strict';
+  var GATE = '345678';
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ── 게이트 ──
+  function openApp() { $('gate').style.display = 'none'; $('app').style.display = 'block'; start(); }
+  (function gate() {
+    if (sessionStorage.getItem('ovsec') === GATE) { openApp(); return; }
+    var inp = $('gate-pw'), err = $('gate-err');
+    inp.focus();
+    inp.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      if (inp.value === GATE) { sessionStorage.setItem('ovsec', GATE); openApp(); }
+      else { err.textContent = '코드가 맞지 않습니다'; inp.value = ''; setTimeout(function () { err.textContent = ''; }, 1800); }
+    });
+  })();
+
+  // ── 토글 ──
+  function bindToggle(id) {
+    var el = $(id);
+    el.addEventListener('click', function () { el.classList.toggle('on'); });
+    return { on: function () { return el.classList.contains('on'); }, set: function (v) { el.classList.toggle('on', !!v); } };
+  }
+  var tgProxy, tgVisible;
+
+  // ── API ──
+  function api(path, body) {
+    return fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {})
+      .then(function (r) { return r.json().catch(function () { return {}; }); });
+  }
+  function control(action, extra) {
+    var body = Object.assign({ action: action }, extra || {});
+    return api('/api/secret/control', body).then(function (s) { if (s && s.status) render(s); return s; });
+  }
+
+  // ── 렌더 ──
+  var lastLogN = -1, lastShot = '';
+  function fmtTime(t) { var d = new Date(t); function p(n){return (n<10?'0':'')+n;} return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); }
+  function classOf(m) {
+    if (/✅|등록 완료|성공|달성/.test(m)) return 'ok';
+    if (/⚠️|실패|필요|못 찾/.test(m)) return 'warn';
+    if (/✕|오류|에러/.test(m)) return 'err';
+    return '';
+  }
+  function render(s) {
+    if (!s || !s.status) return;
+    var running = s.status === 'running', paused = s.status === 'paused';
+    var led = $('led'); led.className = 'led' + (running ? ' on' : paused ? ' pause' : '');
+    $('st-badge').textContent = running ? '가동중' : paused ? '일시정지' : (s.status === 'stopped' ? '정지' : '대기');
+    $('st-count').textContent = (s.count || 0) + (s.dailyLimit ? ' / ' + s.dailyLimit : '');
+
+    // 버튼 활성/비활성
+    $('b-start').disabled = running;
+    $('b-pause').disabled = !running;
+    $('b-resume').disabled = !paused;
+    $('b-stop').disabled = s.status === 'stopped' || s.status === 'idle';
+    $('b-cancel').disabled = s.status === 'idle';
+
+    // 로그(증분 렌더)
+    var logs = s.logs || [];
+    if (logs.length !== lastLogN) {
+      var box = $('log');
+      var atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+      box.innerHTML = logs.map(function (l) {
+        var img = l.shot ? '<img src="' + l.shot + '" data-big="' + l.shot + '" alt="캡처">' : '';
+        return '<div class="ln ' + classOf(l.m) + '"><span class="ts">' + fmtTime(l.t) + '</span><span class="mg">' + esc(l.m) + img + '</span></div>';
+      }).join('');
+      if (atBottom) box.scrollTop = box.scrollHeight;
+      lastLogN = logs.length;
+      // 최근 스샷 → 뷰어
+      var withShot = logs.filter(function (l) { return l.shot; });
+      if (withShot.length) {
+        var last = withShot[withShot.length - 1];
+        if (last.shot !== lastShot) {
+          lastShot = last.shot;
+          $('shot').style.display = 'block';
+          $('shot-img').src = last.shot;
+          $('shot-cap').textContent = fmtTime(last.t) + ' · 봇 캡처';
+        }
+      }
+    }
+  }
+  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+
+  // ── 모달(크게보기) ──
+  function bigImg(src) { $('modal-body').innerHTML = '<img src="' + src + '">'; $('modal').classList.add('show'); }
+  function bigText(txt) { $('modal-body').innerHTML = '<pre></pre>'; $('modal-body').querySelector('pre').textContent = txt; $('modal').classList.add('show'); }
+  $('modal-x').addEventListener('click', function () { $('modal').classList.remove('show'); });
+  $('modal').addEventListener('click', function (e) { if (e.target === $('modal')) $('modal').classList.remove('show'); });
+  $('log').addEventListener('click', function (e) { var b = e.target.getAttribute && e.target.getAttribute('data-big'); if (b) bigImg(b); });
+  $('shot-img').addEventListener('click', function () { if (lastShot) bigImg(lastShot); });
+
+  // ── 폴링 ──
+  var timer = null;
+  function tick() { api('/api/secret/state').then(function (s) { if (s && !s.error) render(s); }); }
+  function start() {
+    tgProxy = bindToggle('tg-proxy'); tgVisible = bindToggle('tg-visible');
+    $('b-start').addEventListener('click', function () {
+      var kw = $('f-keyword').value.trim();
+      if (!kw) { $('f-keyword').focus(); return; }
+      control('start', {
+        keyword: kw, account: $('f-account').value.trim() || 'main',
+        dailyLimit: +$('f-limit').value || 20, termSec: +$('f-term').value || 180,
+        proxyOn: tgProxy.on(), visible: tgVisible.on(),
+      });
+    });
+    $('b-pause').addEventListener('click', function () { control('pause'); });
+    $('b-resume').addEventListener('click', function () { control('resume'); });
+    $('b-stop').addEventListener('click', function () { control('stop'); });
+    $('b-cancel').addEventListener('click', function () { if (confirm('취소하면 오늘 카운트도 0으로 돌아가요. 계속할까요?')) control('cancel'); });
+    $('b-clear').addEventListener('click', function () { control('clear'); lastLogN = -1; });
+    $('b-copy').addEventListener('click', function () {
+      var txt = Array.prototype.map.call($('log').querySelectorAll('.ln'), function (ln) { return ln.textContent; }).join('\n');
+      navigator.clipboard.writeText(txt).then(function () { var b = $('b-copy'); b.textContent = '복사됨!'; setTimeout(function () { b.textContent = '⧉ 복사'; }, 1200); });
+    });
+    $('b-big').addEventListener('click', function () {
+      var txt = Array.prototype.map.call($('log').querySelectorAll('.ln'), function (ln) { return ln.textContent; }).join('\n');
+      bigText(txt);
+    });
+    tick();
+    timer = setInterval(tick, 2000);
+  }
+})();
