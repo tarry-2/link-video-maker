@@ -98,23 +98,45 @@ export async function ytdlpAvailable(): Promise<boolean> {
   try { await run(YTDLP, ['--version'], () => {}, 10000); return true; } catch { return false; }
 }
 
-// 유튜브 다운로드 시도 클라이언트 순서(쿠키/프록시 환경에 맞는 순).
-const CLIENTS = ['web_embedded', 'default', 'android', 'ios', 'web_safari'];
+// 유튜브 다운로드 시도 클라이언트 순서(2026 권장 + 로컬 실측 반영).
+//   default=yt-dlp 기본세트(2026.02~ android_vr,web,web_safari)로 PO토큰 자동 / tv_simply·mweb=봇체크를
+//   덜 받는 클라 / android=PO토큰 불필요 폴백 / web_safari=최후. 잘 막히는 web·ios·tv(쿠키충돌)는 뺐다.
+//   ★교훈(2026-10-19): 유튜브가 봇로직을 바꾸면 '전 클라'가 한꺼번에 막힌다 — 그땐 클라 순서가 아니라
+//   yt-dlp 버전(Dockerfile 부팅 자동 최신화)·PO토큰·프록시 IP가 원인이다. 아래 buildCommon이 그 상태를 로그로 노출.
+const CLIENTS = ['default', 'tv_simply', 'mweb', 'android', 'web_safari'];
 
-// 공통 yt-dlp 인자 + 쿠키/프록시/PO토큰 상태 로그(작업당 1회). 반환 {common, cookieUsed}.
-async function buildCommon(log: (m: string) => void): Promise<{common: string[]; cookieUsed: boolean}> {
+// ★쿠키는 '필수'가 아니라 '보조' — 쿠키 없이 전 클라이언트를 먼저 시도하고, 다 막힐 때만 쿠키를 붙여 재시도한다.
+//   (유튜브 로그인 쿠키는 일반 브라우저에서 뽑으면 하루이틀이면 만료되고, 데이터센터/프록시 IP에선 계정 플래그
+//    위험까지 있다. 2026 yt-dlp는 PO토큰+클라이언트로 쿠키 없이도 대부분 뚫리므로, 쿠키 만료에 제작이 안 죽게 한다.)
+type Attempt = {client: string; cookie: boolean};
+function buildAttempts(cookieAvailable: boolean): Attempt[] {
+  const noCk: Attempt[] = CLIENTS.map((c) => ({client: c, cookie: false}));
+  return cookieAvailable ? [...noCk, ...CLIENTS.map((c) => ({client: c, cookie: true}))] : noCk;
+}
+// 한 시도(client+쿠키여부)에 해당하는 yt-dlp 추가 인자.
+function attArgs(a: Attempt, cookieArgs: string[]): string[] {
+  const ca = a.client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${a.client}`];
+  return a.cookie ? [...ca, ...cookieArgs] : ca;
+}
+function attLabel(a: Attempt): string { return a.cookie ? `${a.client}+쿠키` : a.client; }
+
+// 공통 yt-dlp 인자 + 쿠키/프록시/PO토큰 상태 로그(작업당 1회).
+//   ★common에는 쿠키를 넣지 않는다(cookieArgs로 분리) — 각 시도가 쿠키 유무를 직접 고른다.
+async function buildCommon(log: (m: string) => void): Promise<{common: string[]; cookieArgs: string[]; cookieAvailable: boolean; attempts: Attempt[]}> {
   // -4=IPv4 강제(데이터센터 IPv6가 더 자주 차단됨), --sleep-requests=레이트리밋 완화.
   const common = ['--no-playlist', '--no-warnings', '--retries', '5', '--socket-timeout', '30', '--sleep-requests', '1', '-4'];
+  // ★yt-dlp 버전을 로그로 — '전 클라 봇차단'의 1순위 원인은 오래된 yt-dlp다(유튜브 변경을 못 따라감). 서버에서 바로 보이게.
+  try { const v = (await run(YTDLP, ['--version'], () => {}, 8000)).trim(); if (v) log(`[하이라이트] ⚙️ yt-dlp ${v}`); } catch {}
   const ckFile = process.env.YT_COOKIES_FILE;
-  const cookieUsed = !!(ckFile && fs.existsSync(ckFile));
-  if (cookieUsed) {
+  const cookieAvailable = !!(ckFile && fs.existsSync(ckFile));
+  const cookieArgs = cookieAvailable ? ['--cookies', ckFile!] : [];
+  if (cookieAvailable) {
     let age = '';
     try { const days = (Date.now() - fs.statSync(ckFile!).mtimeMs) / 86400000;
       age = days < 1 ? `${Math.round(days * 24)}시간 전 등록` : `${Math.floor(days)}일 전 등록`; } catch {}
-    common.push('--cookies', ckFile!);
-    log(`[하이라이트] 🔑 유튜브 쿠키 사용 (${age}).`);
+    log(`[하이라이트] 🔑 쿠키 준비됨 (${age}) — 먼저 쿠키 없이 시도하고, 막히면 쿠키를 씁니다.`);
   } else {
-    log('[하이라이트] ⚠️ 유튜브 쿠키 없음 — 설정에서 쿠키를 등록하세요.');
+    log('[하이라이트] 🔑 쿠키 없음 — PO토큰+클라이언트로 시도합니다(대부분 쿠키 없이 됩니다).');
   }
   if (process.env.YT_PROXY) {
     common.push('--proxy', process.env.YT_PROXY);
@@ -123,11 +145,14 @@ async function buildCommon(log: (m: string) => void): Promise<{common: string[];
   } else {
     log('[하이라이트] 🌐 프록시 미사용 (데이터센터 IP 직접 — 봇차단 가능).');
   }
+  // PO토큰 제공자 — 단순 생존(ping)뿐 아니라 버전까지 확인(버전이 안 뜨면 토큰 발급이 깨졌을 수 있음).
   try {
-    await fetch('http://127.0.0.1:4416/ping', {signal: AbortSignal.timeout(3000)});
-    log('[하이라이트] 🛡 PO토큰 서버 작동중.');
-  } catch { log('[하이라이트] ⚠️ PO토큰 서버 응답없음.'); }
-  return {common, cookieUsed};
+    const r = await fetch('http://127.0.0.1:4416/ping', {signal: AbortSignal.timeout(3000)});
+    let ver = '';
+    try { const j: any = await r.json(); if (j?.version) ver = ` v${j.version}`; } catch {}
+    log(`[하이라이트] 🛡 PO토큰 서버 작동중${ver}.`);
+  } catch { log('[하이라이트] ⚠️ PO토큰 서버 응답없음 — 봇차단 위험이 커집니다(재배포가 필요할 수 있어요).'); }
+  return {common, cookieArgs, cookieAvailable, attempts: buildAttempts(cookieAvailable)};
 }
 
 // ── 아카이브 긁기 — 특정 유튜브 채널(KBS 아카이브 등) 안에서 주제(키워드)로 영상 목록을 가져온다. ──
@@ -137,7 +162,7 @@ export type ArchiveVideo = {id: string; title: string; duration: number; viewCou
 export async function searchArchiveChannel(
   channel: string, query: string, max: number, log: (m: string) => void, offset = 0,
 ): Promise<ArchiveVideo[]> {
-  const {common} = await buildCommon(log);
+  const {common, cookieArgs} = await buildCommon(log);
   const flat = common.filter((a) => a !== '--no-playlist'); // 채널 검색은 플레이리스트라 --no-playlist 제거
   // channel이 'id:UCxxxx'면 채널ID로(한글 핸들이라 @검색이 안 되는 소스), 아니면 @핸들로.
   const isId = channel.startsWith('id:');
@@ -152,11 +177,22 @@ export async function searchArchiveChannel(
   let lastErr = '';
   const fetchFrom = async (path: string): Promise<any[]> => {
     const url = base + path;
-    try {
-      const out = await ytRun([...flat, '--flat-playlist', '--playlist-start', String(start), '--playlist-end', String(end), '-J', url], () => {}, 60000);
+    const tryOnce = async (extra: string[]): Promise<any[]> => {
+      const out = await ytRun([...flat, ...extra, '--flat-playlist', '--playlist-start', String(start), '--playlist-end', String(end), '-J', url], () => {}, 60000);
       const data = JSON.parse(out);
       return Array.isArray(data?.entries) ? data.entries : [];
-    } catch (e: any) { lastErr = (e?.message || '').replace(/\s+/g, ' ').slice(-220); return []; }
+    };
+    try { return await tryOnce([]); } // 1차: 쿠키 없이
+    catch (e: any) {
+      const m = e?.message || '';
+      lastErr = m.replace(/\s+/g, ' ').slice(-220);
+      // 봇차단이고 쿠키가 있으면 쿠키 붙여 1회 더(쿠키 보조 — 다운로드 경로와 동일 원칙).
+      if (cookieArgs.length && /not a bot|Sign in to confirm|cookies|consent/i.test(m)) {
+        try { return await tryOnce(cookieArgs); }
+        catch (e2: any) { lastErr = (e2?.message || '').replace(/\s+/g, ' ').slice(-220); }
+      }
+      return [];
+    }
   };
   log(`[아카이브] "${channel}"에서 "${query || '최신'}" 가져오는 중…${offset ? ` (${start}~${end}번째)` : ''}`);
   let entries: any[] = [];
@@ -184,15 +220,16 @@ export async function searchArchiveChannel(
 // ★메타(영상 길이)+자막만 가볍게 받는다. 통짜 영상은 안 받음 — 프록시(주거용 IP)로 39분 1GB는 느려서 타임아웃.
 //   하이라이트 구간을 정한 뒤 그 구간만 받는다(downloadSection) → 데이터·시간 ~10배↓.
 async function fetchMetaAndSubs(
-  videoId: string, dir: string, log: (m: string) => void, common: string[], cookieUsed: boolean, cancelled?: () => boolean,
+  videoId: string, dir: string, log: (m: string) => void, common: string[], cookieArgs: string[], cancelled?: () => boolean,
 ): Promise<{subText: string; duration: number}> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const base = path.join(dir, 'src');
   log('[하이라이트] 자막·정보 가져오는 중…(가볍게, 영상은 구간만 나중에)');
+  const attempts = buildAttempts(cookieArgs.length > 0);
   let ok = false, lastErr = '', duration = 0;
-  for (const client of CLIENTS) {
+  for (const a of attempts) {
     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
-    const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
+    const ca = attArgs(a, cookieArgs);
     try {
       const out = await ytRun([...common, ...ca, '--skip-download', '--write-subs', '--write-auto-subs',
         '--sub-langs', 'en,ko', '--sub-format', 'vtt', '--print', '%(duration)s', '-o', base + '.%(ext)s', url], log, 120000, undefined, cancelled);
@@ -202,15 +239,15 @@ async function fetchMetaAndSubs(
     } catch (e: any) {
       lastErr = (e?.message || '').slice(0, 200);
       if (/사용자가 중단/.test(lastErr)) throw new Error('사용자가 중단했습니다.');
-      log(`[하이라이트] ${client} 실패: ${lastErr.replace(/\s+/g, ' ').slice(0, 120)} → 다음 방식 시도`);
+      log(`[하이라이트] ${attLabel(a)} 실패: ${lastErr.replace(/\s+/g, ' ').slice(0, 120)} → 다음 방식 시도`);
     }
   }
   if (!ok) {
     const botBlocked = /not a bot|Sign in to confirm|cookies|consent/i.test(lastErr);
-    if (botBlocked && cookieUsed)
-      throw new Error('쿠키를 등록했는데도 유튜브가 막았어요 — 쿠키가 만료됐을 가능성이 커요. 크롬에서 유튜브 로그인 상태로 쿠키를 "새로" 내보내 다시 등록해 주세요. (마지막 사유: ' + lastErr.slice(0, 100) + ')');
+    if (botBlocked && cookieArgs.length > 0)
+      throw new Error('쿠키 없이도, 쿠키로도 전부 막혔어요 — 이건 쿠키 만료보다 프록시 IP가 유튜브에 막혔거나 서버 yt-dlp가 오래됐을 가능성이 큽니다. 재배포(yt-dlp 자동 최신화)로 대부분 풀려요. 그래도 안 되면 시크릿 창에서 쿠키를 새로 내보내 등록해 주세요. (마지막 사유: ' + lastErr.slice(0, 100) + ')');
     if (botBlocked)
-      throw new Error('유튜브가 이 서버를 "봇"으로 보고 막았어요. 쿠키/프록시 설정이 필요합니다. (' + lastErr.slice(0, 100) + ')');
+      throw new Error('유튜브가 이 서버를 "봇"으로 보고 막았어요. 재배포(yt-dlp 최신화)나 쿠키 등록이 필요합니다. (' + lastErr.slice(0, 100) + ')');
     throw new Error('영상 정보 가져오기 실패. ' + lastErr);
   }
   let subText = '';
@@ -226,12 +263,12 @@ async function fetchMetaAndSubs(
 //   얼굴 분석(몇 명·얼마나 퍼졌나)만 할 거라 화질 불필요 → 빠르고 저렴. 실패(봇차단 등)면 null(추천 생략).
 export async function sampleForAnalysis(videoId: string, dir: string, log: (m: string) => void): Promise<string | null> {
   try {
-    const {common} = await buildCommon(() => {});
+    const {common, cookieArgs, attempts} = await buildCommon(() => {});
     const url = `https://www.youtube.com/watch?v=${videoId}`;
     const outBase = path.join(dir, 'sample');
     const find = () => { try { return fs.readdirSync(dir).map((x) => path.join(dir, x)).find((x) => /sample\.(mp4|mkv|webm)$/.test(x)); } catch { return undefined; } };
-    for (const client of CLIENTS) {
-      const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
+    for (const a of attempts) {
+      const ca = attArgs(a, cookieArgs);
       try {
         await ytRun([...common, ...ca, '-f', VFMT(360), ...VSORT,
           '--download-sections', '*30-45', '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], () => {}, 90000);
@@ -245,34 +282,35 @@ export async function sampleForAnalysis(videoId: string, dir: string, log: (m: s
 
 async function downloadSection(
   videoId: string, dir: string, idx: number, start: number, end: number,
-  log: (m: string) => void, common: string[], cancelled?: () => boolean,
+  log: (m: string) => void, common: string[], cookieArgs: string[], cancelled?: () => boolean,
 ): Promise<string> {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const outBase = path.join(dir, `sec-${idx}`);
   const section = `*${Math.max(0, Math.floor(start))}-${Math.ceil(end)}`;
   const findFile = () => fs.readdirSync(dir).map(x => path.join(dir, x)).find(x => new RegExp(`sec-${idx}\\.(mp4|mkv|webm)$`).test(x));
+  const attempts = buildAttempts(cookieArgs.length > 0);
   let lastErr = '';
-  for (const client of CLIENTS) {
+  for (const a of attempts) {
     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
     // 이전 클라 시도가 남긴 (깨졌을 수 있는) 파일 제거 — 다음 시도 결과와 섞여 오인되지 않게.
     const prev = findFile(); if (prev) { try { fs.rmSync(prev, {force: true}); } catch {} }
-    const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
+    const ca = attArgs(a, cookieArgs);
     try {
       await ytRun([...common, ...ca, '-f', VFMT(1080), ...VSORT,
         '--download-sections', section, '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], log, 300000, undefined, cancelled);
     } catch (e: any) {
       lastErr = (e?.message || '').slice(0, 200);
       if (/사용자가 중단/.test(lastErr)) throw new Error('사용자가 중단했습니다.');
-      log(`[하이라이트] ${client} 구간 실패 → 다음 방식 시도`);
+      log(`[하이라이트] ${attLabel(a)} 구간 실패 → 다음 방식 시도`);
       continue;
     }
     // ★다운로드 성공(exit 0)이어도 '영상 트랙이 실제로 있는지' 검증 — 없으면(오디오만/깨짐) 크롭·렌더까지
     //   끌고 가면 "No video stream"으로 터지므로, 여기서 걸러 다음 클라로 재시도한다.
     const f = findFile();
-    if (!f) { lastErr = '다운로드 파일을 찾지 못함'; log(`[하이라이트] ${client} 구간: 파일 없음 → 다음 방식 시도`); continue; }
+    if (!f) { lastErr = '다운로드 파일을 찾지 못함'; log(`[하이라이트] ${attLabel(a)} 구간: 파일 없음 → 다음 방식 시도`); continue; }
     if (!(await hasVideoStream(f))) {
       lastErr = '받은 파일에 영상 트랙이 없음(오디오만/깨짐)';
-      log(`[하이라이트] ${client} 구간: 받은 파일에 영상이 없어요(깨짐) → 다음 방식 시도`);
+      log(`[하이라이트] ${attLabel(a)} 구간: 받은 파일에 영상이 없어요(깨짐) → 다음 방식 시도`);
       try { fs.rmSync(f, {force: true}); } catch {}
       continue;
     }
@@ -723,7 +761,7 @@ export async function extractHighlights(
   const isLocal = !!opts.localFile; // 본인 업로드 영상(유튜브 다운로드·프록시·쿠키 불필요)
   await fsp.mkdir(dir, {recursive: true});
   stop();
-  let subText = '', dur = 0, common: string[] = [];
+  let subText = '', dur = 0, common: string[] = [], cookieArgs: string[] = [];
   if (isLocal) {
     // 본인 영상: 다운로드/자막 없음 → 길이만 측정하고 균등 분할(자막 없는 유튜브와 동일 처리).
     log('[하이라이트] 내 영상에서 구간을 나눕니다(자막 없이 균등 분할).');
@@ -731,9 +769,9 @@ export async function extractHighlights(
   } else {
     if (!(await ytdlpAvailable())) throw new Error('서버에 yt-dlp가 없습니다(배포 환경 확인 필요).');
     // 1) 쿠키/프록시/PO 준비 + 자막·길이만 가볍게(통짜 다운로드 안 함 — 프록시로 1GB는 타임아웃).
-    const built = await buildCommon(log); common = built.common;
+    const built = await buildCommon(log); common = built.common; cookieArgs = built.cookieArgs;
     stop();
-    const meta = await fetchMetaAndSubs(videoId, dir, log, common, built.cookieUsed, cancelled);
+    const meta = await fetchMetaAndSubs(videoId, dir, log, common, cookieArgs, cancelled);
     subText = meta.subText; dur = meta.duration;
     if (subText) log(`[하이라이트] 자막 확보: ${subText.length}자 — 내용 기반으로 터질 구간을 고릅니다.`);
     else log('[하이라이트] ⚠️ 자막이 없습니다. 자막(대사)이 있는 영상이라야 하이라이트를 고를 수 있어요.');
@@ -752,7 +790,7 @@ export async function extractHighlights(
       log(`[하이라이트] ${i + 1}/${highlights.length} 구간 ${isLocal ? '자르는' : '받는'} 중 (${h.start}s~${h.end}s)…`);
       let raw = isLocal
         ? await cutSectionLocal(opts.localFile!, dir, i, h.start, h.end, cancelled)
-        : await downloadSection(videoId, dir, i, h.start, h.end, log, common, cancelled);
+        : await downloadSection(videoId, dir, i, h.start, h.end, log, common, cookieArgs, cancelled);
       stop();
       // 무음 제거(선택) — 리프레임/크롭 전에 조용한 구간을 잘라 템포를 올린다. 클립이 짧아지므로 end를 실제 길이로 갱신.
       if (opts.removeSilence) { log(`[하이라이트] ${i + 1}/${highlights.length} 무음 구간 정리…`); raw = await tightenSilence(raw, dir, i, log, cancelled); stop(); }
@@ -794,24 +832,24 @@ export async function fetchSourceTranscript(
   // 1) 자막 먼저(가볍고 정확). 있으면 그대로 쓴다.
   try {
     if (await ytdlpAvailable()) {
-      const {common} = await buildCommon(log);
-      const meta = await fetchMetaAndSubs(videoId, dir, log, common, !!process.env.YT_COOKIES_FILE, cancelled);
+      const {common, cookieArgs} = await buildCommon(log);
+      const meta = await fetchMetaAndSubs(videoId, dir, log, common, cookieArgs, cancelled);
       const subClean = (meta.subText || '').replace(/^\[\d+s\]\s*/gm, '').replace(/\s+/g, ' ').trim();
       if (subClean.length > 80) { log(`[재창작] 원본 자막 ${subClean.length}자 확보 — 실제 내용으로 각색합니다.`); return subClean.slice(0, 20000); }
     }
   } catch (e: any) { if (/사용자가 중단/.test(e?.message || '')) throw e; }
   // 2) 자막 없으면 음성만 받아 STT로 전사(서프라이즈 등 '목소리가 전부'인 영상 핵심).
   if (!elevenKey) { log('[재창작] 음성 전사용 키가 없어 제목으로 진행합니다.'); return ''; }
-  const {common} = await buildCommon(log);
+  const {common, cookieArgs, attempts} = await buildCommon(log);
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const outBase = path.join(dir, 'srcaudio');
   const find = () => { try { return fs.readdirSync(dir).map((x) => path.join(dir, x)).find((x) => /srcaudio\.(mp3|m4a|webm|opus)$/.test(x)); } catch { return undefined; } };
   let got = '';
   log('[재창작] 자막이 없어 원본 음성을 받아 글자로 바꿉니다(STT)…');
-  for (const client of CLIENTS) {
+  for (const a of attempts) {
     if (cancelled()) throw new Error('사용자가 중단했습니다.');
     const prev = find(); if (prev) { try { fs.rmSync(prev, {force: true}); } catch {} }
-    const ca = client === 'default' ? [] : ['--extractor-args', `youtube:player_client=${client}`];
+    const ca = attArgs(a, cookieArgs);
     try {
       await ytRun([...common, ...ca, '-f', 'bestaudio/best', '-x', '--audio-format', 'mp3',
         '--download-sections', `*0-${maxSec}`, '-o', outBase + '.%(ext)s', url], () => {}, 240000, undefined, cancelled);

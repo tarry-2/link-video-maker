@@ -8,7 +8,11 @@ RUN apt-get update && apt-get install -y \
   libpango-1.0-0 libcairo2 libcups2 ffmpeg fonts-noto-cjk \
   python3 python3-pip libgl1 libglib2.0-0 curl unzip git \
   && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
-  && chmod a+rx /usr/local/bin/yt-dlp \
+  && chmod a+rwx /usr/local/bin/yt-dlp \
+  # ↑빌드 시점 바이너리를 심고(초기값), 실제 사용 버전은 부팅 때 CMD에서 자동 최신화한다(아래).
+  #   ★이유: 유튜브는 봇차단 로직을 수시로 바꿔서, 고정 버전이면 어느 날 '전 클라이언트'가 한꺼번에 막힌다.
+  #   부팅마다 yt-dlp를 최신으로 올리면 재배포만으로(혹은 자동) 유튜브 변경에 따라붙는다 = 봇차단 영구 대응의 핵심.
+  #   (a+rwx = 부팅 때 self-update가 바이너리를 제자리에 덮어쓸 수 있게 쓰기권한 부여.)
   && rm -rf /var/lib/apt/lists/*
 
 # ★스마트 리프레임(인물 추적 세로변환)용 opencv + YuNet 얼굴감지 모델.
@@ -54,6 +58,7 @@ RUN npx remotion browser ensure
 
 ENV NODE_ENV=production
 EXPOSE 4000
-# PO토큰 제공자 서버를 백그라운드로 먼저 띄우고(4416), 앱을 메인 프로세스로 실행(exec로 시그널 전달).
+# ①yt-dlp 부팅 자동 최신화(유튜브 봇차단 변경에 따라붙기 — 영구 대응의 핵심). 90초 넘거나 실패하면 기존 버전으로 진행.
+# ②PO토큰 제공자 서버를 백그라운드로 띄우고(4416), ③앱을 메인 프로세스로 실행(exec로 시그널 전달).
 #   제공자가 죽어도 앱은 계속 뜨고, 그 경우 yt-dlp는 PO토큰 없이 시도(폴백).
-CMD ["sh", "-c", "node /opt/bgutil/server/build/main.js >/tmp/bgutil.log 2>&1 & exec npx tsx server.ts"]
+CMD ["sh", "-c", "echo '[boot] yt-dlp 자동 최신화…'; timeout 90 yt-dlp -U 2>&1 || echo '[boot] yt-dlp 최신화 건너뜀(기존 버전 사용)'; yt-dlp --version 2>&1 | sed 's/^/[boot] yt-dlp /'; node /opt/bgutil/server/build/main.js >/tmp/bgutil.log 2>&1 & exec npx tsx server.ts"]
