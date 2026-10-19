@@ -123,6 +123,23 @@
   $('log').addEventListener('click', function (e) { var b = e.target.getAttribute && e.target.getAttribute('data-big'); if (b) bigImg(b); });
   $('shot-img').addEventListener('click', function () { if (lastShot) bigImg(lastShot); });
 
+  // ── 작업 내역(영구) ──
+  function fmtDate(t) { var d = new Date(t); function p(n){return (n<10?'0':'')+n;} return (d.getMonth()+1)+'/'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes()); }
+  function loadActivities() {
+    api('/api/secret/activities').then(function (r) {
+      if (!r || r.error) return;
+      $('act-today').textContent = '· 오늘 ' + (r.todayCount||0) + '건 (👍' + (r.todayLiked||0) + ' 💬' + (r.todayCommented||0) + ' ➕' + (r.todayFollowed||0) + ')';
+      var acts = r.activities || [];
+      $('act-list').innerHTML = acts.length ? acts.map(function (a) {
+        var badge = [a.liked&&'👍', a.commented&&'💬', a.followed&&'➕'].filter(Boolean).join('');
+        var cmt = a.comment ? '<div style="color:var(--dim);margin-top:2px">💬 ' + esc(a.comment) + '</div>' : '';
+        return '<div style="padding:7px 0;border-bottom:1px solid var(--line)">' +
+          '<span style="color:var(--dim2)">' + fmtDate(a.t) + '</span> ' + badge +
+          ' <a href="' + esc(a.url) + '" target="_blank" style="color:var(--neon2);text-decoration:none">@' + esc(a.author||'글') + ' ↗</a>' + cmt + '</div>';
+      }).join('') : '<div style="color:var(--dim2);padding:12px;text-align:center">아직 작업 내역이 없어요</div>';
+    });
+  }
+
   // ── 폴링 ──
   var timer = null;
   function tick() { api('/api/secret/state').then(function (s) { if (s && !s.error) render(s); }); }
@@ -192,7 +209,9 @@
     });
     // 버전 배지(재배포 확인용)
     fetch('/api/version').then(function (r) { return r.json(); }).then(function (j) { if (j && j.version) $('ver-badge').textContent = 'v' + j.version; }).catch(function () {});
-    tick();
+    $('b-act-refresh').addEventListener('click', loadActivities);
+    tick(); loadActivities();
     timer = setInterval(tick, 2000);
+    setInterval(loadActivities, 10000); // 작업 내역 10초마다 갱신
   }
 })();

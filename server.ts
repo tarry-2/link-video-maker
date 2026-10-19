@@ -652,6 +652,8 @@ function diskReport(topN = 20): {volume: string; usedMB: number | null; dirs: {p
 //   시크릿 탭 UI는 /api/secret/state를 폴링해 그대로 보여준다. 봇↔서버는 OVBOT_TOKEN으로만 통신(숨김 유지).
 type SecretLog = {t: number; m: string; shot?: string};
 type SecretAcct = {label: string; username: string; loggedIn: boolean; lastError?: string};
+// 활동 내역 1건(영구 저장) — 재배포해도 안 날아가게 파일에 적재. 테리: "실제 확인해볼 수 있게" 글 링크 포함.
+type SecretActivity = {t: number; author: string; url: string; comment?: string; liked?: boolean; followed?: boolean; commented?: boolean};
 type SecretState = {
   status: 'idle' | 'running' | 'paused' | 'stopped';
   platform: 'threads';
@@ -675,6 +677,20 @@ const secretState: SecretState = (() => {
   try { return {...defaultSecret(), ...JSON.parse(fs.readFileSync(SECRET_FILE, 'utf8'))}; } catch { return defaultSecret(); }
 })();
 function saveSecret() { try { fs.writeFileSync(SECRET_FILE, JSON.stringify(secretState)); } catch {} }
+
+// ── 활동 내역(영구 저장) — 재배포·봇 재시작해도 유지. 중복 댓글 방지 + "실제 확인" 링크 목록 둘 다 해결.
+const SECRET_ACT_FILE = path.join(STUDIO_DATA_DIR, 'secret-activity.json');
+const secretActs: SecretActivity[] = (() => {
+  try { const a = JSON.parse(fs.readFileSync(SECRET_ACT_FILE, 'utf8')); return Array.isArray(a) ? a : []; } catch { return []; }
+})();
+function saveSecretActs() { try { fs.writeFileSync(SECRET_ACT_FILE, JSON.stringify(secretActs.slice(-2000))); } catch {} }
+// 이미 댓글 단 글 URL 집합(중복 방지) — 댓글을 '실제로 단' 것만(commented).
+function commentedUrlSet(): string[] {
+  const s = new Set<string>();
+  for (const a of secretActs) if (a.commented && a.url) s.add(a.url);
+  return [...s];
+}
+function addSecretAct(a: SecretActivity) { secretActs.push(a); if (secretActs.length > 2000) secretActs.splice(0, secretActs.length - 2000); saveSecretActs(); }
 function secretLog(m: string, shot?: string) {
   secretState.logs.push({t: Date.now(), m, shot});
   if (secretState.logs.length > 400) secretState.logs = secretState.logs.slice(-400); // 스샷 많으면 무거워져 상한
@@ -772,6 +788,20 @@ const server = http.createServer(async (req, res) => {
       doLike: secretState.doLike, doComment: secretState.doComment, doFollow: secretState.doFollow,
       commentMode: secretState.commentMode, fixedComments: secretState.fixedComments,
       accounts: secretState.accounts, pendingLogin: pend,
+      commentedUrls: commentedUrlSet(), // ★봇이 중복 댓글 안 달게 — 이미 댓글 단 글 목록(영구)
+    });
+  }
+  if (p === '/api/secret/activities' && req.method === 'GET') {
+    if (!authed(req)) return json(res, 401, {error: '인증 필요'});
+    // 최근 활동(최신순). 오늘 것 카운트도 함께.
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const today = secretActs.filter((a) => a.t >= todayStart.getTime());
+    return json(res, 200, {
+      activities: secretActs.slice(-300).reverse(),
+      todayCount: today.length,
+      todayLiked: today.filter((a) => a.liked).length,
+      todayCommented: today.filter((a) => a.commented).length,
+      todayFollowed: today.filter((a) => a.followed).length,
     });
   }
   if (p === '/api/secret/report' && req.method === 'POST') {
@@ -785,6 +815,10 @@ const server = http.createServer(async (req, res) => {
       const ld = b.loginDone;
       secretState.accounts = secretState.accounts.map((a) => a.label === ld.label ? {...a, loggedIn: !!ld.ok, username: ld.username || a.username, lastError: ld.ok ? '' : (ld.reason || '로그인 실패')} : a);
       saveSecret();
+    }
+    if (b.activity && b.activity.url) { // 봇이 활동 1건 완료 → 영구 저장(중복방지+내역)
+      const a = b.activity;
+      addSecretAct({t: Date.now(), author: String(a.author || ''), url: String(a.url), comment: a.comment ? String(a.comment) : undefined, liked: !!a.liked, followed: !!a.followed, commented: !!a.commented});
     }
     return json(res, 200, {status: secretState.status});
   }
