@@ -651,7 +651,7 @@ function diskReport(topN = 20): {volume: string; usedMB: number | null; dirs: {p
 //   로컬 맥 봇(secret-bot/)이 /api/secret/poll로 할 일을 받아 실행하고, /api/secret/report로 로그·스샷·카운트를 올린다.
 //   시크릿 탭 UI는 /api/secret/state를 폴링해 그대로 보여준다. 봇↔서버는 OVBOT_TOKEN으로만 통신(숨김 유지).
 type SecretLog = {t: number; m: string; shot?: string};
-type SecretAcct = {label: string; username: string; loggedIn: boolean};
+type SecretAcct = {label: string; username: string; loggedIn: boolean; lastError?: string};
 type SecretState = {
   status: 'idle' | 'running' | 'paused' | 'stopped';
   platform: 'threads';
@@ -765,9 +765,9 @@ const server = http.createServer(async (req, res) => {
     else if (b.m) secretLog(String(b.m), b.shot);
     if (typeof b.count === 'number') { secretState.count = b.count; saveSecret(); }
     if (b.status && ['running', 'paused', 'stopped', 'idle'].includes(b.status)) { secretState.status = b.status; saveSecret(); }
-    if (b.loginDone && b.loginDone.label) { // 봇이 자동 로그인 끝냄 → 계정 로그인 상태 갱신
+    if (b.loginDone && b.loginDone.label) { // 봇이 연결(로그인) 끝냄 → 계정 상태+실패사유 갱신
       const ld = b.loginDone;
-      secretState.accounts = secretState.accounts.map((a) => a.label === ld.label ? {...a, loggedIn: !!ld.ok, username: ld.username || a.username} : a);
+      secretState.accounts = secretState.accounts.map((a) => a.label === ld.label ? {...a, loggedIn: !!ld.ok, username: ld.username || a.username, lastError: ld.ok ? '' : (ld.reason || '로그인 실패')} : a);
       saveSecret();
     }
     return json(res, 200, {status: secretState.status});

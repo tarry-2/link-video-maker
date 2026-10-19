@@ -104,9 +104,12 @@
         : '<option value="">계정 없음 — 아래에서 추가하세요</option>';
     }
     $('acct-list').innerHTML = accs.map(function (a) {
-      return '<div style="display:flex;align-items:center;gap:8px;font-size:11px;padding:3px 0">' +
-        '<span style="color:' + (a.loggedIn ? 'var(--neon)' : 'var(--amber)') + '">' + (a.loggedIn ? '●' : '○') + '</span>' +
-        '<span style="flex:1;color:var(--tx)">' + esc(a.label) + ' <i style="color:var(--dim2);font-style:normal">@' + esc(a.username || '') + '</i></span>' +
+      var st = a.loggedIn ? '<span style="color:var(--neon)">● 연결됨</span>'
+        : (a.lastError ? '<span style="color:var(--red)">❌ ' + esc(a.lastError) + '</span>' : '<span style="color:var(--amber)">○ 연결 안 됨</span>');
+      var relink = a.loggedIn ? '' : '<button data-relink="' + esc(a.label) + '" style="background:none;border:1px solid var(--line);color:var(--neon);border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:10px;padding:2px 7px">다시 연결</button>';
+      return '<div style="display:flex;align-items:center;gap:8px;font-size:11px;padding:6px 0;border-bottom:1px solid var(--line)">' +
+        '<span style="flex:1;color:var(--tx)">' + esc(a.label) + ' <i style="color:var(--dim2);font-style:normal">@' + esc(a.username || '') + '</i><br><span style="font-size:10px">' + st + '</span></span>' +
+        relink +
         '<button data-rm="' + esc(a.label) + '" style="background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:10px;padding:2px 7px">삭제</button></div>';
     }).join('');
   }
@@ -162,7 +165,10 @@
     });
     $('f-acct-sel').addEventListener('change', function () { if (this.value) api('/api/secret/account/select', { label: this.value }); });
     $('acct-list').addEventListener('click', function (e) {
-      var rm = e.target.getAttribute && e.target.getAttribute('data-rm');
+      var t = e.target;
+      var relink = t.getAttribute && t.getAttribute('data-relink');
+      if (relink) { $('acct-form').style.display = 'block'; $('a-label').value = relink; $('a-id').value = ''; $('a-pw').value = ''; $('a-id').focus(); return; }
+      var rm = t.getAttribute && t.getAttribute('data-rm');
       if (rm && confirm('"' + rm + '" 계정을 뺄까요? (세션도 끊겨요)')) api('/api/secret/account/remove', { label: rm }).then(function (r) { lastAccJson = ''; renderAccounts(r.accounts, r.account); });
     });
     tick();

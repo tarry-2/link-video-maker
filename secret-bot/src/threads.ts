@@ -47,10 +47,27 @@ async function typeInto(page: Page, selectors: string, value: string): Promise<b
   return true;
 }
 
-// 로그인 — 저장된 아이디/비번으로 봇이 '자동' 로그인(page 자동 입력, 퍼블리 saveInstaSession 패턴).
-//   2FA/캡차가 뜨면 창에서 사용자가 통과(최대 120초). 비번이 없으면 창에서 직접 로그인으로 폴백.
-//   세션은 영구 프로필 + 쿠키 파일로 유지 → 다음부턴 skip(재로그인 안 함).
-//   🔴 TODO(실측): threads.com 로그인 폼 셀렉터(username/password/submit)·2FA 화면 확정.
+// 인스타 로그인 에러 추출 — "비번 틀림 / 아이디 없음"을 구분해 사용자에게 명확히 알려준다(테리 요구).
+async function extractLoginError(page: Page): Promise<string> {
+  try {
+    const txt = await page.evaluate(() => {
+      const el = document.querySelector('#slfErrorAlert, [role="alert"], ._ab2z');
+      const direct = el && el.textContent ? el.textContent.trim() : "";
+      if (direct) return direct;
+      const m = (document.body.innerText || "").match(/(비밀번호[^\n]{0,60}|password[^\n]{0,60}|사용자 이름[^\n]{0,60}|username[^\n]{0,60}|잘못[^\n]{0,40}|incorrect[^\n]{0,40}|doesn.t belong[^\n]{0,40}|찾을 수 없[^\n]{0,40})/i);
+      return m ? m[0] : "";
+    });
+    const t = (txt || "").trim();
+    if (/incorrect|잘못된 비밀번호|비밀번호가 올바르지|password was incorrect/i.test(t)) return "비밀번호가 틀렸어요";
+    if (/doesn.t belong|찾을 수 없|사용자 이름|username you entered/i.test(t)) return "아이디(사용자 이름)를 찾을 수 없어요";
+    return t.slice(0, 90);
+  } catch { return ""; }
+}
+
+// 로그인/계정 연결 — ★스레드 '직접 로그인'은 "예기치 못한 오류"가 남(테리 실측) → "Instagram으로 로그인"을 눌러
+//   인스타 로그인 폼에서 아이디/비번 입력(퍼블리 insta-bot 검증 셀렉터). 각 단계·결과를 로그로 남겨 뭐가 문제인지(비번/아이디/2단계) 바로 보이게.
+//   세션은 영구 프로필 + 쿠키로 유지 → 다음부턴 skip.
+//   🔴 TODO(실측): "Instagram으로 로그인" 버튼 셀렉터·인스타 폼·2FA 화면 확정.
 export async function threadsLogin(account: string, opts: { id?: string; pw?: string; visible?: boolean; proxy?: ProxyOpt; log?: Log } = {}): Promise<{ ok: boolean; reason?: string; already?: boolean }> {
   const log = opts.log || (() => {});
   const context = await launchProfile(account, opts.visible !== false, opts.proxy);
@@ -69,23 +86,52 @@ export async function threadsLogin(account: string, opts: { id?: string; pw?: st
     await sleep(rd(1000, 1800));
     await dismissDialogs(page);
 
-    if (opts.id && opts.pw) {
-      // 자동 로그인(퍼블리 패턴) — 스레드는 인스타 계정으로 로그인하므로 인스타 로그인 폼 셀렉터를 우선 시도.
-      log("[스레드] 저장된 계정으로 자동 로그인 시도…");
-      const okId = await typeInto(page, 'input[name="username"], input[autocomplete="username"], input[name="email"]', opts.id);
-      const okPw = await typeInto(page, 'input[name="password"], input[type="password"]', opts.pw);
-      if (okId && okPw) { await page.keyboard.press("Enter").catch(() => {}); log("[스레드] 로그인 제출 — 2단계 인증/캡차가 뜨면 창에서 통과해 주세요(최대 120초)."); }
-      else log("[스레드] ⚠️ 로그인칸을 못 찾았어요(DOM 실측 필요) — 창에서 직접 로그인해 주세요.");
+    if (!(opts.id && opts.pw)) {
+      log("[연결] 저장된 비번이 없어요 — 창에서 직접 로그인해 주세요(최대 120초).");
     } else {
-      log("[스레드] 저장된 비번이 없어요 — 창에서 직접 로그인해 주세요(최대 120초).");
+      // ★스레드 '직접 로그인'은 "예기치 못한 오류"가 남(테리 실측) → "Instagram으로 로그인"을 눌러 인스타 폼에서 로그인.
+      log("[연결] 'Instagram으로 로그인' 버튼 찾는 중…");
+      const igBtn = page.locator('div[role="button"]:has-text("Instagram"), a:has-text("Instagram"), button:has-text("Instagram"), [role="button"]:has-text("인스타그램")').first();
+      if (await igBtn.isVisible({ timeout: 8000 }).catch(() => false)) {
+        await igBtn.click().catch(() => {});
+        log("[연결] ✅ 'Instagram으로 로그인' 클릭 — 인스타 로그인 화면으로 이동");
+        await sleep(rd(1500, 2800));
+      } else {
+        log("[연결] ⚠️ 'Instagram으로 로그인' 버튼을 못 찾았어요(DOM 실측 필요). 창을 확인해 주세요.");
+      }
+      // 인스타 로그인 폼(퍼블리 검증 셀렉터) — 아이디/비번 입력(사람 타이핑).
+      const idField = page.locator('input[name="username"], input[autocomplete="username"]').first();
+      if (!(await idField.isVisible({ timeout: 15000 }).catch(() => false))) {
+        log("[연결] ⚠️ 아이디 입력칸이 안 보여요 — 이미 인스타 로그인 상태거나 화면이 달라요. 창을 확인해 주세요.");
+      } else {
+        log("[연결] 아이디 입력 중…");
+        await idField.click().catch(() => {});
+        for (const ch of opts.id) await page.keyboard.type(ch, { delay: rd(70, 160) });
+        await sleep(rd(300, 600));
+        log("[연결] 비밀번호 입력 중…");
+        const pwField = page.locator('input[name="password"], input[type="password"]').first();
+        await pwField.click().catch(() => {});
+        for (const ch of opts.pw) await page.keyboard.type(ch, { delay: rd(70, 160) });
+        await sleep(rd(300, 600));
+        log("[연결] 로그인 제출…");
+        await page.keyboard.press("Enter").catch(() => {});
+        await sleep(3500);
+        // 에러 메시지 즉시 확인 — 비번 틀림/아이디 없음 구분(테리 요구).
+        const err = await extractLoginError(page);
+        if (err) { log(`[연결] ❌ 로그인 실패: ${err}`); return { ok: false, reason: err }; }
+        log("[연결] 아이디·비번 통과 — 2단계 인증·보안 확인이 뜨면 창에서 통과해 주세요…");
+      }
     }
-    // 로그인 완료 또는 2FA/캡차 수동 처리 대기(비번칸이 사라지고 /login 벗어나면 완료).
-    try { await page.waitForFunction(() => !/\/login/.test(location.pathname) && !document.querySelector('input[type="password"]'), undefined, { timeout: 120000 }); }
-    catch { return { ok: false, reason: "로그인 미완료(2단계 인증/캡차 필요 또는 아이디·비번 오류)" }; }
+    // 완료 또는 2FA 수동 처리 대기(비번칸 사라지고 로그인 벗어나면 완료).
+    try { await page.waitForFunction(() => !/\/(login|accounts\/login)/.test(location.pathname) && !document.querySelector('input[type="password"]'), undefined, { timeout: 120000 }); }
+    catch {
+      const err2 = await extractLoginError(page);
+      return { ok: false, reason: err2 || "로그인 미완료(2단계 인증/보안 확인 필요 또는 아이디·비번 오류 — 창을 확인하세요)" };
+    }
     await sleep(1500); await dismissDialogs(page);
-    if (!(await isLoggedIn(page))) return { ok: false, reason: "로그인 확인 실패(세션 쿠키 없음)" };
+    if (!(await isLoggedIn(page))) return { ok: false, reason: "로그인 확인 실패(세션이 생기지 않음)" };
     await persist(context, account);
-    log("[스레드] 로그인 성공 — 세션 저장 완료.");
+    log("[연결] ✅ 로그인 성공 — 세션 저장 완료. 이제 재로그인 없이 계속 쓸 수 있어요.");
     return { ok: true };
   } catch (e: any) {
     return { ok: false, reason: e?.message || String(e) };

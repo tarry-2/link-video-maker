@@ -22,7 +22,7 @@ function api(path: string, init?: any): Promise<Response> {
 async function poll(): Promise<Job | null> {
   try { return await (await api("/api/secret/poll")).json(); } catch { return null; }
 }
-async function report(body: { logs?: { m: string; shot?: string }[]; count?: number; status?: string; loginDone?: { label: string; ok: boolean; username: string } }): Promise<void> {
+async function report(body: { logs?: { m: string; shot?: string }[]; count?: number; status?: string; loginDone?: { label: string; ok: boolean; username: string; reason?: string } }): Promise<void> {
   try { await api("/api/secret/report", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); } catch {}
 }
 const log = (m: string, shot?: string) => report({ logs: [{ m, shot }] });
@@ -53,7 +53,7 @@ export async function loop(): Promise<void> {
       const { label, id, pw } = job.pendingLogin;
       await log(`🔑 계정 "${label}" 자동 로그인 시작…`);
       const r = await threadsLogin(label, { id, pw, visible: job.visible !== false, proxy: { on: job.proxyOn, seed: label }, log });
-      await report({ loginDone: { label, ok: r.ok, username: id }, logs: [{ m: r.ok ? `✅ "${label}" 로그인 성공 — 세션 유지됩니다` : `⚠️ "${label}" 로그인 실패: ${r.reason || ""}` }] });
+      await report({ loginDone: { label, ok: r.ok, username: id, reason: r.reason }, logs: [{ m: r.ok ? `✅ "${label}" 연결 성공 — 세션 유지됩니다` : `❌ "${label}" 연결 실패: ${r.reason || ""}` }] });
       continue;
     }
 
