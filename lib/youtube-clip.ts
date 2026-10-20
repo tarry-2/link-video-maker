@@ -179,6 +179,25 @@ async function buildCommon(log: (m: string) => void): Promise<{common: string[];
   return {common, cookieArgs, cookieAvailable, attempts: buildAttempts(cookieAvailable)};
 }
 
+// ★막힘의 '진짜 이유'를 로그에 찍는다(추측 금지, 테리 진단규칙). yt-dlp -v의 수백 줄 중
+//   PO토큰 발급 성공/실패·클라이언트·SABR·차단 사유 줄만 뽑아 노출한다.
+//   (전 클라이언트가 한꺼번에 막히는 건 거의 'PO토큰이 실제로는 발급 안 됨' 또는 '유튜브 신규 차단 웨이브'다 —
+//    둘 중 뭔지 로그 한 줄로 확정하려는 것.)
+async function diagnoseBlock(url: string, common: string[], cookieArgs: string[], log: (m: string) => void): Promise<void> {
+  log('[진단] 막힌 진짜 원인 확인 중… (PO토큰 발급 여부·클라이언트·차단 사유)');
+  const keep = /po.?token|getpot|bgutil|pot provider|visitor.?data|player.?client|\bsabr\b|n-?sig|not a bot|sign in|consent|challenge|\bgvs\b|innertube|\b403\b|\b429\b|login required|fetching pot|no pot|failed to|server error/i;
+  let hit = 0;
+  try {
+    await run(YTDLP, [...common, ...cookieArgs, '-v', '--simulate', '--skip-download', url], () => {}, 60000, (l) => {
+      if (hit < 20 && keep.test(l)) { hit++; log('[진단] ' + l.replace(/\s+/g, ' ').trim().slice(0, 260)); }
+    });
+  } catch (e: any) {
+    const m = (e?.message || '').replace(/\s+/g, ' ').slice(-200);
+    if (m && hit < 20) log('[진단] 종료 사유: ' + m);
+  }
+  if (!hit) log('[진단] 상세 단서가 안 잡혔어요(네트워크/프록시 단에서 끊겼을 수 있음).');
+}
+
 // ── 아카이브 긁기 — 특정 유튜브 채널(KBS 아카이브 등) 안에서 주제(키워드)로 영상 목록을 가져온다. ──
 //   다운로드 아니라 '목록 메타'만(--flat-playlist) 긁으므로 가볍다. 실제 제작은 기존 하이라이트 엔진 재사용.
 export type ArchiveVideo = {id: string; title: string; duration: number; viewCount: number; thumbnail: string; url: string};
@@ -268,10 +287,12 @@ async function fetchMetaAndSubs(
   }
   if (!ok) {
     const botBlocked = /not a bot|Sign in to confirm|cookies|consent/i.test(lastErr);
+    // ★전 클라이언트가 막혔으면 '진짜 이유'를 로그에 찍는다(위 진단) — 추측으로 재배포 반복하지 않게.
+    if (botBlocked) { try { await diagnoseBlock(url, common, cookieArgs, log); } catch {} }
     if (botBlocked && cookieArgs.length > 0)
-      throw new Error('쿠키 없이도, 쿠키로도 전부 막혔어요 — 이건 쿠키 만료보다 프록시 IP가 유튜브에 막혔거나 서버 yt-dlp가 오래됐을 가능성이 큽니다. 재배포(yt-dlp 자동 최신화)로 대부분 풀려요. 그래도 안 되면 시크릿 창에서 쿠키를 새로 내보내 등록해 주세요. (마지막 사유: ' + lastErr.slice(0, 100) + ')');
+      throw new Error('쿠키 없이도, 쿠키로도 전부 막혔어요. 위 [진단] 줄에서 PO토큰 발급 여부·차단 사유를 확인하세요(토큰 발급 실패면 PO토큰 서버 문제, 토큰은 받았는데 막히면 유튜브 신규 차단 웨이브). (마지막 사유: ' + lastErr.slice(0, 100) + ')');
     if (botBlocked)
-      throw new Error('유튜브가 이 서버를 "봇"으로 보고 막았어요. 재배포(yt-dlp 최신화)나 쿠키 등록이 필요합니다. (' + lastErr.slice(0, 100) + ')');
+      throw new Error('유튜브가 이 서버를 "봇"으로 보고 막았어요. 위 [진단] 줄에서 진짜 원인을 확인하세요. (' + lastErr.slice(0, 100) + ')');
     throw new Error('영상 정보 가져오기 실패. ' + lastErr);
   }
   let subText = '';
