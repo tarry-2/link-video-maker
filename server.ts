@@ -3368,6 +3368,13 @@ server.listen(PORT, () => {
   };
   igRefresh();
   setInterval(igRefresh, 24 * 60 * 60 * 1000);
+  // ★yt-dlp 하루 1회 자동 최신화 — Railway 서버는 잘 재시작을 안 해(=부팅 최신화가 안 돎) 유튜브 변경에 뒤처진다.
+  //   하루 한 번 최신 nightly를 당겨 '방치해도 알아서 따라붙게'(테리 지시 2026-10-20). 부팅 1시간 뒤 1회 + 24시간마다.
+  const ytdlpAutoUpdate = () => updateYtdlp((m) => console.log(m))
+    .then((r) => console.log(`[yt-dlp 자동최신화] ${r.before} → ${r.after}${r.changed ? ' (갱신됨)' : ' (이미 최신)'}`))
+    .catch((e) => console.log('[yt-dlp 자동최신화] 실패(기존 버전 유지): ' + (e?.message || e)));
+  setTimeout(ytdlpAutoUpdate, 60 * 60 * 1000);
+  setInterval(ytdlpAutoUpdate, 24 * 60 * 60 * 1000);
   // ★디스크 유지보수: 30분마다 오래된 작업·버려진 업로드 정리 → 볼륨이 꽉 차 ENOSPC 나는 걸 원천 차단.
   // 레거시: 예전엔 업로드를 볼륨(data/hl-uploads)에 뒀다 → 이제 /tmp. 볼륨의 옛 업로드 폴더는 통째로 비운다(볼륨 공간 회수).
   try { fs.rmSync(path.join(STUDIO_DATA_DIR, 'hl-uploads'), {recursive: true, force: true}); } catch {}
