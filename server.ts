@@ -12,7 +12,7 @@ import {registerVideoToPortfolio} from './lib/video-portfolio';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo, cardEditInfo, reRenderCard} from './lib/card-pipeline';
 import {makeHighlights, backfillHighlightProjects, reRenderHighlight, loadHlProject, suggestNarration} from './lib/youtube-highlight';
-import {searchArchiveChannel, sampleForAnalysis, fetchSourceTranscript} from './lib/youtube-clip';
+import {searchArchiveChannel, sampleForAnalysis, fetchSourceTranscript, updateYtdlp, ytdlpVersion} from './lib/youtube-clip';
 import {analyzeReframe} from './lib/reframe';
 import {getTrends} from './lib/trends';
 import {generateCardStoryboard, generateShoppingStoryboard} from './lib/cards';
@@ -3141,6 +3141,21 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const file = path.join(STUDIO_DATA_DIR, 'yt-cookies.txt');
     const exists = fs.existsSync(file);
     return json(res, 200, {saved: exists, when: exists ? fs.statSync(file).mtime.toISOString() : null});
+  }
+
+  // yt-dlp를 '지금 즉시' 최신 nightly로 교체(재배포 없이 — 폰/태블릿에서 버튼 한 번).
+  //   유튜브가 전 클라이언트를 봇차단할 때 가장 흔한 원인 = yt-dlp가 옛 버전. 이걸 앱에서 바로 풀 수 있게.
+  if (p === '/api/youtube/update-ytdlp' && req.method === 'POST') {
+    if (!authed(req)) return json(res, 401, {error: '인증 필요'});
+    try {
+      const r = await updateYtdlp((m) => console.log(m));
+      return json(res, 200, {ok: true, before: r.before, after: r.after, changed: r.changed});
+    } catch (e: any) {
+      return json(res, 500, {error: 'yt-dlp 최신화 실패: ' + (e?.message || e)});
+    }
+  }
+  if (p === '/api/youtube/update-ytdlp' && req.method === 'GET') {
+    return json(res, 200, {version: await ytdlpVersion()});
   }
 
   // 하이라이트 작업 중단(잘못 골랐을 때) — cancelled 플래그만 세우면 makeHighlights가 다음 단계에서 멈춘다.

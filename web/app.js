@@ -1124,7 +1124,19 @@ const KEY_META = [
   { k: 'YOUTUBE_API_KEY', label: 'YouTube API 키 (하이라이트 검색 — 강력 권장)', desc: '하이라이트 소재 검색에 써요. 이걸 넣으면 유튜브 계정 연결(로그인)이 만료·해지돼도 검색이 안 죽어요. Google Cloud Console에서 "YouTube Data API v3"를 켜고 "API 키"를 만들면 됩니다(무료).', link: 'https://console.cloud.google.com/apis/credentials' },
 ];
 
+// 키 설정 진입 비번(테리 지시: 345678). 세션당 1회만 묻는다(sessionStorage).
+const KEY_GATE_CODE = '345678';
+function keyGatePass() {
+  if (sessionStorage.getItem('keys-unlocked') === '1') return true;
+  const v = prompt('키 설정 비밀번호를 입력하세요');
+  if (v === null) return false; // 취소
+  if (v.trim() !== KEY_GATE_CODE) { alert('비밀번호가 틀렸어요.'); return false; }
+  sessionStorage.setItem('keys-unlocked', '1');
+  return true;
+}
+
 $('settings-btn').onclick = async () => {
+  if (!keyGatePass()) return; // ★비번 통과해야 키 설정 열림
   // ★입력칸을 먼저 렌더 + 모달 먼저 표시 — reveal fetch가 실패(401 등)해도 입력칸은 무조건 뜨게.
   $('key-fields').innerHTML = KEY_META.map((m) => `
     <div class="key-field">
@@ -1158,6 +1170,28 @@ $('settings-btn').onclick = async () => {
   }
 };
 $('settings-close').onclick = () => $('settings-modal').classList.add('hidden');
+
+// ── yt-dlp 즉시 최신화(하이라이트 봇차단 풀기, 폰/태블릿에서도) ──
+async function refreshYtVer() {
+  try { const d = await (await fetch('/api/youtube/update-ytdlp')).json();
+    if ($('yt-ver')) $('yt-ver').textContent = d.version ? `(현재 ${d.version})` : '';
+  } catch {}
+}
+$('yt-update')?.addEventListener('click', async () => {
+  const btn = $('yt-update'); btn.disabled = true; btn.textContent = '최신화 중… (20~40초)';
+  if ($('yt-update-msg')) $('yt-update-msg').textContent = '';
+  try {
+    const r = await fetch('/api/youtube/update-ytdlp', {method:'POST'});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '최신화 실패');
+    $('yt-update-msg').innerHTML = d.changed
+      ? `✅ 최신화 완료! ${d.before} → <b>${d.after}</b>. 이제 다시 제작해 보세요.`
+      : `✅ 이미 최신이에요 (${d.after}). 이것도 막히면 쿠키를 새로 등록해 주세요.`;
+    refreshYtVer();
+  } catch (e) { $('yt-update-msg').textContent = '실패: ' + e.message + ' (잠시 후 다시 시도)'; }
+  finally { btn.disabled = false; btn.textContent = '🔄 지금 최신화'; }
+});
+refreshYtVer();
 
 // Seedance(fal) 잔액확인 — admin 키가 있으면 그걸로, 없으면 일반 키로 시도(권한 없으면 안내).
 async function checkFalBalance() {

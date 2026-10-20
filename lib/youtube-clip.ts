@@ -98,6 +98,30 @@ export async function ytdlpAvailable(): Promise<boolean> {
   try { await run(YTDLP, ['--version'], () => {}, 10000); return true; } catch { return false; }
 }
 
+// 현재 yt-dlp 버전 문자열(실패하면 '?').
+export async function ytdlpVersion(): Promise<string> {
+  try { return (await run(YTDLP, ['--version'], () => {}, 10000)).trim(); } catch { return '?'; }
+}
+
+// ★yt-dlp를 '지금 즉시' 최신 nightly로 교체한다(재배포 불필요 — 폰/태블릿에서 버튼 한 번으로).
+//   유튜브 봇차단은 수시로 바뀌고 수정은 nightly에 제일 먼저 들어온다. 부팅 self-update(`yt-dlp -U`)가
+//   조용히 실패해 '옛 버전에 묶이는' 사고(테리: 2개월 묵은 2026.08.19)를 막기 위해, self-update 대신
+//   GitHub nightly-builds 최신 바이너리를 직접 내려받아 제자리에 덮어쓴다(결정적).
+const YTDLP_BIN = process.env.YTDLP_BIN || (YTDLP.startsWith('/') ? YTDLP : '/usr/local/bin/yt-dlp');
+const NIGHTLY_URL = 'https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp';
+export async function updateYtdlp(log: (m: string) => void): Promise<{before: string; after: string; changed: boolean}> {
+  const before = await ytdlpVersion();
+  log(`[yt-dlp] 현재 ${before} → 최신 nightly 내려받는 중…`);
+  // curl로 임시파일에 받아 chmod 후 mv(원자적 교체). 다운로드 실패 시 기존 바이너리는 그대로 유지.
+  await run('sh', ['-c',
+    `curl -fsSL --max-time 120 "${NIGHTLY_URL}" -o "${YTDLP_BIN}.new" && chmod a+rwx "${YTDLP_BIN}.new" && mv -f "${YTDLP_BIN}.new" "${YTDLP_BIN}"`,
+  ], log, 150000);
+  const after = await ytdlpVersion();
+  log(`[yt-dlp] 갱신 완료 → ${after}`);
+  if (after === '?') throw new Error('다운로드는 됐지만 새 바이너리 실행 확인 실패');
+  return {before, after, changed: before !== after};
+}
+
 // 유튜브 다운로드 시도 클라이언트 순서(2026 권장 + 로컬 실측 반영).
 //   default=yt-dlp 기본세트(2026.02~ android_vr,web,web_safari)로 PO토큰 자동 / tv_simply·mweb=봇체크를
 //   덜 받는 클라 / android=PO토큰 불필요 폴백 / web_safari=최후. 잘 막히는 web·ios·tv(쿠키충돌)는 뺐다.
