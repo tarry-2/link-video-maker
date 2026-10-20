@@ -8,6 +8,12 @@ export type {ImageStyle} from './styles'; // 스타일 id(레지스트리) — �
 const NEG_TEXT =
   ', absolutely no text, no letters, no words, no numbers, no captions, no charts, no tables, no documents, no price tags, no signage, no watermark';
 
+// ★음식·상품 의인화 금지(테리: 픽사풍 쇼핑쇼츠에서 '구운 장어'에 살아있는 얼굴이 붙음).
+//   일러스트/3D 스타일(픽사 등)이 음식·재료·상품에도 눈·얼굴을 붙이는 걸 막는다. 캐릭터·사람·동물'캐릭터'엔 영향 없음
+//   (여기선 '음식/재료/상품'만 콕 집어 금지). 조리된 음식은 진짜 조리된 음식으로 보이게.
+const NEG_FOOD =
+  ', food, dishes, cooked meat, grilled fish or eel, ingredients and grocery products are shown as realistic appetizing real food and plain inanimate objects only — never give any food, ingredient or product a face, eyes, mouth or facial expression, no anthropomorphized food, no googly eyes on food, cooked or grilled food looks properly cooked and real, not alive';
+
 export async function generateImageFlux(
   key: string,
   prompt: string,
@@ -45,7 +51,7 @@ async function fluxOnce(
   const st = getStyle(style); // 레지스트리에서 스타일 레시피(프롬프트·사람정책·guidance)
   const styleStr = st.promptAdd + st.peopleAdd;
   const input: Record<string, unknown> = {
-    prompt: prompt + styleStr + NEG_TEXT,
+    prompt: prompt + styleStr + NEG_TEXT + NEG_FOOD,
     aspect_ratio: landscape ? '16:9' : '9:16', // ★롱폼=가로 16:9 / 쇼츠=세로 9:16 네이티브
     num_outputs: 1,
     output_format: 'jpg',
@@ -145,7 +151,7 @@ async function falFluxOnce(
   const styleStr = st.promptAdd + st.peopleAdd;
   const model = quality === 'fast' ? 'fal-ai/flux/schnell' : 'fal-ai/flux/dev';
   const input: Record<string, unknown> = {
-    prompt: prompt + styleStr + NEG_TEXT,
+    prompt: prompt + styleStr + NEG_TEXT + NEG_FOOD,
     image_size: landscape ? 'landscape_16_9' : 'portrait_16_9', // 세로 쇼츠=portrait_16_9(9:16)
     num_images: 1,
     output_format: 'jpeg',
@@ -254,7 +260,7 @@ async function nanoOnce(
     ? 'Keep the EXACT same character(s) from the reference image — identical face, hairstyle, outfit and colors. Only change the pose, action and background as described. '
     : '';
   const input: Record<string, unknown> = {
-    prompt: keepLine + prompt + (styleAdd || NANO_STYLE) + NEG_TEXT,
+    prompt: keepLine + prompt + (styleAdd || NANO_STYLE) + NEG_TEXT + NEG_FOOD,
     aspect_ratio: landscape ? '16:9' : '9:16',
     output_format: 'jpg',
   };

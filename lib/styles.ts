@@ -95,7 +95,7 @@ export const STYLES: ArtStyle[] = [
     desc: '둥글둥글 3D 캐릭터, 큰 눈·표정. 공감 가고 사랑스러움 — 캐릭터·반려동물·스토리에.',
     group: '3D·입체',
     promptAdd:
-      ', Pixar-style 3D render, expressive big eyes, soft global illumination, subsurface scattering, polished rounded shapes, Disney Pixar animated movie aesthetic, high quality 3D',
+      ', Pixar-style 3D render, soft global illumination, subsurface scattering, polished rounded shapes, Disney Pixar animated movie aesthetic, high quality 3D',
     peopleAdd: ', charming 3D characters and mascots are welcome, appealing and friendly',
     guidance: 3.5, illustration: true,
   },
