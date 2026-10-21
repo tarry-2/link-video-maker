@@ -226,13 +226,12 @@
             </div>
             <p id="hl-rmcount-note" class="hint" style="margin-top:4px"></p>
             <!-- 그림 스타일 — 이미지영상·영화 둘 다 적용(실사/애니 등) -->
-            <label class="field-label" style="margin-top:10px">🎨 그림 스타일 <span class="hint">— 영상 분위기(실사·애니 등)</span></label>
-            <div class="seg" style="margin-top:6px;flex-wrap:wrap">
+            <label class="field-label" style="margin-top:10px">🎨 그림 스타일 <span class="hint">— 실사·애니·픽사 3D·클레이·수채 등 (영상만들기와 동일)</span></label>
+            <!-- 스타일은 /api/categories(styles)로 채운다(영상만들기·창작과 동일 18종 — 픽사 3D·클레이 등 전부). highlight.js renderRmStyles -->
+            <div class="seg" id="hl-rmstyle-seg" style="margin-top:6px;flex-wrap:wrap">
               <button type="button" class="seg-btn hl-rmstyle active" data-style="real">📷 실사</button>
-              <button type="button" class="seg-btn hl-rmstyle" data-style="anime">🎨 애니</button>
-              <button type="button" class="seg-btn hl-rmstyle" data-style="cinema">🎞️ 시네마</button>
-              <button type="button" class="seg-btn hl-rmstyle" data-style="classic">🏛️ 고전</button>
             </div>
+            <p id="hl-rmstyle-desc" class="hint" style="margin-top:4px"></p>
             <!-- ★본인 얼굴(선택) — 재창작도 전 장면 주인공을 이 얼굴로 -->
             <label class="field-label" style="margin-top:10px">🧑 본인 얼굴 <span class="hint">— 선택. 올리면 모든 장면 주인공이 이 얼굴로</span></label>
             <input id="hl-face-upload" type="file" accept="image/*" class="input" style="padding:8px" />

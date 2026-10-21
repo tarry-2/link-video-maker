@@ -614,7 +614,15 @@
   let makeMode = 'clip'; // 제작 방식: clip(원본 자르기=하이라이트) / remake(재창작=내용만 뽑아 새 영상)
   let rmOut = 'image';   // 재창작 출력: image(이미지영상) / wan(영화)
   let rmClips = 1;       // 재창작 영화 장면 수(기본 1) — restoreState 전에 선언(TDZ 방지)
-  let rmStyle = 'real';  // 재창작 그림 스타일(real/anime/cinema/classic) — 이미지·영화 둘 다 적용
+  let rmStyle = 'real';  // 재창작 그림 스타일 — 이미지·영화 둘 다 적용. /api/categories styles 18종(픽사 3D·클레이 등)을 동적으로 채움.
+  // 폴백(로드 전/실패 시) 4종 — 로드되면 영상만들기·창작과 동일 전체 스타일로 교체.
+  let RM_STYLES = [{id:'real',emoji:'📷',name:'실사',desc:''},{id:'anime',emoji:'🎨',name:'애니',desc:''},{id:'cinema',emoji:'🎞️',name:'시네마',desc:''},{id:'classic',emoji:'🏛️',name:'고전',desc:''}];
+  function renderRmStyles() {
+    const box = $('hl-rmstyle-seg'); if (!box) return;
+    if (!RM_STYLES.some((s) => s.id === rmStyle)) rmStyle = (RM_STYLES[0] && RM_STYLES[0].id) || 'real';
+    box.innerHTML = RM_STYLES.map((s) => `<button type="button" class="seg-btn hl-rmstyle${s.id === rmStyle ? ' active' : ''}" data-style="${s.id}">${(s.emoji || '') + ' ' + s.name}</button>`).join('');
+    const desc = $('hl-rmstyle-desc'); if (desc) desc.textContent = (RM_STYLES.find((s) => s.id === rmStyle) || {}).desc || '';
+  }
   let rmCount = 1;       // 재창작 편수(같은 소재로 서로 다른 N편)
   let hlFaceImage = '';  // ★본인 얼굴 base64(선택) — 올리면 전 장면을 이 얼굴로
 
@@ -670,7 +678,8 @@
     makeMode = s.makeMode === 'remake' ? 'remake' : 'clip';
     rmOut = s.rmOut === 'wan' ? 'wan' : 'image';
     rmClips = Math.max(1, Math.min(20, Number(s.rmClips) || 1));
-    rmStyle = ['real','anime','cinema','classic'].includes(s.rmStyle) ? s.rmStyle : 'real';
+    rmStyle = s.rmStyle || 'real'; // 값만 복원. 실제 버튼 그리기는 카테고리 로드(18종) 때 renderRmStyles가 함.
+    // ★여기서 renderRmStyles()를 부르면 아직 폴백 4종이라 pixar3d 등 복원값이 real로 깎인다 → active 토글만.
     document.querySelectorAll('.hl-rmstyle').forEach((b) => b.classList.toggle('active', b.dataset.style === rmStyle));
     rmCount = Math.max(1, Math.min(5, Number(s.rmCount) || 1));
     document.querySelectorAll('.hl-rmcount').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === rmCount));
@@ -1236,6 +1245,8 @@
   (async () => {
     try {
       const d = await (await fetch('/api/categories')).json();
+      // 🎨 재창작 그림 스타일 — 영상만들기·창작과 동일한 전체 스타일(픽사 3D·클레이·수채 등 18종)로 채운다.
+      if (Array.isArray(d.styles) && d.styles.length) { RM_STYLES = d.styles; renderRmStyles(); }
       EDIT_VOICE_LIST = d.voices || []; // 수정 모달 목소리 선택용
       const sel = $('hl-voice'); if (!sel || !d.voices) return;
       // ★용도 카테고리(스릴러·시사·힐링 등)로 묶어 보여준다(테리 지시) — <optgroup>. cat 순서는 첫 등장 순.
@@ -1382,11 +1393,14 @@
   $('hl-rmclip-save')?.addEventListener('click', saveRmClip);
   $('hl-rmclip-custom')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveRmClip(); } });
   // 재창작 그림 스타일 선택.
-  document.querySelectorAll('.hl-rmstyle').forEach((b) => b.addEventListener('click', () => {
+  // 🎨 재창작 그림 스타일 — 버튼이 /api/categories로 동적 생성되므로 컨테이너에 '이벤트 위임'으로 바인딩.
+  $('hl-rmstyle-seg')?.addEventListener('click', (e) => {
+    const b = e.target.closest('.hl-rmstyle'); if (!b) return;
     rmStyle = b.dataset.style || 'real';
     document.querySelectorAll('.hl-rmstyle').forEach((x) => x.classList.toggle('active', x.dataset.style === rmStyle));
+    const desc = $('hl-rmstyle-desc'); if (desc) desc.textContent = (RM_STYLES.find((s) => s.id === rmStyle) || {}).desc || '';
     saveState(); addLog(`🎨 그림 스타일 = ${b.textContent.trim()}`);
-  }));
+  });
   // 재창작 편수 선택 + 영화일 때 비용/시간 경고.
   function applyRmCountNote() {
     const n = $('hl-rmcount-note'); if (!n) return;
