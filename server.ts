@@ -2187,6 +2187,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
           quality: b.quality === 'fast' ? 'fast' : 'high',
           // ★전체 스타일 허용(실사·애니·고전 등 15종). 예전엔 real/anime로 뭉개 다른 스타일이 안 먹었음.
           imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
+          ethnicity: b.ethnicity, // 인물 인종(auto/korean/western)
           sceneCount: Number(b.sceneCount) || 0, // 0=길이로 자동, 2~12=직접 지정
           aiClips: Number(b.aiClips) || 0,
           autoShutdown: b.autoShutdown !== false, // 기본 자동 종료(과금 방지)
@@ -2334,6 +2335,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
             voice: b.voice || undefined,
             quality: 'high',
             imageStyle,
+            ethnicity: b.ethnicity, // 인물 인종(auto/korean/western)
             sceneCount: Number(b.sceneCount) || 0,
             narration: b.narration !== false,
             bgm: b.bgm !== false,
@@ -2543,6 +2545,7 @@ ${(realContent || title).slice(0, 8000)}`
             voice: b.voice || undefined,
             quality: 'high', // 재창작은 항상 고퀄 이미지(테리 지적: 이미지 퀄 약함)
             imageStyle,
+            ethnicity: b.ethnicity, // 인물 인종(auto/korean/western)
             sceneCount: Number(b.sceneCount) || 0,
             aiClips, // >0 = 영화(Wan), 0 = 이미지영상
             autoShutdown: b.autoShutdown !== false,
@@ -2725,7 +2728,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
           } catch { faceRef = undefined; }
         }
         const r = await makeVideo([], k, {
-          storyboard, duration: durSec, orientation, imageStyle, aiClips, faceRef,
+          storyboard, duration: durSec, orientation, imageStyle, ethnicity: b.ethnicity, aiClips, faceRef,
           autoShutdown: b.autoShutdown !== false, narration: b.narration !== false, bgm: b.bgm !== false,
           voice: b.voice || undefined, font: pickFont(b.font),
           log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,

@@ -99,7 +99,8 @@ export async function handleStudio(req: IncomingMessage, res: ServerResponse, pa
         const cfg: BatchConfig = {
           presetId: String(b.presetId || ''), duration: Number(b.duration) || 40,
           voice: String(b.voice || ''), quality: b.quality === 'fast' ? 'fast' : 'high',
-          imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real', music: !!b.music,
+          imageStyle: STYLE_IDS.includes(String(b.imageStyle)) ? String(b.imageStyle) : 'real',
+          ethnicity: ['auto', 'korean', 'western'].includes(String(b.ethnicity)) ? String(b.ethnicity) : 'auto', music: !!b.music,
           characterId: String(b.characterId || ''),
         };
         if (!topics.filter(t => t.trim()).length) throw new StudioError('주제를 한 줄에 하나씩 입력하세요.');

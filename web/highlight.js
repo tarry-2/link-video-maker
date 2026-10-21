@@ -624,6 +624,7 @@
     const desc = $('hl-rmstyle-desc'); if (desc) desc.textContent = (RM_STYLES.find((s) => s.id === rmStyle) || {}).desc || '';
   }
   let rmCount = 1;       // 재창작 편수(같은 소재로 서로 다른 N편)
+  let rmEth = 'auto';    // 재창작 등장인물 인종(auto/korean/western)
   let hlFaceImage = '';  // ★본인 얼굴 base64(선택) — 올리면 전 장면을 이 얼굴로
 
   // ── 선택/검색 상태 저장·복원(탭 나갔다 와도 유지, '초기화' 전까지) ──
@@ -632,7 +633,7 @@
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
         region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, narrationCoverage, captionEn, voice, font, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
-        makeMode, rmOut, rmClips, rmStyle, rmCount, // 재창작 설정도 저장(탭 나갔다 와도 유지 — 테리 지시)
+        makeMode, rmOut, rmClips, rmStyle, rmCount, rmEth, // 재창작 설정도 저장(탭 나갔다 와도 유지 — 테리 지시)
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
         searchState: $('hl-search-state')?.textContent || '',
@@ -681,6 +682,8 @@
     rmStyle = s.rmStyle || 'real'; // 값만 복원. 실제 버튼 그리기는 카테고리 로드(18종) 때 renderRmStyles가 함.
     // ★여기서 renderRmStyles()를 부르면 아직 폴백 4종이라 pixar3d 등 복원값이 real로 깎인다 → active 토글만.
     document.querySelectorAll('.hl-rmstyle').forEach((b) => b.classList.toggle('active', b.dataset.style === rmStyle));
+    rmEth = ['auto','korean','western'].includes(s.rmEth) ? s.rmEth : 'auto';
+    document.querySelectorAll('.hl-rmeth').forEach((b) => b.classList.toggle('active', b.dataset.eth === rmEth));
     rmCount = Math.max(1, Math.min(5, Number(s.rmCount) || 1));
     document.querySelectorAll('.hl-rmcount').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === rmCount));
     applyMakeMode(); if (typeof applyRmCountNote === 'function') applyRmCountNote();
@@ -1401,6 +1404,12 @@
     const desc = $('hl-rmstyle-desc'); if (desc) desc.textContent = (RM_STYLES.find((s) => s.id === rmStyle) || {}).desc || '';
     saveState(); addLog(`🎨 그림 스타일 = ${b.textContent.trim()}`);
   });
+  // 🌏 등장인물 인종(자동/한국인/외국인)
+  document.querySelectorAll('.hl-rmeth').forEach((b) => b.addEventListener('click', () => {
+    rmEth = b.dataset.eth || 'auto';
+    document.querySelectorAll('.hl-rmeth').forEach((x) => x.classList.toggle('active', x.dataset.eth === rmEth));
+    saveState(); addLog(`🌏 등장인물 = ${b.textContent.trim()}`);
+  }));
   // 재창작 편수 선택 + 영화일 때 비용/시간 경고.
   function applyRmCountNote() {
     const n = $('hl-rmcount-note'); if (!n) return;
@@ -1453,7 +1462,7 @@
       lastBody = {
         title: picked.title, channel: picked.channel || '',
         videoId: picked.videoId || '', // ★원본 실제 내용(자막/음성STT) 확보용 — 서버가 이걸로 전사해 충실히 각색
-        duration: sec, orientation: orient, voice, font, imageStyle: rmStyle, count: rmCount,
+        duration: sec, orientation: orient, voice, font, imageStyle: rmStyle, ethnicity: rmEth, count: rmCount,
         aiClips: rmOut === 'wan' ? rmClips : 0, // >0 = 영화(앞 N장면 Wan), 0 = 이미지영상
         faceImage: hlFaceImage || undefined, // ★본인 얼굴(있으면 전 장면 그 얼굴로)
       };

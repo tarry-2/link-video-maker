@@ -55,7 +55,7 @@ export const studioProviders: StudioDependencies = {
         try { await fs.copyFile(file, path.join(dir, cref)); p.characterRef = cref; } catch {}
       }
     } else {
-      await generateImageSmart({fal: k.fal, replicate: k.replicate}, prompt, file, log, p.input.quality, p.input.imageStyle, landscape);
+      await generateImageSmart({fal: k.fal, replicate: k.replicate}, prompt, file, log, p.input.quality, p.input.imageStyle, landscape, p.input.ethnicity);
     }
   },
   async voice(p, s, file) {

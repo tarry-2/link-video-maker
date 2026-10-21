@@ -17,7 +17,7 @@ export type BatchItem = {
 // 큐에 공유되는 제작 설정(한 번 정하면 모든 주제에 동일 적용).
 export type BatchConfig = {
   presetId: string; duration: number; voice: string;
-  quality: 'fast' | 'high'; imageStyle: string; music: boolean; // 스타일 id(레지스트리)
+  quality: 'fast' | 'high'; imageStyle: string; ethnicity?: string; music: boolean; // 스타일 id(레지스트리)
   characterId?: string;
 };
 type BatchState = {items: BatchItem[]; config: BatchConfig | null; running: boolean};
@@ -98,7 +98,7 @@ export class BatchQueue {
             const r = this.studio.create({
               mode: 'topic', topic: next.topic,
               presetId: s.config.presetId, duration: s.config.duration, voice: s.config.voice,
-              quality: s.config.quality, imageStyle: s.config.imageStyle, music: s.config.music,
+              quality: s.config.quality, imageStyle: s.config.imageStyle, ethnicity: s.config.ethnicity, music: s.config.music,
               characterId: s.config.characterId || '',
             });
             next.projectId = (r as any).id; next.status = 'creating';

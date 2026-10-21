@@ -66,10 +66,11 @@
   const EPS = [[1, '단편 1개'], [3, '3부작'], [5, '5부작'], [10, '10부작']];
   // 대본 AI 엔진 — free=무료 Gemini(2패스 재집필로 무료 최대치) / gpt=결제한 OpenAI GPT-4.1(방송국·뮤지컬 수준).
   const ENGINES = [['free', '🆓 무료 (Gemini)'], ['gpt', '⭐ 고급 (GPT)']];
+  const ETHS = [['auto', '🤖 자동'], ['korean', '🇰🇷 한국인'], ['western', '🌍 외국인']]; // 등장인물 인종
 
   // ── 상태 ──
   let genres = ['미스터리'];
-  let dur = 60, orient = 'portrait', style = 'real';
+  let dur = 60, orient = 'portrait', style = 'real', eth = 'auto';
   let out = 'image', clips = 2, narr = true, bgm = true, voice = '';
   let engine = 'free'; // 대본 AI 엔진(free=무료 Gemini / gpt=고급 GPT)
   let scenario = null;
@@ -107,6 +108,7 @@
     seg($('cr-dur'), DURS, dur, 'd');
     seg($('cr-orient'), ORIENTS, orient, 'o');
     seg($('cr-style'), STYLES, style, 's');
+    seg($('cr-eth'), ETHS, eth, 'eth');
     seg($('cr-out'), OUTS, out, 'out');
     seg($('cr-clips'), CLIPS, clips, 'c');
     seg($('cr-engine'), ENGINES, engine, 'eng');
@@ -162,6 +164,7 @@
   $('cr-dur').addEventListener('click', (e) => { const b = e.target.closest('[data-d]'); if (!b) return; dur = Number(b.dataset.d); renderSegs(); save(); });
   $('cr-orient').addEventListener('click', (e) => { const b = e.target.closest('[data-o]'); if (!b) return; orient = b.dataset.o; renderSegs(); save(); });
   $('cr-style').addEventListener('click', (e) => { const b = e.target.closest('[data-s]'); if (!b) return; style = b.dataset.s; renderSegs(); if (window.__crStyleTip) window.__crStyleTip(); save(); });
+  $('cr-eth').addEventListener('click', (e) => { const b = e.target.closest('[data-eth]'); if (!b) return; eth = b.dataset.eth; renderSegs(); save(); });
   $('cr-out').addEventListener('click', (e) => { const b = e.target.closest('[data-out]'); if (!b) return; out = b.dataset.out; renderSegs(); save(); });
   $('cr-clips').addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (!b) return; clips = Number(b.dataset.c); if ($('cr-clip-saved')) $('cr-clip-saved').textContent = ''; renderSegs(); save(); });
   $('cr-engine').addEventListener('click', (e) => { const b = e.target.closest('[data-eng]'); if (!b) return; engine = b.dataset.eng; renderSegs(); save(); });
@@ -207,13 +210,13 @@
   // ── 상태 저장/복원(탭 이동·새로고침·기기 바꿔도 유지) ──
   const KEY = 'onvideo-create-state';
   function save() {
-    try { syncTableToScenario(); localStorage.setItem(KEY, JSON.stringify({genres, dur, orient, style, out, clips, narr, bgm, voice, engine, brief: $('cr-brief').value, scenario, eps, bible, epScenarios, epProduced, curEp})); } catch {}
+    try { syncTableToScenario(); localStorage.setItem(KEY, JSON.stringify({genres, dur, orient, style, eth, out, clips, narr, bgm, voice, engine, brief: $('cr-brief').value, scenario, eps, bible, epScenarios, epProduced, curEp})); } catch {}
   }
   function restore() {
     let s; try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch {}
     if (!s) return;
     genres = Array.isArray(s.genres) && s.genres.length ? s.genres : genres;
-    dur = s.dur || dur; orient = s.orient || orient; style = s.style || style;
+    dur = s.dur || dur; orient = s.orient || orient; style = s.style || style; eth = ['auto', 'korean', 'western'].includes(s.eth) ? s.eth : 'auto';
     out = s.out === 'wan' ? 'wan' : 'image'; clips = s.clips || clips;
     narr = s.narr !== false; bgm = s.bgm !== false; voice = s.voice || ''; engine = s.engine === 'gpt' ? 'gpt' : 'free';
     eps = s.eps || 1; bible = s.bible || null; epScenarios = Array.isArray(s.epScenarios) ? s.epScenarios : []; epProduced = Array.isArray(s.epProduced) ? s.epProduced : []; curEp = s.curEp || 0;
@@ -259,7 +262,7 @@
   }
 
   // ── 시나리오 생성(단편/시리즈) ──
-  const briefBody = () => ({genre: genres.join(' '), keywords: genres, brief: $('cr-brief').value.trim(), duration: dur, orientation: orient, imageStyle: style, premiumScript: engine === 'gpt'});
+  const briefBody = () => ({genre: genres.join(' '), keywords: genres, brief: $('cr-brief').value.trim(), duration: dur, orientation: orient, imageStyle: style, ethnicity: eth, premiumScript: engine === 'gpt'});
   $('cr-gen').onclick = $('cr-regen').onclick = async () => {
     if (!genres.length && !$('cr-brief').value.trim()) { $('cr-gen-state').textContent = '장르나 키워드를 하나 이상 골라주세요.'; return; }
     $('cr-gen').disabled = true;
@@ -453,7 +456,7 @@
     $('cr-phase').textContent = '제작 준비'; startTs = Date.now(); startTick();
     try {
       const r = await fetch('/api/create-produce', {method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({storyboard: scenario, duration: dur, orientation: orient, imageStyle: style, aiClips: out === 'wan' ? clips : 0, narration: narr, bgm, voice: voice || undefined, faceImage: faceImage || undefined})});
+        body: JSON.stringify({storyboard: scenario, duration: dur, orientation: orient, imageStyle: style, ethnicity: eth, aiClips: out === 'wan' ? clips : 0, narration: narr, bgm, voice: voice || undefined, faceImage: faceImage || undefined})});
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || '제작 실패');
       attach(d.id);

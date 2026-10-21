@@ -304,6 +304,13 @@ function updateStyleCurrent() {
 $('style-open')?.addEventListener('click', () => $('style-modal')?.classList.remove('hidden'));
 $('style-close')?.addEventListener('click', () => $('style-modal')?.classList.add('hidden'));
 $('style-modal')?.addEventListener('click', (e) => { if (e.target.id === 'style-modal') $('style-modal').classList.add('hidden'); });
+// 🌏 등장인물 인종(자동/한국인/외국인) — #ethnicity hidden에 저장, 제작 body가 읽는다.
+function setEth(v) {
+  const val = ['auto', 'korean', 'western'].includes(v) ? v : 'auto';
+  if ($('ethnicity')) $('ethnicity').value = val;
+  document.querySelectorAll('#eth-seg .eth-btn').forEach((b) => b.classList.toggle('active', b.dataset.eth === val));
+}
+document.querySelectorAll('#eth-seg .eth-btn').forEach((b) => b.addEventListener('click', () => { setEth(b.dataset.eth); saveFormState(); }));
 
 // 🎴 카드 작업 내역 — 영상 내역과 완전 분리. 내가 만든 카드(영상·게시물)만 포트폴리오에서 추려 보여줌.
 //   제목검색 + 날짜범위 + 페이지네이션(10개/페이지, 가로 페이저).
@@ -451,6 +458,7 @@ function applyCardSettings(id, title, media) {
   if (body.cardTheme && $('card-theme')) $('card-theme').value = body.cardTheme;
   if (body.voice != null && $('voice')) $('voice').value = body.voice;
   if (body.imageStyle) setStyle(body.imageStyle);
+  if (body.ethnicity) setEth(body.ethnicity);
   if (body.presetId) {
     selectedPreset = body.presetId;
     const chip = document.querySelector('.chip[data-preset="' + body.presetId + '"]');
@@ -524,6 +532,7 @@ $('generate').onclick = async () => {
       presetId: selectedPreset,
       voice: $('voice').value,
       imageStyle: $('image-style') ? $('image-style').value : 'real',
+      ethnicity: $('ethnicity') ? $('ethnicity').value : 'auto',
     };
   } else if (mode === 'auto' || mode === 'topic') {
     // 주제 추천 모드도 링크 대신 주제를 /api/generate로 보냄(url 자리에 주제).
@@ -537,6 +546,7 @@ $('generate').onclick = async () => {
       voice: $('voice').value,
       quality: $('quality').value,
       imageStyle: $('image-style') ? $('image-style').value : 'real',
+      ethnicity: $('ethnicity') ? $('ethnicity').value : 'auto',
       aiClips: Number($('aiClips').value),
       autoShutdown: $('auto-shutdown') ? $('auto-shutdown').checked : true,
       narration: $('v-narration') ? $('v-narration').checked : true,
@@ -1603,6 +1613,7 @@ function saveFormState() {
       duration: $('duration')?.value,
       voice: $('voice')?.value || '',
       imageStyle: $('image-style')?.value,
+      ethnicity: $('ethnicity')?.value || 'auto',
       characterId: $('character-select')?.value || '',
       quality: $('quality')?.value,
       font: $('font')?.value || '', // 빈값=자동(디자인별 기본 폰트). 기본값 강제하면 '자동'이 안 유지됨.
@@ -1638,6 +1649,7 @@ function restoreFormState() {
   if (s.duration) $('duration').value = s.duration;
   if (s.voice != null && $('voice')) $('voice').value = s.voice;
   if (s.imageStyle && $('image-style')) { $('image-style').value = s.imageStyle; renderStyleGallery(); }
+  setEth(s.ethnicity || 'auto');
   syncCharacterRow();
   if (s.characterId != null && $('character-select')) { $('character-select').value = s.characterId; updateCharacterThumb(); }
   if (s.quality && $('quality')) $('quality').value = s.quality;
@@ -1677,6 +1689,7 @@ function resetForm() {
   if ($('facts')) $('facts').value = '';
   if ($('duration')) $('duration').value = '30';
   if ($('image-style')) { $('image-style').value = 'real'; renderStyleGallery(); }
+  setEth('auto');
   if ($('quality')) $('quality').value = 'high';
   setSceneCount(0);
   setAiClips(0);

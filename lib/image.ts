@@ -14,6 +14,14 @@ const NEG_TEXT =
 const NEG_FOOD =
   ', food, dishes, cooked meat, grilled fish or eel, ingredients and grocery products are shown as realistic appetizing real food and plain inanimate objects only — never give any food, ingredient or product a face, eyes, mouth or facial expression, no anthropomorphized food, no googly eyes on food, cooked or grilled food looks properly cooked and real, not alive';
 
+// ★인물 인종 지정 — 한국 소재인데 서양인 얼굴로 나오는 문제 해결(테리). 모든 스타일 공통(사람 없는 장면엔 무효과).
+//   auto(기본)=미지정(AI 재량). korean=한국인(동아시아). western=서양인. 전 경로(영상만들기·창작·재창작·쇼핑)가 이 한 곳을 거친다.
+export function ethnicityHint(ethnicity?: string): string {
+  if (ethnicity === 'korean') return ', any people or characters shown are Korean (East Asian) with natural Korean faces, hair, skin tone and styling';
+  if (ethnicity === 'western') return ', any people or characters shown are Western (Caucasian)';
+  return '';
+}
+
 export async function generateImageFlux(
   key: string,
   prompt: string,
@@ -22,12 +30,13 @@ export async function generateImageFlux(
   quality: 'fast' | 'high' = 'high',
   style: ImageStyle = 'real',
   landscape = false,
+  ethnicity?: string,
 ): Promise<void> {
   // 일시적 네트워크 오류(fetch failed 등)에 최대 3회 재시도 — placeholder로 새는 것 방지.
   let lastErr: any;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      return await fluxOnce(key, prompt, outPath, log, quality, style, landscape);
+      return await fluxOnce(key, prompt, outPath, log, quality, style, landscape, ethnicity);
     } catch (e: any) {
       lastErr = e;
       log?.(`[이미지] 생성 실패(${e.message}) — 재시도 ${attempt}/3`);
@@ -45,13 +54,14 @@ async function fluxOnce(
   quality: 'fast' | 'high' = 'high',
   style: ImageStyle = 'real',
   landscape = false,
+  ethnicity?: string,
 ): Promise<void> {
   const high = quality !== 'fast';
   const model = high ? 'flux-dev' : 'flux-schnell';
   const st = getStyle(style); // 레지스트리에서 스타일 레시피(프롬프트·사람정책·guidance)
   const styleStr = st.promptAdd + st.peopleAdd;
   const input: Record<string, unknown> = {
-    prompt: prompt + styleStr + NEG_TEXT + NEG_FOOD,
+    prompt: prompt + styleStr + ethnicityHint(ethnicity) + NEG_TEXT + NEG_FOOD,
     aspect_ratio: landscape ? '16:9' : '9:16', // ★롱폼=가로 16:9 / 쇼츠=세로 9:16 네이티브
     num_outputs: 1,
     output_format: 'jpg',
@@ -123,10 +133,11 @@ export async function generateImageFal(
   quality: 'fast' | 'high' = 'high',
   style: ImageStyle = 'real',
   landscape = false,
+  ethnicity?: string,
 ): Promise<void> {
   let lastErr: any;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    try { return await falFluxOnce(key, prompt, outPath, log, quality, style, landscape); }
+    try { return await falFluxOnce(key, prompt, outPath, log, quality, style, landscape, ethnicity); }
     catch (e: any) {
       const m = String(e?.message || '');
       if (isFalExhausted(m)) throw e; // 크레딧 소진류는 재시도 무의미 → 던져서 Replicate 폴백
@@ -146,12 +157,13 @@ async function falFluxOnce(
   quality: 'fast' | 'high',
   style: ImageStyle,
   landscape: boolean,
+  ethnicity?: string,
 ): Promise<void> {
   const st = getStyle(style);
   const styleStr = st.promptAdd + st.peopleAdd;
   const model = quality === 'fast' ? 'fal-ai/flux/schnell' : 'fal-ai/flux/dev';
   const input: Record<string, unknown> = {
-    prompt: prompt + styleStr + NEG_TEXT + NEG_FOOD,
+    prompt: prompt + styleStr + ethnicityHint(ethnicity) + NEG_TEXT + NEG_FOOD,
     image_size: landscape ? 'landscape_16_9' : 'portrait_16_9', // 세로 쇼츠=portrait_16_9(9:16)
     num_images: 1,
     output_format: 'jpeg',
@@ -206,17 +218,18 @@ export async function generateImageSmart(
   quality: 'fast' | 'high' = 'high',
   style: ImageStyle = 'real',
   landscape = false,
+  ethnicity?: string,
 ): Promise<void> {
   if (keys.fal) {
     try {
-      await generateImageFal(keys.fal, prompt, outPath, log, quality, style, landscape);
+      await generateImageFal(keys.fal, prompt, outPath, log, quality, style, landscape, ethnicity);
       return;
     } catch (e: any) {
       const m = String(e?.message || '');
       log?.(`[이미지] fal → Replicate 폴백(${isFalExhausted(m) ? '크레딧 소진' : '실패'}): ${m.slice(0, 60)}`);
     }
   }
-  await generateImageFlux(keys.replicate, prompt, outPath, log, quality, style, landscape);
+  await generateImageFlux(keys.replicate, prompt, outPath, log, quality, style, landscape, ethnicity);
 }
 
 // ── nano-banana(google, Replicate): 애니 캐릭터 일관성 생성 ──
