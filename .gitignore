@@ -14,3 +14,7 @@ data/
 
 # Local dependency symlink
 node_modules
+
+# 굴비 쇼츠 로컬 임시 작업물(커밋 제외)
+work-gulbi/
+make-gulbi.ts
