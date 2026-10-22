@@ -27,7 +27,19 @@
     plat: 'threads',
     accts: {threads: [], instagram: [], facebook: []},
     sel: {threads: new Set(), instagram: new Set(), facebook: new Set()},
+    vPage: 0, vFilter: 'all',
   };
+  const V_PER = 12; // 페이지당 영상 수
+  // 작업 종류 구분(배지·필터): 하이라이트/카드영상/재창작/창작/일반영상.
+  function kindOf(v) {
+    if (v.media === 'highlight') return 'highlight';
+    if (v.media === 'card') return 'card';
+    if (v.origin === 'remake') return 'remake';
+    if (v.origin === 'create') return 'create';
+    return 'video';
+  }
+  const KIND_LABEL = {highlight: '🎬 하이라이트', card: '🎴 카드영상', remake: '🎭 재창작', create: '✍️ 창작', video: '🎞 영상'};
+  const filteredVideos = () => state.vFilter === 'all' ? state.videos : state.videos.filter((v) => kindOf(v) === state.vFilter);
   let curJob = '', es = null, stopMode = null, lastRun = null, lastRunId = ''; // stopMode: 'stop'|'cancel'|null
 
   // ───────── 영상 그리드 ─────────
@@ -41,19 +53,35 @@
   }
   function renderVideos() {
     const g = $('vgrid');
-    if (!state.videos.length) { g.innerHTML = '<p class="mini-state">포트폴리오에 영상이 없어요. 먼저 영상을 만들어 주세요.</p>'; updateVSel(); return; }
-    g.innerHTML = state.videos.map((v) => {
+    const list = filteredVideos();
+    if (!list.length) { g.innerHTML = `<p class="mini-state">${state.videos.length ? '이 종류의 영상이 없어요.' : '포트폴리오에 영상이 없어요. 먼저 영상을 만들어 주세요.'}</p>`; $('vpager').innerHTML = ''; updateVSel(); return; }
+    const pages = Math.max(1, Math.ceil(list.length / V_PER));
+    if (state.vPage >= pages) state.vPage = pages - 1;
+    if (state.vPage < 0) state.vPage = 0;
+    const items = list.slice(state.vPage * V_PER, state.vPage * V_PER + V_PER);
+    g.innerHTML = items.map((v) => {
       const badges = [v.instagramUrl ? '<span title="인스타 올림">📷</span>' : '', v.facebookUrl ? '<span title="페북 올림">👍</span>' : '', v.threadsUrl ? '<span title="스레드 올림">🧵</span>' : ''].join('');
       const land = v.orientation === 'landscape' ? ' land' : '';
       return `<div class="vcard${state.selVideos.has(v.id) ? ' sel' : ''}" data-vid="${esc(v.id)}">
         <div class="vcheck">${state.selVideos.has(v.id) ? '✓' : ''}</div>
         ${v.thumb ? `<img class="vthumb${land}" src="${esc(v.thumb)}" loading="lazy" onerror="this.style.visibility='hidden'"/>` : `<div class="vthumb${land}"></div>`}
+        <div class="vkind">${KIND_LABEL[kindOf(v)]}</div>
         <div class="vtitle">${esc(v.title || '(제목 없음)')}</div>
         <div class="vbadges">${badges}</div>
         <div class="vbtns"><button data-act="instagram" title="인스타로 바로">📷</button><button data-act="facebook" title="페북으로 바로">👍</button><button data-act="threads" title="스레드로 바로">🧵</button><button data-act="dl" title="다운로드">⬇</button></div>
       </div>`;
     }).join('');
+    renderPager(pages);
     updateVSel();
+  }
+  function renderPager(pages) {
+    const box = $('vpager');
+    if (pages <= 1) { box.innerHTML = ''; return; }
+    const cur = state.vPage; const nums = [];
+    for (let i = 0; i < pages; i++) { if (i === 0 || i === pages - 1 || (i >= cur - 2 && i <= cur + 2)) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…'); }
+    box.innerHTML = `<button data-p="${Math.max(0, cur - 1)}" ${cur === 0 ? 'disabled' : ''}>◀</button>` +
+      nums.map((n) => n === '…' ? '<span class="dots">…</span>' : `<button class="${n === cur ? 'active' : ''}" data-p="${n}">${n + 1}</button>`).join('') +
+      `<button data-p="${Math.min(pages - 1, cur + 1)}" ${cur === pages - 1 ? 'disabled' : ''}>▶</button>`;
   }
   function updateVSel() { $('vsel-count').textContent = state.selVideos.size + '개 선택'; }
 
@@ -69,6 +97,8 @@
   $('v-all').onclick = () => { state.videos.forEach((v) => state.selVideos.add(v.id)); renderVideos(); };
   $('v-none').onclick = () => { state.selVideos.clear(); renderVideos(); };
   $('v-reload').onclick = loadVideos;
+  $('vpager').onclick = (e) => { const b = e.target.closest('button[data-p]'); if (!b) return; state.vPage = Number(b.dataset.p); renderVideos(); };
+  $('vfilter').onclick = (e) => { const b = e.target.closest('[data-f]'); if (!b) return; [...$('vfilter').children].forEach((x) => x.classList.toggle('on', x === b)); state.vFilter = b.dataset.f; state.vPage = 0; renderVideos(); };
 
   // ───────── 계정(플랫폼별) ─────────
   async function loadAccounts() {

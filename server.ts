@@ -911,6 +911,8 @@ JSON만: {"comment":"..."}`;
     return serveFile(res, path.join(ROOT, 'web', 'shop.js'), 'application/javascript; charset=utf-8');
   if (p === '/ppurio' || p === '/ppurio.html')
     return serveFile(res, path.join(ROOT, 'web', 'ppurio-v.html'), 'text/html; charset=utf-8');
+  if (p === '/ppurio-manifest.json')
+    return serveFile(res, path.join(ROOT, 'web', 'ppurio-manifest.json'), 'application/manifest+json; charset=utf-8');
   if (p.startsWith('/ppurio-assets/')) {
     const f = p.slice('/ppurio-assets/'.length);
     if (/^[\w.-]+\.(png|jpe?g|webp|svg)$/.test(f)) {

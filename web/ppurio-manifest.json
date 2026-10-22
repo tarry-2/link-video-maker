@@ -1,0 +1,17 @@
+{
+  "name": "뿌리오 — 사방으로 송출",
+  "short_name": "뿌리오",
+  "description": "영상을 스레드·인스타·페북 여러 계정에 한 번에 송출하는 방송콘솔.",
+  "start_url": "/social",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#efe8da",
+  "theme_color": "#a8dc2e",
+  "lang": "ko",
+  "icons": [
+    { "src": "/ppurio-assets/ppurio-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/ppurio-assets/ppurio-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/ppurio-assets/ppurio-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>뿌리오 방송콘솔 — 한 번에 사방으로 송출</title>
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="/ppurio-manifest.json" />
     <meta name="theme-color" content="#f3eee2" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/ppurio-assets/ppurio-icon-192.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -76,13 +76,20 @@
 
       /* 영상 그리드 */
       .vtools { display:flex; gap:7px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
-      .vgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:12px; max-height:640px; overflow:auto; padding:3px; }
+      .vfilter { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+      .vgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:12px; padding:3px; }
+      .pager { display:flex; gap:5px; justify-content:center; margin-top:16px; flex-wrap:wrap; }
+      .pager button { min-width:34px; padding:7px 10px; border-radius:9px; border:1px solid var(--line); background:var(--field); color:var(--ink); font-weight:700; font-size:13px; cursor:pointer; transition:all .15s; }
+      .pager button.active { background:var(--lime); border-color:var(--lime); color:#1f2d05; }
+      .pager button:disabled { opacity:.4; cursor:default; }
+      .pager .dots { padding:7px 4px; color:var(--dim); }
       .vcard { border:2px solid var(--line); border-radius:14px; overflow:hidden; background:var(--field); cursor:pointer; transition:border-color .15s, transform .15s; position:relative; }
       .vcard:hover { transform:translateY(-2px); }
       .vcard.sel { border-color:var(--lime); box-shadow:0 0 0 3px color-mix(in srgb,var(--lime),transparent 78%); }
       .vcard .vthumb { width:100%; aspect-ratio:9/16; object-fit:cover; background:#17130c; display:block; }
       .vcard .vthumb.land { aspect-ratio:16/9; }
-      .vcard .vtitle { font-size:11.5px; font-weight:700; padding:7px 8px 3px; line-height:1.3; height:38px; overflow:hidden; }
+      .vcard .vkind { display:inline-block; font-size:10px; font-weight:800; padding:2px 7px; border-radius:6px; background:var(--bg); color:var(--lime-d); margin:6px 8px 0; }
+      .vcard .vtitle { font-size:11.5px; font-weight:700; padding:5px 8px 3px; line-height:1.3; height:36px; overflow:hidden; }
       .vcard .vbadges { display:flex; gap:3px; padding:0 8px; min-height:14px; }
       .vcard .vbadges span { font-size:10px; }
       .vcard .vbtns { display:flex; gap:3px; padding:5px 6px 7px; }
@@ -151,12 +158,21 @@
         <div class="col-main">
           <div class="step-card">
             <div class="step-h"><span class="step-no">1</span><h2>영상 선택</h2><span class="opt" id="vsel-count">0개 선택</span></div>
+            <div class="vfilter" id="vfilter">
+              <button class="chip on" data-f="all">전체</button>
+              <button class="chip" data-f="video">🎞 영상</button>
+              <button class="chip" data-f="remake">🎭 재창작</button>
+              <button class="chip" data-f="create">✍️ 창작</button>
+              <button class="chip" data-f="card">🎴 카드</button>
+              <button class="chip" data-f="highlight">🎬 하이라이트</button>
+            </div>
             <div class="vtools">
               <button id="v-all" class="chip">전체 선택</button>
               <button id="v-none" class="chip">해제</button>
               <button id="v-reload" class="chip">↻ 새로고침</button>
             </div>
             <div id="vgrid" class="vgrid"><p class="mini-state">영상 불러오는 중…</p></div>
+            <div id="vpager" class="pager"></div>
           </div>
         </div>
 
