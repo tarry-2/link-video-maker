@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>뿌리오 종묘사 — 씨앗 한 봉지로 사방에 심다</title>
+    <meta name="description" content="글 하나를 AI가 플랫폼마다 다르게 다듬어 여러 소셜 계정에 동시에 뿌리는 다계정 발행 도구." />
+    <meta name="theme-color" content="#efe3c6" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+    <style>
+      :root {
+        --paper: #efe3c6; --paper-2: #e6d7b2; --card: #f7efd9;
+        --ink: #2a1d0e; --ink-2: #5a4a2e;
+        --mustard: #e0a52a; --tomato: #cf4129; --olive: #6d7a34; --leaf: #3f8a3a; --sky: #4a7fa5;
+        --bd: 3px solid var(--ink);
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        font-family: 'Pretendard', sans-serif; background: var(--paper); color: var(--ink);
+        overflow-x: hidden; line-height: 1.55; -webkit-font-smoothing: antialiased;
+      }
+      /* 종이 질감 */
+      body::before { content:''; position: fixed; inset:0; z-index: 9998; pointer-events:none; opacity:.09; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+      .han { font-family: 'Black Han Sans', sans-serif; }
+      .bri { font-family: 'Bricolage Grotesque', sans-serif; }
+      .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px,5vw,48px); position: relative; }
+      a { color: inherit; }
+
+      /* 상단바 */
+      header { position: sticky; top: 0; z-index: 200; background: var(--paper); border-bottom: var(--bd); }
+      .nav { display: flex; align-items: center; justify-content: space-between; height: 70px; }
+      .logo { display: flex; align-items: center; gap: 9px; }
+      .logo img { width: 38px; height: 38px; object-fit: contain; }
+      .logo .k { font-family:'Black Han Sans'; font-size: 24px; letter-spacing: .01em; }
+      .logo .sub { font-family:'Bricolage Grotesque'; font-weight: 700; font-size: 10px; letter-spacing: .22em; color: var(--tomato); text-transform: uppercase; align-self:flex-end; margin-bottom: 7px; }
+      .nav-cta {
+        font-family:'Bricolage Grotesque'; font-weight: 800; font-size: 14px; padding: 11px 22px; border: var(--bd); border-radius: 4px;
+        background: var(--mustard); color: var(--ink); text-decoration: none; box-shadow: 3px 3px 0 var(--ink); transition: transform .12s, box-shadow .12s;
+      }
+      .nav-cta:hover { transform: translate(-2px,-2px); box-shadow: 5px 5px 0 var(--ink); }
+
+      /* 히어로 = 씨앗봉투 포스터 */
+      .hero { position: relative; padding: clamp(26px,4vw,56px) 0 clamp(40px,6vw,80px); }
+      .hero-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: clamp(20px,4vw,48px); align-items: center; }
+      .stamp-row { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+      .stamp { font-family:'Bricolage Grotesque'; font-weight: 800; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 6px 12px; border: 2px solid var(--ink); border-radius: 100px; }
+      .stamp.m { background: var(--tomato); color: #fff; transform: rotate(-3deg); }
+      .stamp.n { background: var(--card); color: var(--ink); transform: rotate(2deg); }
+      h1.hero-t { font-family:'Black Han Sans'; font-size: clamp(46px,8.6vw,108px); line-height: .96; letter-spacing: -.01em; color: var(--ink); }
+      h1.hero-t .t { color: var(--tomato); } h1.hero-t .o { color: var(--olive); } h1.hero-t .m { color: var(--mustard); -webkit-text-stroke: 2px var(--ink); }
+      .hero-rule { height: 6px; background: repeating-linear-gradient(90deg, var(--ink) 0 18px, transparent 18px 30px); margin: 22px 0; max-width: 360px; }
+      .hero-sub { font-size: clamp(15.5px,1.7vw,19px); color: var(--ink-2); max-width: 40ch; font-weight: 500; }
+      .hero-sub b { color: var(--tomato); font-weight: 800; }
+      .hero-actions { margin-top: 30px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+      .btn-primary { font-family:'Bricolage Grotesque'; font-weight: 800; font-size: 16px; padding: 15px 30px; border: var(--bd); border-radius: 6px;
+        background: var(--leaf); color: #fff; text-decoration: none; box-shadow: 5px 5px 0 var(--ink); transition: transform .12s, box-shadow .12s; }
+      .btn-primary:hover { transform: translate(-2px,-2px); box-shadow: 7px 7px 0 var(--ink); }
+      .btn-ghost { font-family:'Bricolage Grotesque'; font-weight: 800; font-size: 14.5px; color: var(--ink); text-decoration: none; padding: 14px 10px; border-bottom: 3px solid var(--tomato); }
+
+      /* 봉투 캐릭터 */
+      .packet { position: relative; background: var(--card); border: var(--bd); border-radius: 8px; padding: 26px 22px 20px; box-shadow: 8px 8px 0 var(--ink);
+        background-image: linear-gradient(var(--paper-2) 1px, transparent 1px); background-size: 100% 26px; }
+      .packet::before { content:''; position:absolute; top:-3px; left:-3px; right:-3px; height: 26px; background:
+        radial-gradient(circle at 12px -4px, transparent 12px, var(--card) 13px) repeat-x; background-size: 26px 26px; border-bottom: var(--bd); }
+      .packet-top { position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+      .packet-top .lbl { font-family:'Bricolage Grotesque'; font-weight: 800; font-size: 11px; letter-spacing:.14em; color: var(--tomato); text-transform: uppercase; }
+      .packet-top .net { font-family:'Bricolage Grotesque'; font-weight: 800; font-size: 11px; color: var(--ink-2); }
+      .puri-stage { position: relative; display: grid; place-items: center; min-height: 300px; }
+      .sunburst { position: absolute; width: 360px; height: 360px; z-index: 0;
+        background: repeating-conic-gradient(from 0deg, var(--mustard) 0deg 8deg, transparent 8deg 16deg); opacity: .22; border-radius: 50%; animation: spin 50s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg);} }
+      .puri { position: relative; z-index: 3; width: clamp(200px,26vw,310px); filter: drop-shadow(0 16px 20px rgba(42,29,14,.3)); animation: float 5s ease-in-out infinite; }
+      @keyframes float { 0%,100%{ transform: translateY(0) rotate(-2deg);} 50%{ transform: translateY(-14px) rotate(2deg);} }
+      .seed-badge { position: absolute; z-index: 4; bottom: 6px; right: 0; background: var(--tomato); color: #fff; border: var(--bd); border-radius: 50%;
+        width: 92px; height: 92px; display: grid; place-items: center; text-align: center; transform: rotate(-8deg); box-shadow: 4px 4px 0 var(--ink); }
+      .seed-badge span { font-family:'Black Han Sans'; font-size: 13px; line-height: 1.1; }
+
+      /* 섹션 공통 */
+      .reveal { opacity: 0; transform: translateY(30px); transition: opacity .6s ease, transform .6s ease; }
+      .reveal.in { opacity: 1; transform: none; }
+      .sec-tag { display: inline-flex; align-items:center; gap: 8px; font-family:'Bricolage Grotesque'; font-weight: 800; font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+        color: var(--paper); background: var(--ink); padding: 7px 16px; border-radius: 100px; margin-bottom: 18px; }
+      .sec-h { font-family:'Black Han Sans'; font-size: clamp(32px,6vw,68px); letter-spacing: -.01em; line-height: 1; }
+
+      /* How = 3 씨앗봉투 */
+      .how { padding: clamp(50px,7vw,96px) 0; }
+      .how-head { text-align: center; margin-bottom: clamp(36px,5vw,60px); }
+      .packets { display: grid; grid-template-columns: repeat(3,1fr); gap: clamp(18px,2.5vw,28px); }
+      .pk { position: relative; background: var(--card); border: var(--bd); border-radius: 8px; padding: 30px 22px 24px; box-shadow: 6px 6px 0 var(--ink);
+        background-image: linear-gradient(var(--paper-2) 1px, transparent 1px); background-size: 100% 24px; transition: transform .15s, box-shadow .15s; }
+      .pk:hover { transform: translate(-3px,-3px); box-shadow: 9px 9px 0 var(--ink); }
+      .pk:nth-child(1){ --ac: var(--leaf); } .pk:nth-child(2){ --ac: var(--tomato); transform: translateY(18px);} .pk:nth-child(3){ --ac: var(--mustard);}
+      .pk:nth-child(2):hover{ transform: translate(-3px,15px); }
+      .pk .no { position:absolute; top: -18px; left: 22px; width: 46px; height: 46px; border-radius: 50%; background: var(--ac); border: var(--bd); color:#fff;
+        display:grid; place-items:center; font-family:'Black Han Sans'; font-size: 22px; box-shadow: 3px 3px 0 var(--ink); }
+      .pk:nth-child(3) .no { color: var(--ink); }
+      .pk .ic { font-size: 40px; margin: 6px 0 12px; }
+      .pk h3 { font-family:'Bricolage Grotesque'; font-weight: 800; font-size: clamp(18px,2.1vw,23px); margin-bottom: 9px; letter-spacing: -.01em; }
+      .pk p { font-size: 14px; color: var(--ink-2); line-height: 1.6; }
+
+      /* Why = 가로 라벨 배너 */
+      .why { background: var(--ink); color: var(--paper); border-top: var(--bd); border-bottom: var(--bd); }
+      .why-inr { padding: clamp(48px,6vw,84px) 0; }
+      .why .sec-tag { background: var(--mustard); color: var(--ink); }
+      .why .sec-h { color: var(--paper); }
+      .why-lead { font-family:'Bricolage Grotesque'; font-weight: 700; font-size: clamp(18px,2vw,26px); line-height: 1.35; color: var(--mustard); margin: 18px 0 40px; max-width: 24ch; }
+      .feats { display: grid; grid-template-columns: repeat(2,1fr); gap: 2px; border: 2px solid rgba(239,227,198,.25); }
+      .feat { padding: 26px; border: 1px solid rgba(239,227,198,.18); display:grid; grid-template-columns: 48px 1fr; gap: 16px; align-items:start; }
+      .feat .fic { font-size: 30px; }
+      .feat h4 { font-family:'Bricolage Grotesque'; font-weight: 800; font-size: 18px; color: var(--mustard); margin-bottom: 6px; }
+      .feat p { font-size: 14px; color: #d8ccab; line-height: 1.6; }
+
+      /* 변환 데모 */
+      .morph { padding: clamp(50px,7vw,96px) 0; }
+      .morph-head { text-align: center; max-width: 560px; margin: 0 auto clamp(26px,4vw,44px); }
+      .seedline { width: fit-content; margin: 0 auto; background: var(--card); border: var(--bd); border-radius: 100px; padding: 12px 24px; font-weight: 700; font-size: 14.5px; box-shadow: 4px 4px 0 var(--ink); }
+      .seedline b { color: var(--tomato); }
+      .branches { display: grid; grid-template-columns: repeat(3,1fr); gap: clamp(16px,2.5vw,24px); margin-top: 44px; }
+      .bud { background: var(--card); border: var(--bd); border-radius: 8px; padding: 20px; box-shadow: 5px 5px 0 var(--ink); }
+      .bud:nth-child(2){ transform: rotate(-1.2deg);} .bud:nth-child(3){ transform: translateY(18px) rotate(1deg);}
+      .bud .tag { font-family:'Bricolage Grotesque'; font-size: 11px; font-weight: 800; letter-spacing:.06em; text-transform:uppercase; padding: 5px 12px; border: 2px solid var(--ink); border-radius: 100px; display:inline-flex; gap:6px; margin-bottom: 12px; }
+      .bud p { font-size: 14px; line-height: 1.6; color: var(--ink); }
+      .bud .hash { color: var(--olive); font-weight: 700; display:block; margin-top: 8px; font-size: 13px; }
+      .t-th { background: #d9ecd4; } .t-ig { background: #f6dbe4; } .t-fb { background: #d9e4f0; }
+
+      /* 마지막 CTA */
+      .final { text-align: center; padding: clamp(60px,8vw,120px) 0; position: relative; }
+      .final .puri-sm { width: clamp(100px,14vw,150px); margin: 0 auto 10px; display:block; animation: float 5s ease-in-out infinite; filter: drop-shadow(0 12px 16px rgba(42,29,14,.26)); }
+      .final h2 { font-family:'Black Han Sans'; font-size: clamp(34px,7vw,82px); letter-spacing: -.01em; line-height: 1.02; }
+      .final h2 .u { color: var(--tomato); position: relative; }
+      .final h2 .u::after { content:''; position:absolute; left:0; right:0; bottom: 6px; height: 10px; background: var(--mustard); z-index:-1; }
+      .final .hero-actions { justify-content: center; margin-top: 34px; }
+      footer { background: var(--ink); color: var(--paper); border-top: var(--bd); padding: 28px 0; text-align: center; font-family:'Bricolage Grotesque'; font-weight: 700; font-size: 13px; letter-spacing: .04em; }
+
+      @media (max-width: 880px) {
+        .hero-grid { grid-template-columns: 1fr; }
+        .packets { grid-template-columns: 1fr; gap: 30px; }
+        .pk:nth-child(2){ transform: none; } .pk:nth-child(2):hover{ transform: translate(-3px,-3px);}
+        .feats { grid-template-columns: 1fr; }
+        .branches { grid-template-columns: 1fr; gap: 18px; }
+        .bud:nth-child(2),.bud:nth-child(3){ transform: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap nav">
+        <a href="/ppurio-c" class="logo"><img src="/ppurio-assets/puri.png" alt="뿌리오" /> <span class="k">뿌리오</span> <span class="sub">종묘사</span></a>
+        <a href="/social" class="nav-cta">스튜디오 열기 →</a>
+      </div>
+    </header>
+
+    <!-- 히어로 -->
+    <section class="hero wrap">
+      <div class="hero-grid">
+        <div class="hero-text">
+          <div class="stamp-row">
+            <span class="stamp m">🌾 ORGANIC 콘텐츠</span>
+            <span class="stamp n">SINCE 2026</span>
+          </div>
+          <h1 class="hero-t">한 봉지로<br /><span class="t">사방에</span> <span class="o">심다.</span></h1>
+          <div class="hero-rule"></div>
+          <p class="hero-sub">글 한 줄을 심으면 AI가 <b>플랫폼마다 다른 품종</b>으로 길러, 당신의 여러 소셜 계정에 한 번에 뿌립니다. 복붙은 흉작, 다품종은 풍작.</p>
+          <div class="hero-actions">
+            <a href="/social" class="btn-primary">씨앗 뿌리기 🌱</a>
+            <a href="#how" class="btn-ghost">재배법 보기</a>
+          </div>
+        </div>
+        <div class="packet">
+          <div class="packet-top"><span class="lbl">뿌리오 종묘사 · 다계정 품종</span><span class="net">순 3계정</span></div>
+          <div class="puri-stage">
+            <div class="sunburst"></div>
+            <img class="puri" src="/ppurio-assets/puri.png" alt="뿌리오 마스코트" />
+            <div class="seed-badge"><span>한 번<br/>쓰면<br/>끝</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How -->
+    <section id="how" class="how wrap">
+      <div class="how-head reveal">
+        <span class="sec-tag">🌱 재배법 · How it works</span>
+        <h2 class="sec-h">심는 건 하나,<br/>거두는 건 사방.</h2>
+      </div>
+      <div class="packets">
+        <div class="pk reveal"><div class="no">1</div><div class="ic">🌱</div><h3>글감을 심어요</h3><p>주제나 느낌 한 줄이면 AI가 스레드에서 먹히는 글로 키웁니다. 직접 쓴 글을 심어도 돼요.</p></div>
+        <div class="pk reveal"><div class="no">2</div><div class="ic">🍃</div><h3>품종별로 다듬어요</h3><p>스레드·인스타·페북은 말투도 해시태그도 다릅니다. 각 밭의 결에 맞게 새로 심습니다.</p></div>
+        <div class="pk reveal"><div class="no">3</div><div class="ic">🌾</div><h3>여러 밭에 뿌려요</h3><p>원하는 계정을 골라 버튼 한 번. 밭마다 성공·실패를 한 화면에서 거둡니다.</p></div>
+      </div>
+    </section>
+
+    <!-- Why -->
+    <div class="why">
+      <div class="wrap why-inr">
+        <div class="reveal">
+          <span class="sec-tag">왜 뿌리오 · Why</span>
+          <h2 class="sec-h">복붙은 흉작입니다.</h2>
+          <p class="why-lead">같은 씨앗을 그대로 여러 밭에 뿌리면, 알고리즘은 ‘복제’로 읽고 묻어버립니다.</p>
+        </div>
+        <div class="feats reveal">
+          <div class="feat"><div class="fic">🎯</div><div><h4>품종별 전용 글</h4><p>스레드는 대화체 끝맺음 질문, 인스타는 공감형 해시태그 5개. 밭의 결을 읽고 각각 새로 씁니다.</p></div></div>
+          <div class="feat"><div class="fic">🌿</div><div><h4>밭은 섞지 않게</h4><p>노래 밭엔 노래만, 영상 밭엔 영상만. 품종이 섞이면 둘 다 죽습니다.</p></div></div>
+          <div class="feat"><div class="fic">🎨</div><div><h4>글에 맞는 그림까지</h4><p>텍스트만으로 심심할 때, 어울리는 이미지를 그 자리에서 길러 함께 뿌립니다.</p></div></div>
+          <div class="feat"><div class="fic">⚡</div><div><h4>한 번에 여러 밭</h4><p>계정을 체크하고 버튼 한 번. 밭마다 성공·실패를 즉시 돌려받습니다.</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 변환 데모 -->
+    <section class="morph wrap">
+      <div class="morph-head reveal">
+        <span class="sec-tag">한 알, 여러 꽃 · One seed</span>
+        <h2 class="sec-h">같은 씨앗,<br/>다른 꽃.</h2>
+      </div>
+      <div class="reveal"><div class="seedline">🌰 심은 한 줄 : <b>“혼자 사는 20대의 현실 공감”</b></div></div>
+      <div class="branches">
+        <div class="bud reveal"><span class="tag t-th">🧵 스레드</span><p>자취 3년 차… 제일 서러운 순간이 아플 때더라. 다들 혼자 아플 땐 뭐 챙겨 먹어요?</p></div>
+        <div class="bud reveal"><span class="tag t-ig">📷 인스타</span><p>혼자 사는 사람만 아는 그 순간 🥲 저장해두고 공감 댓글 남겨요<span class="hash">#자취 #1인가구 #독립 #자취꿀팁 #현실공감</span></p></div>
+        <div class="bud reveal"><span class="tag t-fb">👍 페이스북</span><p>처음 독립했을 땐 자유가 전부인 줄 알았어요. 진짜 어른이 된 건, 아무도 없는 방에서 혼자 끼니를 챙기던 그 밤이었습니다.</p></div>
+      </div>
+    </section>
+
+    <!-- 마지막 CTA -->
+    <section class="final wrap">
+      <img class="puri-sm" src="/ppurio-assets/puri.png" alt="" />
+      <h2>이제 복붙은 그만.<br/><span class="u">씨앗 하나로 뿌리세요.</span></h2>
+      <div class="hero-actions">
+        <a href="/social" class="btn-primary">뿌리오 종묘사 열기 🌱</a>
+      </div>
+    </section>
+
+    <footer>🌱 뿌리오 종묘사 — OnVideo 패밀리 · 스레드 다계정 발행 도구</footer>
+
+    <script>
+      const io = new IntersectionObserver((es)=>{ es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} }); }, { threshold:.16, rootMargin:'0px 0px -8% 0px' });
+      document.querySelectorAll('.reveal').forEach((el,i)=>{ el.style.transitionDelay=(Math.min(i%3,2)*0.09)+'s'; io.observe(el); });
+    </script>
+  </body>
+</html>

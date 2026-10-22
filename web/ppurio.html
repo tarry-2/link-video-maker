@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>뿌리오 — 한 번 심으면, 사방으로 퍼집니다</title>
+    <meta name="description" content="글 하나를 AI가 플랫폼마다 다르게 다듬어 여러 소셜 계정에 동시에 뿌리는 다계정 발행 도구." />
+    <meta name="theme-color" content="#101a0b" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,900;1,9..144,600;1,9..144,900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+    <style>
+      :root {
+        --bone: #f0e8d6; --bone-2: #e7dcc4;
+        --ink: #121c0b; --ink-2: #26311a;
+        --moss: #1c3312; --moss-deep: #0f2109;
+        --sprout: #5bb33e; --sprout-hi: #8ede5a; --lime: #c7e65a;
+        --terra: #d85a2e; --clay: #b84a2a; --gold: #eaa828;
+        --paper-sh: 0 2px 1px rgba(18,28,11,.04), 0 10px 30px -12px rgba(18,28,11,.3);
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        font-family: 'Pretendard', sans-serif; background: var(--bone); color: var(--ink);
+        overflow-x: hidden; line-height: 1.5; -webkit-font-smoothing: antialiased;
+      }
+      /* 전면 그레인 */
+      body::after {
+        content: ''; position: fixed; inset: 0; z-index: 9998; pointer-events: none; opacity: .06; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      }
+      .disp { font-family: 'Fraunces', serif; }
+      .wrap { max-width: 1240px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 56px); position: relative; }
+      a { color: inherit; }
+
+      /* ── 상단바 ── */
+      header { position: sticky; top: 0; z-index: 200; }
+      .nav {
+        display: flex; align-items: center; justify-content: space-between; height: 76px;
+        margin: 14px auto 0; max-width: 1240px; padding: 0 clamp(20px,5vw,56px);
+      }
+      .nav-pill {
+        display: flex; align-items: center; justify-content: space-between; width: 100%;
+        background: rgba(18,28,11,.82); backdrop-filter: blur(14px) saturate(1.3);
+        border: 1px solid rgba(199,230,90,.18); border-radius: 100px; padding: 9px 9px 9px 22px;
+        box-shadow: 0 18px 40px -20px rgba(18,28,11,.6);
+      }
+      .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -.03em; color: var(--bone); }
+      .logo img { width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 4px 8px rgba(0,0,0,.3)); }
+      .logo .k { font-family:'Fraunces'; font-weight:900; }
+      .nav-cta {
+        font-weight: 800; font-size: 14.5px; padding: 12px 24px; border-radius: 100px;
+        background: var(--lime); color: var(--moss-deep); text-decoration: none;
+        transition: transform .25s cubic-bezier(.2,.9,.3,1.3), background .25s; white-space: nowrap;
+      }
+      .nav-cta:hover { transform: translateY(-2px) scale(1.03); background: var(--sprout-hi); }
+
+      /* ── 히어로 ── */
+      .hero { position: relative; padding: clamp(40px,7vw,86px) 0 clamp(60px,10vw,140px); }
+      .hero-bg { position: absolute; top: -90px; left: 0; right: 0; height: 720px; z-index: 0; overflow: hidden; }
+      .hero-bg img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; opacity: .5; }
+      .hero-bg::after { content:''; position:absolute; inset:0; background: linear-gradient(180deg, rgba(240,232,214,.35) 0%, rgba(240,232,214,.2) 40%, var(--bone) 92%), radial-gradient(70% 60% at 72% 36%, transparent, rgba(240,232,214,.5)); }
+      .hero-glow {
+        position: absolute; top: -140px; right: -8%; width: 820px; height: 820px; z-index: 1; pointer-events:none;
+        background: radial-gradient(circle at 50% 50%, rgba(139,222,90,.4), rgba(234,168,40,.14) 42%, transparent 66%);
+        filter: blur(14px); animation: breathe 7s ease-in-out infinite; mix-blend-mode: multiply;
+      }
+      @keyframes breathe { 0%,100%{ transform: scale(1); opacity:.85;} 50%{ transform: scale(1.12); opacity:1;} }
+      .hero-grid {
+        position: relative; z-index: 3; display: grid;
+        grid-template-columns: 1.02fr .98fr; align-items: center; gap: clamp(16px,3vw,40px);
+      }
+      .eyebrow {
+        display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 800; letter-spacing: .01em;
+        color: var(--moss); background: rgba(91,179,62,.14); border: 1px solid rgba(91,179,62,.34);
+        padding: 8px 16px; border-radius: 100px; margin-bottom: 26px;
+      }
+      .eyebrow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sprout); box-shadow: 0 0 0 0 rgba(91,179,62,.6); animation: ping 2s infinite; }
+      @keyframes ping { 0%{ box-shadow: 0 0 0 0 rgba(91,179,62,.55);} 70%,100%{ box-shadow: 0 0 0 11px rgba(91,179,62,0);} }
+      h1.hero-t {
+        font-family: 'Fraunces', serif; font-weight: 900; font-size: clamp(46px, 8.4vw, 116px);
+        line-height: .9; letter-spacing: -.045em; margin-left: -.04em;
+      }
+      h1.hero-t .l2 { padding-left: clamp(30px,8vw,120px); display: block; }
+      h1.hero-t .l3 { display: block; }
+      h1.hero-t .grow {
+        position: relative; display: inline-block; color: var(--sprout);
+        font-style: italic; font-weight: 900;
+      }
+      h1.hero-t .grow svg { position: absolute; left: -2%; bottom: -.14em; width: 104%; height: .32em; overflow: visible; }
+      h1.hero-t .grow path { fill: none; stroke: var(--terra); stroke-width: 9; stroke-linecap: round; stroke-dasharray: 460; stroke-dashoffset: 460; animation: draw 1.1s .7s cubic-bezier(.6,0,.3,1) forwards; }
+      @keyframes draw { to { stroke-dashoffset: 0; } }
+      .hero-sub { margin: 30px 0 0 clamp(0px,2vw,30px); font-size: clamp(16px,1.7vw,20px); color: var(--ink-2); max-width: 44ch; font-weight: 500; }
+      .hero-sub b { color: var(--terra); font-weight: 800; }
+      .hero-actions { margin: 36px 0 0 clamp(0px,2vw,30px); display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+      .btn-primary {
+        position: relative; font-weight: 800; font-size: 16.5px; padding: 17px 34px; border-radius: 100px;
+        background: var(--terra); color: #fff; text-decoration: none; border: none; cursor: pointer;
+        box-shadow: 0 8px 0 var(--clay), 0 18px 26px -10px rgba(184,74,42,.5); transition: transform .14s, box-shadow .14s;
+      }
+      .btn-primary:hover { transform: translateY(4px); box-shadow: 0 4px 0 var(--clay), 0 10px 18px -10px rgba(184,74,42,.5); }
+      .btn-ghost { font-weight: 800; font-size: 15px; color: var(--ink); text-decoration: none; padding: 15px 4px; border-bottom: 2.5px solid var(--ink); transition: color .2s, border-color .2s; }
+      .btn-ghost:hover { color: var(--sprout); border-color: var(--sprout); }
+
+      /* 캐릭터 무대 */
+      .stage { position: relative; display: grid; place-items: center; min-height: clamp(360px,42vw,560px); }
+      .blob {
+        position: absolute; width: clamp(300px,36vw,500px); aspect-ratio: 1; z-index: 1;
+        background: linear-gradient(150deg, var(--sprout) 0%, var(--moss) 100%);
+        border-radius: 42% 58% 55% 45% / 55% 44% 56% 45%;
+        box-shadow: inset 0 -30px 60px rgba(15,33,9,.4), 0 40px 70px -24px rgba(28,51,18,.55);
+        animation: morph 12s ease-in-out infinite;
+      }
+      @keyframes morph {
+        0%,100%{ border-radius: 42% 58% 55% 45% / 55% 44% 56% 45%; transform: rotate(0deg); }
+        50%{ border-radius: 56% 44% 43% 57% / 44% 57% 43% 56%; transform: rotate(8deg); }
+      }
+      .ring { position: absolute; width: clamp(360px,44vw,620px); aspect-ratio: 1; border: 2px dashed rgba(91,179,62,.4); border-radius: 50%; z-index: 0; animation: spin 40s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .puri { position: relative; z-index: 4; width: clamp(240px,30vw,400px); filter: drop-shadow(0 30px 40px rgba(28,51,18,.4)); animation: float 5s ease-in-out infinite; }
+      @keyframes float { 0%,100%{ transform: translateY(0) rotate(-2deg);} 50%{ transform: translateY(-22px) rotate(2deg);} }
+      /* 날리는 씨앗 */
+      .seed { position: absolute; z-index: 5; width: 11px; height: 15px; border-radius: 60% 60% 52% 52% / 74% 74% 40% 40%; opacity: 0; }
+      .seed.a{ top:16%; left:12%; background:var(--gold); animation: drift 3.6s ease-in-out infinite; }
+      .seed.b{ top:30%; left:84%; background:var(--sprout-hi); width:9px;height:12px; animation: drift 4.2s ease-in-out .7s infinite; }
+      .seed.c{ top:66%; left:6%; background:var(--terra); width:8px;height:11px; animation: drift 4.8s ease-in-out 1.3s infinite; }
+      .seed.d{ top:76%; left:80%; background:var(--lime); width:10px;height:13px; animation: drift 4s ease-in-out .3s infinite; }
+      .seed.e{ top:8%; left:56%; background:var(--gold); width:7px;height:10px; animation: drift 3.3s ease-in-out .9s infinite; }
+      @keyframes drift { 0%{ opacity:0; transform: translate(0,0) rotate(0);} 18%{opacity:1;} 82%{opacity:.6;} 100%{ opacity:0; transform: translate(42px,-66px) rotate(160deg);} }
+
+      /* 떠있는 "통계" 칩 (비대칭 오버랩) */
+      .float-stat {
+        position: absolute; z-index: 6; background: var(--bone); border-radius: 18px; padding: 12px 16px;
+        box-shadow: var(--paper-sh); border: 1.5px solid rgba(18,28,11,.1);
+        display: flex; align-items: center; gap: 11px; animation: bob 4.5s ease-in-out infinite;
+      }
+      .float-stat .fnum { font-family:'Fraunces'; font-weight:900; font-size: 26px; color: var(--terra); line-height:1; }
+      .float-stat .ft { font-size: 11.5px; font-weight: 700; color: var(--ink-2); line-height:1.25; }
+      .fs-1 { top: 6%; left: -6%; transform: rotate(-5deg); }
+      .fs-2 { bottom: 10%; right: -9%; animation-delay: 1.2s; transform: rotate(4deg); }
+      @keyframes bob { 0%,100%{ transform: translateY(0) rotate(var(--r,0));} 50%{ transform: translateY(-10px) rotate(var(--r,0));} }
+      .fs-1 { --r:-5deg; } .fs-2 { --r:4deg; }
+
+      /* ── 섹션 공통 ── */
+      .reveal { opacity: 0; transform: translateY(34px); transition: opacity .7s cubic-bezier(.2,.7,.3,1), transform .7s cubic-bezier(.2,.7,.3,1); }
+      .reveal.in { opacity: 1; transform: none; }
+      .sec-label { font-family:'Fraunces'; font-style: italic; font-weight: 600; font-size: clamp(16px,1.7vw,20px); color: var(--terra); margin-bottom: 14px; display:flex; align-items:center; gap:12px; }
+      .sec-label::before { content:''; width: 42px; height: 2.5px; background: var(--terra); display:inline-block; }
+      .sec-h { font-family:'Fraunces'; font-weight: 900; font-size: clamp(32px,5.6vw,66px); letter-spacing: -.035em; line-height: 1; }
+
+      /* ── How: 박스 없는 궤적 흐름 ── */
+      .how { position: relative; padding: clamp(50px,8vw,110px) 0; }
+      .how-head { max-width: 640px; margin-bottom: clamp(30px,5vw,64px); }
+      .steps { position: relative; display: flex; flex-direction: column; gap: clamp(28px,5vw,60px); }
+      .step { position: relative; display: grid; grid-template-columns: clamp(110px,16vw,230px) 1fr; gap: clamp(16px,3vw,48px); align-items: center; }
+      .step:nth-child(2) { padding-left: clamp(30px,10vw,160px); }
+      .step:nth-child(3) { padding-left: clamp(60px,20vw,320px); }
+      .step .big {
+        font-family:'Fraunces'; font-weight: 900; font-size: clamp(90px,17vw,230px); line-height: .8;
+        letter-spacing: -.04em; color: transparent; -webkit-text-stroke: 2px var(--sprout);
+        position: relative;
+      }
+      .step:nth-child(2) .big { -webkit-text-stroke-color: var(--terra); }
+      .step:nth-child(3) .big { -webkit-text-stroke-color: var(--gold); }
+      .step .big .fill { position:absolute; inset:0; color: var(--sprout); -webkit-text-stroke: 0; clip-path: inset(100% 0 0 0); transition: clip-path 1s cubic-bezier(.4,0,.2,1); }
+      .step.in .big .fill { clip-path: inset(0 0 0 0); }
+      .step:nth-child(2) .big .fill { color: var(--terra); }
+      .step:nth-child(3) .big .fill { color: var(--gold); }
+      .step .scont { max-width: 440px; }
+      .step .sic { font-size: 30px; margin-bottom: 8px; }
+      .step h3 { font-size: clamp(20px,2.6vw,30px); font-weight: 800; letter-spacing: -.02em; margin-bottom: 10px; }
+      .step p { font-size: clamp(14.5px,1.5vw,17px); color: var(--ink-2); line-height: 1.6; }
+
+      /* ── Why: 다크 풀블리드, 기울어진 경계 ── */
+      .why { position: relative; background: var(--moss-deep); color: var(--bone); margin-top: clamp(40px,7vw,90px); }
+      .why::before, .why::after { content:''; position: absolute; left:0; right:0; height: 7vw; background: var(--moss-deep); z-index:1; }
+      .why::before { top: -3.5vw; clip-path: polygon(0 100%, 100% 0, 100% 100%, 0 100%); }
+      .why::after { bottom: -3.5vw; clip-path: polygon(0 0, 100% 0, 100% 0, 0 100%); }
+      .why-inr { position: relative; z-index: 2; padding: clamp(50px,7vw,96px) 0; }
+      .why .sec-label { color: var(--gold); } .why .sec-label::before { background: var(--gold); }
+      .why .sec-h { color: var(--bone); }
+      .why-grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: clamp(24px,5vw,70px); align-items: start; margin-top: clamp(32px,5vw,56px); }
+      .why-lead { font-family:'Fraunces'; font-weight: 600; font-style: italic; font-size: clamp(19px,2.2vw,27px); line-height: 1.35; color: var(--lime); }
+      .feats { display: flex; flex-direction: column; }
+      .feat { display: grid; grid-template-columns: 54px 1fr; gap: 20px; padding: 26px 0; border-top: 1px solid rgba(199,230,90,.18); align-items: start; }
+      .feat:last-child { border-bottom: 1px solid rgba(199,230,90,.18); }
+      .feat .fic { font-size: 34px; line-height: 1; filter: drop-shadow(0 6px 10px rgba(0,0,0,.4)); }
+      .feat h4 { font-size: clamp(17px,1.9vw,21px); font-weight: 800; color: var(--sprout-hi); margin-bottom: 7px; letter-spacing: -.01em; }
+      .feat p { font-size: 14.5px; color: #c6d2b4; line-height: 1.62; }
+
+      /* ── 변환 데모: 하나의 씨앗 → 세 갈래 ── */
+      .morph { position: relative; padding: clamp(60px,9vw,120px) 0; }
+      .morph-head { text-align: center; max-width: 620px; margin: 0 auto clamp(40px,6vw,72px); }
+      .morph-head .sec-label { justify-content: center; }
+      .sprout-src {
+        display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 0 auto 10px; width: fit-content;
+      }
+      .sprout-src .seed-in {
+        background: var(--moss); color: var(--lime); font-weight: 700; font-size: 14.5px;
+        padding: 13px 22px; border-radius: 100px; box-shadow: 0 14px 30px -12px rgba(28,51,18,.6);
+        display:flex; align-items:center; gap:9px;
+      }
+      .sprout-src .seed-in b { color: #fff; }
+      .branches { position: relative; display: grid; grid-template-columns: repeat(3,1fr); gap: clamp(16px,2.5vw,32px); margin-top: 54px; }
+      .branches .vine { position: absolute; top: -54px; left: 0; width: 100%; height: 56px; z-index: 0; pointer-events:none; }
+      .branches .vine path { fill: none; stroke: var(--sprout); stroke-width: 2.5; stroke-dasharray: 5 7; opacity: .55; }
+      .bud { position: relative; z-index: 2; background: var(--bone); border-radius: 22px; padding: 22px; box-shadow: var(--paper-sh); border: 1.5px solid rgba(18,28,11,.08); }
+      .bud:nth-child(2){ transform: rotate(-1.4deg); } .bud:nth-child(3){ transform: translateY(26px) rotate(1deg); } .bud:nth-child(4){ transform: rotate(1.6deg); }
+      .bud .tag { font-size: 12px; font-weight: 800; padding: 5px 13px; border-radius: 100px; display: inline-flex; align-items:center; gap:6px; margin-bottom: 13px; }
+      .bud p { font-size: 14.5px; line-height: 1.6; color: var(--ink); }
+      .bud .hash { color: var(--sprout); font-weight: 700; display:block; margin-top: 8px; font-size: 13.5px; }
+      .t-th { background: #e3f6df; color: #2f7d2b; } .t-ig { background: #fde6ef; color: #c0356f; } .t-fb { background: #e3ecfb; color: #2f5fb0; }
+
+      /* ── 마지막 CTA ── */
+      .final { position: relative; text-align: center; padding: clamp(70px,10vw,150px) 0 clamp(50px,7vw,100px); overflow: hidden; }
+      .final .glow2 { position: absolute; left: 50%; top: 20%; transform: translateX(-50%); width: 700px; height: 500px; background: radial-gradient(ellipse, rgba(139,222,90,.35), transparent 65%); filter: blur(10px); z-index:0; }
+      .final .puri-sm { position: relative; z-index: 2; width: clamp(110px,16vw,170px); margin: 0 auto 6px; display: block; animation: float 5s ease-in-out infinite; filter: drop-shadow(0 20px 26px rgba(28,51,18,.32)); }
+      .final h2 { position: relative; z-index: 2; font-family:'Fraunces'; font-weight: 900; font-size: clamp(36px,7.4vw,92px); letter-spacing: -.04em; line-height: .98; }
+      .final h2 .u { position: relative; color: var(--terra); }
+      .final h2 .u::after { content:''; position: absolute; left: -2%; right: -2%; bottom: .08em; height: .5em; background: var(--gold); z-index: -1; border-radius: 4px; transform: rotate(-1deg); opacity:.55; }
+      .final .hero-actions { justify-content: center; margin-top: 40px; }
+      footer { position: relative; z-index:2; border-top: 1px solid rgba(18,28,11,.12); padding: 30px 0; text-align: center; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+
+      /* ── 반응형 ── */
+      @media (max-width: 880px) {
+        .nav { height: 66px; }
+        .hero-grid { grid-template-columns: 1fr; text-align: left; }
+        .stage { order: -1; min-height: 360px; margin-bottom: 10px; }
+        h1.hero-t .l2 { padding-left: clamp(18px,8vw,60px); }
+        .hero-sub, .hero-actions { margin-left: 0; }
+        .fs-1 { left: 2%; } .fs-2 { right: 2%; }
+        .step { grid-template-columns: 1fr; gap: 6px; }
+        .step:nth-child(2), .step:nth-child(3) { padding-left: 0; }
+        .step .big { font-size: clamp(76px,24vw,130px); }
+        .step .scont { padding-left: 6px; }
+        .why-grid { grid-template-columns: 1fr; }
+        .branches { grid-template-columns: 1fr; gap: 16px; }
+        .branches .vine { display: none; }
+        .bud:nth-child(3){ transform:none; } .bud:nth-child(2),.bud:nth-child(4){ transform:none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav class="nav">
+        <div class="nav-pill">
+          <a href="/ppurio" class="logo"><img src="/ppurio-assets/puri.png" alt="뿌리오" /> <span class="k">뿌리오</span></a>
+          <a href="/social" class="nav-cta">스튜디오 열기 →</a>
+        </div>
+      </nav>
+    </header>
+
+    <!-- ── 히어로 ── -->
+    <section class="hero">
+      <div class="hero-bg"><img src="/ppurio-assets/hero-a.jpg" alt="" onerror="this.parentNode.style.display='none'" /></div>
+      <div class="hero-glow"></div>
+      <div class="wrap hero-grid">
+        <div class="hero-text">
+          <span class="eyebrow"><span class="dot"></span> 스레드 · 인스타 · 페북 다계정 자동발행</span>
+          <h1 class="hero-t disp">
+            <span class="l1">한 번</span>
+            <span class="l2">심으면,</span>
+            <span class="l3"><span class="grow">사방으로<svg viewBox="0 0 300 24" preserveAspectRatio="none"><path d="M4 18 C 70 4, 150 4, 220 14 S 290 20, 296 10"/></svg></span></span>
+            <span class="l3">퍼집니다.</span>
+          </h1>
+          <p class="hero-sub">글 하나를 AI가 <b>플랫폼마다 다르게</b> 다듬어, 당신의 여러 소셜 계정에 동시에 씨앗처럼 뿌립니다. 복붙하느라 조회수를 버리지 마세요.</p>
+          <div class="hero-actions">
+            <a href="/social" class="btn-primary">지금 뿌려보기 🌱</a>
+            <a href="#how" class="btn-ghost">어떻게 되나요?</a>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="ring"></div>
+          <div class="blob"></div>
+          <span class="seed a"></span><span class="seed b"></span><span class="seed c"></span><span class="seed d"></span><span class="seed e"></span>
+          <img class="puri" src="/ppurio-assets/puri.png" alt="뿌리오 마스코트 뿌리" />
+          <div class="float-stat fs-1"><span class="fnum">3</span><span class="ft">플랫폼 동시<br/>발행</span></div>
+          <div class="float-stat fs-2"><span class="fnum">1×</span><span class="ft">쓰는 건<br/>한 번</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── How ── -->
+    <section id="how" class="how wrap">
+      <div class="how-head reveal">
+        <div class="sec-label disp">How it works</div>
+        <h2 class="sec-h">심는 건 하나,<br/>거두는 건 사방.</h2>
+      </div>
+      <div class="steps">
+        <div class="step reveal">
+          <div class="big" aria-hidden="true">01<span class="fill">01</span></div>
+          <div class="scont">
+            <div class="sic">🌱</div>
+            <h3>글감을 심어요</h3>
+            <p>주제나 느낌 한 줄만 던지면 AI가 스레드에서 먹히는 글로 키워냅니다. 직접 쓴 글을 그대로 심어도 돼요.</p>
+          </div>
+        </div>
+        <div class="step reveal">
+          <div class="big" aria-hidden="true">02<span class="fill">02</span></div>
+          <div class="scont">
+            <div class="sic">🍃</div>
+            <h3>플랫폼 결에 맞게 다듬어요</h3>
+            <p>스레드·인스타·페북은 말투도 길이도 해시태그도 다릅니다. 같은 소재를 각 플랫폼 결에 맞게 자동으로 바꿔 심습니다.</p>
+          </div>
+        </div>
+        <div class="step reveal">
+          <div class="big" aria-hidden="true">03<span class="fill">03</span></div>
+          <div class="scont">
+            <div class="sic">🌾</div>
+            <h3>여러 계정에 한 번에 뿌려요</h3>
+            <p>원하는 계정을 골라 버튼 한 번. 계정마다 성공·실패를 바로 돌려받고, 결과까지 한 화면에서 거둡니다.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Why ── -->
+    <div class="why">
+      <div class="wrap why-inr">
+        <div class="reveal">
+          <div class="sec-label disp">Why 뿌리오</div>
+          <h2 class="sec-h">복붙은 조회수를<br/>죽입니다.</h2>
+        </div>
+        <div class="why-grid">
+          <p class="why-lead reveal">같은 글을 그대로 여러 곳에 올리는 순간, 알고리즘은 그걸 ‘복제’로 읽고 묻어버립니다. 뿌리오는 한 소재를 계정마다 다른 얼굴로 길러 뿌립니다.</p>
+          <div class="feats">
+            <div class="feat reveal"><div class="fic">🎯</div><div><h4>플랫폼별 전용 글</h4><p>스레드는 대화체 끝맺음 질문으로, 인스타는 공감형 해시태그 5개로. 플랫폼 결을 읽고 각각 새로 씁니다.</p></div></div>
+            <div class="feat reveal"><div class="fic">🌿</div><div><h4>계정은 섞지 않게</h4><p>노래 계정엔 노래만, 영상 계정엔 영상만. 주제가 섞이면 둘 다 죽습니다. 계정마다 결을 지켜 뿌립니다.</p></div></div>
+            <div class="feat reveal"><div class="fic">🎨</div><div><h4>글에 맞는 이미지까지</h4><p>텍스트만으로 심심할 때, 글에 어울리는 이미지를 그 자리에서 생성해 함께 뿌립니다.</p></div></div>
+            <div class="feat reveal"><div class="fic">⚡</div><div><h4>한 번에 여러 계정</h4><p>계정을 골라 체크하고 버튼 한 번. 계정별 성공·실패를 즉시 돌려받습니다.</p></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 변환 데모 ── -->
+    <section class="morph wrap">
+      <div class="morph-head reveal">
+        <div class="sec-label disp">One seed, many blooms</div>
+        <h2 class="sec-h">같은 소재,<br/>다른 얼굴.</h2>
+      </div>
+      <div class="sprout-src reveal">
+        <div class="seed-in">🌰 <span>심은 한 줄 : <b>“혼자 사는 20대의 현실 공감”</b></span></div>
+        <span style="font-size:22px">↓</span>
+      </div>
+      <div class="branches">
+        <svg class="vine" viewBox="0 0 1000 56" preserveAspectRatio="none"><path d="M500 0 C 500 30, 170 20, 166 56 M500 0 C 500 34, 500 30, 500 56 M500 0 C 500 30, 830 20, 834 56"/></svg>
+        <div class="bud reveal"><span class="tag t-th">🧵 스레드</span><p>자취 3년 차… 제일 서러운 순간이 아플 때더라. 다들 혼자 아플 땐 뭐 챙겨 먹어요?</p></div>
+        <div class="bud reveal"><span class="tag t-ig">📷 인스타</span><p>혼자 사는 사람만 아는 그 순간 🥲 저장해두고 공감 댓글 남겨요<span class="hash">#자취 #1인가구 #독립 #자취꿀팁 #현실공감</span></p></div>
+        <div class="bud reveal"><span class="tag t-fb">👍 페이스북</span><p>처음 독립했을 땐 자유가 전부인 줄 알았어요. 그런데 진짜 어른이 된 건, 아무도 없는 방에서 혼자 끼니를 챙기던 그 밤이었습니다.</p></div>
+      </div>
+    </section>
+
+    <!-- ── 마지막 CTA ── -->
+    <section class="final wrap">
+      <div class="glow2"></div>
+      <img class="puri-sm" src="/ppurio-assets/puri.png" alt="" />
+      <h2 class="disp">이제 복붙은 그만.<br/><span class="u">씨앗 하나로 뿌리세요.</span></h2>
+      <div class="hero-actions">
+        <a href="/social" class="btn-primary">뿌리오 스튜디오 열기 🌱</a>
+      </div>
+    </section>
+
+    <footer>🌱 뿌리오 — OnVideo 패밀리 · 스레드 다계정 발행 도구</footer>
+
+    <script>
+      // scroll 리빌
+      const io = new IntersectionObserver((es) => {
+        es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+      }, { threshold: 0.18, rootMargin: '0px 0px -8% 0px' });
+      document.querySelectorAll('.reveal, .step').forEach((el, i) => {
+        el.style.transitionDelay = (Math.min(i % 4, 3) * 0.08) + 's';
+        io.observe(el);
+      });
+    </script>
+  </body>
+</html>

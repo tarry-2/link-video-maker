@@ -227,6 +227,37 @@ export async function publishVideo(
   return {permalink: await permalinkOf(pd.id, token), id: pd.id};
 }
 
+// 이미지(+글,+링크) 게시 — media_type=IMAGE. image_url은 공개 접근 가능한 URL(R2 presigned 등).
+export async function publishImage(
+  imageUrl: string, text: string, log?: (m: string) => void, accountId?: string, linkAttachment?: string,
+): Promise<{permalink: string; id: string}> {
+  const c = getThreads(accountId);
+  if (!c || !c.userId || !c.accessToken) throw new Error('스레드가 연결되지 않았습니다. 키 설정에서 연결하세요.');
+  const token = c.accessToken;
+  log?.('[스레드] 이미지 컨테이너 생성 중…');
+  const createParams: Record<string, string> = {
+    media_type: 'IMAGE',
+    image_url: imageUrl,
+    text: (text || '').slice(0, 500),
+    access_token: token,
+  };
+  if (linkAttachment) createParams.link_attachment = linkAttachment;
+  const cr = await fetch(`${HOST}/${API}/me/threads`, {method: 'POST', body: new URLSearchParams(createParams)});
+  const cd: any = await cr.json();
+  if (!cr.ok || !cd.id) {
+    const e = cd?.error || {};
+    const detail = [e.message, e.error_user_title, e.error_user_msg, e.error_subcode && ('subcode ' + e.error_subcode)]
+      .filter(Boolean).join(' | ') || JSON.stringify(cd).slice(0, 300);
+    throw new Error('이미지 컨테이너 생성 실패: ' + detail);
+  }
+  log?.('[스레드] 이미지 처리 대기 중…');
+  await waitFinished(cd.id, token, log);
+  log?.('[스레드] 게시 중…');
+  const pd: any = await publishWithRetry('me', cd.id, token, log);
+  log?.('[스레드] 게시 완료!');
+  return {permalink: await permalinkOf(pd.id, token), id: pd.id};
+}
+
 // 텍스트(+링크) 전용 게시 — 영상 없이 글만. 쇼핑 글(제휴링크) 등. text 500자 제한.
 export async function publishText(
   text: string, log?: (m: string) => void, accountId?: string, linkAttachment?: string,

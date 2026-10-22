@@ -29,7 +29,8 @@ import {getStream, presignGet, uploadFile, videoKey, r2Enabled, deleteKey as del
 import {listCharacters, characterImagePath, createCharacter, deleteCharacter} from './lib/characters';
 import {instagramStatus, addInstagram, removeInstagram, renameInstagram, listInstagram, verifyInstagram, publishVideo, publishCarousel, loadInstagram, generateCaption, maybeRefreshInstagram, getInstaStats, getUploadActivity} from './lib/instagram';
 import {facebookStatus, addFacebook, removeFacebook, renameFacebook, listFacebook, verifyFacebook, publishVideo as fbPublishVideo, publishPhotos as fbPublishPhotos, getFbStats, getUploadActivity as getFbActivity} from './lib/facebook';
-import {threadsStatus, removeThreads, renameThreads, publishVideo as thPublishVideo, publishText as thPublishText, getThreadsStats, getUploadActivity as getThActivity, maybeRefreshThreads, saveThreadsClient, threadsAuthUrl, exchangeThreadsCode} from './lib/threads';
+import {threadsStatus, removeThreads, renameThreads, publishVideo as thPublishVideo, publishText as thPublishText, publishImage as thPublishImage, getThreadsStats, getUploadActivity as getThActivity, maybeRefreshThreads, saveThreadsClient, threadsAuthUrl, exchangeThreadsCode} from './lib/threads';
+import {generateImageSmart} from './lib/image';
 import {resolveProduct} from './lib/partner';
 import {pngToJpeg} from './lib/img-util';
 
@@ -861,7 +862,7 @@ JSON만: {"comment":"..."}`;
 
   // ── 🔒 기능 페이지 진입 차단 — 비번(세션) 없으면 랜딩으로. 대시보드·기능·관리 화면은 로그인 필수. ──
   //   랜딩(/)·로그인/버전 API·정적 자산·포트폴리오 쇼케이스(랜딩 캐러셀용)는 공개로 남긴다.
-  const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html', '/create', '/create.html', '/shop', '/shop.html', '/secret', '/secret.html']);
+  const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html', '/create', '/create.html', '/shop', '/shop.html', '/secret', '/secret.html', '/social', '/social.html']);
   if (GATED_PAGES.has(p) && !authed(req)) {
     res.writeHead(302, {Location: '/?login=1'});
     return res.end();
@@ -885,6 +886,19 @@ JSON만: {"comment":"..."}`;
     return serveFile(res, path.join(ROOT, 'web', 'shop.html'), 'text/html; charset=utf-8');
   if (p === '/shop.js')
     return serveFile(res, path.join(ROOT, 'web', 'shop.js'), 'application/javascript; charset=utf-8');
+  if (p === '/ppurio' || p === '/ppurio.html')
+    return serveFile(res, path.join(ROOT, 'web', 'ppurio-v.html'), 'text/html; charset=utf-8');
+  if (p.startsWith('/ppurio-assets/')) {
+    const f = p.slice('/ppurio-assets/'.length);
+    if (/^[\w.-]+\.(png|jpe?g|webp|svg)$/.test(f)) {
+      const ct = f.endsWith('.png') ? 'image/png' : f.endsWith('.svg') ? 'image/svg+xml' : f.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+      return serveFile(res, path.join(ROOT, 'web', 'ppurio-assets', f), ct);
+    }
+  }
+  if (p === '/social' || p === '/social.html')
+    return serveFile(res, path.join(ROOT, 'web', 'social.html'), 'text/html; charset=utf-8');
+  if (p === '/social.js')
+    return serveFile(res, path.join(ROOT, 'web', 'social.js'), 'application/javascript; charset=utf-8');
   // 🔒 시크릿 콘솔(숨김) — 로그인(GATED) + UI 345678 이중 게이트. 메뉴에 노출 안 함.
   if (p === '/secret' || p === '/secret.html')
     return serveFile(res, path.join(ROOT, 'web', 'secret.html'), 'text/html; charset=utf-8');
@@ -1594,6 +1608,64 @@ JSON만: {"comment":"..."}`;
       const r = await thPublishText(text, undefined, accountId, link);
       return json(res, 200, r);
     } catch (e: any) { return json(res, 502, {error: e.message}); }
+  }
+
+  // ───────── 🧵 스레드 스튜디오(다계정): 주제→글 / 이미지 생성 / 선택 계정 일괄 발행 ─────────
+  // 주제·느낌 또는 직접 글감 → 스레드 전용 글 생성(generateCaption platform=threads 재사용).
+  if (p === '/api/social/compose' && req.method === 'POST') {
+    const b = await readBody(req);
+    const topic = String(b.topic || '').trim();
+    const pfRaw = String(b.platform || 'threads').toLowerCase();
+    const platform = (pfRaw === 'instagram' || pfRaw === 'facebook' ? pfRaw : 'threads') as 'instagram' | 'threads' | 'facebook';
+    if (!topic) return json(res, 400, {error: '주제나 내용을 입력하세요.'});
+    const k = pipelineKeys();
+    try {
+      const text = await generateCaption({gemini: k.gemini, openai: k.openai}, topic, [], platform);
+      return json(res, 200, {text});
+    } catch (e: any) { return json(res, 502, {error: '글 생성 실패: ' + e.message}); }
+  }
+  // 글에 어울리는 이미지 생성 → R2 저장 → 공개 URL 반환. imageKey로 발행 때 다시 presign.
+  if (p === '/api/social/image' && req.method === 'POST') {
+    const b = await readBody(req);
+    const prompt = String(b.prompt || '').trim();
+    if (!prompt) return json(res, 400, {error: '이미지 설명을 입력하세요.'});
+    if (!r2Enabled()) return json(res, 400, {error: '이미지 저장(R2)이 설정되지 않았습니다.'});
+    const k = pipelineKeys();
+    const tmp = path.join(os.tmpdir(), `social-${randomUUID()}.jpg`);
+    try {
+      await generateImageSmart({fal: k.fal, replicate: k.replicate}, prompt, tmp, undefined, 'high', 'real', false);
+      const key = `social/${randomUUID()}.jpg`;
+      const ok = await uploadFile(key, tmp, 'image/jpeg');
+      if (!ok) return json(res, 502, {error: '이미지 업로드 실패'});
+      const url = await presignGet(key, 3600);
+      return json(res, 200, {url, key});
+    } catch (e: any) { return json(res, 502, {error: '이미지 생성 실패: ' + e.message}); }
+    finally { try { fs.unlinkSync(tmp); } catch {} }
+  }
+  // 선택한 여러 계정에 같은 글(+이미지/링크)을 순차 발행. 계정별 성공/실패를 모아 돌려준다.
+  if (p === '/api/social/publish' && req.method === 'POST') {
+    const b = await readBody(req);
+    const text = String(b.text || '').trim();
+    const link = String(b.link || '').trim() || undefined;
+    const imageKey = String(b.imageKey || '').trim();
+    const accountIds: string[] = Array.isArray(b.accountIds) ? b.accountIds.map((x: any) => String(x)).filter(Boolean) : [];
+    if (!accountIds.length) return json(res, 400, {error: '올릴 계정을 하나 이상 선택하세요.'});
+    if (!text && !imageKey) return json(res, 400, {error: '글이나 이미지를 넣으세요.'});
+    let imageUrl: string | undefined;
+    if (imageKey) {
+      imageUrl = (await presignGet(imageKey, 3600)) || undefined;
+      if (!imageUrl) return json(res, 502, {error: '이미지 링크 생성 실패'});
+    }
+    const results: {accountId: string; ok: boolean; permalink?: string; error?: string}[] = [];
+    for (const aid of accountIds) {
+      try {
+        const r = imageUrl
+          ? await thPublishImage(imageUrl, text, undefined, aid, link)
+          : await thPublishText(text, undefined, aid, link);
+        results.push({accountId: aid, ok: true, permalink: r.permalink});
+      } catch (e: any) { results.push({accountId: aid, ok: false, error: e.message}); }
+    }
+    return json(res, 200, {results});
   }
 
   // ── 상품 조회(쇼핑 쇼츠용) — 온파트너 제휴링크(/r/{code}) 또는 온종일팜 다이렉트 상품페이지 둘 다 자동판별 ──

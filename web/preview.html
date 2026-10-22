@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>뿌리오 미리보기 허브</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,500&display=swap" rel="stylesheet" />
+    <style>
+      :root { --bg:#efe8da; --card:#faf5ea; --ink:#231d13; --dim:#7a715c; --line:rgba(35,29,19,.1); --lime:#a8dc2e; --lime-d:#5c9a1d; }
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:'Pretendard',sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; padding:clamp(24px,6vw,64px) clamp(18px,5vw,40px); -webkit-font-smoothing:antialiased; }
+      .wrap { max-width:1000px; margin:0 auto; }
+      .top { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+      .top img { width:52px; height:52px; object-fit:contain; filter:drop-shadow(0 8px 14px rgba(35,29,19,.2)); }
+      h1 { font-size:clamp(26px,4vw,40px); font-weight:900; letter-spacing:-.03em; }
+      h1 .fr { font-family:'Fraunces',serif; font-style:italic; color:var(--lime-d); }
+      .lead { color:var(--dim); font-size:15px; margin:4px 0 36px 66px; }
+      .sec-lbl { font-size:13px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--lime-d); margin:30px 0 14px; }
+      .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+      .pcard { display:block; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:22px; text-decoration:none; color:inherit; box-shadow:0 1px 2px rgba(35,29,19,.04),0 14px 30px -18px rgba(35,29,19,.3); transition:transform .18s, box-shadow .18s; position:relative; }
+      .pcard:hover { transform:translateY(-4px); box-shadow:0 1px 2px rgba(35,29,19,.04),0 22px 40px -18px rgba(35,29,19,.4); }
+      .pcard .badge { position:absolute; top:16px; right:16px; font-size:11px; font-weight:800; padding:4px 10px; border-radius:100px; }
+      .badge.live { background:var(--lime); color:#1f2d05; }
+      .badge.old { background:rgba(35,29,19,.08); color:var(--dim); }
+      .pcard .ic { font-size:34px; margin-bottom:12px; }
+      .pcard h3 { font-size:19px; font-weight:800; letter-spacing:-.02em; margin-bottom:6px; }
+      .pcard p { font-size:13.5px; color:var(--dim); line-height:1.5; }
+      .pcard .go { margin-top:14px; font-size:13px; font-weight:800; color:var(--lime-d); }
+      .grid.old .pcard { opacity:.72; }
+      footer { margin-top:44px; color:var(--dim); font-size:13px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top"><img src="/ppurio-assets/puri.png" alt="뿌리오" /><h1>뿌리오 <span class="fr">미리보기</span></h1></div>
+      <p class="lead">아래에서 바로 열어보세요. 모션·토글·반응형은 실제로 열어야 보입니다.</p>
+
+      <div class="sec-lbl">✅ 확정 방향</div>
+      <div class="grid">
+        <a class="pcard" href="/ppurio-v.html"><span class="badge live">LANDING</span><div class="ic">🌅</div><h3>뿌리오 랜딩</h3><p>비주얼 퍼스트 풀스크린. 픽사 씬 + 조회수 그래프·반응 카운터 모션, 다크/라이트, 반응형.</p><div class="go">열기 →</div></a>
+        <a class="pcard" href="/social.html"><span class="badge live">STUDIO</span><div class="ic">🎛️</div><h3>뿌리오 스튜디오 (대시보드)</h3><p>글 생성→이미지→링크→계정→발행. 성과 미니바, 다크/라이트, 반응형. (로컬엔 API 없어 계정 로드만 실패)</p><div class="go">열기 →</div></a>
+      </div>
+
+      <div class="sec-lbl">📁 지난 시안 (참고 · 폐기)</div>
+      <div class="grid old">
+        <a class="pcard" href="/ppurio.html"><span class="badge old">참고</span><div class="ic">🅰️</div><h3>A · 에디토리얼</h3><p>크림+모스그린, 계단 번호.</p><div class="go">열기 →</div></a>
+        <a class="pcard" href="/ppurio-b.html"><span class="badge old">참고</span><div class="ic">🅱️</div><h3>B · 나이트가든</h3><p>다크 네온 글래스.</p><div class="go">열기 →</div></a>
+        <a class="pcard" href="/ppurio-c.html"><span class="badge old">참고</span><div class="ic">🅲</div><h3>C · 레트로 종묘사</h3><p>빈티지 씨앗봉투.</p><div class="go">열기 →</div></a>
+        <a class="pcard" href="/ppurio-d.html"><span class="badge old">참고</span><div class="ic">🅳</div><h3>D · 브루탈리즘</h3><p>거대 타이포 콜라주 + 파종 모션.</p><div class="go">열기 →</div></a>
+      </div>
+
+      <footer>🌱 뿌리오 — OnVideo 패밀리 · 로컬 미리보기 (http://localhost:8899/preview.html)</footer>
+    </div>
+  </body>
+</html>
