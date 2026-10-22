@@ -318,5 +318,48 @@
         document.querySelectorAll('.scene .scene-bg img').forEach(img=>{ const r=img.getBoundingClientRect(); const off=(r.top+r.height/2 - innerHeight/2)/innerHeight; img.style.objectPosition='center '+(50+off*10)+'%'; });
       }); });
     </script>
+
+    <!-- 🔒 뿌리오 대시보드 진입 로그인 모달 (게이트가 /ppurio?login=1 로 보냄) -->
+    <style>
+      .login-modal { position:fixed; inset:0; z-index:1000; display:none; place-items:center; padding:24px; background:rgba(13,11,7,.8); backdrop-filter:blur(8px); }
+      .login-modal.on { display:grid; }
+      .lm-box { background:var(--page-bg); color:var(--page-ink); border-radius:28px; padding:38px 32px; max-width:380px; width:100%; text-align:center; box-shadow:0 30px 80px -20px rgba(0,0,0,.6); animation:lm-in .3s ease; }
+      @keyframes lm-in { from { transform:translateY(16px) scale(.97); opacity:0; } }
+      .lm-box .lm-puri { width:84px; margin:0 auto 14px; display:block; filter:drop-shadow(0 8px 14px rgba(0,0,0,.2)); }
+      .lm-box h2 { font-size:24px; font-weight:900; letter-spacing:-.02em; }
+      .lm-box .lm-desc { font-size:14px; color:var(--page-dim); margin-top:8px; }
+      .lm-box input { width:100%; margin-top:22px; padding:15px 16px; border-radius:14px; border:1.5px solid var(--line); background:var(--page-bg); color:var(--page-ink); font-size:16px; font-family:inherit; text-align:center; }
+      .lm-box input:focus { outline:none; border-color:var(--lime); box-shadow:0 0 0 3px color-mix(in srgb,var(--lime),transparent 78%); }
+      .lm-box button { width:100%; margin-top:12px; padding:15px; border-radius:14px; border:none; background:var(--lime); color:var(--ink); font-weight:800; font-size:16px; font-family:inherit; cursor:pointer; transition:transform .14s; }
+      .lm-box button:hover { transform:translateY(-2px); }
+      .lm-err { color:#e0652f; font-weight:700; font-size:13px; min-height:18px; margin-top:10px; }
+    </style>
+    <div class="login-modal" id="login-modal">
+      <div class="lm-box">
+        <img class="lm-puri" src="/ppurio-assets/puri.png" alt="뿌리오" />
+        <h2>뿌리오 방송콘솔</h2>
+        <p class="lm-desc">비밀번호를 입력하면 대시보드로 들어가요.</p>
+        <input id="lm-pw" type="password" placeholder="비밀번호" autocomplete="current-password" />
+        <button id="lm-go">들어가기 →</button>
+        <p class="lm-err" id="lm-err"></p>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var modal = document.getElementById('login-modal');
+        if (new URLSearchParams(location.search).get('login') === '1') { modal.classList.add('on'); document.getElementById('lm-pw').focus(); }
+        async function go() {
+          var pw = document.getElementById('lm-pw').value;
+          var err = document.getElementById('lm-err'); err.textContent = '';
+          try {
+            var r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
+            if (!r.ok) { err.textContent = '비밀번호를 확인하세요.'; return; }
+            location.href = '/social';
+          } catch (e) { err.textContent = '오류가 났어요. 다시 시도하세요.'; }
+        }
+        document.getElementById('lm-go').onclick = go;
+        document.getElementById('lm-pw').addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+      })();
+    </script>
   </body>
 </html>

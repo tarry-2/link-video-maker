@@ -887,7 +887,9 @@ JSON만: {"comment":"..."}`;
   //   랜딩(/)·로그인/버전 API·정적 자산·포트폴리오 쇼케이스(랜딩 캐러셀용)는 공개로 남긴다.
   const GATED_PAGES = new Set(['/app', '/app.html', '/index.html', '/voices', '/monetize', '/monetize.html', '/highlight', '/highlight.html', '/create', '/create.html', '/shop', '/shop.html', '/secret', '/secret.html', '/social', '/social.html']);
   if (GATED_PAGES.has(p) && !authed(req)) {
-    res.writeHead(302, {Location: '/?login=1'});
+    // 뿌리오 대시보드(/social)는 뿌리오 랜딩으로, 나머지는 OnVideo 랜딩으로(브랜드 맥락 유지).
+    const dest = (p === '/social' || p === '/social.html') ? '/ppurio?login=1' : '/?login=1';
+    res.writeHead(302, {Location: dest});
     return res.end();
   }
 
