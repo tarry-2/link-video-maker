@@ -138,13 +138,20 @@
   }
   function platIcon(p) { return p === 'instagram' ? '📷' : p === 'facebook' ? '👍' : '🧵'; }
   function platKo(p) { return p === 'instagram' ? '인스타' : p === 'facebook' ? '페북' : '스레드'; }
+  // 현재 플랫폼 계정에 검색어 필터 적용
+  function filteredAccts() {
+    const q = (($('acct-search') && $('acct-search').value) || '').trim().toLowerCase();
+    const all = state.accts[state.plat];
+    return q ? all.filter((a) => String(a.label || a.username || a.pageName || a.id).toLowerCase().includes(q)) : all;
+  }
   function renderAccts() {
-    const box = $('accts'); const plat = state.plat; const list = state.accts[plat]; const sel = state.sel[plat];
-    if (!list.length) { box.innerHTML = `<p class="mini-state">연결된 ${platIcon(plat)} ${platKo(plat)} 계정이 없어요. 영상 만들기 → ⚙ 키 설정에서 연결하세요.</p>`; updateASel(); return; }
+    const box = $('accts'); const plat = state.plat; const sel = state.sel[plat];
+    if (!state.accts[plat].length) { box.innerHTML = `<p class="mini-state">연결된 ${platIcon(plat)} ${platKo(plat)} 계정이 없어요. 영상 만들기 → ⚙ 키 설정에서 연결하세요.</p>`; updateASel(); return; }
+    const list = filteredAccts();
+    if (!list.length) { box.innerHTML = '<p class="mini-state">검색 결과가 없어요.</p>'; updateASel(); return; }
     box.innerHTML = list.map((a) => {
       const name = a.label || a.username || a.pageName || a.id;
-      const sub = a.username ? `@${a.username}` : (a.pageName && a.label !== a.pageName ? a.pageName : '');
-      return `<div class="acct-row"><input type="checkbox" id="a-${esc(a.id)}" data-aid="${esc(a.id)}" ${sel.has(a.id) ? 'checked' : ''}><label for="a-${esc(a.id)}">${platIcon(plat)} ${esc(name)}${sub ? ` <span class="acct-niche">${esc(sub)}</span>` : ''}</label></div>`;
+      return `<div class="acct-row${sel.has(a.id) ? ' on' : ''}"><input type="checkbox" id="a-${esc(a.id)}" data-aid="${esc(a.id)}" ${sel.has(a.id) ? 'checked' : ''}><label for="a-${esc(a.id)}">${platIcon(plat)} ${esc(name)}</label></div>`;
     }).join('');
     updateASel();
   }
@@ -155,17 +162,19 @@
   $('accts').onchange = (e) => {
     const cb = e.target.closest('[data-aid]'); if (!cb) return;
     if (cb.checked) state.sel[state.plat].add(cb.dataset.aid); else state.sel[state.plat].delete(cb.dataset.aid);
+    const row = cb.closest('.acct-row'); if (row) row.classList.toggle('on', cb.checked);
     updateASel();
   };
+  $('acct-search').oninput = renderAccts; // 계정 검색
   $('plat-seg').onclick = (e) => {
     const b = e.target.closest('[data-plat]'); if (!b) return;
     [...$('plat-seg').children].forEach((x) => x.classList.toggle('on', x === b));
     state.plat = b.dataset.plat; renderAccts();
   };
   $('a-all').onclick = () => {
-    const list = state.accts[state.plat]; const sel = state.sel[state.plat];
+    const sel = state.sel[state.plat]; const list = filteredAccts(); // 검색 중이면 보이는 것만
     const allOn = list.length && list.every((a) => sel.has(a.id));
-    if (allOn) sel.clear(); else list.forEach((a) => sel.add(a.id));
+    if (allOn) list.forEach((a) => sel.delete(a.id)); else list.forEach((a) => sel.add(a.id));
     renderAccts();
   };
 

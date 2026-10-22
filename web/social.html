@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>뿌리오 방송콘솔 — 한 번에 사방으로 송출</title>
-    <link rel="manifest" href="/ppurio-manifest.json" />
+    <link rel="manifest" href="/ppurio-manifest.json?v=2114" />
     <meta name="theme-color" content="#f3eee2" />
     <link rel="apple-touch-icon" href="/ppurio-assets/ppurio-icon-192.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -33,14 +33,22 @@
       .head { display:flex; align-items:center; gap:12px; margin:0 auto; padding:13px clamp(16px,4vw,28px); }
       .back { width:40px; height:40px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:17px; display:grid; place-items:center; text-decoration:none; transition:transform .15s; }
       .back:hover { transform:translateX(-2px); }
-      .brand { display:flex; align-items:center; gap:9px; font-weight:800; font-size:19px; letter-spacing:-.02em; flex:1; }
+      .brand { display:flex; align-items:center; gap:9px; font-weight:800; font-size:19px; letter-spacing:-.02em; flex:1; white-space:nowrap; min-width:0; }
       .brand img { width:34px; height:34px; object-fit:contain; }
       .brand small { font-weight:600; font-size:12px; color:var(--dim); margin-left:-2px; }
       .onair { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:900; letter-spacing:.06em; color:#fff; background:#dc2626; padding:5px 11px; border-radius:100px; animation:onair-blink 1.5s ease-in-out infinite; white-space:nowrap; }
       @keyframes onair-blink { 0%,100%{ opacity:1; box-shadow:0 0 14px -2px rgba(220,38,38,.75); } 50%{ opacity:.5; box-shadow:0 0 3px -2px rgba(220,38,38,.15); } }
       .onair.live { animation-duration:.6s; background:#ef4444; }
       .ver-badge { font-size:10.5px; font-weight:700; color:var(--dim); background:var(--bg); padding:4px 9px; border-radius:100px; white-space:nowrap; }
-      @media (max-width:560px){ .onair { font-size:10px; padding:4px 8px; } .ver-badge { display:none; } }
+      @media (max-width:560px){
+        .head { gap:7px; padding:11px 14px; }
+        .brand { font-size:15.5px; }
+        .brand small { display:none; }
+        .brand img { width:28px; height:28px; }
+        .onair { font-size:9px; padding:3px 7px; letter-spacing:.02em; }
+        .ver-badge { display:none; }
+        .btn-tx { display:none; }
+      }
       #theme-btn { width:40px; height:40px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:18px; cursor:pointer; display:grid; place-items:center; transition:transform .2s; }
       #theme-btn:hover { transform:scale(1.08); }
 
@@ -110,11 +118,14 @@
       .vcard.sel .vcheck { background:var(--lime); color:#1f2d05; }
 
       /* 계정 */
-      .acct-list { max-height:380px; overflow:auto; }
-      .acct-row { display:flex; align-items:center; gap:10px; padding:11px 13px; border:1.5px solid var(--line); border-radius:13px; margin-bottom:8px; background:var(--field); transition:border-color .2s; }
+      .acct-search { width:100%; padding:10px 13px; border-radius:11px; border:1.5px solid var(--line); background:var(--field); color:var(--ink); font-size:13.5px; font-family:inherit; margin-bottom:10px; }
+      .acct-search:focus { outline:none; border-color:var(--lime); }
+      .acct-list { max-height:440px; overflow:auto; display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:7px; align-content:start; }
+      .acct-row { display:flex; align-items:center; gap:9px; padding:10px 12px; border:1.5px solid var(--line); border-radius:12px; background:var(--field); transition:border-color .2s; min-width:0; }
       .acct-row:hover { border-color:var(--lime); }
-      .acct-row input[type=checkbox] { width:19px; height:19px; accent-color:var(--lime-d); flex-shrink:0; }
-      .acct-row label { flex:1; font-size:14px; font-weight:600; cursor:pointer; }
+      .acct-row.on { border-color:var(--lime); background:color-mix(in srgb,var(--lime) 10%,var(--field)); }
+      .acct-row input[type=checkbox] { width:18px; height:18px; accent-color:var(--lime-d); flex-shrink:0; }
+      .acct-row label { flex:1; min-width:0; font-size:13px; font-weight:600; cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .acct-niche { font-size:12px; color:var(--dim); font-weight:500; }
       .mini-state { font-size:13.5px; color:var(--dim); padding:10px 2px; }
       .tip { display:flex; gap:8px; font-size:12.5px; color:var(--dim); margin-top:12px; line-height:1.55; background:color-mix(in srgb,var(--sun) 12%,var(--card)); padding:11px 13px; border-radius:12px; }
@@ -163,7 +174,7 @@
         <a href="/ppurio" class="brand" style="text-decoration:none"><img src="/ppurio-assets/puri.png" alt="뿌리오" /> 뿌리오 <small>방송콘솔</small></a>
         <span class="onair" id="onair">● ON AIR</span>
         <span class="ver-badge" id="ver-badge"></span>
-        <a href="/app" class="back" title="온비디오로 이동" style="width:auto;padding:0 14px;text-decoration:none;font-size:13px;font-weight:800">🎬 온비디오</a>
+        <a href="/app" class="back" title="온비디오로 이동" style="width:auto;padding:0 13px;text-decoration:none;font-size:13px;font-weight:800">🎬<span class="btn-tx"> 온비디오</span></a>
         <button id="theme-btn" title="밝게/어둡게">🌙</button>
       </div>
     </header>
@@ -208,6 +219,7 @@
               <button data-plat="facebook">👍 페북</button>
             </div>
             <div class="vtools"><button id="a-all" class="chip">전체 선택/해제</button><span class="mini-state" id="asel-count" style="padding:0"></span></div>
+            <input id="acct-search" class="acct-search" placeholder="🔍 계정 이름 검색…" />
             <div id="accts" class="acct-list"><p class="mini-state">계정 불러오는 중…</p></div>
             <div class="tip">💡 한 기기·한 계정·텀을 두고 올려야 안 걸려요. 계정마다 주제를 섞지 마세요.</div>
           </div>
