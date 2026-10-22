@@ -27,8 +27,10 @@
     plat: 'threads',
     accts: {threads: [], instagram: [], facebook: []},
     sel: {threads: new Set(), instagram: new Set(), facebook: new Set()},
-    vPage: 0, vFilter: 'all',
+    vPage: 0, vFilter: 'all', mode: 'now',
   };
+  function getInterval() { var el = $('interval'); return el ? Number(el.value) || 0 : 0; }
+  function currentTargets() { return {threads: [...state.sel.threads], instagram: [...state.sel.instagram], facebook: [...state.sel.facebook]}; }
   const V_PER = 12; // 페이지당 영상 수
   // 작업 종류 구분(배지·필터): 하이라이트/카드영상/재창작/창작/일반영상.
   function kindOf(v) {
@@ -185,7 +187,7 @@
     $('c-resume').classList.add('hidden');
     setBar(0); showCtrls(true);
     try {
-      const d = await api('/api/social/broadcast', {videoIds, targets, skip: skip || []});
+      const d = await api('/api/social/broadcast', {videoIds, targets, skip: skip || [], intervalSec: getInterval()});
       curJob = d.id; lastRunId = d.id;
       streamJob(d.id);
     } catch (e) { addLog('❌ 시작 실패: ' + e.message); showCtrls(false); }
@@ -217,9 +219,55 @@
     else if (!wasCancel) { setBar(100); confetti(); }                  // 전부 성공했을 때만 폭죽
   }
 
-  // 메인 송출(선택 영상 × 선택 계정 전부)
+  // 메인 송출 — 모드(지금/예약)에 따라 즉시 발행 or 예약 등록
   $('broadcast').onclick = () => {
-    runBroadcast([...state.selVideos], {threads: [...state.sel.threads], instagram: [...state.sel.instagram], facebook: [...state.sel.facebook]}, []);
+    if (state.mode === 'schedule') return scheduleBroadcast();
+    runBroadcast([...state.selVideos], currentTargets(), []);
+  };
+  // 지금/예약 모드 전환
+  $('mode-seg').onclick = (e) => {
+    const b = e.target.closest('[data-mode]'); if (!b) return;
+    [...$('mode-seg').children].forEach((x) => x.classList.toggle('on', x === b));
+    state.mode = b.dataset.mode;
+    $('sched-time-wrap').classList.toggle('hidden', state.mode !== 'schedule');
+    $('broadcast').textContent = state.mode === 'schedule' ? '⏰ 예약 걸기' : '🚀 선택한 영상을 선택한 계정에 송출';
+  };
+  // 예약 등록
+  async function scheduleBroadcast() {
+    const videoIds = [...state.selVideos]; const targets = currentTargets();
+    const nAcc = targets.threads.length + targets.instagram.length + targets.facebook.length;
+    if (!videoIds.length) return alert('송출할 영상을 하나 이상 선택하세요.');
+    if (!nAcc) return alert('올릴 계정을 하나 이상 선택하세요.');
+    const t = $('sched-time').value;
+    if (!t) return alert('예약 시각을 선택하세요.');
+    const scheduledAt = new Date(t).getTime();
+    if (!scheduledAt || scheduledAt < Date.now()) return alert('예약 시각을 미래로 지정하세요.');
+    try {
+      await api('/api/social/schedule', {videoIds, targets, scheduledAt, intervalSec: getInterval()});
+      addLog(`⏰ 예약됨 — ${new Date(scheduledAt).toLocaleString('ko-KR')}에 자동 송출됩니다.`);
+      alert('예약됐어요! 그 시각에 자동으로 송출됩니다.');
+      loadSchedules();
+    } catch (e) { alert(e.message); }
+  }
+  // 예약 목록
+  async function loadSchedules() {
+    try {
+      const d = await api('/api/social/schedule');
+      const box = $('sched-list');
+      if (!d.items || !d.items.length) { box.innerHTML = ''; return; }
+      box.innerHTML = '<div class="small sub" style="font-weight:800;margin-bottom:2px">⏰ 예약된 송출</div>' + d.items.map((s) => {
+        const when = new Date(s.scheduledAt).toLocaleString('ko-KR', {month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+        const iv = s.intervalSec ? ` · 간격 ${s.intervalSec}초` : '';
+        const st = s.status === 'running' ? ' · 🔴 발행 중…' : '';
+        return `<div class="sched-item"><span class="si-when">${when}</span><span class="si-meta">영상 ${s.nVideos} × 계정 ${s.nAcc}${iv}${st}</span>${s.status === 'pending' ? `<button data-cancel="${s.id}">취소</button>` : ''}</div>`;
+      }).join('');
+    } catch {}
+  }
+  $('sched-list').onclick = async (e) => {
+    const b = e.target.closest('[data-cancel]'); if (!b) return;
+    if (!confirm('이 예약을 취소할까요?')) return;
+    try { await fetch('/api/social/schedule/' + encodeURIComponent(b.dataset.cancel), {method: 'DELETE'}); } catch {}
+    loadSchedules();
   };
   // 영상 카드 개별 4버튼 — 그 플랫폼의 '선택된 계정'으로 이 영상만 송출(⬇는 blob 다운로드)
   function quickSend(vid, act) {
@@ -254,4 +302,5 @@
 
   loadVideos();
   loadAccounts();
+  loadSchedules();
 })();

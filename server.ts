@@ -520,6 +520,126 @@ function enqueueJob(job: Job, task: () => Promise<void>) {
   if (runningJobs >= JOB_CONCURRENCY) jlog(job, `[대기] 다른 작업이 처리 중이라 대기열에 넣었어요 — 앞에 ${ahead}건. 순서가 되면 자동으로 시작됩니다.`);
   pumpQueue();
 }
+
+// ── 방송콘솔 발행(즉시/예약 공용) — intervalSec>0이면 각 발행 사이 대기(봇 차단 회피) ──
+function bSleep(ms: number) { return new Promise<void>((r) => setTimeout(r, ms)); }
+type BTargets = {instagram: string[]; facebook: string[]; threads: string[]};
+async function runBroadcastJob(job: Job, videoIds: string[], tg: BTargets, skipKeys: string[], intervalSec: number) {
+  const skip = new Set<string>(skipKeys);
+  const nAcc = tg.instagram.length + tg.facebook.length + tg.threads.length;
+  const k = pipelineKeys();
+  const igNames: Record<string, string> = {}; for (const a of listInstagram()) igNames[a.id] = a.label || a.username || a.id;
+  const fbNames: Record<string, string> = {}; for (const a of listFacebook()) fbNames[a.id] = a.label || a.pageName || a.id;
+  const thNames: Record<string, string> = {}; for (const a of ((threadsStatus() as any).accounts || [])) thNames[a.id] = a.label || a.username || a.id;
+  const icon = (pl: string) => pl === 'instagram' ? '📷' : pl === 'facebook' ? '👍' : '🧵';
+  const nameOf = (pl: string, aid: string) => (pl === 'instagram' ? igNames[aid] : pl === 'facebook' ? fbNames[aid] : thNames[aid]) || aid;
+  const plans: {vid: string; platform: 'instagram' | 'facebook' | 'threads'; aid: string}[] = [];
+  for (const vid of videoIds) {
+    for (const aid of tg.instagram) plans.push({vid, platform: 'instagram', aid});
+    for (const aid of tg.facebook) plans.push({vid, platform: 'facebook', aid});
+    for (const aid of tg.threads) plans.push({vid, platform: 'threads', aid});
+  }
+  const total = plans.length;
+  let done = 0, ok = 0, fail = 0;
+  const remaining: string[] = [];
+  const urlCache = new Map<string, string>();
+  const coverCache = new Map<string, string | undefined>();
+  const capCache = new Map<string, string>();
+  const videoTitle = (vid: string) => (resolveVideo(vid)?.title || listPortfolio().find((x) => x.projectId === vid)?.title || vid);
+  jlog(job, '──────── 방송콘솔 송출 시작 ────────');
+  jlog(job, `• 영상 ${videoIds.length}개 × 계정 ${nAcc}개 = 총 ${total}건${intervalSec ? ` · 계정 간격 ${intervalSec}초` : ''}`);
+  jlog(job, `• 대상: 📷 인스타 ${tg.instagram.length} · 👍 페북 ${tg.facebook.length} · 🧵 스레드 ${tg.threads.length}`);
+  try {
+    for (let i = 0; i < plans.length; i++) {
+      const plan = plans[i];
+      const key = `${plan.vid}|${plan.platform}|${plan.aid}`;
+      const nm = nameOf(plan.platform, plan.aid);
+      if (job.cancelled) { remaining.push(key); continue; }
+      if (skip.has(key)) { done++; ok++; jlog(job, `${icon(plan.platform)} ${nm} ⏭ 이미 완료 — 건너뜀 (${done}/${total})`); continue; }
+      done++;
+      const pct = Math.round((done / total) * 100);
+      jlog(job, `${icon(plan.platform)} ${nm} ⏳ 발행 중… · "${videoTitle(plan.vid).slice(0, 24)}" (${done}/${total} · ${pct}%)`);
+      let published = false;
+      try {
+        let url = urlCache.get(plan.vid);
+        if (!url) {
+          const r2key = await ensureInstaVideoR2(plan.vid);
+          if (!r2key) throw new Error('영상 파일을 찾을 수 없어요(오래돼 정리됐을 수 있음) — 다시 제작해 주세요.');
+          url = (await presignGet(r2key, 3600)) || '';
+          if (!url) throw new Error('영상 임시 링크 생성 실패.');
+          urlCache.set(plan.vid, url);
+        }
+        const capKey = `${plan.vid}|${plan.platform}`;
+        let caption = capCache.get(capKey);
+        if (caption === undefined) {
+          const src = resolveVideo(plan.vid);
+          try { caption = src ? await generateCaption({gemini: k.gemini, openai: k.openai}, src.title, src.narrations, plan.platform) : (videoTitle(plan.vid)); }
+          catch { caption = videoTitle(plan.vid); }
+          const attr = readAttribution(plan.vid);
+          if (attr && !caption.includes(attr)) caption += '\n\n' + attr;
+          const cta = readProductCta(plan.vid);
+          if (cta && !caption.includes(cta)) caption += '\n\n' + cta;
+          capCache.set(capKey, caption);
+        }
+        let r: {permalink: string; id: string};
+        if (plan.platform === 'instagram') {
+          let cover = coverCache.get(plan.vid);
+          if (cover === undefined) { try { cover = (await ensureThumbJpegUrl(plan.vid)) || undefined; } catch { cover = undefined; } coverCache.set(plan.vid, cover); }
+          r = await publishVideo(url, caption, 'reels', undefined, cover, plan.aid);
+          if (r.permalink) { setPortfolioInstagram(plan.vid, r.permalink); saveProjectInstagram(plan.vid, r.permalink); }
+        } else if (plan.platform === 'facebook') {
+          r = await fbPublishVideo(url, caption, undefined, plan.aid);
+          if (r.permalink) { setPortfolioFacebook(plan.vid, r.permalink); saveProjectFacebook(plan.vid, r.permalink); }
+        } else {
+          const link = (listPortfolio().find((x) => x.projectId === plan.vid)?.productUrl) || undefined;
+          r = await thPublishVideo(url, caption, undefined, plan.aid, link);
+          if (r.permalink) { setPortfolioThreads(plan.vid, r.permalink); saveProjectThreads(plan.vid, r.permalink); }
+        }
+        ok++; published = true;
+        jlog(job, `${icon(plan.platform)} ${nm} ✅ 완료 ${r.permalink || ''}`);
+      } catch (e: any) {
+        fail++; remaining.push(key);
+        jlog(job, `${icon(plan.platform)} ${nm} ❌ 실패 — ${(e?.message || String(e)).slice(0, 400)}`);
+      }
+      // 계정 간격 — 실제 발행했고 마지막이 아니면 대기(봇 차단 회피). 취소하면 즉시 빠져나온다.
+      if (published && intervalSec > 0 && i < plans.length - 1 && !job.cancelled) {
+        jlog(job, `⏱ 다음 발행까지 ${intervalSec}초 대기…`);
+        for (let w = 0; w < intervalSec && !job.cancelled; w++) await bSleep(1000);
+      }
+    }
+    job.remaining = remaining;
+    if (job.cancelled) {
+      jlog(job, '──────── ⏹ 취소됨 ────────');
+      jlog(job, `총 ${total}건 중 ✅ ${ok}건 발행 · ${remaining.length}건 미발행. '이어하기'를 누르면 미발행분부터 다시 보냅니다.`);
+    } else {
+      jlog(job, '──────── 🎉 송출 완료 ────────');
+      jlog(job, `총 ${total}건: ✅ ${ok}건 · ❌ ${fail}건${fail ? " (실패분은 '이어하기'로 재시도)" : ''}`);
+    }
+    job.done = true; job.doneAt = Date.now();
+  } catch (e: any) {
+    job.remaining = remaining; job.error = e.message; job.done = true; job.doneAt = Date.now();
+    jlog(job, '[실패] ' + (e?.message || e));
+  }
+}
+
+// ── 예약 송출 저장(파일 — 서버 재시작에도 유지) + 스케줄러 ──
+type Scheduled = {id: string; videoIds: string[]; targets: BTargets; scheduledAt: number; intervalSec: number; status: 'pending' | 'running' | 'done' | 'canceled'; createdAt: number; label?: string; jobId?: string};
+const SCHEDULE_FILE = path.join(STUDIO_DATA_DIR, 'scheduled-broadcasts.json');
+let scheduledBroadcasts: Scheduled[] = (() => { try { const a = JSON.parse(fs.readFileSync(SCHEDULE_FILE, 'utf8')); return Array.isArray(a) ? a : []; } catch { return []; } })();
+function saveScheduledBroadcasts() { try { fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(scheduledBroadcasts.slice(-500))); } catch {} }
+async function runBroadcastScheduler() {
+  const now = Date.now();
+  for (const s of scheduledBroadcasts) {
+    if (s.status !== 'pending' || s.scheduledAt > now) continue;
+    s.status = 'running'; saveScheduledBroadcasts();
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false, kind: 'broadcast'};
+    jobs.set(id, job); currentGenJob = id; s.jobId = id; saveScheduledBroadcasts();
+    jlog(job, `⏰ 예약된 송출을 시작합니다 (예약: ${new Date(s.scheduledAt).toLocaleString('ko-KR', {timeZone: 'Asia/Seoul'})}).`);
+    runBroadcastJob(job, s.videoIds, s.targets, [], s.intervalSec).catch(() => {}).finally(() => { s.status = 'done'; saveScheduledBroadcasts(); });
+  }
+}
+setInterval(() => { runBroadcastScheduler().catch(() => {}); }, 30000);
 // 📊 성과(stats) 응답 캐시 — Meta/유튜브 insights는 영상마다 API를 긁어 느리다(수십 초). 플랫폼별 3분 TTL로
 //   두 번째 방문부터 성과탭이 즉시 뜬다. debug=1(진단)은 항상 새로 긁어 우회(원인 추적용).
 const statsCache = new Map<string, {at: number; body: any}>();
@@ -1703,7 +1823,7 @@ JSON만: {"comment":"..."}`;
     const b = await readBody(req);
     const videoIds: string[] = (Array.isArray(b.videoIds) ? b.videoIds : []).map((x: any) => String(x)).filter(Boolean);
     const T = b.targets || {};
-    const tg = {
+    const tg: BTargets = {
       instagram: (Array.isArray(T.instagram) ? T.instagram : []).map((x: any) => String(x)).filter(Boolean),
       facebook: (Array.isArray(T.facebook) ? T.facebook : []).map((x: any) => String(x)).filter(Boolean),
       threads: (Array.isArray(T.threads) ? T.threads : []).map((x: any) => String(x)).filter(Boolean),
@@ -1711,109 +1831,48 @@ JSON만: {"comment":"..."}`;
     const nAcc = tg.instagram.length + tg.facebook.length + tg.threads.length;
     if (!videoIds.length) return json(res, 400, {error: '송출할 영상을 하나 이상 선택하세요.'});
     if (!nAcc) return json(res, 400, {error: '올릴 계정을 하나 이상 선택하세요.'});
-    const skip = new Set<string>((Array.isArray(b.skip) ? b.skip : []).map((x: any) => String(x))); // 이어하기: 이미 성공한 작업 키
-
+    const skip = (Array.isArray(b.skip) ? b.skip : []).map((x: any) => String(x)); // 이어하기: 이미 성공한 작업 키
+    const intervalSec = Math.max(0, Math.min(600, Math.floor(Number(b.intervalSec) || 0))); // 계정 간격(봇 차단 회피)
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false, kind: 'broadcast'};
     jobs.set(id, job);
     currentGenJob = id;
-
-    (async () => { // 방송콘솔 발행은 ffmpeg·크로뮴을 안 쓰므로 제작 큐에 넣지 않는다(즉시 발행).
-      const k = pipelineKeys();
-      const igNames: Record<string, string> = {}; for (const a of listInstagram()) igNames[a.id] = a.label || a.username || a.id;
-      const fbNames: Record<string, string> = {}; for (const a of listFacebook()) fbNames[a.id] = a.label || a.pageName || a.id;
-      const thNames: Record<string, string> = {}; for (const a of ((threadsStatus() as any).accounts || [])) thNames[a.id] = a.label || a.username || a.id;
-      const icon = (pl: string) => pl === 'instagram' ? '📷' : pl === 'facebook' ? '👍' : '🧵';
-      const nameOf = (pl: string, aid: string) => (pl === 'instagram' ? igNames[aid] : pl === 'facebook' ? fbNames[aid] : thNames[aid]) || aid;
-      // 실행 계획: 영상 × (계정 플랫폼별). 취소/이어하기의 단위가 되는 'key'로 식별.
-      const plans: {vid: string; platform: 'instagram' | 'facebook' | 'threads'; aid: string}[] = [];
-      for (const vid of videoIds) {
-        for (const aid of tg.instagram) plans.push({vid, platform: 'instagram', aid});
-        for (const aid of tg.facebook) plans.push({vid, platform: 'facebook', aid});
-        for (const aid of tg.threads) plans.push({vid, platform: 'threads', aid});
-      }
-      const total = plans.length;
-      let done = 0, ok = 0, fail = 0;
-      const remaining: string[] = []; // 취소/실패로 안 된 작업 키(이어하기용)
-      // 영상당 1회만 계산(공개 URL·커버), 영상×플랫폼당 1회만 캡션 생성.
-      const urlCache = new Map<string, string>();
-      const coverCache = new Map<string, string | undefined>();
-      const capCache = new Map<string, string>();
-      const videoTitle = (vid: string) => (resolveVideo(vid)?.title || listPortfolio().find((x) => x.projectId === vid)?.title || vid);
-      jlog(job, '──────── 방송콘솔 송출 시작 ────────');
-      jlog(job, `• 영상 ${videoIds.length}개 × 계정 ${nAcc}개 = 총 ${total}건`);
-      jlog(job, `• 대상: 📷 인스타 ${tg.instagram.length} · 👍 페북 ${tg.facebook.length} · 🧵 스레드 ${tg.threads.length}`);
-      try {
-        for (const plan of plans) {
-          const key = `${plan.vid}|${plan.platform}|${plan.aid}`;
-          const nm = nameOf(plan.platform, plan.aid);
-          if (job.cancelled) { remaining.push(key); continue; }
-          if (skip.has(key)) { done++; ok++; jlog(job, `${icon(plan.platform)} ${nm} ⏭ 이미 완료 — 건너뜀 (${done}/${total})`); continue; }
-          done++;
-          const pct = Math.round((done / total) * 100);
-          jlog(job, `${icon(plan.platform)} ${nm} ⏳ 발행 중… · "${videoTitle(plan.vid).slice(0, 24)}" (${done}/${total} · ${pct}%)`);
-          try {
-            // 1) 영상 공개 URL(영상당 1회) — 기존 업로드 핸들러와 동일 경로.
-            let url = urlCache.get(plan.vid);
-            if (!url) {
-              const r2key = await ensureInstaVideoR2(plan.vid);
-              if (!r2key) throw new Error('영상 파일을 찾을 수 없어요(오래돼 정리됐을 수 있음) — 다시 제작해 주세요.');
-              url = (await presignGet(r2key, 3600)) || '';
-              if (!url) throw new Error('영상 임시 링크 생성 실패.');
-              urlCache.set(plan.vid, url);
-            }
-            // 2) 캡션(영상×플랫폼당 1회) — 플랫폼마다 다른 글 + 출처/구매링크.
-            const capKey = `${plan.vid}|${plan.platform}`;
-            let caption = capCache.get(capKey);
-            if (caption === undefined) {
-              const src = resolveVideo(plan.vid);
-              try { caption = src ? await generateCaption({gemini: k.gemini, openai: k.openai}, src.title, src.narrations, plan.platform) : (videoTitle(plan.vid)); }
-              catch { caption = videoTitle(plan.vid); }
-              const attr = readAttribution(plan.vid);
-              if (attr && !caption.includes(attr)) caption += '\n\n' + attr;
-              const cta = readProductCta(plan.vid);
-              if (cta && !caption.includes(cta)) caption += '\n\n' + cta;
-              capCache.set(capKey, caption);
-            }
-            // 3) 발행(플랫폼별) — 기존 핸들러와 같은 함수·배지 기록.
-            let r: {permalink: string; id: string};
-            if (plan.platform === 'instagram') {
-              let cover = coverCache.get(plan.vid);
-              if (cover === undefined) { try { cover = (await ensureThumbJpegUrl(plan.vid)) || undefined; } catch { cover = undefined; } coverCache.set(plan.vid, cover); }
-              r = await publishVideo(url, caption, 'reels', undefined, cover, plan.aid);
-              if (r.permalink) { setPortfolioInstagram(plan.vid, r.permalink); saveProjectInstagram(plan.vid, r.permalink); }
-            } else if (plan.platform === 'facebook') {
-              r = await fbPublishVideo(url, caption, undefined, plan.aid);
-              if (r.permalink) { setPortfolioFacebook(plan.vid, r.permalink); saveProjectFacebook(plan.vid, r.permalink); }
-            } else {
-              const link = (listPortfolio().find((x) => x.projectId === plan.vid)?.productUrl) || undefined;
-              r = await thPublishVideo(url, caption, undefined, plan.aid, link);
-              if (r.permalink) { setPortfolioThreads(plan.vid, r.permalink); saveProjectThreads(plan.vid, r.permalink); }
-            }
-            ok++;
-            jlog(job, `${icon(plan.platform)} ${nm} ✅ 완료 ${r.permalink || ''}`);
-          } catch (e: any) {
-            fail++; remaining.push(key);
-            // Meta subcode·원문 그대로(뭉개기 금지, 테리 규칙).
-            jlog(job, `${icon(plan.platform)} ${nm} ❌ 실패 — ${(e?.message || String(e)).slice(0, 400)}`);
-          }
-        }
-        job.remaining = remaining;
-        if (job.cancelled) {
-          jlog(job, '──────── ⏹ 취소됨 ────────');
-          jlog(job, `총 ${total}건 중 ✅ ${ok}건 발행 · ${remaining.length}건 미발행. '이어하기'를 누르면 미발행분부터 다시 보냅니다.`);
-        } else {
-          jlog(job, '──────── 🎉 송출 완료 ────────');
-          jlog(job, `총 ${total}건: ✅ ${ok}건 · ❌ ${fail}건${fail ? " (실패분은 '이어하기'로 재시도)" : ''}`);
-        }
-        job.done = true; job.doneAt = Date.now();
-      } catch (e: any) {
-        job.remaining = remaining; job.error = e.message; job.done = true; job.doneAt = Date.now();
-        jlog(job, '[실패] ' + (e?.message || e));
-      }
-    })();
-
+    // 방송콘솔 발행은 ffmpeg·크로뮴을 안 쓰므로 제작 큐에 넣지 않는다(즉시 발행).
+    runBroadcastJob(job, videoIds, tg, skip, intervalSec).catch((e: any) => { job.error = e?.message || String(e); job.done = true; job.doneAt = Date.now(); });
     return json(res, 202, {id});
+  }
+  // ── ⏰ 예약 송출 — 지정 시각에 자동 발행(계정 간격 포함). data 파일 저장, 스케줄러가 실행 ──
+  if (p === '/api/social/schedule' && req.method === 'POST') {
+    const b = await readBody(req);
+    const videoIds: string[] = (Array.isArray(b.videoIds) ? b.videoIds : []).map((x: any) => String(x)).filter(Boolean);
+    const T = b.targets || {};
+    const tg: BTargets = {
+      instagram: (Array.isArray(T.instagram) ? T.instagram : []).map((x: any) => String(x)).filter(Boolean),
+      facebook: (Array.isArray(T.facebook) ? T.facebook : []).map((x: any) => String(x)).filter(Boolean),
+      threads: (Array.isArray(T.threads) ? T.threads : []).map((x: any) => String(x)).filter(Boolean),
+    };
+    const nAcc = tg.instagram.length + tg.facebook.length + tg.threads.length;
+    const scheduledAt = Math.floor(Number(b.scheduledAt) || 0); // epoch ms
+    if (!videoIds.length) return json(res, 400, {error: '송출할 영상을 하나 이상 선택하세요.'});
+    if (!nAcc) return json(res, 400, {error: '올릴 계정을 하나 이상 선택하세요.'});
+    if (!scheduledAt || scheduledAt < Date.now() - 60000) return json(res, 400, {error: '예약 시각을 미래로 지정하세요.'});
+    const intervalSec = Math.max(0, Math.min(600, Math.floor(Number(b.intervalSec) || 0)));
+    const s: Scheduled = {id: randomUUID().slice(0, 8), videoIds, targets: tg, scheduledAt, intervalSec, status: 'pending', createdAt: Date.now(), label: String(b.label || '')};
+    scheduledBroadcasts.push(s); saveScheduledBroadcasts();
+    return json(res, 200, {id: s.id, scheduledAt});
+  }
+  if (p === '/api/social/schedule' && req.method === 'GET') {
+    const items = scheduledBroadcasts.filter((s) => s.status === 'pending' || s.status === 'running')
+      .sort((a, b2) => a.scheduledAt - b2.scheduledAt)
+      .map((s) => ({id: s.id, scheduledAt: s.scheduledAt, intervalSec: s.intervalSec, status: s.status, nVideos: s.videoIds.length, nAcc: s.targets.instagram.length + s.targets.facebook.length + s.targets.threads.length, label: s.label || '', jobId: s.jobId}));
+    return json(res, 200, {items});
+  }
+  if (p.startsWith('/api/social/schedule/') && req.method === 'DELETE') {
+    const sid = decodeURIComponent(p.slice('/api/social/schedule/'.length));
+    const s = scheduledBroadcasts.find((x) => x.id === sid);
+    if (!s) return json(res, 404, {error: '예약을 찾을 수 없습니다.'});
+    if (s.status === 'pending') { s.status = 'canceled'; saveScheduledBroadcasts(); return json(res, 200, {ok: true}); }
+    return json(res, 400, {error: '이미 시작됐거나 끝난 예약은 취소할 수 없어요.'});
   }
   // 방송콘솔 '이어하기'용 — 취소/실패로 안 된 작업 키 목록(끝난 job에서 조회).
   if (p.startsWith('/api/social/broadcast/remaining/') && req.method === 'GET') {

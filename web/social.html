@@ -116,6 +116,15 @@
       .bar span { position:absolute; inset:0; display:grid; place-items:center; font-size:12.5px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
       .ss-log { font-family:ui-monospace,monospace; font-size:12.5px; line-height:1.7; background:#17130c; color:#bdf06a; border-radius:14px; padding:14px; max-height:300px; min-height:120px; overflow:auto; white-space:pre-wrap; margin-top:14px; }
       .ctrls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+      .bcast-opts { margin-bottom:14px; }
+      .opt-row { display:flex; gap:18px; flex-wrap:wrap; align-items:center; margin-top:10px; font-size:13px; font-weight:700; color:var(--dim); }
+      .opt-row label { display:flex; align-items:center; gap:7px; }
+      .mini-sel { padding:8px 11px; border-radius:10px; border:1.5px solid var(--line); background:var(--field); color:var(--ink); font-size:13.5px; font-family:inherit; font-weight:700; }
+      .sched-list { margin-top:16px; display:flex; flex-direction:column; gap:8px; }
+      .sched-item { display:flex; align-items:center; gap:10px; padding:11px 14px; border:1.5px solid var(--line); border-radius:13px; background:var(--field); font-size:13px; }
+      .sched-item .si-when { font-weight:800; color:var(--lime-d); white-space:nowrap; }
+      .sched-item .si-meta { color:var(--dim); flex:1; }
+      .sched-item button { padding:6px 11px; border-radius:9px; border:1px solid var(--line); background:var(--bg); color:var(--terra); font-weight:700; font-size:12px; cursor:pointer; }
       .ctrl { padding:11px 18px; font-size:13.5px; }
       .hidden { display:none !important; }
 
@@ -199,6 +208,21 @@
             <button id="c-clear" class="chip">🧹 초기화</button>
           </span>
         </div>
+        <div class="bcast-opts">
+          <div class="seg" id="mode-seg">
+            <button data-mode="now" class="on">⚡ 지금 송출</button>
+            <button data-mode="schedule">⏰ 예약 송출</button>
+          </div>
+          <div class="opt-row">
+            <label>계정 간격
+              <select id="interval" class="mini-sel"><option value="0">즉시(간격 없음)</option><option value="60">1분</option><option value="180">3분</option><option value="300">5분</option></select>
+              <span class="small sub">봇 차단 회피</span>
+            </label>
+            <label id="sched-time-wrap" class="hidden">예약 시각
+              <input type="datetime-local" id="sched-time" class="mini-sel" />
+            </label>
+          </div>
+        </div>
         <button id="broadcast" class="primary-btn publish-btn">🚀 선택한 영상을 선택한 계정에 송출</button>
         <div class="bar" id="bar"><div class="bar-fill" id="bar-fill"></div><span id="bar-txt">0%</span></div>
         <div id="con" class="ss-log">여기에 송출 로그가 실시간으로 올라옵니다. 영상과 계정을 고르고 🚀 송출을 눌러보세요.</div>
@@ -207,6 +231,7 @@
           <button id="c-resume" class="chip ctrl hidden">▶ 이어하기</button>
           <button id="c-cancel" class="chip ctrl hidden">✕ 취소</button>
         </div>
+        <div id="sched-list" class="sched-list"></div>
       </div>
     </div>
 
