@@ -208,6 +208,7 @@
     stopMode = null; conStarted = true; con.textContent = '';
     $('c-resume').classList.add('hidden');
     setBar(0); showCtrls(true);
+    { const oa = $('onair'); if (oa) oa.classList.add('live'); } // 송출 중 ON AIR 빠른 깜빡
     try {
       const d = await api('/api/social/broadcast', {videoIds, targets, skip: skip || [], intervalSec: getInterval()});
       curJob = d.id; lastRunId = d.id;
@@ -235,6 +236,7 @@
     const wasCancel = stopMode === 'cancel';
     curJob = ''; stopMode = null;
     showCtrls(false);
+    { const oa = $('onair'); if (oa) oa.classList.remove('live'); } // 송출 끝 → ON AIR 평상 깜빡
     let remaining = [];
     try { const r = await api('/api/social/broadcast/remaining/' + encodeURIComponent(lastRunId)); remaining = r.remaining || []; } catch {}
     if (remaining.length) { $('c-resume').classList.remove('hidden'); } // 미발행분 있으면 이어하기(정지·취소·실패 공통)
@@ -322,6 +324,8 @@
     runBroadcast(lastRun.videoIds, lastRun.targets, skip);
   };
 
+  // 버전 배지(뿌리오도 재배포 확인용)
+  fetch('/api/version').then((r) => r.json()).then((d) => { if (d && d.version) $('ver-badge').textContent = 'v' + d.version; }).catch(() => {});
   loadVideos();
   loadAccounts();
   loadSchedules();
