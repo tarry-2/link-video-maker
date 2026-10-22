@@ -43,6 +43,11 @@ export type Highlight = {start: number; end: number; hookTop: string; hookAccent
 export type ClipResult = {file: string; start: number; end: number; hookTop: string; hookAccent: string; transcript?: string; score: number; reason?: string; whole?: boolean};
 
 function run(cmd: string, args: string[], log: (m: string) => void, timeoutMs = 300000, onLine?: (line: string) => void, cancelled?: () => boolean): Promise<string> {
+  // ★ffmpeg 스레드 상한 — 컨테이너는 호스트의 많은 vCPU를 보고 ffmpeg가 코어 수만큼 스레드를 만든다.
+  //   필터(블러·overlay)·인코딩 스레드가 폭증하면 작업이 쌓일 때 pid/thread 한계를 넘어
+  //   "Resource temporarily unavailable"(EAGAIN)로 ffmpeg가 아예 안 뜬다(2026-10-22 라이브 장애 원인).
+  //   -y로 시작하는 ffmpeg 호출에만 주입(ffprobe·yt-dlp 제외). 2스레드면 쇼츠 인코딩에 충분.
+  if (cmd === FFMPEG && args[0] === '-y') args = ['-y', '-threads', '2', '-filter_threads', '2', '-filter_complex_threads', '2', ...args.slice(1)];
   return new Promise((resolve, reject) => {
     const ps = spawn(cmd, args, {stdio: ['ignore', 'pipe', 'pipe']});
     let out = '', err = '', killedByCancel = false;

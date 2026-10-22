@@ -497,6 +497,29 @@ function jlog(job: Job, s: string) {
 const jobs = new Map<string, Job>();
 // ★모바일↔PC 실시간 동기화: 현재 진행 중인 생성 작업 id. 어느 기기든 로드 시 이걸 받아 같은 SSE에 붙는다.
 let currentGenJob = '';
+
+// ★작업 큐 — 무거운 제작/렌더(ffmpeg·Remotion·GPU)가 동시에 돌면 7.5GB·스레드 한계를 넘어 전부 멈춘다
+//   (회원이 몰리면 바로 터지는 근본 원인, 2026-10-22). 동시 JOB_CONCURRENCY개만 실행하고 나머지는 대기열에
+//   줄 세운다 → '막힘' 대신 '대기 N번째'. 기본 1(안전). 메모리 올리면 JOB_CONCURRENCY env로 늘린다.
+const JOB_CONCURRENCY = Math.max(1, Number(process.env.JOB_CONCURRENCY) || 1);
+let runningJobs = 0;
+const waitQueue: {job: Job; task: () => Promise<void>}[] = [];
+function pumpQueue() {
+  while (runningJobs < JOB_CONCURRENCY && waitQueue.length) {
+    const next = waitQueue.shift()!;
+    if (next.job.cancelled) { next.job.done = true; next.job.doneAt = Date.now(); continue; } // 대기 중 취소한 건 건너뜀
+    runningJobs++;
+    // task 내부가 자체 try/catch로 job.done/error를 세팅한다(여기선 슬롯만 반납하고 다음을 당긴다).
+    Promise.resolve().then(next.task).catch(() => {}).finally(() => { runningJobs--; pumpQueue(); });
+  }
+}
+// 무거운 제작 작업을 큐에 넣는다(기존 `(async()=>{…})()` 즉시실행을 대체). 자리 나면 자동 시작.
+function enqueueJob(job: Job, task: () => Promise<void>) {
+  waitQueue.push({job, task});
+  const ahead = runningJobs + waitQueue.length - 1; // 내 앞에서 돌거나 기다리는 작업 수
+  if (runningJobs >= JOB_CONCURRENCY) jlog(job, `[대기] 다른 작업이 처리 중이라 대기열에 넣었어요 — 앞에 ${ahead}건. 순서가 되면 자동으로 시작됩니다.`);
+  pumpQueue();
+}
 // 📊 성과(stats) 응답 캐시 — Meta/유튜브 insights는 영상마다 API를 긁어 느리다(수십 초). 플랫폼별 3분 TTL로
 //   두 번째 방문부터 성과탭이 즉시 뜬다. debug=1(진단)은 항상 새로 긁어 우회(원인 추적용).
 const statsCache = new Map<string, {at: number; body: any}>();
@@ -1691,7 +1714,7 @@ JSON만: {"comment":"..."}`;
     jobs.set(id, job);
     currentGenJob = id;
 
-    (async () => {
+    (async () => { // 방송콘솔 발행은 ffmpeg·크로뮴을 안 쓰므로 제작 큐에 넣지 않는다(즉시 발행).
       const k = pipelineKeys();
       const igNames: Record<string, string> = {}; for (const a of listInstagram()) igNames[a.id] = a.label || a.username || a.id;
       const fbNames: Record<string, string> = {}; for (const a of listFacebook()) fbNames[a.id] = a.label || a.pageName || a.id;
@@ -2381,7 +2404,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
     currentGenJob = id;
 
     // 백그라운드 실행
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         const r = await makeVideo([url], k, {
           duration: Number(b.duration) || 30,
@@ -2431,7 +2454,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
         job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
-    })();
+    });
 
     return json(res, 202, {id});
   }
@@ -2456,7 +2479,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
     const job: Job = {id, logs: [], done: false, kind: 'shopping'};
     jobs.set(id, job);
     currentGenJob = id;
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         jlog(job, '[쇼핑] 상품 정보를 불러오는 중…');
         const product = await resolveProduct(productLink);
@@ -2566,7 +2589,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
         job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
-    })();
+    });
     return json(res, 202, {id});
   }
 
@@ -2659,7 +2682,7 @@ JSON만 출력: {"topics":[{"title":"당장 만들고 싶은 이야기 제목·�
     const job: Job = {id, logs: [], done: false, kind: 'remake'};
     jobs.set(id, job);
     currentGenJob = id;
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         jlog(job, `[재창작] "${title.slice(0, 40)}" 내용을 우리 영상으로 새로 만듭니다(원본 미디어·로고 미사용 → 저작권 free).`);
         // ★원본 실제 내용 확보 — 프론트가 자막을 줬으면 그걸, 아니면 서버가 videoId로 자막→음성STT 전사한다.
@@ -2790,7 +2813,7 @@ ${(realContent || title).slice(0, 8000)}`
         job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
-    })();
+    });
     return json(res, 202, {id});
   }
 
@@ -2832,7 +2855,7 @@ ${extra}
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false, kind: 'scenario'};
     jobs.set(id, job);
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         jlog(job, `[주제] ${extra ? `"${extra}"` : '(자유 주제 없음 — 장르/키워드로 집필)'}`);
         jlog(job, `[장르] ${genre || '미스터리'}${kw.length ? ` · 키워드: ${kw.join(', ')}` : ''}`);
@@ -2849,7 +2872,7 @@ ${extra}
         job.error = '시나리오 생성 실패: ' + (e?.message || e); job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + job.error);
       }
-    })();
+    });
     return json(res, 202, {id});
   }
 
@@ -2873,7 +2896,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const id = randomUUID().slice(0, 8);
     const job: Job = {id, logs: [], done: false, kind: 'bible'};
     jobs.set(id, job);
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         jlog(job, `[시리즈] ${episodes}부작 설계`);
         jlog(job, `[주제] ${extra ? `"${extra}"` : '(자유 주제 없음 — 장르/키워드로 설계)'}`);
@@ -2896,7 +2919,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
         job.error = '스토리 바이블 생성 실패: ' + (e?.message || e); job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + job.error);
       }
-    })();
+    });
     return json(res, 202, {id});
   }
 
@@ -2916,7 +2939,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const job: Job = {id, logs: [], done: false, kind: 'create'}; // 창작 전용 kind — create 페이지만 이 작업에 연동(다른 탭이 안 가로채게)
     jobs.set(id, job);
     currentGenJob = id;
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         jlog(job, `[창작] "${storyboard.title || '오리지널'}" 시나리오로 영상을 제작합니다(${aiClips > 0 ? '영화' : '이미지 영상'}).`);
         // ★본인 얼굴: 업로드한 사진(base64)을 파일로 저장 → faceRef로 넘기면 전 장면을 그 얼굴로.
@@ -2958,7 +2981,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
         job.error = e.message; job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
-    })();
+    });
     return json(res, 202, {id});
   }
 
@@ -3015,7 +3038,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     jobs.set(id, job);
     currentGenJob = id;
 
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         // dataURL → 임시 파일 저장
         const upDir = path.join(ROOT, 'public', 'uploads', id);
@@ -3064,7 +3087,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
         job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
-    })();
+    });
 
     return json(res, 202, {id});
   }
@@ -3128,7 +3151,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const job: Job = {id, logs: [], done: false, ...(isShopping ? {kind: 'shopping' as const} : {})};
     jobs.set(id, job);
     currentGenJob = id;
-    (async () => {
+    enqueueJob(job, async () => {
       let shopUrlToSave = '', shopNameToSave = '';
       try {
         // 업로드 배경(dataURL) 저장.
@@ -3213,7 +3236,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
         job.done = true; job.doneAt = Date.now();
         jlog(job, '[실패] ' + e.message);
       }
-    })();
+    });
     return json(res, 202, {id});
   }
   // ── 카드 수정: 저장된 대본 불러오기 ──
@@ -3235,7 +3258,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
     currentGenJob = id;
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         const r = await reRenderCard(k, projectId, editedCards, (m) => jlog(job, m));
         job.kind = r.kind === 'post' ? 'post' : undefined;
@@ -3243,7 +3266,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
         job.projectId = r.projectId;
         job.done = true; job.doneAt = Date.now();
       } catch (e: any) { job.error = e.message; job.done = true; job.doneAt = Date.now(); jlog(job, '[실패] ' + e.message); }
-    })();
+    });
     return json(res, 202, {id});
   }
 
@@ -3321,7 +3344,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
     currentGenJob = id;
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         job.kind = 'highlight';
         job.clips = []; // 완성되는 편마다 누적(먼저 끝난 편을 SSE로 바로 흘림)
@@ -3338,7 +3361,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
         // ★작업 끝날 때마다 디스크 청소 — 완성분은 R2로 가고 볼륨 잔재를 즉시 비워 ENOSPC 재발 방지.
         runMaintenance('하이라이트완료');
       }
-    })();
+    });
     return json(res, 202, {id});
   }
 
@@ -3418,7 +3441,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const job: Job = {id, logs: [], done: false};
     jobs.set(id, job);
     currentGenJob = id;
-    (async () => {
+    enqueueJob(job, async () => {
       try {
         job.kind = 'highlight';
         const r = await reRenderHighlight(projectId, overrides, (m) => jlog(job, m));
@@ -3426,7 +3449,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
         job.projectId = projectId; job.file = r.output;
         job.done = true; job.doneAt = Date.now();
       } catch (e: any) { job.error = e.message; job.done = true; job.doneAt = Date.now(); jlog(job, '[실패] ' + e.message); }
-    })();
+    });
     return json(res, 202, {id});
   }
   // 편집 화면이 쓸 정보(저장된 후킹·템플릿 + 템플릿 목록).

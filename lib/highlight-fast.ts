@@ -17,6 +17,8 @@ const FONTS_DIR = path.join(process.cwd(), 'public', 'fonts');
 const FPS = 30;
 
 function run(args: string[], log: (m: string) => void, onLine?: (l: string) => void, cancelled?: () => boolean, timeoutMs = 420000): Promise<void> {
+  // ★ffmpeg 스레드 상한(EAGAIN 방지) — youtube-clip.ts와 동일. 빠른렌더 filter_complex 스레드 폭증 차단.
+  if (args[0] === '-y') args = ['-y', '-threads', '2', '-filter_threads', '2', '-filter_complex_threads', '2', ...args.slice(1)];
   return new Promise((resolve, reject) => {
     const ps = spawn(FFMPEG, args, {stdio: ['ignore', 'pipe', 'pipe']});
     let err = '', killed = false;
