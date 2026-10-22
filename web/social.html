@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>뿌리오 스튜디오 — 씨앗 하나로 사방에</title>
+    <title>뿌리오 방송콘솔 — 한 번에 사방으로 송출</title>
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#f3eee2" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -29,9 +29,8 @@
       .fr { font-family:'Fraunces',serif; font-style:italic; }
       a { color:inherit; }
 
-      /* 상단바 */
       header { position:sticky; top:0; z-index:50; background:color-mix(in srgb,var(--bg),transparent 12%); backdrop-filter:blur(12px); border-bottom:1px solid var(--line); }
-      .head { display:flex; align-items:center; gap:12px; max-width:860px; margin:0 auto; padding:13px clamp(16px,4vw,28px); }
+      .head { display:flex; align-items:center; gap:12px; margin:0 auto; padding:13px clamp(16px,4vw,28px); }
       .back { width:40px; height:40px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:17px; display:grid; place-items:center; text-decoration:none; transition:transform .15s; }
       .back:hover { transform:translateX(-2px); }
       .brand { display:flex; align-items:center; gap:9px; font-weight:800; font-size:19px; letter-spacing:-.02em; flex:1; }
@@ -40,168 +39,163 @@
       #theme-btn { width:40px; height:40px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--ink); font-size:18px; cursor:pointer; display:grid; place-items:center; transition:transform .2s; }
       #theme-btn:hover { transform:scale(1.08); }
 
-      .wrap { width:100%; margin:0 auto; padding:clamp(18px,3vw,34px) clamp(16px,4vw,48px) 80px; }
-      .head { max-width:none; }
-      .work-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:clamp(14px,1.6vw,22px); align-items:start; }
+      .wrap { width:100%; margin:0 auto; padding:clamp(18px,3vw,30px) clamp(16px,4vw,48px) 80px; }
+      .work-grid { display:grid; grid-template-columns:1.55fr 1fr; gap:clamp(14px,1.6vw,22px); align-items:start; }
       .col-main, .col-side { display:flex; flex-direction:column; min-width:0; }
-      @media (max-width:980px){ .work-grid{ grid-template-columns:1fr; } }
+      @media (max-width:1000px){ .work-grid{ grid-template-columns:1fr; } }
 
-      /* 환영 히어로 */
-      .welcome { display:flex; align-items:center; gap:clamp(14px,3vw,26px); padding:clamp(18px,3vw,26px) clamp(20px,3vw,30px); background:linear-gradient(120deg, var(--card), color-mix(in srgb,var(--lime) 14%,var(--card))); border:1px solid var(--line); border-radius:24px; box-shadow:var(--sh); margin-bottom:26px; position:relative; overflow:hidden; }
-      .welcome .wpic { width:clamp(72px,13vw,104px); flex-shrink:0; filter:drop-shadow(0 10px 16px rgba(35,29,19,.2)); animation:bob 4.5s ease-in-out infinite; }
+      /* 환영 */
+      .welcome { display:flex; align-items:center; gap:clamp(14px,3vw,26px); padding:clamp(16px,3vw,24px) clamp(20px,3vw,30px); background:linear-gradient(120deg, var(--card), color-mix(in srgb,var(--lime) 14%,var(--card))); border:1px solid var(--line); border-radius:24px; box-shadow:var(--sh); margin-bottom:22px; position:relative; overflow:hidden; }
+      .welcome .wpic { width:clamp(64px,11vw,92px); flex-shrink:0; filter:drop-shadow(0 10px 16px rgba(35,29,19,.2)); animation:bob 4.5s ease-in-out infinite; }
       @keyframes bob { 50%{ transform:translateY(-8px) rotate(2deg);} }
-      .welcome h1 { font-size:clamp(20px,3.2vw,30px); font-weight:900; letter-spacing:-.03em; line-height:1.15; }
+      .welcome h1 { font-size:clamp(19px,3vw,28px); font-weight:900; letter-spacing:-.03em; line-height:1.15; }
       .welcome h1 .fr { color:var(--lime-d); }
       .welcome p { font-size:clamp(13px,1.6vw,15px); color:var(--dim); margin-top:5px; }
 
-      /* 성과 미니바 */
-      .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:clamp(10px,2vw,16px); margin-bottom:26px; }
-      .stat { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px 18px; box-shadow:var(--sh); }
-      .stat .sn { font-size:clamp(22px,3.4vw,30px); font-weight:900; color:var(--lime-d); letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1; }
-      .stat .sl { font-size:12px; font-weight:700; color:var(--dim); margin-top:6px; }
-
-      /* 단계 카드 */
-      .step-card { background:var(--card); border:1px solid var(--line); border-radius:22px; padding:clamp(18px,3vw,26px); margin-bottom:16px; box-shadow:var(--sh); }
-      .step-h { display:flex; align-items:center; gap:11px; margin-bottom:16px; }
+      .step-card { background:var(--card); border:1px solid var(--line); border-radius:22px; padding:clamp(16px,2.4vw,24px); margin-bottom:16px; box-shadow:var(--sh); }
+      .step-h { display:flex; align-items:center; gap:11px; margin-bottom:14px; flex-wrap:wrap; }
       .step-no { width:30px; height:30px; flex-shrink:0; border-radius:50%; background:var(--lime); color:#1f2d05; font-weight:900; font-size:15px; display:grid; place-items:center; box-shadow:0 4px 10px -3px color-mix(in srgb,var(--lime),transparent 30%); }
       [data-theme="dark"] .step-no { color:#182200; }
       .step-h h2 { font-size:clamp(16px,2.1vw,19px); font-weight:800; letter-spacing:-.02em; }
-      .step-h .opt { font-size:12px; font-weight:600; color:var(--dim); }
+      .step-h .opt { font-size:12px; font-weight:700; color:var(--dim); margin-left:auto; display:flex; gap:6px; }
 
       .seg { display:flex; gap:7px; margin-bottom:13px; flex-wrap:wrap; background:var(--bg); padding:5px; border-radius:14px; }
-      .seg button { flex:1; min-width:100px; padding:10px; border-radius:10px; border:none; background:transparent; color:var(--dim); cursor:pointer; font-size:13.5px; font-weight:700; font-family:inherit; transition:all .2s; }
+      .seg button { flex:1; min-width:90px; padding:10px; border-radius:10px; border:none; background:transparent; color:var(--dim); cursor:pointer; font-size:13.5px; font-weight:700; font-family:inherit; transition:all .2s; }
       .seg button.on { background:var(--card); color:var(--ink); box-shadow:0 2px 8px -2px rgba(35,29,19,.2); }
 
-      .input, textarea.input { width:100%; padding:13px 15px; border-radius:13px; border:1.5px solid var(--line); background:var(--field); color:var(--ink); font-size:14.5px; font-family:inherit; transition:border-color .2s; resize:vertical; }
-      .input:focus { outline:none; border-color:var(--lime); box-shadow:0 0 0 3px color-mix(in srgb,var(--lime),transparent 78%); }
-      .input::placeholder { color:var(--dim); opacity:.7; }
-      .field-label { display:block; font-size:13px; font-weight:700; color:var(--dim); margin-top:12px; }
-      .field-label .input, .field-label textarea { margin-top:7px; }
+      .chip { padding:7px 12px; border-radius:10px; border:1px solid var(--line); background:var(--field); color:var(--ink); font-size:12.5px; font-weight:700; font-family:inherit; cursor:pointer; transition:all .15s; }
+      .chip:hover { border-color:var(--lime); }
+      .chip.on { background:var(--lime); color:#1f2d05; border-color:var(--lime); }
+      .chip:disabled { opacity:.5; cursor:default; }
 
       .primary-btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:13px 22px; border-radius:13px; border:none; background:var(--lime); color:#1f2d05; font-weight:800; font-size:14.5px; font-family:inherit; cursor:pointer; box-shadow:0 8px 18px -8px color-mix(in srgb,var(--lime),transparent 20%); transition:transform .14s, box-shadow .14s; }
       [data-theme="dark"] .primary-btn { color:#152000; }
       .primary-btn:hover { transform:translateY(-2px); box-shadow:0 12px 24px -8px color-mix(in srgb,var(--lime),transparent 10%); }
-      .primary-btn:disabled { opacity:.6; cursor:default; transform:none; }
+      .primary-btn:disabled { opacity:.55; cursor:default; transform:none; }
+      .publish-btn { width:100%; padding:17px; font-size:16px; border-radius:16px; }
 
-      .counter { font-size:12px; color:var(--dim); text-align:right; margin-top:6px; font-variant-numeric:tabular-nums; }
-      .counter.over { color:var(--terra); font-weight:800; }
+      /* 영상 그리드 */
+      .vtools { display:flex; gap:7px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+      .vgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:12px; max-height:640px; overflow:auto; padding:3px; }
+      .vcard { border:2px solid var(--line); border-radius:14px; overflow:hidden; background:var(--field); cursor:pointer; transition:border-color .15s, transform .15s; position:relative; }
+      .vcard:hover { transform:translateY(-2px); }
+      .vcard.sel { border-color:var(--lime); box-shadow:0 0 0 3px color-mix(in srgb,var(--lime),transparent 78%); }
+      .vcard .vthumb { width:100%; aspect-ratio:9/16; object-fit:cover; background:#17130c; display:block; }
+      .vcard .vthumb.land { aspect-ratio:16/9; }
+      .vcard .vtitle { font-size:11.5px; font-weight:700; padding:7px 8px 3px; line-height:1.3; height:38px; overflow:hidden; }
+      .vcard .vbadges { display:flex; gap:3px; padding:0 8px; min-height:14px; }
+      .vcard .vbadges span { font-size:10px; }
+      .vcard .vbtns { display:flex; gap:3px; padding:5px 6px 7px; }
+      .vcard .vbtns button { flex:1; padding:6px 0; border-radius:8px; border:none; background:var(--bg); font-size:14px; cursor:pointer; transition:background .15s, transform .1s; }
+      .vcard .vbtns button:hover { background:var(--lime); transform:scale(1.08); }
+      .vcard .vcheck { position:absolute; top:7px; left:7px; width:23px; height:23px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; display:grid; place-items:center; font-size:13px; font-weight:900; backdrop-filter:blur(3px); }
+      .vcard.sel .vcheck { background:var(--lime); color:#1f2d05; }
 
-      .acct-row { display:flex; align-items:center; gap:10px; padding:12px 14px; border:1.5px solid var(--line); border-radius:13px; margin-bottom:8px; background:var(--field); transition:border-color .2s; }
+      /* 계정 */
+      .acct-list { max-height:380px; overflow:auto; }
+      .acct-row { display:flex; align-items:center; gap:10px; padding:11px 13px; border:1.5px solid var(--line); border-radius:13px; margin-bottom:8px; background:var(--field); transition:border-color .2s; }
       .acct-row:hover { border-color:var(--lime); }
       .acct-row input[type=checkbox] { width:19px; height:19px; accent-color:var(--lime-d); flex-shrink:0; }
       .acct-row label { flex:1; font-size:14px; font-weight:600; cursor:pointer; }
       .acct-niche { font-size:12px; color:var(--dim); font-weight:500; }
-      .mini-state { font-size:13.5px; color:var(--dim); padding:6px 2px; }
-      .sub { color:var(--dim); } .small { font-size:12.5px; }
+      .mini-state { font-size:13.5px; color:var(--dim); padding:10px 2px; }
       .tip { display:flex; gap:8px; font-size:12.5px; color:var(--dim); margin-top:12px; line-height:1.55; background:color-mix(in srgb,var(--sun) 12%,var(--card)); padding:11px 13px; border-radius:12px; }
 
-      .img-prev { max-width:220px; border-radius:14px; margin-top:12px; display:none; box-shadow:var(--sh); }
-
-      .publish-btn { width:100%; padding:17px; font-size:16px; border-radius:16px; margin-top:8px; box-shadow:0 12px 26px -8px color-mix(in srgb,var(--lime),transparent 10%); }
-
-      .ss-log { font-family:ui-monospace,monospace; font-size:12px; background:#181511; color:#bdf06a; border-radius:14px; padding:13px; max-height:190px; overflow:auto; white-space:pre-wrap; margin-top:14px; display:none; }
-      #results { margin-top:16px; }
-      .res-item { font-size:13.5px; padding:9px 0; border-bottom:1px solid var(--line); }
-      .res-item a { color:var(--lime-d); font-weight:700; }
+      /* 콘솔 */
+      .console-card { margin-top:4px; }
+      .bar { position:relative; height:28px; border-radius:14px; background:var(--bg); margin-top:14px; overflow:hidden; display:none; }
+      .bar.on { display:block; }
+      .bar-fill { height:100%; width:0; background:linear-gradient(90deg, var(--lime), var(--lime-d)); transition:width .4s ease; border-radius:14px; }
+      .bar span { position:absolute; inset:0; display:grid; place-items:center; font-size:12.5px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
+      .ss-log { font-family:ui-monospace,monospace; font-size:12.5px; line-height:1.7; background:#17130c; color:#bdf06a; border-radius:14px; padding:14px; max-height:300px; min-height:120px; overflow:auto; white-space:pre-wrap; margin-top:14px; }
+      .ctrls { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+      .ctrl { padding:11px 18px; font-size:13.5px; }
       .hidden { display:none !important; }
+
+      /* 크게보기 모달 */
+      .big-modal { position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:100; display:none; place-items:center; padding:20px; }
+      .big-modal.on { display:grid; }
+      .big-modal .bm-in { background:#17130c; color:#bdf06a; border-radius:18px; padding:20px; max-width:940px; width:100%; max-height:82vh; overflow:auto; font-family:ui-monospace,monospace; font-size:14px; line-height:1.8; white-space:pre-wrap; box-shadow:0 30px 80px -20px rgba(0,0,0,.6); }
+      .big-modal .bm-x { position:absolute; top:22px; right:26px; width:42px; height:42px; border-radius:50%; border:none; background:var(--card); color:var(--ink); font-size:20px; cursor:pointer; }
+
+      /* 폭죽 */
+      .confetti { position:fixed; top:-20px; font-size:22px; z-index:120; pointer-events:none; animation:fall linear forwards; }
+      @keyframes fall { to { transform:translateY(105vh) rotate(540deg); opacity:.2; } }
 
       @media (max-width:560px){
         .welcome { flex-direction:row; }
-        .stats { grid-template-columns:repeat(3,1fr); gap:8px; }
-        .stat { padding:13px 12px; } .stat .sl { font-size:11px; }
-        .seg button { min-width:80px; font-size:13px; }
+        .vgrid { grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); }
+        .seg button { min-width:70px; font-size:12.5px; }
       }
     </style>
   </head>
   <body>
     <header>
       <div class="head">
-        <a href="/app" class="back" title="메인으로">←</a>
-        <span class="brand"><img src="/ppurio-assets/puri.png" alt="뿌리오" /> 뿌리오 <small>스튜디오</small></span>
+        <a href="/ppurio" class="back" title="뿌리오 홈(랜딩)으로">←</a>
+        <a href="/ppurio" class="brand" style="text-decoration:none"><img src="/ppurio-assets/puri.png" alt="뿌리오" /> 뿌리오 <small>방송콘솔</small></a>
         <button id="theme-btn" title="밝게/어둡게">🌙</button>
       </div>
     </header>
 
     <div class="wrap">
-      <!-- 환영 -->
       <div class="welcome">
         <img class="wpic" src="/ppurio-assets/puri.png" alt="뿌리오 마스코트" />
         <div>
-          <h1>오늘은 어떤 <span class="fr">씨앗</span>을<br/>뿌려볼까요?</h1>
-          <p>글 한 줄을 심으면 여러 계정에 플랫폼마다 다르게 뿌려드려요.</p>
+          <h1>한 번에 <span class="fr">사방</span>으로<br/>송출하세요</h1>
+          <p>영상을 고르고 계정을 고르면, 스레드·인스타·페북 전 계정에 순서대로 뿌려드려요.</p>
         </div>
-      </div>
-
-      <!-- 성과 미니바 -->
-      <div class="stats">
-        <div class="stat"><div class="sn" data-to="12">0</div><div class="sl">오늘 뿌린 글</div></div>
-        <div class="stat"><div class="sn" data-to="3">0</div><div class="sl">연결된 계정</div></div>
-        <div class="stat"><div class="sn" data-to="4680">0</div><div class="sl">이번 주 반응 ↗</div></div>
       </div>
 
       <div class="work-grid">
-      <div class="col-main">
-      <!-- 1. 글 만들기 -->
-      <div class="step-card">
-        <div class="step-h"><span class="step-no">1</span><h2>글 만들기</h2></div>
-        <div class="seg" id="src-seg">
-          <button data-src="topic" class="on">🌱 주제로 AI 생성</button>
-          <button data-src="write">✏️ 직접 작성</button>
+        <div class="col-main">
+          <div class="step-card">
+            <div class="step-h"><span class="step-no">1</span><h2>영상 선택</h2><span class="opt" id="vsel-count">0개 선택</span></div>
+            <div class="vtools">
+              <button id="v-all" class="chip">전체 선택</button>
+              <button id="v-none" class="chip">해제</button>
+              <button id="v-reload" class="chip">↻ 새로고침</button>
+            </div>
+            <div id="vgrid" class="vgrid"><p class="mini-state">영상 불러오는 중…</p></div>
+          </div>
         </div>
-        <div id="src-topic">
-          <input id="topic" class="input" placeholder="예: 혼자 사는 20대의 현실 공감 / 요즘 뜨는 간식 리뷰" />
-          <button id="gen-text" class="primary-btn" style="margin-top:10px">✍️ 스레드 글 생성</button>
-        </div>
-        <label class="field-label" style="margin-top:14px">글 내용 <span class="sub small">(스레드는 500자까지, 첫 문장이 승부)</span>
-          <textarea id="text" class="input" rows="7" maxlength="500" placeholder="여기에 글이 생성돼요. 직접 고쳐도 됩니다."></textarea>
-        </label>
-        <div class="counter" id="count">0 / 500</div>
-      </div>
 
-      <!-- 2. 이미지 -->
-      <div class="step-card">
-        <div class="step-h"><span class="step-no">2</span><h2>이미지</h2><span class="opt">선택</span></div>
-        <div class="seg" id="img-seg">
-          <button data-img="none" class="on">텍스트만</button>
-          <button data-img="gen">🎨 이미지 생성</button>
-        </div>
-        <div id="img-gen" class="hidden">
-          <input id="img-prompt" class="input" placeholder="이미지 설명 (예: 아늑한 원룸, 따뜻한 조명, 저녁)" />
-          <button id="gen-img" class="primary-btn" style="margin-top:10px">🎨 이미지 생성</button>
-          <img id="img-prev" class="img-prev" alt="미리보기" />
+        <div class="col-side">
+          <div class="step-card">
+            <div class="step-h"><span class="step-no">2</span><h2>송출 대상 계정</h2></div>
+            <div class="seg" id="plat-seg">
+              <button data-plat="threads" class="on">🧵 스레드</button>
+              <button data-plat="instagram">📷 인스타</button>
+              <button data-plat="facebook">👍 페북</button>
+            </div>
+            <div class="vtools"><button id="a-all" class="chip">전체 선택/해제</button><span class="mini-state" id="asel-count" style="padding:0"></span></div>
+            <div id="accts" class="acct-list"><p class="mini-state">계정 불러오는 중…</p></div>
+            <div class="tip">💡 한 기기·한 계정·텀을 두고 올려야 안 걸려요. 계정마다 주제를 섞지 마세요.</div>
+          </div>
         </div>
       </div>
 
-      <!-- 3. 링크 -->
-      <div class="step-card">
-        <div class="step-h"><span class="step-no">3</span><h2>링크 첨부</h2><span class="opt">선택</span></div>
-        <label class="field-label">쇼핑쇼츠·외부 링크 <span class="sub small">(글 아래 미리보기로 붙어요)</span>
-          <input id="link" class="input" placeholder="예: https://... (온파트너 제휴링크도 가능)" />
-        </label>
-      </div>
-
-      </div>
-      <div class="col-side">
-      <!-- 4. 계정 -->
-      <div class="step-card">
-        <div class="step-h"><span class="step-no">4</span><h2>올릴 계정 선택</h2><span class="opt">여러 개 가능</span></div>
-        <div id="accts"><p class="mini-state">계정 불러오는 중…</p></div>
-        <div class="tip">💡 계정마다 주제를 섞지 마세요. 노래 계정엔 노래만, 영상 계정엔 영상만 올려야 알고리즘이 밀어줍니다.</div>
-      </div>
-
-      <!-- 5. 발행 -->
-      <button id="publish" class="primary-btn publish-btn">🌱 선택한 계정에 뿌리기</button>
-      <div id="log" class="ss-log"></div>
-      <div id="results" class="step-card hidden"><div class="step-h"><span class="step-no">✓</span><h2>결과</h2></div><div id="res-list"></div></div>
-      </div>
+      <div class="step-card console-card">
+        <div class="step-h"><span class="step-no">3</span><h2>송출 콘솔</h2>
+          <span class="opt">
+            <button id="c-big" class="chip">🔍 크게</button>
+            <button id="c-copy" class="chip">📋 복사</button>
+            <button id="c-clear" class="chip">🧹 초기화</button>
+          </span>
+        </div>
+        <button id="broadcast" class="primary-btn publish-btn">🚀 선택한 영상을 선택한 계정에 송출</button>
+        <div class="bar" id="bar"><div class="bar-fill" id="bar-fill"></div><span id="bar-txt">0%</span></div>
+        <div id="con" class="ss-log">여기에 송출 로그가 실시간으로 올라옵니다. 영상과 계정을 고르고 🚀 송출을 눌러보세요.</div>
+        <div class="ctrls">
+          <button id="c-stop" class="chip ctrl hidden">⏹ 정지</button>
+          <button id="c-resume" class="chip ctrl hidden">▶ 이어하기</button>
+          <button id="c-cancel" class="chip ctrl hidden">✕ 취소</button>
+        </div>
       </div>
     </div>
 
+    <div class="big-modal" id="big-modal"><button class="bm-x" id="bm-x">✕</button><div class="bm-in" id="bm-in"></div></div>
+
     <script src="/social.js"></script>
-    <script>
-      // 성과 미니바 카운트업(데모 — 추후 실제 지표 연결)
-      document.querySelectorAll('.stat .sn').forEach(el=>{ const to=+el.dataset.to, s=performance.now(), d=1200;
-        const f=n=>{ const p=Math.min(1,(n-s)/d); el.textContent=Math.round((1-Math.pow(1-p,3))*to).toLocaleString(); if(p<1)requestAnimationFrame(f); }; requestAnimationFrame(f); });
-    </script>
   </body>
 </html>
