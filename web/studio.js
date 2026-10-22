@@ -194,7 +194,7 @@
       const st = await (await fetch('/api/facebook/status')).json();
       if (!st.connected) { message('먼저 ⚙ 키 설정에서 페이스북 페이지를 연결하세요.', true); btn.disabled = false; btn.textContent = orig; return; }
       btn.textContent = '👍 글 만드는 중…';
-      const d = await api('/api/instagram/caption/' + current.id, undefined);
+      const d = await api('/api/instagram/caption/' + current.id + '?platform=facebook', undefined);
       let box = el('fb-modal');
       if (!box) { box = document.createElement('div'); box.id = 'fb-modal'; box.className = 'modal hidden'; document.body.appendChild(box); }
       box.innerHTML = `<div class="modal-box">
@@ -225,7 +225,7 @@
       const st = await (await fetch('/api/threads/status')).json();
       if (!st.connected) { message('먼저 ⚙ 키 설정에서 스레드 계정을 연결하세요.', true); btn.disabled = false; btn.textContent = orig; return; }
       btn.textContent = '🧵 글 만드는 중…';
-      const d = await api('/api/instagram/caption/' + current.id, undefined);
+      const d = await api('/api/instagram/caption/' + current.id + '?platform=threads', undefined);
       let box = el('th-modal');
       if (!box) { box = document.createElement('div'); box.id = 'th-modal'; box.className = 'modal hidden'; document.body.appendChild(box); }
       box.innerHTML = `<div class="modal-box">

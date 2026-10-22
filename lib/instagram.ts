@@ -130,41 +130,74 @@ export async function verifyInstagram(cfg: {igUserId: string; accessToken: strin
 
 // 인스타 릴스 전용 캡션 자동 생성(유튜브 메타와 다르게 — 가십성·화제성·댓글 유발 톤).
 // 반환 = 바로 붙여 쓸 수 있는 완성 캡션(훅 / 빈줄 / 본문 / 빈줄 / 해시태그 한 줄).
+export type CaptionPlatform = 'instagram' | 'threads' | 'facebook';
+
+// 플랫폼별 글 규칙 — 2026 실측 기준. 같은 영상도 플랫폼마다 글이 달라야 먹힌다.
+//   instagram: 공감·재미, 해시태그 5개(30개는 구식), 첫 125자가 승부, 블록 레이아웃.
+//   threads:   텍스트가 본체인 대화 플랫폼. 500자 이내, 첫 문장에 다 걸고, 해시태그 0~1개(떡칠은 독),
+//              끝은 댓글 부르는 질문(댓글이 노출을 결정). 해시태그 떡칠/광고 톤 = 조회수 안 나오는 직접 원인.
+//   facebook:  480자 내외 스토리텔링, 해시태그 1~2개(효과 작음), 공유 유도.
+function buildCaptionPrompt(platform: CaptionPlatform, title: string, body: string): string {
+  const base = `영상 제목: ${title}
+영상 내용(자막/해설): ${body || '(내용 정보가 적음 — 제목에 드러난 소재만 근거로 삼아라)'}
+
+🔴🔴절대 규칙 — 반드시 지켜라:
+- '위에 주어진 제목·내용에 실제로 나온 소재'로만 써라. 거기 없는 주제를 지어내지 마라.
+- '붓기·다이어트·피부·건강 꿀팁' 류는 제목/내용에 그 말이 실제로 있을 때만. 먹방·예능·스포츠 영상을 다이어트/붓기로 비틀지 마라(완전히 다른 영상이 된다).
+- 내용 정보가 적으면 억지 각도 금지, 영상에 실제로 보이는 장면·인물·상황을 그대로 공감 포인트로 삼아라.`;
+
+  if (platform === 'threads') {
+    return `너는 '스레드(Threads)'에서 수만 조회·수백 댓글을 터뜨리는 카피라이터다. 아래 영상 소재로 스레드 글을 써라.
+${base}
+
+★이건 '스레드' 글이다 — 인스타 캡션(해시태그 떡칠)과 완전히 다르다:
+- 스레드는 '텍스트가 본체'인 대화 플랫폼. 트위터처럼 솔직하고 대화하듯 써라.
+- 전체 500자 이내(짧을수록 좋다). 첫 문장에 핵심·훅을 다 걸어라(첫 문장에서 안 멈추면 끝이다).
+- 해시태그 떡칠 절대 금지(스레드에선 독이다). 써도 딱 1개까지, 안 써도 된다.
+- 반드시 '댓글 부르는 질문'으로 끝내라(의견 갈리게/경험 묻게). 댓글이 노출을 결정한다.
+- 이모지 절제(0~2개). 광고·정보 나열 톤 금지, 진짜 사람 말투.
+JSON만 출력: {"hook":"첫 문장(강한 훅)","blocks":["짧은 문장 1~2개(배열)"],"question":"댓글 부르는 질문 한 줄","hashtag":"선택: 태그 1개(# 없이) 또는 빈 문자열"}`;
+  }
+
+  if (platform === 'facebook') {
+    return `너는 '페이스북'에서 공유·댓글이 터지는 카피라이터다. 아래 영상 소재로 페이스북 글을 써라.
+${base}
+
+★이건 '페이스북' 글이다:
+- 480자 내외의 '스토리텔링'. 공감 가는 상황·감정으로 이야기하듯. 짧은 문단을 빈 줄로 띄워 읽기 쉽게.
+- 첫 줄에 강한 공감·호기심 훅. 끝에 공유·의견을 자연스럽게 유도.
+- 해시태그는 1~2개만(페북은 해시태그 효과가 작다). 이모지는 적당히.
+JSON만 출력: {"hook":"첫 줄 훅","blocks":["짧은 문단 2~3개(배열)"],"hashtags":["핵심 태그 1~2개(# 없이)"]}`;
+  }
+
+  // instagram (기본)
+  return `너는 인스타그램 릴스로 수십만 조회를 터뜨리는 바이럴 카피라이터다. 사람들이 "헉 완전 내 얘기", "이거 저장!" 하며 공감·댓글·태그하는 릴스 캡션을 만들어라.
+${base}
+
+★이건 '인스타' 캡션이다 — 유튜브처럼 정보 나열 말고, 친구한테 썰 푸는 것처럼 '재미있고 생생하게'. 모바일로 '술술' 읽히게 짧은 "블록"으로 쪼개고 블록 사이는 빈 줄. 이모지로 리듬(과하지 않게).
+
+규칙:
+- hook: 첫 줄. 스크롤 멈추는 강한 공감+떡밥 한 문장. '이 영상의 실제 소재'로 콕 집어 "헉 내 얘기" 싶게. 이모지 1~2개. 거짓 낚시 금지.
+- blocks: 3~5개 짧은 블록(배열). 1번=강한 공감·몰입(구체적 상황·감정·장면), 중간=반전·웃음·궁금증 증폭(밋밋한 요약 금지), 마지막=댓글 부르는 질문 1개 + "저장각/친구 소환" 유도. 썰 푸는 구어체.
+- hashtags: 이 영상 소재에 맞는, 인스타에서 잘 노출되는 '핵심' 해시태그 딱 5개(과거 30개는 구식 — 5개가 노출에 더 좋다). 초대형 트렌드 1개 + 주제 핵심 + 틈새 믹스. # 없이 배열, 공백 없는 단어.
+JSON만 출력: {"hook":"...","blocks":["...","..."],"hashtags":["...(핵심 5개)"]}`;
+}
+
 export async function generateCaption(
   keys: {gemini: string[]; openai?: string},
   title: string,
   narrations: string[],
+  platform: CaptionPlatform = 'instagram',
 ): Promise<string> {
   const body = narrations.join(' ').slice(0, 1500);
-  const prompt = `너는 인스타그램 릴스로 수십만 조회를 터뜨리는 바이럴 카피라이터다. 아래 '이 영상'에 어울리는, 사람들이 "헉 완전 내 얘기", "이거 저장!" 하며 공감하고 댓글 달고 친구 태그하는 릴스 캡션을 만들어라.
-영상 제목: ${title}
-영상 내용(자막/해설): ${body || '(내용 정보가 적음 — 제목에 드러난 소재만 근거로 삼아라)'}
-
-🔴🔴절대 규칙 — 반드시 지켜라:
-- 캡션은 '위에 주어진 제목·내용에 실제로 나온 소재'로만 써라. 거기 없는 주제를 지어내지 마라.
-- 특히 '붓기·다이어트·피부·건강 꿀팁' 같은 소재는 제목/내용에 그 말이 실제로 있을 때만 써라. 먹방·예능·스포츠 영상인데 다이어트/붓기 얘기로 비틀지 마라(완전히 다른 영상이 된다).
-- 내용 정보가 적으면 억지 각도를 만들지 말고, 영상에 실제로 보이는 장면·인물·상황을 그대로 공감 포인트로 삼아라.
-
-★이건 '인스타' 캡션이다 — 유튜브처럼 정보 나열 말고, 친구한테 썰 푸는 것처럼 '재미있고 생생하게'. 모바일로 보니 한 눈에 '술술' 읽혀야 한다. 긴 문단 금지. 짧은 문장을 "블록"으로 쪼개고 블록 사이는 빈 줄로 숨 쉬게. 정보보다 '공감·재미'를 먼저 친다. 적절한 이모지로 리듬을 줘라(과하지 않게).
-
-규칙:
-- hook: 첫 줄. 스크롤을 멈추게 하는 강한 공감+떡밥 한 문장. '이 영상의 실제 소재'로 대상을 콕 집어 "헉 내 얘기" 싶게. 이모지 1~2개. 거짓 낚시 금지.
-- blocks: 3~5개의 짧은 블록(배열). 각 블록 1~2줄. 읽는 맛 있게, 리듬감 있게(한 방씩).
-   · 1번 = 강한 공감·몰입(이 영상 내용 기반 구체적 상황·감정·장면 묘사로 "나도 그래/이거 봐봐" 유발).
-   · 중간 = 반전·핵심·웃음 포인트·궁금증 증폭(밋밋한 요약 금지, 센스 있게 한 끗).
-   · 마지막 = 댓글 부르는 질문 1개(의견 갈리게/공감 묻게) + "저장각이에요/친구 소환" 류 저장·공유·태그 유도.
-   썰 푸는 구어체·위트 유지, 딱딱한 설명체·정보 나열 금지.
-- hashtags: 이 영상의 실제 소재에 맞는, 인스타에서 잘 노출되는 해시태그 12~15개. 한국어 중심 + 핵심 영어 2~3개. 초대형 트렌드 태그(릴스추천/탐색탭/fyp) 1~2개 + 주제 핵심 + 틈새 믹스. # 없이 배열, 공백 없는 단어.
-JSON만 출력: {"hook":"...","blocks":["...","...","..."],"hashtags":["...","..."]}`;
-  // ★AI가 고온도에서 깨진 JSON(문자열 안 잘못된 \ 이스케이프 등)을 뱉으면 JSON.parse가 "Bad escaped character"로
+  const prompt = buildCaptionPrompt(platform, title, body);
+  // ★AI가 고온도에서 깨진 JSON(문자열 안 잘못된 이스케이프 등)을 뱉으면 JSON.parse가 "Bad escaped character"로
   //   터져 캡션 생성 '전체'가 실패하던 문제 → 재시도(저온도) + 깨진 이스케이프 정리 + 최후 폴백(제목 기반).
-  //   generateCaption은 인스타·페북·스레드 공용이라 여기 한 곳만 고치면 세 발송 경로가 다 안전해진다.
   const parseLoose = (s: string): any => {
     const m = s.match(/\{[\s\S]*\}/);
     if (!m) throw new Error('JSON 형태 아님');
     let t = m[0];
     try { return JSON.parse(t); } catch {}
-    // 유효하지 않은 백슬래시 이스케이프(\" \\ \/ \b \f \n \r \t \uXXXX 외)의 \ 를 제거해 복구 시도.
     t = t.replace(/\\(?!["\\/bfnrtu])/g, '');
     return JSON.parse(t);
   };
@@ -178,17 +211,27 @@ JSON만 출력: {"hook":"...","blocks":["...","...","..."],"hashtags":["...","..
     if (!raw) continue;
     try { d = parseLoose(raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '')); } catch {}
   }
-  if (!d) d = {}; // 끝까지 실패 → 제목 기반 최소 캡션으로 폴백(발송은 되게, 에러 throw 안 함)
+  if (!d) d = {}; // 끝까지 실패 → 제목 기반 최소 캡션으로 폴백(발송은 되게)
   const hook = String(d.hook || title).trim();
-  // blocks(신규) 우선, 없으면 body(구) 호환. 각 블록을 빈 줄로 띄워 모바일 가독성 확보.
   const blocks = Array.isArray(d.blocks)
     ? d.blocks.map((x: any) => String(x).trim()).filter(Boolean)
     : (d.body ? [String(d.body).trim()] : []);
+
+  // 스레드: 500자 이내, 끝에 질문, 해시태그 0~1개(떡칠 금지).
+  if (platform === 'threads') {
+    const q = String(d.question || '').trim();
+    const tag = String(d.hashtag || '').replace(/^#+/, '').replace(/\s+/g, '');
+    const out = [hook, ...blocks, q].filter(Boolean).join('\n\n');
+    return (tag ? `${out}\n\n#${tag}` : out).slice(0, 490);
+  }
+
+  // 인스타(해시태그 5)·페북(해시태그 2): 훅 / 블록(빈 줄) / 해시태그 한 줄.
+  const maxTags = platform === 'facebook' ? 2 : 5;
   const tags = Array.isArray(d.hashtags)
-    ? [...new Set(d.hashtags.map((x: any) => '#' + String(x).replace(/^#+/, '').replace(/\s+/g, '')).filter((t: string) => t.length > 1))].slice(0, 15)
+    ? [...new Set(d.hashtags.map((x: any) => '#' + String(x).replace(/^#+/, '').replace(/\s+/g, '')).filter((t: string) => t.length > 1))].slice(0, maxTags)
     : [];
-  // 인스타식 레이아웃: 훅 / 빈 줄 / (블록마다 빈 줄) / 빈 줄 / 해시태그 한 줄
-  return [hook, ...blocks, tags.join(' ')].filter(Boolean).join('\n\n').slice(0, 2200);
+  const limit = platform === 'facebook' ? 1800 : 2200;
+  return [hook, ...blocks, tags.join(' ')].filter(Boolean).join('\n\n').slice(0, limit);
 }
 
 // 영상 게시. kind는 과거 호환용(reels/feed)이지만 실제로는 둘 다 REELS로 올린다.

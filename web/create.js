@@ -633,7 +633,7 @@
       const st = await (await fetch('/api/facebook/status')).json();
       if (!st.connected) { alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 페이스북 페이지를 연결하세요.'); return; }
       btn.textContent = '👍 글 만드는 중…';
-      const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id)); const d = await r.json();
+      const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id) + '?platform=facebook'); const d = await r.json();
       if (!r.ok) throw new Error(d.error || '글 생성 실패');
       modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>👍 페이스북 올리기</h2><button class="ghost-btn" data-x="close">✕</button></div>
         <label class="field-label">글 내용<textarea id="cu-c" class="input" rows="8" maxlength="5000">${esc(d.caption || '')}</textarea></label>
@@ -656,7 +656,7 @@
       const st = await (await fetch('/api/threads/status')).json();
       if (!st.connected) { alert('먼저 영상 만들기 화면의 ⚙ 키 설정에서 스레드 계정을 연결하세요.'); return; }
       btn.textContent = '🧵 글 만드는 중…';
-      const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id)); const d = await r.json();
+      const r = await fetch('/api/instagram/caption/' + encodeURIComponent(id) + '?platform=threads'); const d = await r.json();
       if (!r.ok) throw new Error(d.error || '글 생성 실패');
       modal(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2>🧵 스레드 올리기</h2><button class="ghost-btn" data-x="close">✕</button></div>
         <p class="mini-state">글은 500자까지 올라가요. 링크를 넣으면 글 아래 미리보기로 붙어요.</p>

@@ -1372,8 +1372,11 @@ JSON만: {"comment":"..."}`;
     const meta = src ? {title: src.title, narrations: src.narrations} : cardPostMeta(id);
     if (!meta) return json(res, 404, {error: '항목을 찾을 수 없습니다.'});
     const k = pipelineKeys();
+    // 플랫폼별 글: ?platform=threads|facebook|instagram (기본 instagram). 같은 영상도 플랫폼마다 글이 달라야 먹힌다.
+    const pfRaw = (u.searchParams.get('platform') || 'instagram').toLowerCase();
+    const platform = (pfRaw === 'threads' || pfRaw === 'facebook' ? pfRaw : 'instagram') as 'instagram' | 'threads' | 'facebook';
     try {
-      const caption = await generateCaption({gemini: k.gemini, openai: k.openai}, meta.title, meta.narrations);
+      const caption = await generateCaption({gemini: k.gemini, openai: k.openai}, meta.title, meta.narrations, platform);
       // CC BY 하이라이트는 캡션에도 출처를 붙인다(저작권 표기 의무).
       const attr = readAttribution(id);
       let finalCaption = attr && !caption.includes(attr) ? (caption + '\n\n' + attr) : caption;
