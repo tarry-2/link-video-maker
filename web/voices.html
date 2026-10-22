@@ -168,6 +168,8 @@
       .pf-card-ops .op-ig { background: linear-gradient(45deg,#f09433,#dc2743,#bc1888); }
       .pf-card-ops .op-yt { background: linear-gradient(135deg,#ff3b3b,#cc0000); }
       .pf-card-ops .op-th { background: linear-gradient(135deg,#333,#000); }
+      .pf-card-ops .op-dl { flex: 1 1 0; min-width: 0; border-radius: 9px; padding: 7px 4px; font-size: 13px; font-weight: 800; color: #fff; cursor: pointer; white-space: nowrap; background: #5c9a1d; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; transition: filter .15s ease, transform .15s ease; }
+      .pf-card-ops .op-dl:hover { filter: brightness(1.08); transform: translateY(-1px); }
       /* ── 여러 개 선택(선택 모드) ── 보기 모드와 색·구조로 확실히 구분 ── */
       .selbar { position: sticky; top: 8px; z-index: 20; display: none; align-items: center; flex-wrap: wrap; gap: 8px 10px;
         background: linear-gradient(135deg, var(--teal), var(--purple)); color: #fff; border: 2px solid rgba(255,255,255,.35);
@@ -469,7 +471,7 @@
           if (tb) tb.insertAdjacentHTML('beforeend', '<span class="pf-check">✓</span>');
           const ops = isPost
             ? `<button class="op-fb" data-op="fb">👍 페북</button><button class="op-ig" data-op="ig">📷 인스타</button>`
-            : `<button class="op-fb" data-op="fb">👍</button><button class="op-ig" data-op="ig">📷</button><button class="op-th" data-op="th">🧵</button><button class="op-yt" data-op="yt">▶</button>`;
+            : `<button class="op-fb" data-op="fb">👍</button><button class="op-ig" data-op="ig">📷</button><button class="op-th" data-op="th">🧵</button><button class="op-yt" data-op="yt">▶</button><a class="op-dl" href="${esc(it.video)}" download="${esc(it.title)}.mp4" title="다운로드">⬇</a>`;
           fig.insertAdjacentHTML('beforeend', `<div class="pf-card-ops">${ops}</div>`);
           if (selMode && picked.has(it.id)) fig.classList.add('picked');
           if (!isPost) {
@@ -534,6 +536,8 @@
       $('mypf-grid').onclick = e => {
         const card = e.target.closest('.pf-thumb-card');
         if (!card) return;
+        // 다운로드 링크(<a download>)는 브라우저 기본 동작으로 받고, 스테이지 로드만 막는다.
+        if (e.target.closest('.op-dl') && !selMode) return;
         // 보기 모드: 카드 아래 미니버튼 = 그 자리서 바로 올리기(스테이지 안 올라감).
         const op = e.target.closest('[data-op]');
         if (op && !selMode) {
