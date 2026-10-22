@@ -86,7 +86,13 @@
       .vcard { border:2px solid var(--line); border-radius:14px; overflow:hidden; background:var(--field); cursor:pointer; transition:border-color .15s, transform .15s; position:relative; }
       .vcard:hover { transform:translateY(-2px); }
       .vcard.sel { border-color:var(--lime); box-shadow:0 0 0 3px color-mix(in srgb,var(--lime),transparent 78%); }
+      .vcard .vthumb-box { position:relative; }
       .vcard .vthumb { width:100%; aspect-ratio:9/16; object-fit:cover; background:#17130c; display:block; }
+      .vcard .vplay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:46px; height:46px; border-radius:50%; border:none; background:rgba(0,0,0,.5); color:#fff; font-size:16px; cursor:pointer; backdrop-filter:blur(3px); display:grid; place-items:center; transition:transform .15s, background .15s; }
+      .vcard .vplay:hover { background:var(--lime); color:#1f2d05; transform:translate(-50%,-50%) scale(1.12); }
+      .vcard.playing .vplay { display:none; }
+      .vcard .vthumb-playing { width:100%; aspect-ratio:9/16; object-fit:contain; background:#000; display:block; }
+      .vcard .vthumb-playing.land { aspect-ratio:16/9; }
       .vcard .vthumb.land { aspect-ratio:16/9; }
       .vcard .vkind { display:inline-block; font-size:10px; font-weight:800; padding:2px 7px; border-radius:6px; background:var(--bg); color:var(--lime-d); margin:6px 8px 0; }
       .vcard .vtitle { font-size:11.5px; font-weight:700; padding:5px 8px 3px; line-height:1.3; height:36px; overflow:hidden; }

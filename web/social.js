@@ -31,6 +31,7 @@
   };
   function getInterval() { var el = $('interval'); return el ? Number(el.value) || 0 : 0; }
   function currentTargets() { return {threads: [...state.sel.threads], instagram: [...state.sel.instagram], facebook: [...state.sel.facebook]}; }
+  let playingCard = null; // 그 자리서 재생 중인 카드(한 번에 하나만)
   const V_PER = 12; // 페이지당 영상 수
   // 작업 종류 구분(배지·필터): 하이라이트/카드영상/재창작/창작/일반영상.
   function kindOf(v) {
@@ -54,6 +55,7 @@
     } catch (e) { g.innerHTML = '<p class="mini-state">불러오기 실패: ' + esc(e.message) + '</p>'; }
   }
   function renderVideos() {
+    playingCard = null; // 다시 그리면 재생 중이던 비디오도 DOM에서 사라짐
     const g = $('vgrid');
     const list = filteredVideos();
     if (!list.length) { g.innerHTML = `<p class="mini-state">${state.videos.length ? '이 종류의 영상이 없어요.' : '포트폴리오에 영상이 없어요. 먼저 영상을 만들어 주세요.'}</p>`; $('vpager').innerHTML = ''; updateVSel(); return; }
@@ -66,7 +68,7 @@
       const land = v.orientation === 'landscape' ? ' land' : '';
       return `<div class="vcard${state.selVideos.has(v.id) ? ' sel' : ''}" data-vid="${esc(v.id)}">
         <div class="vcheck">${state.selVideos.has(v.id) ? '✓' : ''}</div>
-        ${v.thumb ? `<img class="vthumb${land}" src="${esc(v.thumb)}" loading="lazy" onerror="this.style.visibility='hidden'"/>` : `<div class="vthumb${land}"></div>`}
+        <div class="vthumb-box">${v.thumb ? `<img class="vthumb${land}" src="${esc(v.thumb)}" loading="lazy" onerror="this.style.visibility='hidden'"/>` : `<div class="vthumb${land}"></div>`}${v.video ? '<button class="vplay" title="재생/중지">▶</button>' : ''}</div>
         <div class="vkind">${KIND_LABEL[kindOf(v)]}</div>
         <div class="vtitle">${esc(v.title || '(제목 없음)')}</div>
         <div class="vbadges">${badges}</div>
@@ -87,11 +89,31 @@
   }
   function updateVSel() { $('vsel-count').textContent = state.selVideos.size + '개 선택'; }
 
+  function stopPlay(card) {
+    if (card && card._videoEl) { try { card._videoEl.pause(); } catch (e) {} card._videoEl.remove(); card._videoEl = null; }
+    if (card) { const t = card.querySelector('.vthumb'); if (t) t.style.display = ''; card.classList.remove('playing'); }
+    if (playingCard === card) playingCard = null;
+  }
+  function togglePlay(card, vid) {
+    if (card.classList.contains('playing')) { stopPlay(card); return; } // 재생 중이면 중지
+    const v = state.videos.find((x) => x.id === vid); if (!v || !v.video) return;
+    if (playingCard) stopPlay(playingCard); // 한 번에 하나만 재생
+    const box = card.querySelector('.vthumb-box'); const thumb = card.querySelector('.vthumb');
+    const el = document.createElement('video');
+    el.src = v.video; el.controls = true; el.autoplay = true; el.playsInline = true;
+    el.className = 'vthumb-playing' + (v.orientation === 'landscape' ? ' land' : '');
+    if (thumb) thumb.style.display = 'none';
+    box.appendChild(el);
+    card.classList.add('playing'); card._videoEl = el; playingCard = card;
+  }
   $('vgrid').onclick = (e) => {
+    const play = e.target.closest('.vplay');
     const btn = e.target.closest('.vbtns button');
     const card = e.target.closest('.vcard'); if (!card) return;
     const vid = card.dataset.vid;
+    if (play) { e.stopPropagation(); togglePlay(card, vid); return; } // ▶ = 그 자리서 재생/중지
     if (btn) { e.stopPropagation(); quickSend(vid, btn.dataset.act); return; }
+    if (card.classList.contains('playing')) return; // 재생 중엔 비디오 조작 — 선택 토글 막음
     if (state.selVideos.has(vid)) state.selVideos.delete(vid); else state.selVideos.add(vid); // 카드 클릭 = 선택 토글
     card.classList.toggle('sel'); card.querySelector('.vcheck').textContent = state.selVideos.has(vid) ? '✓' : '';
     updateVSel();
