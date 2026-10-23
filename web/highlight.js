@@ -123,6 +123,7 @@
       const m = JSON.parse(ev.data);
       if (m.log) { recv++; if (recv > logCount) { addLog(m.log, m.log.includes('[완료]') ? 'done' : m.log.includes('[실패]') ? 'fail' : ''); energyFromLog(m.log); logCount = recv; } }
       if (m.clip) { addResultClip(m.clip); loadHistory(); } // 먼저 끝난 편 바로 노출(+작업내역 갱신)
+      if (m.analyzed && m.analyzed.projectId) addBlueprint(m.analyzed); // 설계도 1편 들어올 때마다 카드 추가
       if (m.done) {
         es.close(); curES = null; curJobId = null;
         clearTimeout(tickTimer);
@@ -132,6 +133,17 @@
         if (m.error) { setEnergy(energyPct, m.error.includes('중단') ? '중단됨' : '실패'); }
         else { setEnergy(100, '완성! 🎉'); const f = $('hl-energy'); if (f) f.classList.remove('anim'); celebrate(); }
         showStopped(); // 성공·실패 공통: '같은 설정으로 다시' + '취소하고 새 영상' 노출
+        // ★2단계 워크플로 1단계(감별) 완료 — 설계도 배열이 왔고 아직 완성 클립은 없다 → 선택/수정 UI로.
+        const isAnalyze = Array.isArray(m.analyzed) && m.analyzed.length && !(m.clips && m.clips.length);
+        if (isAnalyze) {
+          if (!m.error) {
+            (m.analyzed || []).forEach((a) => { if (a && a.projectId && !blueprint.some((x) => x.projectId === a.projectId)) blueprint.push(a); });
+            setEnergy(100, '설계도 완성! 📝'); const f = $('hl-energy'); if (f) f.classList.remove('anim');
+            addLog('📝 설계도 완성 — 제목·소제목·본문·배지를 확인·수정하고, 만들 편을 체크해서 만드세요.', 'done');
+            showBlueprint(blueprint, false);
+          }
+          return; // 완성 결과 처리(showResults) 건너뜀
+        }
         if (m.kind === 'highlight' && !m.error) {
           addLog(`[진단] 완료 — 서버 clips=${(m.clips||[]).length}개, 화면 결과=${resultClips.length}개`, 'done');
           // ★서버가 보낸 m.clips가 '완전한 최종 목록'이다 — 이걸로 resultClips를 재구성(병합)한다.
@@ -215,6 +227,103 @@
     box.querySelectorAll('.hl-th').forEach((b) => b.onclick = () => uploadThreads(b, b.dataset.id));
     box.querySelectorAll('.hl-edit').forEach((b) => b.onclick = () => openEditModal(b.dataset.id));
     box.scrollIntoView({behavior: 'smooth'});
+  }
+
+  // ── 2단계 워크플로: 설계도(감별) 리뷰 — 렌더 전 제목·소제목·본문·배지 확인/수정 후 선택한 편만 만들기 ──
+  let blueprint = []; // 감별 결과(AnalyzedClip[]). 각 항목에 _pick(선택 여부)·수정값을 담는다.
+  function addBlueprint(a) {
+    if (!a || !a.projectId) return;
+    if (!blueprint.some((x) => x.projectId === a.projectId)) blueprint.push(a);
+    showBlueprint(blueprint, !!curJobId);
+  }
+  function bpCard(a, land) {
+    const pick = a._pick !== false;
+    const img = a.thumbUrl ? `<img class="bp-thumb" src="${a.thumbUrl}" alt="미리보기">` : `<div class="bp-thumb"></div>`;
+    return `<div class="bp-item ${pick ? 'on' : 'off'} ${land ? 'land' : ''}">
+      <label class="bp-pick"><input type="checkbox" data-id="${a.projectId}" ${pick ? 'checked' : ''}> 만들기</label>
+      ${scoreBadge(a.score, true)}
+      ${img}
+      ${typeof a.score === 'number' ? `<div class="hl-verdict ${gradeOf(a.score).cls}" style="margin-top:8px">${gradeOf(a.score).verdict}</div>` : ''}
+      <div class="bp-row2">
+        <div class="bp-fld"><label>제목 <button class="ghost-btn small bp-ai bp-hook-ai" type="button" data-id="${a.projectId}">✨AI</button></label><input class="input bp-in" data-id="${a.projectId}" data-f="hookTop" maxlength="40" value="${esc(a.hookTop || '')}"></div>
+        <div class="bp-fld"><label>소제목(강조)</label><input class="input bp-in" data-id="${a.projectId}" data-f="hookAccent" maxlength="20" value="${esc(a.hookAccent || '')}"></div>
+      </div>
+      <div class="bp-fld"><label>본문(해설 나레이션) <button class="ghost-btn small bp-ai bp-narr-ai" type="button" data-id="${a.projectId}">✨AI작성</button></label><textarea class="input bp-in" data-id="${a.projectId}" data-f="commentary" rows="3" maxlength="2000" placeholder="(비우면 해설 없이 원본 소리만)">${esc(a.commentary || '')}</textarea></div>
+      <div class="bp-fld"><label>배지(썸네일 작은 강조)</label><input class="input bp-in" data-id="${a.projectId}" data-f="thumbBadge" maxlength="20" value="${esc(a.thumbBadge || '')}"></div>
+    </div>`;
+  }
+  function updateBpMakeBtn() {
+    const n = blueprint.filter((x) => x._pick !== false).length;
+    const btn = $('hl-bp-make'); if (btn) { btn.textContent = `🎬 선택한 ${n}편 만들기`; btn.disabled = n === 0; }
+  }
+  function showBlueprint(list, inProgress) {
+    const box = $('hl-blueprint-block'); if (!box) return;
+    box.classList.remove('hidden');
+    if (!list.length) { box.innerHTML = '<p class="mini-state">설계도를 만드는 중…</p>'; return; }
+    const sorted = list.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+    const land = orient === 'landscape';
+    box.innerHTML = `<h2 style="margin:0 0 4px">📝 설계도 ${list.length}편 — 확인·수정 후 만들기${inProgress ? ' · 감별 중…' : ''}</h2>
+      <p class="mini-state" style="margin-bottom:6px">렌더(돈·시간) 전에 <b>제목·소제목·본문·배지</b>를 먼저 확인하세요. 고칠 건 바로 수정하고, <b>만들 편만 체크</b>한 뒤 아래 버튼을 누르면 그 편만 만들어집니다. 🏅등급=AI가 예측한 터질 확률.</p>
+      <div class="bp-make-bar">
+        <button id="hl-bp-design" class="ghost-btn small" type="button">🎨 자막 디자인 (전체 공통)</button>
+        <button id="hl-bp-all" class="ghost-btn small" type="button">☑ 전체 선택/해제</button>
+        <button id="hl-bp-make" class="primary-btn" type="button" style="margin-left:auto"${inProgress ? ' disabled title="감별이 끝나면 만들 수 있어요"' : ''}>🎬 선택한 편 만들기</button>
+      </div>
+      <div class="bp-grid">${sorted.map((a) => bpCard(a, land)).join('')}</div>`;
+    box.querySelectorAll('.bp-pick input').forEach((cb) => cb.onchange = () => {
+      const it = blueprint.find((x) => x.projectId === cb.dataset.id); if (it) it._pick = cb.checked;
+      const item = cb.closest('.bp-item'); item.classList.toggle('off', !cb.checked); item.classList.toggle('on', cb.checked);
+      updateBpMakeBtn();
+    });
+    box.querySelectorAll('.bp-in').forEach((inp) => inp.oninput = () => {
+      const it = blueprint.find((x) => x.projectId === inp.dataset.id); if (it) it[inp.dataset.f] = inp.value;
+    });
+    box.querySelectorAll('.bp-hook-ai').forEach((b) => b.onclick = () => bpHookAI(b));
+    box.querySelectorAll('.bp-narr-ai').forEach((b) => b.onclick = () => bpNarrAI(b));
+    $('hl-bp-design').onclick = () => { try { openEditor(); } catch {} };
+    $('hl-bp-all').onclick = () => { const anyOff = blueprint.some((x) => x._pick === false); blueprint.forEach((x) => x._pick = anyOff); showBlueprint(blueprint, inProgress); };
+    const mk = $('hl-bp-make'); if (mk && !inProgress) mk.onclick = startRender;
+    updateBpMakeBtn();
+  }
+  async function bpHookAI(b) {
+    const id = b.dataset.id, o = b.textContent; b.disabled = true; b.textContent = '✨…';
+    try {
+      const d = await (await fetch('/api/highlight/hook-suggest/' + encodeURIComponent(id))).json();
+      const it = blueprint.find((x) => x.projectId === id); if (!it) return;
+      if (d.hookTop) { it.hookTop = d.hookTop; const el = document.querySelector(`.bp-in[data-id="${id}"][data-f="hookTop"]`); if (el) el.value = d.hookTop; }
+      if (d.hookAccent) { it.hookAccent = d.hookAccent; const el = document.querySelector(`.bp-in[data-id="${id}"][data-f="hookAccent"]`); if (el) el.value = d.hookAccent; }
+    } catch {} finally { b.disabled = false; b.textContent = o; }
+  }
+  async function bpNarrAI(b) {
+    const id = b.dataset.id, o = b.textContent; b.disabled = true; b.textContent = '✨…';
+    try {
+      const d = await (await fetch('/api/highlight/narration-suggest/' + encodeURIComponent(id))).json();
+      if (d.error) throw new Error(d.error);
+      const it = blueprint.find((x) => x.projectId === id);
+      if (d.narration) { if (it) it.commentary = d.narration; const el = document.querySelector(`.bp-in[data-id="${id}"][data-f="commentary"]`); if (el) el.value = d.narration; }
+    } catch (e) { alert('AI 작성 실패: ' + e.message); } finally { b.disabled = false; b.textContent = o; }
+  }
+  function startRender() {
+    const picks = blueprint.filter((x) => x._pick !== false);
+    if (!picks.length) { alert('만들 편을 하나 이상 선택하세요.'); return; }
+    if (curJobId) { alert('이미 작업이 진행 중이에요. 끝난 뒤에 만드세요.'); return; }
+    const items = picks.map((a) => {
+      const it = {projectId: a.projectId, hookTop: a.hookTop, hookAccent: a.hookAccent, thumbBadge: a.thumbBadge,
+        template: tplMode, font, hookStyle, hookBg, voice};
+      const body = (a.commentary || '').trim();
+      if (body) it.narration = body; else it.narrationOff = true; // 본문 비우면 해설 없이 원본 소리만
+      return it;
+    });
+    addLog(`──────── 🎬 선택한 ${items.length}편 제작 시작 ────────`, 'done');
+    addLog(`• 디자인: ${(TPLS2.find((t) => t[0] === tplMode) || [])[1] || '자동'} / 폰트 ${FONT_NAME[font] || '자동'}`);
+    startTs = Date.now(); setEnergy(8, '선택한 편을 만드는 중…');
+    const estBase = 2 + items.length * (sec * 3.5 / 60 + 0.5);
+    estTotalText = `약 ${Math.max(2, Math.round(estBase * 0.8))}~${Math.round(estBase * 1.2)}분`;
+    try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
+    $('hl-blueprint-block')?.classList.add('hidden'); // 렌더 시작 → 설계도 접고 진행/결과로
+    resultClips = [];
+    lastBody = {items}; lastEndpoint = '/api/highlights/render';
+    generate(lastBody, lastEndpoint);
   }
 
   // ── 편집 모달 — 후킹 문구 + 디자인 템플릿 바꿔 그 클립만 다시 렌더(Phase3b) ──
@@ -1461,11 +1570,12 @@
   }
   // 전체 초기화 — 로그·진행·결과·에너지바까지 싹 비우고 처음 상태로.
   function resetAll() {
-    detachJob(); lastBody = null; startTs = 0; estTotalText = ''; resultClips = [];
+    detachJob(); lastBody = null; startTs = 0; estTotalText = ''; resultClips = []; blueprint = [];
     if ($('log')) $('log').textContent = ''; logJobId = null; logCount = 0;
     setEnergy(0, ''); const f = $('hl-energy'); if (f) f.classList.add('anim');
     $('progress-block')?.classList.add('hidden');
     $('hl-result-block')?.classList.add('hidden');
+    $('hl-blueprint-block')?.classList.add('hidden');
     ['hl-stop','hl-resume','hl-reset'].forEach((id) => $(id)?.classList.add('hidden'));
   }
   // 제작 방식 토글(하이라이트/재창작) — 재창작이면 전용 옵션 노출 + 하이라이트 전용 옵션 숨김 + 버튼 문구 변경.
@@ -1605,7 +1715,8 @@
       }
       addLog('🚫 음악방송 — 유튜브는 차단될 수 있어요. 인스타·페북 위주로 올리는 걸 권장합니다.', 'warn');
     }
-    addLog('──────── 하이라이트 제작 시작 ────────', 'done');
+    addLog('──────── 📝 하이라이트 감별(설계도) 시작 ────────', 'done');
+    addLog('먼저 렌더 없이 구간을 감별해 제목·소제목·본문·배지를 뽑아요. 확인·수정 후 "선택한 편 만들기"로 렌더합니다(돈·시간 절약).');
     addLog(`• 소재: ${picked.mine ? '📁 내 영상(저작권 자유)' : (mode === 'archive' ? '📼 ' + (picked.channel || '공개 아카이브') + ' · ' + (cat || '직접 검색') : (mode === 'url' ? 'URL 직접 입력' : (region === 'global' ? '해외' : '한국') + ' · ' + (cat || '직접 검색')))}`);
     addLog(`• 라이선스: ${picked.mine ? '내 소유(차단 걱정 없음)' : (picked.risk === 'archive' ? (picked.channel || '방송사') + ' 공식 공개 아카이브(출처 표기 시 안전)' : (picked.isCc !== false ? '재사용 허가(CC)' : '표준 라이선스(권한 확인 필요)'))}`);
     addLog(`• 원본 영상: ${picked.title}`);
@@ -1629,13 +1740,15 @@
     estTotalText = `약 ${estLo}~${estHi}분`;
     addLog(`• 예상 소요: ${estTotalText} (서버 상황 따라 달라져요 · 길이·편수 줄이면 빨라짐)`);
     addLog('────────────────────────────');
-    startTs = Date.now(); setEnergy(8, '하이라이트 제작을 시작합니다…');
+    startTs = Date.now(); setEnergy(8, '감별(설계도)을 시작합니다…');
     // 새로고침해도 경과·예상시간이 안 사라지게 저장(복원 시 읽음).
     try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
     // 소재 출처(작업내역 탭별 이원화) — 내 영상 업로드면 upload, 그 외는 현재 모드(search/url/archive).
     const src = picked.mine ? 'upload' : (['url', 'archive'].includes(mode) ? mode : 'search');
+    // ★2단계 워크플로: 바로 렌더하지 않고 '감별(설계도)' 먼저 — 제목·소제목·본문·배지 확인/수정 후 선택한 편만 렌더.
+    blueprint = []; $('hl-blueprint-block')?.classList.add('hidden');
     lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, font, hookStyle, hookBg, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, narrationCoverage, captionEn: !!captionEn, source: src, voice, isCc: picked.isCc !== false};
-    lastEndpoint = '/api/generate-highlights';
+    lastEndpoint = '/api/highlights/analyze';
     generate(lastBody, lastEndpoint);
   });
   $('hl-resume')?.addEventListener('click', () => { if (lastBody) generate(lastBody, lastEndpoint); });
@@ -1688,11 +1801,11 @@
     try {
       const d = await (await fetch('/api/jobs/current', {cache: 'no-store'})).json();
       // ★이 페이지가 담당하는 작업 = 하이라이트 + 재창작(remake). 둘 다 받아야 재창작도 기기간 실시간 연동됨(테리 지적).
-      if (d && d.id && (!d.kind || d.kind === 'highlight' || d.kind === 'remake')) {
+      if (d && d.id && (!d.kind || d.kind === 'highlight' || d.kind === 'remake' || d.kind === 'analyze')) {
         if (curJobId) return; // 이미 붙어 진행 보고 있으면 그대로
         // 붙기 전에 makeMode를 그 작업 종류에 맞춘다(remake면 결과 카드·문구가 재창작용으로 나오게). applyMakeMode로 UI까지 동기화.
         if (d.kind === 'remake' && makeMode !== 'remake') { makeMode = 'remake'; try { applyMakeMode(); } catch {} }
-        else if (d.kind === 'highlight' && makeMode !== 'clip') { makeMode = 'clip'; try { applyMakeMode(); } catch {} }
+        else if ((d.kind === 'highlight' || d.kind === 'analyze') && makeMode !== 'clip') { makeMode = 'clip'; try { applyMakeMode(); } catch {} }
         // 다른 기기(또는 새로고침)에서 돌고 있는 작업 — 바로 붙어 실시간 표시.
         try { const mt = JSON.parse(localStorage.getItem('onvideo-hljob-meta') || 'null');
           if (mt) { if (mt.startTs) startTs = mt.startTs; estTotalText = mt.estTotalText || ''; } } catch {}

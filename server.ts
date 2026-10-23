@@ -11,7 +11,7 @@ import {generateStoryboard, type Storyboard} from './lib/script';
 import {registerVideoToPortfolio} from './lib/video-portfolio';
 import {makeVideoManual} from './lib/manual';
 import {makeCardVideo, cardEditInfo, reRenderCard} from './lib/card-pipeline';
-import {makeHighlights, backfillHighlightProjects, reRenderHighlight, loadHlProject, suggestNarration} from './lib/youtube-highlight';
+import {makeHighlights, analyzeHighlights, renderAnalyzed, backfillHighlightProjects, reRenderHighlight, loadHlProject, suggestNarration, type AnalyzedClip} from './lib/youtube-highlight';
 import {searchArchiveChannel, sampleForAnalysis, fetchSourceTranscript, updateYtdlp, ytdlpVersion} from './lib/youtube-clip';
 import {analyzeReframe} from './lib/reframe';
 import {getTrends} from './lib/trends';
@@ -488,7 +488,7 @@ async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse
 }
 
 // 진행 중인 작업의 로그를 SSE로 흘리기 위한 저장소
-type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight' | 'remake' | 'create' | 'scenario' | 'bible' | 'shopping' | 'broadcast'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; cancelled?: boolean; storyboard?: Storyboard; bible?: any; remaining?: string[]};
+type Job = {id: string; logs: string[]; done: boolean; doneAt?: number; file?: string; title?: string; error?: string; kind?: 'video' | 'post' | 'highlight' | 'remake' | 'create' | 'scenario' | 'bible' | 'shopping' | 'broadcast' | 'analyze'; images?: string[]; zip?: string; projectId?: string; clips?: {projectId: string; file: string; title: string; score?: number}[]; analyzed?: AnalyzedClip[]; cancelled?: boolean; storyboard?: Storyboard; bible?: any; remaining?: string[]};
 // ★영상 로그(studio.ts)와 동일하게 각 줄 앞에 실시간 시각(한국시간 HH:MM:SS)을 붙인다. 프론트는 그대로 출력.
 function jlog(job: Job, s: string) {
   const t = new Date().toLocaleTimeString('ko-KR', {hour12: false, timeZone: 'Asia/Seoul'});
@@ -3435,6 +3435,111 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     return json(res, 202, {id});
   }
 
+  // ── 2단계 워크플로 1단계: 감별/설계도(렌더 전) — 제목·소제목·본문·배지를 먼저 뽑아 보여주고, 사용자가 수정 후 렌더 ──
+  //   generate-highlights와 입력은 같지만 렌더·TTS를 안 해서 싸고 빠르다. 결과(AnalyzedClip)를 SSE로 흘린다.
+  if (p === '/api/highlights/analyze' && req.method === 'POST') {
+    const b = await readBody(req);
+    const videoId = String(b.videoId || '').trim();
+    const uploadId = String(b.uploadId || '').trim();
+    let localFile: string | undefined;
+    if (uploadId) {
+      if (!/^[\w-]{12}$/.test(uploadId)) return json(res, 400, {error: '업로드를 다시 해주세요.'});
+      const found = fs.existsSync(HL_UPLOAD_DIR) ? fs.readdirSync(HL_UPLOAD_DIR).find((f) => f.startsWith(uploadId + '.')) : undefined;
+      if (!found) return json(res, 400, {error: '업로드한 영상을 찾을 수 없어요. 다시 올려주세요.'});
+      localFile = path.join(HL_UPLOAD_DIR, found);
+    } else if (!/^[\w-]{11}$/.test(videoId)) {
+      return json(res, 400, {error: '영상을 선택하세요.'});
+    }
+    const title = String(b.title || '').slice(0, 200);
+    const channel = String(b.channel || '').slice(0, 120);
+    const count = Math.max(1, Math.min(10, Number(b.count) || 3));
+    const clipSec = Math.max(15, Math.min(600, Number(b.clipSec) || 30));
+    const orientation = b.orientation === 'landscape' ? 'landscape' : 'portrait';
+    const commentary = !!b.commentary;
+    const narrationCoverage = [1, 0.8, 0.6].includes(Number(b.narrationCoverage)) ? Number(b.narrationCoverage) : 1;
+    const voice = typeof b.voice === 'string' ? b.voice : undefined;
+    const reframe = b.reframe === 'letterbox' ? 'letterbox' : 'track';
+    const muteOriginal = !!b.muteOriginal;
+    const template = typeof b.template === 'string' ? b.template : 'auto';
+    const font = pickFont(b.font);
+    const hookStyle = ['box', 'bar', 'none', 'bubble', 'gradient'].includes(b.hookStyle) ? b.hookStyle : undefined;
+    const hookBg = typeof b.hookBg === 'string' && b.hookBg ? b.hookBg : undefined;
+    const textColor = typeof b.textColor === 'string' && b.textColor ? b.textColor : undefined;
+    const removeSilence = !!b.removeSilence;
+    const broll = !!b.broll;
+    const captionEn = !!b.captionEn;
+    const isCc = b.isCc !== false;
+    const source = ['search', 'url', 'upload', 'archive'].includes(b.source) ? b.source : undefined;
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false};
+    jobs.set(id, job);
+    currentGenJob = id;
+    enqueueJob(job, async () => {
+      try {
+        job.kind = 'analyze'; // ★감별 전용 kind — 교차기기 폴링이 '제작 완료'로 오인하지 않게(finishFromDone 제외)
+        job.analyzed = [];
+        const list = await analyzeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, narrationCoverage, voice, reframe, muteOriginal, localFile, template, font, hookStyle, hookBg, textColor, removeSilence, broll, captionEn, source, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
+          onClip: (a) => { if (!job.analyzed!.some((x) => x.projectId === a.projectId)) job.analyzed!.push(a); }});
+        if (localFile) { try { fs.rmSync(localFile, {force: true}); } catch {} }
+        if (!list.length) throw new Error('설계도를 만들지 못했습니다(구간을 못 뽑았어요).');
+        job.done = true; job.doneAt = Date.now();
+      } catch (e: any) {
+        job.error = e.message; job.done = true; job.doneAt = Date.now();
+        jlog(job, '[실패] ' + e.message);
+      } finally { runMaintenance('감별완료'); }
+    });
+    return json(res, 202, {id});
+  }
+
+  // ── 2단계 워크플로 2단계: 선택한 편만 렌더(설계도 수정값 반영) — renderAnalyzed가 analyzed→completed 전환·포폴 등록 ──
+  if (p === '/api/highlights/render' && req.method === 'POST') {
+    const b = await readBody(req);
+    const items = Array.isArray(b.items) ? b.items : [];
+    if (!items.length) return json(res, 400, {error: '만들 편을 선택하세요.'});
+    const id = randomUUID().slice(0, 8);
+    const job: Job = {id, logs: [], done: false};
+    jobs.set(id, job);
+    currentGenJob = id;
+    enqueueJob(job, async () => {
+      try {
+        job.kind = 'highlight';
+        job.clips = [];
+        for (let i = 0; i < items.length; i++) {
+          if (job.cancelled) { jlog(job, '[중단] 사용자가 중단했습니다.'); break; }
+          const it = items[i] || {};
+          const projectId = String(it.projectId || '').trim();
+          if (!projectId) continue;
+          jlog(job, `[제작] ${i + 1}/${items.length}편 렌더 중…`);
+          const overrides = {
+            hookTop: typeof it.hookTop === 'string' ? it.hookTop : undefined,
+            hookAccent: typeof it.hookAccent === 'string' ? it.hookAccent : undefined,
+            template: typeof it.template === 'string' ? it.template : undefined,
+            font: typeof it.font === 'string' ? it.font : undefined,
+            hookStyle: ['box', 'bar', 'none', 'bubble', 'gradient'].includes(it.hookStyle) ? it.hookStyle : undefined,
+            hookBg: typeof it.hookBg === 'string' && it.hookBg ? it.hookBg : undefined,
+            textColor: typeof it.textColor === 'string' && it.textColor ? it.textColor : undefined,
+            narration: typeof it.narration === 'string' ? it.narration : undefined, // 에디터 '본문' 값 → TTS
+            voice: typeof it.voice === 'string' ? it.voice : undefined,
+            thumbBig: typeof it.thumbBig === 'string' ? it.thumbBig : undefined,
+            thumbBadge: typeof it.thumbBadge === 'string' ? it.thumbBadge : undefined,
+            narrationOff: it.narrationOff === true,
+          };
+          try {
+            const r = await renderAnalyzed(projectId, overrides, (m) => jlog(job, m));
+            job.clips.push({projectId, file: r.output, title: String(it.hookTop || '')});
+          } catch (e: any) { jlog(job, `[실패] ${i + 1}편: ` + (e?.message || e)); }
+        }
+        if (!job.clips.length) throw new Error('선택한 편을 만들지 못했습니다.');
+        job.file = job.clips[0].file; job.projectId = job.clips[0].projectId; job.title = job.clips[0].title;
+        job.done = true; job.doneAt = Date.now();
+      } catch (e: any) {
+        job.error = e.message; job.done = true; job.doneAt = Date.now();
+        jlog(job, '[실패] ' + e.message);
+      } finally { runMaintenance('하이라이트렌더완료'); }
+    });
+    return json(res, 202, {id});
+  }
+
   // 유튜브 쿠키 등록(봇차단 뚫기) — 로그인한 브라우저에서 뽑은 cookies.txt 내용을 data 볼륨에 저장.
   //   yt-dlp가 YT_COOKIES_FILE 경로를 읽는다(youtube-clip.ts). Railway 콘솔 안 건드리고 앱에서 바로.
   if (p === '/api/youtube-cookies' && req.method === 'POST') {
@@ -3613,6 +3718,7 @@ JSON만: {"hookTop":"...","hookAccent":"..."}`;
     });
     let sent = 0;
     let sentClips = 0;
+    let sentAnalyzed = 0;
     let lastWrite = Date.now();
     const timer = setInterval(() => {
       let wrote = false;
@@ -3627,13 +3733,19 @@ JSON만: {"hookTop":"...","hookAccent":"..."}`;
         sentClips++;
         wrote = true;
       }
+      // ★2단계 워크플로 1단계(감별) — 설계도 카드를 편별로 즉시 흘린다(선택 UI 실시간 채우기).
+      while (job.analyzed && sentAnalyzed < job.analyzed.length) {
+        res.write(`data: ${JSON.stringify({analyzed: job.analyzed[sentAnalyzed]})}\n\n`);
+        sentAnalyzed++;
+        wrote = true;
+      }
       // ★heartbeat — 영화(RunPod 팟 부팅) 등으로 새 로그 없이 몇 분씩 조용할 때
       //   연결이 idle로 끊기지 않게 15초마다 주석 핑을 보낸다(EventSource는 ':' 줄 무시).
       if (wrote) lastWrite = Date.now();
       else if (Date.now() - lastWrite > 15000) { res.write(': ping\n\n'); lastWrite = Date.now(); }
       if (job.done) {
         res.write(
-          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip, projectId: job.projectId, clips: job.clips, storyboard: job.storyboard, bible: job.bible})}\n\n`,
+          `data: ${JSON.stringify({done: true, file: job.file, title: job.title, error: job.error, kind: job.kind, images: job.images, zip: job.zip, projectId: job.projectId, clips: job.clips, analyzed: job.analyzed, storyboard: job.storyboard, bible: job.bible})}\n\n`,
         );
         clearInterval(timer);
         res.end();

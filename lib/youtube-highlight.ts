@@ -91,6 +91,62 @@ function cleanTitle(raw: string, max = 20): string {
   return t.slice(0, max).trim();
 }
 
+// ★음악 소재 감지 + 노래제목 추출(Task#7) — 음악방송/뮤직비디오는 '노래제목'이 후킹의 핵심인데
+//   koreanHook 프롬프트가 '제목 그대로 복붙 금지'라 노래제목이 통째로 빠진다(테리 지적). 소재가 '음악'으로
+//   판정될 때만 원제목에서 노래제목을 뽑아 소제목(hookAccent)에 고정한다(에디터서 수정 가능).
+const MUSIC_SHOW_RE = /인기가요|뮤직뱅크|음악중심|엠\s?카운트다운|엠카운트다운|쇼\s?챔피언|쇼챔피언|열린음악회|불후의\s?명곡|복면가왕|가요대[제축][전제]|나는\s?가수다|싱어게인|Inkigayo|Music\s?Bank|Music\s?Core|M\s?Countdown|Show\s?Champion|KPOP|K-?POP/i;
+const MV_RE = /\bM\/?V\b|뮤직비디오|Official\s?(Music\s?)?(Video|Audio)|Lyric\s?Video|교차편집|직캠|FAN\s?CAM|FANCAM/i;
+function isMusicMaterial(rawTitle: string): boolean {
+  const t = rawTitle || '';
+  return MUSIC_SHOW_RE.test(t) || MV_RE.test(t);
+}
+// 원제목에서 노래제목만 추출(없으면 null). ①따옴표/괄호 안 ②'가수 - 노래' 뒤쪽.
+function extractSongTitle(rawTitle: string): string | null {
+  const t = (rawTitle || '').trim();
+  if (!t) return null;
+  // 1) 따옴표/낫표/겹낫표 안의 제목: '...' "..." “...” 「...」 《...》
+  let m = t.match(/[‘'"“]([^’'"”]{2,40})[’'"”]/) || t.match(/[「《]([^」》]{2,40})[」》]/);
+  if (m && m[1].trim()) return m[1].trim().slice(0, 20);
+  // 2) '가수 - 노래'(대시 구분) → 뒤쪽을 노래로. 뒤에 붙은 M/V·Official 등 꼬리는 잘라낸다.
+  m = t.replace(/\[[^\]]*\]/g, ' ').match(/^\s*.{1,30}?\s*[-–—]\s*([^-–—|(\[]{2,40})/);
+  if (m && m[1].trim()) {
+    const song = m[1].replace(/\b(M\/?V|Official.*|Lyric.*|가사.*|Audio|Live|무대|교차편집|직캠)\b.*$/i, '').trim();
+    if (song.length >= 2) return song.slice(0, 20);
+  }
+  return null;
+}
+
+// ★후킹 확정(공통) — makeHighlights/analyzeHighlights 양쪽이 이걸 쓴다(로직 단일출처).
+//   ①보이는 후킹 보장 ②한글 보장(영어면 koreanHook) ③중복제거 ④'90점 이상'으로 강화 ⑤음악 소재면 노래제목 고정.
+async function finalizeHooks(
+  c: {hookTop?: string; hookAccent?: string; transcript?: string},
+  title: string, visionFrames: GeminiImage[], k: {gemini: string[]}, log: (m: string) => void,
+): Promise<{hookTop: string; hookAccent: string}> {
+  const hasVisibleHook = (s: string) => /[0-9A-Za-z가-힣]/.test(s || '');
+  const hasKorean = (s: string) => /[가-힣]/.test(s || '');
+  let hookTopFinal = hasVisibleHook(c.hookTop || '') ? (c.hookTop as string) : cleanTitle(title, 20);
+  let hookAccentFinal = c.hookAccent || '';
+  // 후킹에 한글이 하나도 없으면(영어 제목·자막) 제목+대사로 '한국어 후킹'을 새로 만든다.
+  if (!hasKorean(hookTopFinal)) {
+    const kh = await koreanHook(k.gemini, title, c.transcript || '', log, visionFrames);
+    if (kh) { hookTopFinal = kh.hookTop; if (!hasKorean(hookAccentFinal)) hookAccentFinal = kh.hookAccent; }
+  }
+  if (!hasVisibleHook(hookTopFinal)) hookTopFinal = cleanTitle(title, 20) || (title || '').slice(0, 20) || '하이라이트';
+  hookAccentFinal = dedupAccent(hookTopFinal, hookAccentFinal);
+  // 후킹 강화 게이트 — "항상 90점 이상"으로 재작성(밋밋 방지). 영상 대사(transcript) 근거.
+  try {
+    const [strong] = await intensifyHooks(k.gemini, [{hookTop: hookTopFinal, hookAccent: hookAccentFinal, context: (c.transcript || title || '').slice(0, 300)}], log, visionFrames);
+    if (strong && strong.hookTop && hasKorean(strong.hookTop)) { hookTopFinal = strong.hookTop; hookAccentFinal = strong.hookAccent; }
+  } catch (e: any) { log('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
+  // ★음악 소재면 노래제목을 소제목에 고정(Task#7) — 강화까지 끝난 뒤 덮어써서 노래제목이 살아남게.
+  //   hookTop(윗줄)은 한국어 후킹을 유지하므로 노래제목이 영어여도 전체적으론 한국어 후킹이다.
+  if (isMusicMaterial(title) && hasKorean(hookTopFinal)) {
+    const song = extractSongTitle(title);
+    if (song) { hookAccentFinal = dedupAccent(hookTopFinal, song); log(`[음악] 노래제목 "${song}"을 소제목에 고정`); }
+  }
+  return {hookTop: hookTopFinal, hookAccent: hookAccentFinal};
+}
+
 // 완성 영상(후킹 자막이 이미 입혀진 mp4)에서 프레임 1장을 뽑아 썸네일 PNG로 저장.
 //   커버가 없으면 인스타/유튜브가 영상 첫 프레임(어두운 화면)을 집어가 미리보기가 빈다.
 //   후킹이 자리잡은 지점(atSec)에서 뽑아 글자가 보이는 썸네일을 만든다.
@@ -369,27 +425,9 @@ export async function makeHighlights(
     const tpl = (opts.template && opts.template !== 'auto')
       ? getHlTemplate(opts.template)
       : pickHlTemplate(`${c.hookTop || ''} ${c.hookAccent || ''} ${meta.title}`);
-    // ★후킹은 나레이션(해설)과 무관하게 '항상', 그리고 '한국어'로 들어가야 한다.
-    const hasVisibleHook = (s: string) => /[0-9A-Za-z가-힣]/.test(s || '');
-    const hasKorean = (s: string) => /[가-힣]/.test(s || '');
-    let hookTopFinal = hasVisibleHook(c.hookTop) ? c.hookTop : cleanTitle(meta.title, 20);
-    let hookAccentFinal = c.hookAccent || '';
-    // 후킹에 한글이 하나도 없으면(영어 제목·영어 자막이라 AI가 영어로 뽑았거나 제목으로 폴백된 경우)
-    //   제목+대사로 '한국어 후킹'을 새로 만든다. 이게 테리가 말한 "후킹은 한글이야".
-    if (!hasKorean(hookTopFinal)) {
-      const kh = await koreanHook(k.gemini, meta.title, c.transcript || '', log, visionFrames);
-      if (kh) { hookTopFinal = kh.hookTop; if (!hasKorean(hookAccentFinal)) hookAccentFinal = kh.hookAccent; }
-    }
-    if (!hasVisibleHook(hookTopFinal)) hookTopFinal = cleanTitle(meta.title, 20) || (meta.title || '').slice(0, 20) || '하이라이트';
-    // ★중복 가드 — hookAccent가 hookTop에 이미 들어간 말이면 "했던 말을 또 하는" 꼴이라 지운다(테리 지적).
-    //   (공백·구두점 제거해 비교. 서로 substring이면 중복으로 본다.)
-    hookAccentFinal = dedupAccent(hookTopFinal, hookAccentFinal);
-    // ★후킹 강화 게이트 — "항상 90점 이상"으로 재작성(밋밋 방지, 테리 지시). 영상 대사(transcript)에 근거.
-    try {
-      const [strong] = await intensifyHooks(k.gemini, [{hookTop: hookTopFinal, hookAccent: hookAccentFinal, context: (c.transcript || meta.title || '').slice(0, 300)}], log, visionFrames);
-      if (strong && strong.hookTop && hasKorean(strong.hookTop)) { hookTopFinal = strong.hookTop; hookAccentFinal = strong.hookAccent; }
-    } catch (e: any) { log('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
-    log(`[하이라이트] ${i + 1}편 후킹: "${hookTopFinal}"${hookAccentFinal ? ` / "${hookAccentFinal}"` : ''}${hasKorean(hookTopFinal) ? '' : ' (한글 변환 실패—원문 유지)'}`);
+    // ★후킹 확정(공통 헬퍼) — 보이는후킹·한국어·중복제거·90점강화·음악제목 고정까지 한 번에(로직 단일출처).
+    const {hookTop: hookTopFinal, hookAccent: hookAccentFinal} = await finalizeHooks(c, meta.title, visionFrames, k, log);
+    log(`[하이라이트] ${i + 1}편 후킹: "${hookTopFinal}"${hookAccentFinal ? ` / "${hookAccentFinal}"` : ''}${/[가-힣]/.test(hookTopFinal) ? '' : ' (한글 변환 실패—원문 유지)'}`);
     const scene: SceneData = {
       image: `${jobRel}/${clipName}`, // 폴백용(사용 안 함 — fullBleed가 video 사용)
       video: `${jobRel}/${clipName}`,
@@ -602,6 +640,133 @@ export async function makeHighlights(
   try { await fsp.rm(workDir, {recursive: true, force: true}); } catch {}
   log(`[하이라이트] 총 ${results.length}편 완성! 포트폴리오에서 유튜브·인스타로 올릴 수 있어요.`);
   return results;
+}
+
+// ── 2단계 워크플로 1단계: 감별/설계도(렌더·TTS 없이 싸고 빠름) ──────────────────────────
+//   테리: "영상 만들기 전에 먼저 영상 보고 제목·소제목·본문·배지 다 나오면 내가 수정해서 에디터 확인하고 저장하고 만들기."
+//   = extractHighlights(다운+자막+구간+9:16크롭)와 편별 텍스트(해설 대본·후킹·음악제목·배지)까지만 만들고 '렌더 직전'에 멈춘다.
+//   깨끗한 클립(c.file)을 source로 보존 + project.json status:'analyzed'로 저장 → 사용자가 수정 후 renderAnalyzed로 그것만 렌더.
+export type AnalyzedClip = {
+  projectId: string; idx: number; start: number; end: number; clipSec: number;
+  hookTop: string; hookAccent: string; commentary: string; thumbBig: string; thumbBadge: string;
+  template: string; font?: string; hookStyle?: string; hookBg?: string; textColor?: string;
+  thumbUrl: string; score: number; reason?: string; transcript: string;
+};
+export async function analyzeHighlights(
+  videoId: string,
+  meta: {title: string; channel: string; isCc?: boolean},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; narrationCoverage?: number; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; font?: string; hookStyle?: string; hookBg?: string; textColor?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; source?: 'search' | 'url' | 'upload' | 'archive'; onClip?: (c: AnalyzedClip) => void} = {},
+): Promise<AnalyzedClip[]> {
+  const log = opts.log || (() => {});
+  const cancelled = opts.isCancelled || (() => false);
+  const stopIfCancelled = () => { if (cancelled()) throw new Error('사용자가 중단했습니다.'); };
+  const orientation = opts.orientation === 'landscape' ? 'landscape' : 'portrait';
+  const isMine = !!opts.localFile;
+  const k = pipelineKeys();
+  const workDir = path.join(os.tmpdir(), `onvideo-hlz-${videoId || 'mine'}-${Date.now()}`);
+  log(`[감별] 재사용 영상에서 숏폼 소재를 뽑아 '설계도'를 만듭니다…(렌더 전 미리보기)`);
+  const clips = await extractHighlights(videoId, workDir, k.gemini, {count: opts.count, clipSec: opts.clipSec, log, isCancelled: cancelled, orientation, reframe: opts.reframe, localFile: opts.localFile, removeSilence: opts.removeSilence, title: meta.title});
+  stopIfCancelled();
+  log(`[감별] ${clips.length}개 구간 확보 — 제목·소제목·본문·배지를 생성합니다(아직 렌더 안 함).`);
+
+  const attribution = isMine ? ''
+    : (meta.isCc === false ? `출처: ${meta.channel}` : `출처: ${meta.channel} (Creative Commons BY)`);
+  const sourceKey = isMine ? ('upload:' + (meta.title || '').trim()) : ('yt:' + videoId);
+  // 완성도 게이트 — 설정 길이의 80% 미만 구간은 스킵(반토막 방지). makeHighlights와 동일 기준.
+  const minSec = opts.clipSec ? Math.max(10, Math.floor(opts.clipSec * 0.8)) : 0;
+  const out: AnalyzedClip[] = [];
+  let episodeNo = 0;
+  for (let i = 0; i < clips.length; i++) {
+    stopIfCancelled();
+    const c = clips[i];
+    if (minSec && !c.whole && (c.end - c.start) < minSec) {
+      log(`[감별] 구간이 짧아(${Math.round(c.end - c.start)}초 · 기준 ${minSec}초) 완성도 위해 한 편을 스킵했습니다.`);
+      continue;
+    }
+    episodeNo++;
+    const projectId = randomUUID();
+    const studioDir = path.join(DATA_DIR, 'studio', projectId);
+    await fsp.mkdir(studioDir, {recursive: true});
+    const durSec = Math.max(1, c.end - c.start);
+    const clipFrames = Math.round(durSec * FPS);
+    // 길이 락(상한) — 사용자가 고른 한 편 길이(clipSec). 렌더 때 해설이 길어도 이걸 넘지 않게 저장.
+    const capFrames = opts.clipSec ? Math.round(opts.clipSec * FPS) : clipFrames;
+
+    // 이 구간 '실제 화면' 프레임 — 후킹·해설을 보이는 것 기준으로(인물 이름 단정 방지) + 설계도 카드 미리보기로 재사용.
+    const visionFrames = await clipVisionFrames(c.file, durSec, studioDir).catch(() => []);
+    if (visionFrames.length) log(`[감별] ${episodeNo}편 화면 ${visionFrames.length}장 분석`);
+
+    // 해설(본문/나레이션) 대본 — TTS는 '렌더 때' 1회. 여기선 텍스트만(싸고 빠름, 수정 가능).
+    let commentaryText = '';
+    if (opts.commentary) {
+      const narrCoverage = Math.max(0.3, Math.min(1, opts.narrationCoverage ?? 1));
+      const narrTargetSec = Math.max(5, Math.min(Math.round(durSec), Math.floor((capFrames / FPS) * 0.92 * narrCoverage)));
+      try { commentaryText = (await writeCommentary(k.gemini, meta.title, c.transcript || '', c.hookTop || '', narrTargetSec, log, visionFrames, episodeNo - 1, narrCoverage < 0.95)) || ''; }
+      catch (e: any) { log(`[감별] ${episodeNo}편 해설 대본 생성 실패(본문 비움): ` + (e?.message || '').slice(0, 50)); }
+    }
+
+    // 후킹 확정(공통 헬퍼) — 보이는후킹·한국어·중복제거·90점강화·음악제목 고정.
+    const {hookTop: hookTopFinal, hookAccent: hookAccentFinal} = await finalizeHooks(c, meta.title, visionFrames, k, log);
+    log(`[감별] ${episodeNo}편 후킹: "${hookTopFinal}"${hookAccentFinal ? ` / "${hookAccentFinal}"` : ''}`);
+
+    // 디자인 템플릿 — 사용자가 고르면 그걸로, '자동'이면 후킹/제목으로 편마다 매칭(렌더 때와 동일).
+    const tpl = (opts.template && opts.template !== 'auto') ? getHlTemplate(opts.template)
+      : pickHlTemplate(`${hookTopFinal} ${hookAccentFinal} ${meta.title}`);
+
+    // 깨끗한 클립(후킹 없는 원본)을 source로 보존 — 렌더 때 재다운 금지. R2 우선(볼륨 ENOSPC 회피).
+    const proj: any = {
+      id: projectId,
+      title: (opts.count || 3) === 1 || c.whole ? hookTopFinal.slice(0, 74) : `${hookTopFinal.slice(0, 74)} ${episodeNo}편`,
+      status: 'analyzed', // ★렌더 전 — 포폴에 아직 안 올림. renderAnalyzed가 completed로 전환하며 포폴 등록.
+      createdAt: new Date().toISOString(),
+      orientation, kind: 'highlight', score: c.score, attribution,
+      input: {duration: Math.round(durSec), voice: opts.voice},
+      scenes: [{narration: commentaryText, voice: {frames: 0}}], // 본문(해설 대본) — render가 TTS
+      // 렌더 재료 메타(reRenderHighlight/renderAnalyzed가 읽음).
+      hlEdit: {
+        hookTop: hookTopFinal, hookAccent: hookAccentFinal, template: tpl.id,
+        font: opts.font || undefined, hookStyle: opts.hookStyle || undefined, hookBg: opts.hookBg || undefined, textColor: opts.textColor || undefined,
+        words: [], durFrames: capFrames, capFrames, muteOriginal: !!opts.muteOriginal,
+        hasNarration: false, orientation, baseTitle: meta.title,
+        transcript: (c.transcript || '').slice(0, 1200),
+        thumbBig: hookTopFinal.slice(0, 40), thumbBadge: (hookAccentFinal || '').slice(0, 20),
+      },
+      // 렌더 후 포폴 등록에 필요한 재료(status completed 전환 시 사용).
+      analyzeMeta: {source: opts.source || (isMine ? 'upload' : 'search'), sourceKey, commentary: !!opts.commentary, voice: opts.voice, captionEn: !!opts.captionEn, broll: !!opts.broll, narrationCoverage: opts.narrationCoverage ?? 1},
+    };
+    try {
+      if (r2Enabled()) {
+        const sk = videoKey(projectId, 'source.mp4');
+        if (await uploadFile(sk, c.file, 'video/mp4')) proj.sourceR2 = sk;
+      } else { fs.copyFileSync(c.file, path.join(studioDir, 'source.mp4')); proj.source = 'source.mp4'; }
+    } catch (e: any) { log('[감별] 원본 보존 실패(이 편 제외): ' + (e?.message || '')); continue; }
+
+    // 설계도 카드 미리보기 썸네일 = 화면 프레임(후킹 없는 깨끗한 원본). vision 프레임(폭512 jpeg) 재사용.
+    let thumbUrl = '';
+    if (visionFrames[0]?.dataB64) thumbUrl = `data:${visionFrames[0].mimeType || 'image/jpeg'};base64,${visionFrames[0].dataB64}`;
+
+    // project.json 저장(R2 백업 포함) — loadHlProject가 renderAnalyzed/edit-info에서 읽는다.
+    try {
+      const pjPath = path.join(studioDir, 'project.json');
+      fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
+      fs.renameSync(pjPath + '.tmp', pjPath);
+      if (r2Enabled()) { try { await uploadFile(videoKey(projectId, 'project.json'), pjPath, 'application/json'); } catch {} }
+    } catch (e: any) { log('[감별] 설계도 저장 실패: ' + (e?.message || '')); continue; }
+
+    const a: AnalyzedClip = {
+      projectId, idx: episodeNo, start: c.start, end: c.end, clipSec: opts.clipSec || Math.round(durSec),
+      hookTop: hookTopFinal, hookAccent: hookAccentFinal, commentary: commentaryText,
+      thumbBig: proj.hlEdit.thumbBig, thumbBadge: proj.hlEdit.thumbBadge,
+      template: tpl.id, font: opts.font, hookStyle: opts.hookStyle, hookBg: opts.hookBg, textColor: opts.textColor,
+      thumbUrl, score: c.score, reason: c.reason, transcript: (c.transcript || '').slice(0, 1200),
+    };
+    out.push(a);
+    try { opts.onClip?.(a); } catch {}
+    log(`[감별] ${episodeNo}편 설계도 완성: ${a.hookTop}`);
+  }
+  try { await fsp.rm(workDir, {recursive: true, force: true}); } catch {}
+  log(`[감별] 총 ${out.length}편 설계도 완성! 수정 후 '선택한 편만 만들기'로 렌더하세요.`);
+  return out;
 }
 
 // ★기존(구버전) 하이라이트 복구 — v1.80.0 전에 만든 하이라이트는 project.json/썸네일이 없어서
@@ -822,9 +987,13 @@ export async function reRenderHighlight(
   const hookAccent = (overrides.hookAccent !== undefined ? overrides.hookAccent : e.hookAccent || '').slice(0, 20);
   // 나레이션 끄면 자막(words)도 비우고, 원본 소리를 살린다(muteOriginal 강제 해제 — 무음 방지).
   const words = narrationOff ? [] : (newWords ?? (Array.isArray(e.words) ? e.words : []));
-  const durFrames = (newWords && newWords.length)
+  const durFramesRaw = (newWords && newWords.length)
     ? newWords[newWords.length - 1].e + 15 // 새 나레이션 길이에 맞춤(끝 0.5초 여운)
     : (e.durFrames || Math.round((Number(proj.input?.duration) || 30) * FPS));
+  // ★길이 락 — 2단계 워크플로에서 저장한 상한(capFrames=사용자가 고른 한 편 길이)을 '절대' 넘지 않는다.
+  //   해설 나레이션이 59초보다 길어져도 쇼츠 전세계 차단(60초+)을 피한다. capFrames 없는 옛 영상은 그대로(무회귀).
+  const cap = Number(e.capFrames) || 0;
+  const durFrames = cap ? Math.min(cap, durFramesRaw) : durFramesRaw;
   const scene: SceneData = {
     image: `${jobRel}/clip.mp4`, video: `${jobRel}/clip.mp4`, fullBleed: true,
     template: tpl.id, hookTop, hookAccent, accentColor: tpl.accentColor,
@@ -911,11 +1080,16 @@ export async function reRenderHighlight(
     } catch (e2: any) { log('[편집] R2 갱신 실패(로컬 보관): ' + (e2?.message || '')); try { fs.copyFileSync(outAbs, path.join(studioDir, output)); fs.rmSync(outAbs, {force: true}); delete proj.outputR2; } catch {} }
   }
   proj.thumb = thumbOk ? 'thumb.png' : proj.thumb;
+  // ★2단계 워크플로: 분석(analyzed)만 하고 아직 포폴에 없던 영상이면 이번이 '첫 완성'이다 → completed로 전환.
+  const wasAnalyzed = proj.status !== 'completed';
+  proj.status = 'completed';
   fs.writeFileSync(pjPath + '.tmp', JSON.stringify(proj));
   fs.renameSync(pjPath + '.tmp', pjPath);
   // ★project.json도 R2 백업(볼륨 날아가도 재편집 메타 보존).
   if (r2Enabled()) { try { await uploadFile(videoKey(projectId, 'project.json'), pjPath, 'application/json'); } catch {} }
-  // 포트폴리오 제목 동기화.
+  // 출처(attribution)를 프로젝트 폴더에도 남긴다(상세설명 폴백 — project.json 읽기 실패 대비).
+  try { if (proj.attribution) fs.writeFileSync(path.join(studioDir, 'attribution.txt'), proj.attribution); } catch {}
+  // 포트폴리오 등록/동기화.
   try {
     const items = listPortfolio();
     const idx = items.findIndex((x) => x.projectId === projectId);
@@ -925,8 +1099,20 @@ export async function reRenderHighlight(
       // ★수정한 영상을 맨 앞으로(테리: 수정하면 포폴 맨 앞에 뜨게). 포폴은 앞이 최신.
       items.splice(idx, 1); items.unshift(it);
       const fp = path.join(DATA_DIR, 'portfolio.json'); fs.writeFileSync(fp + '.tmp', JSON.stringify(items)); fs.renameSync(fp + '.tmp', fp);
+    } else {
+      // ★2단계 첫 렌더 — 포폴에 신규 등록(voices.html 카드 + 유튜브·인스타 자동 업로드 재사용).
+      const am = proj.analyzeMeta || {};
+      addPortfolio({
+        projectId, title: proj.title, output,
+        voice: '원본 음성(CC)', category: '🎬 유튜브 하이라이트', goal: 'info',
+        createdAt: proj.createdAt || new Date().toISOString(), orientation, kind: 'highlight', score: proj.score,
+        source: am.source || 'search', sourceKey: am.sourceKey, attribution: proj.attribution || '',
+      });
     }
   } catch {}
-  log('[편집] ✅ 다시 렌더 완료!');
+  log(wasAnalyzed ? '[제작] ✅ 선택한 편 렌더 완료!' : '[편집] ✅ 다시 렌더 완료!');
   return {output};
 }
+
+// 2단계 워크플로 2단계: 설계도(analyzed)를 수정값으로 렌더 — reRenderHighlight가 analyzed→completed 전환·포폴 등록까지 처리.
+export const renderAnalyzed = reRenderHighlight;
