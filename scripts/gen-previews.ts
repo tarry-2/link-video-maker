@@ -9,7 +9,7 @@ import {HL_TEMPLATES} from '../src/highlight-templates';
 
 // 모든 템플릿에 '같은' 샘플 문구/배경을 써서 디자인 차이만 도드라지게 한다.
 const SAMPLE = {
-  image: 'news2.jpg',
+  image: 'news1.jpg', // 빗방울 도시야경(보케) — 궁전(news2)이 구려서 감성적인 배경으로 교체(테리)
   hookTop: '아무도 몰랐던',
   hookAccent: '이 장면',
   subWords: ['이', '부분', '진짜', '소름', '돋아요'],
