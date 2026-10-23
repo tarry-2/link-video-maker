@@ -21,13 +21,22 @@ const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 //   (블러·레터박스 폴백이 '둘 다' 죽는 건 둘 다 비디오 디코딩이 선행이기 때문 — 필터 문제가 아니었다).
 //   h264는 어떤 ffmpeg에서나 디코딩되고 빠르며, 오디오까지 aac(m4a)로 받으면 opus→aac 재인코딩 부담도 사라진다.
 //   avc1이 없는 희귀 영상에서만 최후로 아무 코덱이나 받는다(그마저 못 받는 것보단 낫다).
+// ★SABR 견디는 포맷 셀렉터(2026). 유튜브가 SABR-only 실험을 세션에 걸면 avc1·고해상 https 포맷이
+//   "missing a URL"로 전부 빠지고 360p progressive(18) 하나만 남거나 0개가 된다. 그때 기존 셀렉터는
+//   avc1·height 제약에 아무것도 안 걸려 "Requested format is not available"로 통째 실패했다(테리: 매일 깨짐).
+//   → 선호는 h264지만, 없으면 vp9/av1/progressive/아무거나까지 '단계적으로 폭 넓게' 내려간다.
+//   av1/vp9을 받으면 아래 2차 방어(probeVCodec→toH264)가 h264로 변환하므로 ffmpeg 호환성도 안전.
 const VFMT = (maxH: number) =>
   `bv*[vcodec^=avc1][height<=${maxH}]+ba[acodec^=mp4a]/` + // 최선: h264 영상 + aac 오디오 (av1·opus 둘 다 회피)
   `bv*[vcodec^=avc1][height<=${maxH}]+ba/` +               // h264 영상 + 아무 오디오
-  `b[vcodec^=avc1][height<=${maxH}]/` +                    // h264 progressive
-  `bv*[height<=${maxH}]+ba/b[height<=${maxH}]/b`;          // 최후: 아무 코덱(av1일 수 있음 — 경고 로그로 추적)
-// yt-dlp 포맷 '정렬' 안전벨트 — 후보 안에서 h264·aac를 가장 선호하게(위 셀렉터와 이중 방어).
-const VSORT = ['-S', 'vcodec:h264,acodec:aac'];
+  `b[vcodec^=avc1][height<=${maxH}]/` +                    // h264 progressive(muxed)
+  `bv*[height<=${maxH}]+ba/` +                             // 아무 코덱(vp9/av1) + 오디오 → h264로 변환됨
+  `b[height<=${maxH}]/` +                                  // 아무 progressive(해상도 이내)
+  `bv*+ba/` +                                              // SABR 폴백: height 제약도 풀고 아무 영상+오디오
+  `b/18/best`;                                             // 최후: 아무거나(360p progressive '18' 포함) — 못 받느니 받는다
+// yt-dlp 포맷 '정렬' 안전벨트 — 후보 안에서 h264·aac를 가장 선호하고, 그다음 maxH에 가까운 해상도를 고른다
+//   (폴백에서 height 제약을 푼 경우 과대 해상도를 피하려 res:maxH 기준). 위 셀렉터와 이중 방어.
+const VSORT = (maxH: number) => ['-S', `vcodec:h264,acodec:aac,res:${maxH},fps`];
 
 // ffmpeg stderr에서 '진짜 원인' 줄만 뽑는다 — Qavg/frame=/kb\/s 같은 통계 라인에 묻혀 원인이 안 보이던 문제 해결.
 //   (기존 slice(-180)은 끝쪽 통계만 남아 "왜 터졌는지"를 가렸다. 테리 진단로그 규칙.)
@@ -149,11 +158,24 @@ function attArgs(a: Attempt, cookieArgs: string[]): string[] {
 }
 function attLabel(a: Attempt): string { return a.cookie ? `${a.client}+쿠키` : a.client; }
 
+// ★차단 신호 분류(테리: 매일 깨지는 진짜 원인을 로그로 한 방에). 둘 다 "전 클라 실패" 시 진단을 돌린다.
+//   SABR = 유튜브가 세션/프록시 IP에 SABR-only를 걸어 다운로드 가능한 포맷을 빼버린 상태(PO토큰이 있어도 발생).
+//     이 경우 에러가 "Requested format is not available / missing a URL / Only images" 로 나와 기존 정규식이 못 잡아
+//     진단이 안 돌고 "그냥 실패"로 끝났다 → 아래로 명시 포함. SABR는 세션 일시적이라 '시간 두고 재시도'가 공식 권장.
+const SABR_RE = /missing a URL|\bSABR\b|Only images are available|Requested format is not available|format is not available|requires a .*PO Token|No video formats found/i;
+//   BOT = 명시적 봇/로그인/레이트 차단.
+const BOT_RE = /not a bot|Sign in to confirm|cookies|consent|login required|\b429\b|Too Many Requests|\b403\b/i;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 // 공통 yt-dlp 인자 + 쿠키/프록시/PO토큰 상태 로그(작업당 1회).
 //   ★common에는 쿠키를 넣지 않는다(cookieArgs로 분리) — 각 시도가 쿠키 유무를 직접 고른다.
 async function buildCommon(log: (m: string) => void): Promise<{common: string[]; cookieArgs: string[]; cookieAvailable: boolean; attempts: Attempt[]}> {
   // -4=IPv4 강제(데이터센터 IPv6가 더 자주 차단됨), --sleep-requests=레이트리밋 완화.
-  const common = ['--no-playlist', '--no-warnings', '--retries', '5', '--socket-timeout', '30', '--sleep-requests', '1', '-4'];
+  const common = ['--no-playlist', '--no-warnings', '--retries', '5', '--socket-timeout', '30', '--sleep-requests', '1', '-4',
+    // ★PO토큰 provider(bgutil HTTP) 주소를 '명시'로 못박는다 — 자동 감지가 실패해도 확실히 연결(포트 바뀌어도 안전).
+    //   프록시는 yt-dlp가 다운로드에 쓰는 --proxy를 provider 요청(request_proxy)으로 '자동' 전달하므로(공식 소스 확인),
+    //   PO토큰이 다운로드와 '같은 프록시 IP'로 발급된다(토큰 IP=다운로드 IP 일치 → SABR 유발 요인 하나 제거).
+    '--extractor-args', 'youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416'];
   // ★yt-dlp 버전을 로그로 — '전 클라 봇차단'의 1순위 원인은 오래된 yt-dlp다(유튜브 변경을 못 따라감). 서버에서 바로 보이게.
   try { const v = (await run(YTDLP, ['--version'], () => {}, 8000)).trim(); if (v) log(`[하이라이트] ⚙️ yt-dlp ${v}`); } catch {}
   const ckFile = process.env.YT_COOKIES_FILE;
@@ -189,8 +211,11 @@ async function buildCommon(log: (m: string) => void): Promise<{common: string[];
 //   (전 클라이언트가 한꺼번에 막히는 건 거의 'PO토큰이 실제로는 발급 안 됨' 또는 '유튜브 신규 차단 웨이브'다 —
 //    둘 중 뭔지 로그 한 줄로 확정하려는 것.)
 async function diagnoseBlock(url: string, common: string[], cookieArgs: string[], log: (m: string) => void): Promise<void> {
-  log('[진단] 막힌 진짜 원인 확인 중… (PO토큰 발급 여부·클라이언트·차단 사유)');
-  const keep = /po.?token|getpot|bgutil|pot provider|visitor.?data|player.?client|\bsabr\b|n-?sig|not a bot|sign in|consent|challenge|\bgvs\b|innertube|\b403\b|\b429\b|login required|fetching pot|no pot|failed to|server error/i;
+  const viaProxy = common.includes('--proxy');
+  log(`[진단] 막힌 진짜 원인 확인 중… (PO토큰 발급 여부·프록시 경유·클라이언트·차단 사유)${viaProxy ? ' — 프록시 경유로 확인' : ' — ⚠️ 프록시 없음'}`);
+  // ★PO토큰이 '프록시로' 발급되는지를 로그로 본다 — "Generating a gvs PO Token … via bgutil HTTP server" 가 보이면 발급 성공,
+  //   "no pot/failed/server error/SABR" 가 보이면 그게 진짜 원인. proxy/request_proxy 줄로 어느 IP로 발급됐는지 추적.
+  const keep = /po.?token|getpot|bgutil|pot provider|request_proxy|\bproxy\b|visitor.?data|player.?client|\bsabr\b|missing a url|n-?sig|not a bot|sign in|consent|challenge|\bgvs\b|innertube|\b403\b|\b429\b|login required|fetching pot|no pot|failed to|server error/i;
   let hit = 0;
   try {
     await run(YTDLP, [...common, ...cookieArgs, '-v', '--simulate', '--skip-download', url], () => {}, 60000, (l) => {
@@ -291,8 +316,9 @@ async function fetchMetaAndSubs(
     }
   }
   if (!ok) {
-    const botBlocked = /not a bot|Sign in to confirm|cookies|consent/i.test(lastErr);
+    const botBlocked = BOT_RE.test(lastErr) || SABR_RE.test(lastErr);
     // ★전 클라이언트가 막혔으면 '진짜 이유'를 로그에 찍는다(위 진단) — 추측으로 재배포 반복하지 않게.
+    //   SABR/봇 둘 다 진단 대상(PO토큰이 프록시로 발급됐는지·차단 사유가 로그에 한 방에 나온다).
     if (botBlocked) { try { await diagnoseBlock(url, common, cookieArgs, log); } catch {} }
     if (botBlocked && cookieArgs.length > 0)
       throw new Error('쿠키 없이도, 쿠키로도 전부 막혔어요. 위 [진단] 줄에서 PO토큰 발급 여부·차단 사유를 확인하세요(토큰 발급 실패면 PO토큰 서버 문제, 토큰은 받았는데 막히면 유튜브 신규 차단 웨이브). (마지막 사유: ' + lastErr.slice(0, 100) + ')');
@@ -320,7 +346,7 @@ export async function sampleForAnalysis(videoId: string, dir: string, log: (m: s
     for (const a of attempts) {
       const ca = attArgs(a, cookieArgs);
       try {
-        await ytRun([...common, ...ca, '-f', VFMT(360), ...VSORT,
+        await ytRun([...common, ...ca, '-f', VFMT(360), ...VSORT(360),
           '--download-sections', '*30-45', '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], () => {}, 90000);
       } catch { continue; }
       const f = find();
@@ -338,15 +364,28 @@ async function downloadSection(
   const outBase = path.join(dir, `sec-${idx}`);
   const section = `*${Math.max(0, Math.floor(start))}-${Math.ceil(end)}`;
   const findFile = () => fs.readdirSync(dir).map(x => path.join(dir, x)).find(x => new RegExp(`sec-${idx}\\.(mp4|mkv|webm)$`).test(x));
-  const attempts = buildAttempts(cookieArgs.length > 0);
   let lastErr = '';
-  for (const a of attempts) {
+  // ★SABR/세션 일시 차단은 '시간 두고 재시도'하면 자주 풀린다(yt-dlp 공식). 전 클라 실패 시 한 번 더 전체 재시도.
+  //   (테리: "아침엔 되다 많이 하면 안 됨" = 유튜브가 그 프록시 IP를 잠깐 조인 것 → 쉬었다 다시 하면 자주 풀림.)
+  const PASSES = 2;
+  for (let pass = 0; pass < PASSES; pass++) {
+   if (pass > 0) {
+     const sabr = SABR_RE.test(lastErr), bot = BOT_RE.test(lastErr);
+     // 전 클라 실패의 '진짜 원인'(PO토큰이 프록시로 발급됐는지·차단 사유)을 로그에 한 번 남기고, 세션이 풀리게 쉰다.
+     if (sabr || bot) { try { await diagnoseBlock(url, common, cookieArgs, log); } catch {} }
+     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
+     const wait = sabr ? 25 : 12;
+     log(`[하이라이트] ${sabr ? '유튜브 SABR(일시 차단) 추정 — ' : ''}${wait}초 쉬고 전체 재시도(${pass + 1}/${PASSES})…`);
+     await sleep(wait * 1000);
+   }
+   const attempts = buildAttempts(cookieArgs.length > 0);
+   for (const a of attempts) {
     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
     // 이전 클라 시도가 남긴 (깨졌을 수 있는) 파일 제거 — 다음 시도 결과와 섞여 오인되지 않게.
     const prev = findFile(); if (prev) { try { fs.rmSync(prev, {force: true}); } catch {} }
     const ca = attArgs(a, cookieArgs);
     try {
-      await ytRun([...common, ...ca, '-f', VFMT(1080), ...VSORT,
+      await ytRun([...common, ...ca, '-f', VFMT(1080), ...VSORT(1080),
         '--download-sections', section, '--merge-output-format', 'mp4', '-o', outBase + '.%(ext)s', url], log, 300000, undefined, cancelled);
     } catch (e: any) {
       lastErr = (e?.message || '').slice(0, 200);
@@ -375,6 +414,7 @@ async function downloadSection(
       log(`[하이라이트] h264 변환 실패 → 원본 그대로 진행(크롭에서 재시도)`);
     }
     return f; // 영상 트랙이 확인된 유효 파일
+   }
   }
   throw new Error('구간 다운로드 실패(유효한 영상을 못 받음): ' + lastErr);
 }
