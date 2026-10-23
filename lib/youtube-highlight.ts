@@ -100,6 +100,16 @@ function isMusicMaterial(rawTitle: string): boolean {
   const t = rawTitle || '';
   return MUSIC_SHOW_RE.test(t) || MV_RE.test(t);
 }
+// 원제목에서 가수명 추출(없으면 null) — '가수 - 노래'의 앞부분, 영문 괄호/대괄호 제거.
+function extractArtist(rawTitle: string): string | null {
+  const t = (rawTitle || '').replace(/\[[^\]]*\]/g, ' ').trim();
+  const m = t.match(/^\s*([^-–—|(\[]{1,20}?)\s*[-–—]/);
+  if (m && m[1]) {
+    const a = m[1].replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+    if (a.length >= 1 && a.length <= 15 && /[가-힣A-Za-z]/.test(a)) return a;
+  }
+  return null;
+}
 // 원제목에서 노래제목만 추출(없으면 null). ①따옴표/괄호 안 ②'가수 - 노래' 뒤쪽.
 function extractSongTitle(rawTitle: string): string | null {
   const t = (rawTitle || '').trim();
@@ -138,11 +148,19 @@ async function finalizeHooks(
     const [strong] = await intensifyHooks(k.gemini, [{hookTop: hookTopFinal, hookAccent: hookAccentFinal, context: (c.transcript || title || '').slice(0, 300)}], log, visionFrames);
     if (strong && strong.hookTop && hasKorean(strong.hookTop)) { hookTopFinal = strong.hookTop; hookAccentFinal = strong.hookAccent; }
   } catch (e: any) { log('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
-  // ★음악 소재면 노래제목을 소제목에 고정(Task#7) — 강화까지 끝난 뒤 덮어써서 노래제목이 살아남게.
-  //   hookTop(윗줄)은 한국어 후킹을 유지하므로 노래제목이 영어여도 전체적으론 한국어 후킹이다.
-  if (isMusicMaterial(title) && hasKorean(hookTopFinal)) {
+  // ★음악 소재면 '제목(hookTop)'에 노래제목을 고정한다(테리: 제목에 노래제목이 나와야 함).
+  //   형식 = `가수의 "노래제목"`(가수 있으면) / `"노래제목"`. 기존에 만든 내용 후킹은 '소제목(hookAccent)'으로 내린다.
+  //   배지(thumbBadge)는 analyze에서 hookAccent(후킹)를 자동으로 쓰므로 "배지=자동 후킹"도 충족.
+  if (isMusicMaterial(title)) {
     const song = extractSongTitle(title);
-    if (song) { hookAccentFinal = dedupAccent(hookTopFinal, song); log(`[음악] 노래제목 "${song}"을 소제목에 고정`); }
+    if (song) {
+      const artist = extractArtist(title);
+      const songTitle = (artist ? `${artist}의 "${song}"` : `"${song}"`).slice(0, 40);
+      const contentHook = hookAccentFinal || hookTopFinal; // 소제목에 쓸 '내용 후킹'
+      hookTopFinal = songTitle;
+      hookAccentFinal = dedupAccent(songTitle, contentHook);
+      log(`[음악] 제목="${songTitle}" / 소제목(후킹)="${hookAccentFinal}"`);
+    }
   }
   return {hookTop: hookTopFinal, hookAccent: hookAccentFinal};
 }

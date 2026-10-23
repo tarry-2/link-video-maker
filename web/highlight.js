@@ -130,20 +130,27 @@
         try { localStorage.removeItem('onvideo-hljob'); localStorage.removeItem('onvideo-hljob-meta'); } catch {}
         refreshGpu();
         $('hl-stop')?.classList.add('hidden'); // 끝났으니 중단 버튼 숨김
+        // ★2단계 워크플로 1단계(감별) 완료 — 설계도 배열이 왔고 아직 완성 클립은 없다 → '완성'이 아니라 '설계도 완성(수정 후 만들기)' 상태.
+        //   🔴 공통 '완성!🎉'·폭죽·'이어서 다시(resume)' 처리를 '타기 전에' 가로채야 한다(테리: 설계도인데 완성이라 떠서 이어서 눌러도 감별만 또 돎).
+        const isAnalyze = Array.isArray(m.analyzed) && m.analyzed.length && !(m.clips && m.clips.length);
+        if (isAnalyze) {
+          if (m.error) {
+            setEnergy(energyPct, m.error.includes('중단') ? '중단됨' : '감별 실패');
+            $('hl-reset')?.classList.remove('hidden'); if (lastBody) $('hl-resume')?.classList.remove('hidden');
+          } else {
+            (m.analyzed || []).forEach((a) => { if (a && a.projectId && !blueprint.some((x) => x.projectId === a.projectId)) blueprint.push(a); });
+            setEnergy(100, '설계도 완성 — 아래에서 수정하고 "만들기"'); const f = $('hl-energy'); if (f) f.classList.remove('anim');
+            // ★'이어서 다시(resume=감별 재실행)'는 숨긴다 — 여기서 '이어서'는 설계도 패널의 "선택한 편 만들기"다(렌더로 이어짐).
+            $('hl-resume')?.classList.add('hidden'); $('hl-reset')?.classList.remove('hidden');
+            addLog('📝 설계도 완성! 제목·소제목·본문·배지를 확인·수정하고, 만들 편을 체크한 뒤 "선택한 편 만들기"를 누르면 그 편만 렌더됩니다.', 'done');
+            showBlueprint(blueprint, false);
+            try { $('hl-blueprint-block')?.scrollIntoView({behavior: 'smooth', block: 'start'}); } catch {}
+          }
+          return; // 완성(showResults)·폭죽·resume 공통 처리 건너뜀
+        }
         if (m.error) { setEnergy(energyPct, m.error.includes('중단') ? '중단됨' : '실패'); }
         else { setEnergy(100, '완성! 🎉'); const f = $('hl-energy'); if (f) f.classList.remove('anim'); celebrate(); }
         showStopped(); // 성공·실패 공통: '같은 설정으로 다시' + '취소하고 새 영상' 노출
-        // ★2단계 워크플로 1단계(감별) 완료 — 설계도 배열이 왔고 아직 완성 클립은 없다 → 선택/수정 UI로.
-        const isAnalyze = Array.isArray(m.analyzed) && m.analyzed.length && !(m.clips && m.clips.length);
-        if (isAnalyze) {
-          if (!m.error) {
-            (m.analyzed || []).forEach((a) => { if (a && a.projectId && !blueprint.some((x) => x.projectId === a.projectId)) blueprint.push(a); });
-            setEnergy(100, '설계도 완성! 📝'); const f = $('hl-energy'); if (f) f.classList.remove('anim');
-            addLog('📝 설계도 완성 — 제목·소제목·본문·배지를 확인·수정하고, 만들 편을 체크해서 만드세요.', 'done');
-            showBlueprint(blueprint, false);
-          }
-          return; // 완성 결과 처리(showResults) 건너뜀
-        }
         if (m.kind === 'highlight' && !m.error) {
           addLog(`[진단] 완료 — 서버 clips=${(m.clips||[]).length}개, 화면 결과=${resultClips.length}개`, 'done');
           // ★서버가 보낸 m.clips가 '완전한 최종 목록'이다 — 이걸로 resultClips를 재구성(병합)한다.
@@ -263,13 +270,13 @@
     const sorted = list.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
     const land = orient === 'landscape';
     box.innerHTML = `<h2 style="margin:0 0 4px">📝 설계도 ${list.length}편 — 확인·수정 후 만들기${inProgress ? ' · 감별 중…' : ''}</h2>
-      <p class="mini-state" style="margin-bottom:6px">렌더(돈·시간) 전에 <b>제목·소제목·본문·배지</b>를 먼저 확인하세요. 고칠 건 바로 수정하고, <b>만들 편만 체크</b>한 뒤 아래 버튼을 누르면 그 편만 만들어집니다. 🏅등급=AI가 예측한 터질 확률.</p>
+      <p class="mini-state" style="margin-bottom:6px">렌더(돈·시간) 전 미리보기예요. <b>제목·소제목·본문·배지</b>를 고치고, <b>만들 편만 체크</b>한 뒤 맨 아래 <b>"선택한 편 만들기"</b>를 누르면 그 편만 완성됩니다. 🏅등급=AI 예측 터질 확률.</p>
+      <div class="bp-grid">${sorted.map((a) => bpCard(a, land)).join('')}</div>
       <div class="bp-make-bar">
         <button id="hl-bp-design" class="ghost-btn small" type="button">🎨 자막 디자인 (전체 공통)</button>
         <button id="hl-bp-all" class="ghost-btn small" type="button">☑ 전체 선택/해제</button>
         <button id="hl-bp-make" class="primary-btn" type="button" style="margin-left:auto"${inProgress ? ' disabled title="감별이 끝나면 만들 수 있어요"' : ''}>🎬 선택한 편 만들기</button>
-      </div>
-      <div class="bp-grid">${sorted.map((a) => bpCard(a, land)).join('')}</div>`;
+      </div>`;
     box.querySelectorAll('.bp-pick input').forEach((cb) => cb.onchange = () => {
       const it = blueprint.find((x) => x.projectId === cb.dataset.id); if (it) it._pick = cb.checked;
       const item = cb.closest('.bp-item'); item.classList.toggle('off', !cb.checked); item.classList.toggle('on', cb.checked);
@@ -1434,8 +1441,14 @@
     if (!phone) return;
     const land = orient === 'landscape';
     phone.classList.toggle('land', land);
+    // ★꽉참(track) vs 전체보존(letterbox) — 세로일 때만 레터박스 의미. 에디터가 실제 변환 느낌을 보여줘야 후킹을 그 레이아웃에서 꾸밀 수 있다(테리).
+    const letterbox = !land && reframeMode === 'letterbox';
+    phone.classList.toggle('letterbox', letterbox);
     const url = thumbUrl();
-    phone.style.backgroundImage = url ? `url("${url}")` : 'linear-gradient(135deg,#2c2645,#16121f)';
+    const img = url ? `url("${url}")` : '';
+    const bg = $('de-bg'), fg = $('de-fg');
+    if (fg) fg.style.backgroundImage = img || 'linear-gradient(135deg,#2c2645,#16121f)';
+    if (bg) bg.style.backgroundImage = img;
     const H = phone.getBoundingClientRect().height || (land ? 338 : 600);
     const sc = H / (land ? 1080 : 1920); // 실제 px → 미리보기 px
     const fsTop = (land ? 80 : 88) * sc, fsAcc = (land ? 96 : 104) * sc;
