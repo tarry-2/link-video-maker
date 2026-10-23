@@ -1314,38 +1314,44 @@
     const text = (preset && preset.light) ? preset.text : T.text;
     return {head: font || T.head, style, bg, border: T.border, radius: T.radius, text, accent: T.accent, glow: T.glow, light};
   }
-  const OL = '1.6px 1.6px 0 #000,-1.6px 1.6px 0 #000,1.6px -1.6px 0 #000,-1.6px -1.6px 0 #000,0 1.6px 0 #000,0 -1.6px 0 #000,1.6px 0 0 #000,-1.6px 0 0 #000';
+  const olAt = (px) => { const p = Math.max(1, px); return `${p}px ${p}px 0 #000,-${p}px ${p}px 0 #000,${p}px -${p}px 0 #000,-${p}px -${p}px 0 #000,0 ${p}px 0 #000,0 -${p}px 0 #000,${p}px 0 0 #000,-${p}px 0 0 #000`; };
   const thumbUrl = () => (picked && picked.videoId) ? `https://i.ytimg.com/vi/${picked.videoId}/hqdefault.jpg` : '';
 
+  // ★실제 영상(세로 1080×1920 / 가로 1920×1080)과 1:1 비율로 렌더 — 폰 실측 높이로 px 스케일.
+  //   그래서 실제처럼 후킹이 상단에 작게 얹히고 인물 얼굴을 안 가린다(테리: 미리보기 과장 문제).
   function renderPreview() {
     const R = resolveHookJS();
-    const phone = $('de-phone'), box = $('de-hook-box'), ht = $('de-ht'), ha = $('de-ha');
+    const phone = $('de-phone'), box = $('de-hook-box'), ht = $('de-ht'), ha = $('de-ha'), hook = $('de-hook');
     if (!phone) return;
+    const land = orient === 'landscape';
+    phone.classList.toggle('land', land);
     const url = thumbUrl();
     phone.style.backgroundImage = url ? `url("${url}")` : 'linear-gradient(135deg,#2c2645,#16121f)';
-    phone.classList.toggle('land', orient === 'landscape');
+    const H = phone.getBoundingClientRect().height || (land ? 338 : 600);
+    const sc = H / (land ? 1080 : 1920); // 실제 px → 미리보기 px
+    const fsTop = (land ? 80 : 88) * sc, fsAcc = (land ? 96 : 104) * sc;
+    hook.style.top = (land ? 40 : 110) * sc + 'px';
+    hook.style.padding = `0 ${(land ? 90 : 70) * sc}px`;
     box.removeAttribute('style');
-    const land = orient === 'landscape';
-    const fs = land ? 26 : 30;
+    const sh = `0 ${8 * sc}px ${26 * sc}px rgba(0,0,0,.5)`;
     if (R.style === 'none') { /* 띠 없이 글자만 */ }
-    else if (R.style === 'bar') { box.style.background = R.bg; box.style.width = '100%'; box.style.maxWidth = '100%'; box.style.padding = '11px 26px'; box.style.borderRadius = R.radius + 'px'; box.style.boxShadow = '0 10px 30px rgba(0,0,0,.5)'; }
-    else { box.style.background = R.bg; box.style.padding = land ? '11px 28px' : '15px 30px'; box.style.borderRadius = R.radius + 'px'; box.style.backdropFilter = 'blur(6px)'; box.style.boxShadow = '0 10px 30px rgba(0,0,0,.5)'; if (R.border !== 'none') box.style.border = '3px solid ' + R.border; }
-    const ff = `'${R.head}', 'Noto Color Emoji', sans-serif`;
-    ht.style.fontFamily = ff; ha.style.fontFamily = ff;
-    ht.style.color = R.text; ht.style.fontSize = fs + 'px'; ht.style.textShadow = R.light ? 'none' : OL;
-    ha.style.color = R.accent; ha.style.fontSize = Math.round(fs * 1.1) + 'px';
-    ha.style.textShadow = R.light ? 'none' : `0 2px 9px ${R.accent}66, ${OL}` + (R.glow ? `, 0 0 22px ${R.accent}` : '');
+    else if (R.style === 'bar') box.style.cssText = `background:${R.bg};width:100%;max-width:100%;padding:${14 * sc}px ${40 * sc}px;border-radius:${R.radius * sc}px;box-shadow:${sh}`;
+    else box.style.cssText = `background:${R.bg};padding:${(land ? 14 : 20) * sc}px ${(land ? 46 : 42) * sc}px;border-radius:${R.radius * sc}px;backdrop-filter:blur(6px);box-shadow:${sh}${R.border !== 'none' ? `;border:${3 * sc}px solid ${R.border}` : ''}`;
+    const ol = R.light ? 'none' : olAt(2 * sc);
+    const ff = `'${R.head}','Noto Color Emoji',sans-serif`;
+    ht.style.cssText = `font-family:${ff};color:${R.text};font-size:${fsTop}px;text-shadow:${ol}`;
+    ha.style.cssText = `font-family:${ff};color:${R.accent};font-size:${fsAcc}px;margin-top:${4 * sc}px;text-shadow:${R.light ? 'none' : `0 ${2 * sc}px ${9 * sc}px ${R.accent}66,${ol}${R.glow ? `,0 0 ${22 * sc}px ${R.accent}` : ''}`}`;
   }
 
   let deBuilt = false;
   function buildChips() {
-    if (deBuilt) { syncActive(); return; }
+    if (deBuilt) return;
     const tp = $('de-tpls'), fo = $('de-fonts'), st = $('de-styles'), co = $('de-colors');
     tp.innerHTML = TPLS2.map(([v, l]) => v === 'auto'
       ? `<button type="button" class="de-tpl" data-t="auto"><span class="auto">✨</span><span class="nm">자동</span></button>`
       : `<button type="button" class="de-tpl" data-t="${v}"><img src="/tpl-preview/${v}.png" alt="${l}" loading="lazy"><span class="nm">${l}</span></button>`).join('');
-    fo.innerHTML = FONTS.map(([v, g]) => `<button type="button" class="de-chip de-font" data-font="${v}" style="font-family:'${v || 'inherit'}'">${v ? g : '자동'}</button>`).join('');
-    st.innerHTML = STYLES.map(([v, l, ic]) => `<button type="button" class="de-chip de-hs" data-hs="${v}"><span class="ic">${ic}</span><span class="tx">${l}</span></button>`).join('');
+    fo.innerHTML = FONTS.map(([v, g]) => `<button type="button" class="de-font${v ? '' : ' auto'}" data-font="${v}" style="font-family:'${v || 'inherit'}'">${v ? g : '자동'}</button>`).join('');
+    st.innerHTML = STYLES.map(([v, l, ic]) => `<button type="button" class="de-hs" data-hs="${v}"><span class="ic">${ic}</span><span class="tx">${l}</span></button>`).join('');
     co.innerHTML = `<button type="button" class="de-sw auto" data-bg="" title="자동">자동</button>` + BG_PRESETS.map((p) => `<button type="button" class="de-sw" data-bg="${p.id}" title="${p.name}" style="background:${p.bg}"></button>`).join('');
     tp.querySelectorAll('.de-tpl').forEach((b) => b.onclick = () => { tplMode = b.dataset.t; syncActive(); renderPreview(); });
     fo.querySelectorAll('.de-font').forEach((b) => b.onclick = () => { font = b.dataset.font || ''; syncActive(); renderPreview(); });
@@ -1358,27 +1364,41 @@
     document.querySelectorAll('#de-fonts .de-font').forEach((b) => b.classList.toggle('on', (b.dataset.font || '') === font));
     document.querySelectorAll('#de-styles .de-hs').forEach((b) => b.classList.toggle('on', (b.dataset.hs || '') === hookStyle));
     document.querySelectorAll('#de-colors .de-sw').forEach((b) => b.classList.toggle('on', (b.dataset.bg || '') === hookBg));
-    const cs = $('de-colorsec'); if (cs) cs.style.opacity = hookStyle === 'none' ? '.4' : '1';
+    const note = $('de-colnote'); if (note) note.textContent = hookStyle === 'none' ? '지금은 "글자만(띠 없음)"이라 바탕색이 안 보여요. 띠 스타일을 박스·바·버블로 바꾸면 적용돼요.' : '';
   }
-  function openEditor() { buildChips(); syncActive(); renderPreview(); $('de-overlay').classList.add('open'); }
+  // 탭 전환(Edits식) — 선택한 섹션 시트만 보이게.
+  function setTab(s) {
+    document.querySelectorAll('#de-tabs .de-tab').forEach((b) => b.classList.toggle('on', b.dataset.s === s));
+    document.querySelectorAll('.de-sheet').forEach((sh) => sh.classList.toggle('on', sh.dataset.s === s));
+  }
+  $('de-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.de-tab'); if (b) setTab(b.dataset.s); });
+  // 세로/가로 토글 — 미리보기 비율 + 제작 설정(orient) 둘 다 반영.
+  document.querySelectorAll('.de-oseg').forEach((b) => b.onclick = () => {
+    orient = b.dataset.o;
+    document.querySelectorAll('.de-oseg').forEach((x) => x.classList.toggle('on', x.dataset.o === orient));
+    document.querySelectorAll('.hl-orient').forEach((x) => x.classList.toggle('active', (x.dataset.o || x.dataset.orient) === orient));
+    if (typeof applyReframeRow === 'function') applyReframeRow();
+    saveState(); requestAnimationFrame(renderPreview);
+  });
+  function openEditor() {
+    buildChips(); syncActive();
+    document.querySelectorAll('.de-oseg').forEach((x) => x.classList.toggle('on', x.dataset.o === orient));
+    $('de-overlay').classList.add('open');
+    requestAnimationFrame(renderPreview);
+  }
   function closeEditor() { $('de-overlay').classList.remove('open'); }
   function saveDesign() { saveState(); updateOpenBtn(); closeEditor(); }
-  // 제작화면 '디자인 꾸미기' 버튼의 미니 프리뷰·요약 갱신(모든 탭 공통 상태 반영).
+  // 제작화면 '자막 디자인' 버튼의 요약 문구 갱신.
   function updateOpenBtn() {
-    const R = resolveHookJS(); const th = $('de-open-thumb'), mini = $('de-open-mini'), sub = $('de-open-sub');
-    const url = thumbUrl();
-    if (th) th.style.backgroundImage = url ? `url("${url}")` : 'linear-gradient(135deg,#2c2645,#16121f)';
-    if (mini) { mini.style.fontFamily = `'${R.head}','Noto Color Emoji'`; mini.style.color = R.text;
-      mini.style.background = R.style === 'none' ? 'transparent' : R.bg;
-      mini.style.textShadow = R.light ? 'none' : '1px 1px 0 #000,-1px 1px 0 #000,1px -1px 0 #000,-1px -1px 0 #000'; }
-    if (sub) { const tplN = (TPLS2.find((t) => t[0] === tplMode) || [])[1] || '자동';
-      sub.textContent = `${tplN} · ${FONT_NAME[font] || '자동'}${hookStyle === 'none' ? ' · 글자만' : (hookBg ? ' · ' + ((BG_PRESETS.find((p) => p.id === hookBg) || {}).name || '') : '')}`; }
+    const sub = $('de-open-sub'); if (!sub) return;
+    const tplN = (TPLS2.find((t) => t[0] === tplMode) || [])[1] || '자동';
+    sub.textContent = `${tplN} · ${FONT_NAME[font] || '자동'}${hookStyle === 'none' ? ' · 글자만' : (hookBg ? ' · ' + ((BG_PRESETS.find((p) => p.id === hookBg) || {}).name || '') : '')}`;
   }
-  window.deUpdateOpenBtn = updateOpenBtn; // 영상 선택·복원 후 미니 프리뷰 갱신용
+  window.deUpdateOpenBtn = updateOpenBtn;
   $('de-open')?.addEventListener('click', openEditor);
   $('de-close')?.addEventListener('click', closeEditor);
   $('de-save')?.addEventListener('click', saveDesign);
-  $('de-overlay')?.addEventListener('click', (e) => { if (e.target.id === 'de-overlay') closeEditor(); });
+  window.addEventListener('resize', () => { if ($('de-overlay')?.classList.contains('open')) renderPreview(); });
   // 🔍 템플릿 미리보기 크게 보기 — 버튼 선택과 분리(stopPropagation), 샘플 이미지를 모달로 크게.
   document.querySelectorAll('.tpl-zoom').forEach((z) => z.addEventListener('click', (e) => {
     e.stopPropagation();
