@@ -693,6 +693,7 @@
     rmCount = Math.max(1, Math.min(5, Number(s.rmCount) || 1));
     document.querySelectorAll('.hl-rmcount').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === rmCount));
     applyMakeMode(); if (typeof applyRmCountNote === 'function') applyRmCountNote();
+    if (window.deUpdateOpenBtn) window.deUpdateOpenBtn(); // '디자인 꾸미기' 미니 프리뷰·요약 초기 반영
     // 버튼 활성 복원
     document.querySelectorAll('.hl-region').forEach((b) => b.classList.toggle('active', b.dataset.region === region));
     document.querySelectorAll('.hl-order').forEach((b) => b.classList.toggle('active', b.dataset.order === order));
@@ -807,6 +808,7 @@
     document.querySelectorAll('.hl-card').forEach((x) => x.classList.toggle('active', x.dataset.id === picked.videoId));
     $('hl-picked').textContent = `선택: ${picked.title}`;
     renderCountSeg(); saveState();
+    if (window.deUpdateOpenBtn) window.deUpdateOpenBtn(); // 미니 프리뷰 배경을 고른 영상 썸네일로
     addLog(`🎥 영상 선택: ${picked.title} (${fmtDur(picked.durationSec)} · ${picked.channel})`);
     fetchReframeAdvice(); // 영상 파악해서 '꽉채움/전체보존' 추천
     $('hl-options')?.scrollIntoView({behavior: 'smooth', block: 'start'});
@@ -1280,24 +1282,103 @@
   document.querySelectorAll('.hl-broll').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.hl-broll').forEach((x) => x.classList.remove('active')); b.classList.add('active'); broll = Number(b.dataset.broll); saveState();
   }));
-  document.querySelectorAll('.hl-tpl').forEach((b) => b.addEventListener('click', () => {
-    document.querySelectorAll('.hl-tpl').forEach((x) => x.classList.remove('active')); b.classList.add('active'); tplMode = b.dataset.t; saveState();
-  }));
-  // 🔤 제목 폰트 선택(모든 탭 공통) — 자동(빈값)이면 템플릿 폰트.
-  document.querySelectorAll('#hl-font-picker .font-chip').forEach((b) => b.addEventListener('click', () => {
-    document.querySelectorAll('#hl-font-picker .font-chip').forEach((x) => x.classList.remove('active')); b.classList.add('active'); font = b.dataset.font || ''; saveState();
-  }));
-  // 🎀 후킹 띠 스타일(박스/바/버블/글자만) — 'none'이면 바탕색 선택을 흐리게(의미 없으니).
-  document.querySelectorAll('.hl-hstyle').forEach((b) => b.addEventListener('click', () => {
-    document.querySelectorAll('.hl-hstyle').forEach((x) => x.classList.remove('active')); b.classList.add('active');
-    hookStyle = b.dataset.hs || '';
-    if ($('hl-hookbg-label')) $('hl-hookbg-label').style.opacity = hookStyle === 'none' ? '0.4' : '1';
-    saveState();
-  }));
-  // 🎨 띠 바탕색 팔레트
-  document.querySelectorAll('.hl-hbg').forEach((b) => b.addEventListener('click', () => {
-    document.querySelectorAll('.hl-hbg').forEach((x) => x.classList.remove('active')); b.classList.add('active'); hookBg = b.dataset.bg || ''; saveState();
-  }));
+  // ═══════ 🎬 자막 디자인 스튜디오 (캡컷식 라이브 프리뷰 에디터) ═══════
+  // 서버 highlight-templates.ts와 동기화된 템플릿 기본 디자인(미리보기용 — 실제 렌더는 서버 resolveHook).
+  const TPL_DEF = {
+    variety:{head:'Black Han Sans',style:'box',bg:'rgba(12,12,16,0.6)',border:'#FFE24B',radius:22,text:'#fff',accent:'#FFE24B',glow:0},
+    impact:{head:'Gothic A1',style:'bar',bg:'linear-gradient(90deg,#e11d1d,#ff4d4d)',border:'none',radius:8,text:'#fff',accent:'#FFE24B',glow:0},
+    cinema:{head:'Song Myung',style:'none',bg:'transparent',border:'none',radius:0,text:'#fff',accent:'#F4D58D',glow:0},
+    neon:{head:'Black Han Sans',style:'gradient',bg:'linear-gradient(120deg,rgba(124,76,255,0.85),rgba(255,77,141,0.85))',border:'#38f9e4',radius:20,text:'#fff',accent:'#38f9e4',glow:1},
+    magazine:{head:'Noto Serif KR',style:'box',bg:'rgba(18,18,20,0.72)',border:'#e8dcc0',radius:6,text:'#fff',accent:'#E8C87A',glow:0},
+    pop:{head:'Jua',style:'bubble',bg:'rgba(255,255,255,0.94)',border:'#ff7eb6',radius:34,text:'#2b2b33',accent:'#ff3d87',glow:0},
+  };
+  const defOf = (id) => TPL_DEF[id] || TPL_DEF.variety; // auto는 variety로 미리보기(실제는 주제별 매칭)
+  const BG_PRESETS = [
+    {id:'ink',name:'먹색',bg:'rgba(12,12,16,0.62)'},{id:'red',name:'레드',bg:'linear-gradient(90deg,#e11d1d,#ff4d4d)'},
+    {id:'blue',name:'블루',bg:'linear-gradient(90deg,#1d4ed8,#3b82f6)'},{id:'purple',name:'퍼플',bg:'linear-gradient(120deg,#7c4cff,#ff4d8d)'},
+    {id:'teal',name:'틸',bg:'linear-gradient(90deg,#0d9488,#14b8a6)'},{id:'amber',name:'앰버',bg:'linear-gradient(90deg,#d97706,#f59e0b)',text:'#1a1200'},
+    {id:'white',name:'화이트',bg:'rgba(255,255,255,0.94)',text:'#20222b',light:1},{id:'pink',name:'파스텔핑크',bg:'rgba(255,224,236,0.95)',text:'#8a1f52',light:1},
+  ];
+  const FONTS = [['',''],['Black Han Sans','가'],['Do Hyeon','가'],['Jua','가'],['Gothic A1','가'],['Noto Sans KR','가'],['Gaegu','가'],['Noto Serif KR','가'],['Gowun Batang','가'],['Song Myung','가']];
+  const FONT_NAME = {'':'자동','Black Han Sans':'임팩트','Do Hyeon':'도현','Jua':'주아','Gothic A1':'고딕','Noto Sans KR':'본고딕','Gaegu':'손글씨','Noto Serif KR':'명조','Gowun Batang':'고운바탕','Song Myung':'송명'};
+  const TPLS2 = [['auto','자동'],['variety','예능 자막'],['impact','임팩트 레드'],['cinema','감성 시네마'],['neon','네온 힙'],['magazine','매거진 다큐'],['pop','버블 팝']];
+  const STYLES = [['','자동','✨'],['box','박스','▢'],['bar','꽉찬 띠','▬'],['bubble','버블','⬭'],['none','글자만','T']];
+
+  // 현재 선택 → 최종 후킹 스타일(서버 resolveHook과 동일 규칙).
+  function resolveHookJS() {
+    const T = defOf(tplMode);
+    const style = hookStyle || T.style;
+    const preset = hookBg ? BG_PRESETS.find((p) => p.id === hookBg) : null;
+    const bg = preset ? preset.bg : T.bg;
+    const light = preset ? !!preset.light : (style === 'bubble');
+    const text = (preset && preset.light) ? preset.text : T.text;
+    return {head: font || T.head, style, bg, border: T.border, radius: T.radius, text, accent: T.accent, glow: T.glow, light};
+  }
+  const OL = '1.6px 1.6px 0 #000,-1.6px 1.6px 0 #000,1.6px -1.6px 0 #000,-1.6px -1.6px 0 #000,0 1.6px 0 #000,0 -1.6px 0 #000,1.6px 0 0 #000,-1.6px 0 0 #000';
+  const thumbUrl = () => (picked && picked.videoId) ? `https://i.ytimg.com/vi/${picked.videoId}/hqdefault.jpg` : '';
+
+  function renderPreview() {
+    const R = resolveHookJS();
+    const phone = $('de-phone'), box = $('de-hook-box'), ht = $('de-ht'), ha = $('de-ha');
+    if (!phone) return;
+    const url = thumbUrl();
+    phone.style.backgroundImage = url ? `url("${url}")` : 'linear-gradient(135deg,#2c2645,#16121f)';
+    phone.classList.toggle('land', orient === 'landscape');
+    box.removeAttribute('style');
+    const land = orient === 'landscape';
+    const fs = land ? 26 : 30;
+    if (R.style === 'none') { /* 띠 없이 글자만 */ }
+    else if (R.style === 'bar') { box.style.background = R.bg; box.style.width = '100%'; box.style.maxWidth = '100%'; box.style.padding = '11px 26px'; box.style.borderRadius = R.radius + 'px'; box.style.boxShadow = '0 10px 30px rgba(0,0,0,.5)'; }
+    else { box.style.background = R.bg; box.style.padding = land ? '11px 28px' : '15px 30px'; box.style.borderRadius = R.radius + 'px'; box.style.backdropFilter = 'blur(6px)'; box.style.boxShadow = '0 10px 30px rgba(0,0,0,.5)'; if (R.border !== 'none') box.style.border = '3px solid ' + R.border; }
+    const ff = `'${R.head}', 'Noto Color Emoji', sans-serif`;
+    ht.style.fontFamily = ff; ha.style.fontFamily = ff;
+    ht.style.color = R.text; ht.style.fontSize = fs + 'px'; ht.style.textShadow = R.light ? 'none' : OL;
+    ha.style.color = R.accent; ha.style.fontSize = Math.round(fs * 1.1) + 'px';
+    ha.style.textShadow = R.light ? 'none' : `0 2px 9px ${R.accent}66, ${OL}` + (R.glow ? `, 0 0 22px ${R.accent}` : '');
+  }
+
+  let deBuilt = false;
+  function buildChips() {
+    if (deBuilt) { syncActive(); return; }
+    const tp = $('de-tpls'), fo = $('de-fonts'), st = $('de-styles'), co = $('de-colors');
+    tp.innerHTML = TPLS2.map(([v, l]) => v === 'auto'
+      ? `<button type="button" class="de-tpl" data-t="auto"><span class="auto">✨</span><span class="nm">자동</span></button>`
+      : `<button type="button" class="de-tpl" data-t="${v}"><img src="/tpl-preview/${v}.png" alt="${l}" loading="lazy"><span class="nm">${l}</span></button>`).join('');
+    fo.innerHTML = FONTS.map(([v, g]) => `<button type="button" class="de-chip de-font" data-font="${v}" style="font-family:'${v || 'inherit'}'">${v ? g : '자동'}</button>`).join('');
+    st.innerHTML = STYLES.map(([v, l, ic]) => `<button type="button" class="de-chip de-hs" data-hs="${v}"><span class="ic">${ic}</span><span class="tx">${l}</span></button>`).join('');
+    co.innerHTML = `<button type="button" class="de-sw auto" data-bg="" title="자동">자동</button>` + BG_PRESETS.map((p) => `<button type="button" class="de-sw" data-bg="${p.id}" title="${p.name}" style="background:${p.bg}"></button>`).join('');
+    tp.querySelectorAll('.de-tpl').forEach((b) => b.onclick = () => { tplMode = b.dataset.t; syncActive(); renderPreview(); });
+    fo.querySelectorAll('.de-font').forEach((b) => b.onclick = () => { font = b.dataset.font || ''; syncActive(); renderPreview(); });
+    st.querySelectorAll('.de-hs').forEach((b) => b.onclick = () => { hookStyle = b.dataset.hs || ''; syncActive(); renderPreview(); });
+    co.querySelectorAll('.de-sw').forEach((b) => b.onclick = () => { hookBg = b.dataset.bg || ''; syncActive(); renderPreview(); });
+    deBuilt = true;
+  }
+  function syncActive() {
+    document.querySelectorAll('#de-tpls .de-tpl').forEach((b) => b.classList.toggle('on', b.dataset.t === tplMode));
+    document.querySelectorAll('#de-fonts .de-font').forEach((b) => b.classList.toggle('on', (b.dataset.font || '') === font));
+    document.querySelectorAll('#de-styles .de-hs').forEach((b) => b.classList.toggle('on', (b.dataset.hs || '') === hookStyle));
+    document.querySelectorAll('#de-colors .de-sw').forEach((b) => b.classList.toggle('on', (b.dataset.bg || '') === hookBg));
+    const cs = $('de-colorsec'); if (cs) cs.style.opacity = hookStyle === 'none' ? '.4' : '1';
+  }
+  function openEditor() { buildChips(); syncActive(); renderPreview(); $('de-overlay').classList.add('open'); }
+  function closeEditor() { $('de-overlay').classList.remove('open'); }
+  function saveDesign() { saveState(); updateOpenBtn(); closeEditor(); }
+  // 제작화면 '디자인 꾸미기' 버튼의 미니 프리뷰·요약 갱신(모든 탭 공통 상태 반영).
+  function updateOpenBtn() {
+    const R = resolveHookJS(); const th = $('de-open-thumb'), mini = $('de-open-mini'), sub = $('de-open-sub');
+    const url = thumbUrl();
+    if (th) th.style.backgroundImage = url ? `url("${url}")` : 'linear-gradient(135deg,#2c2645,#16121f)';
+    if (mini) { mini.style.fontFamily = `'${R.head}','Noto Color Emoji'`; mini.style.color = R.text;
+      mini.style.background = R.style === 'none' ? 'transparent' : R.bg;
+      mini.style.textShadow = R.light ? 'none' : '1px 1px 0 #000,-1px 1px 0 #000,1px -1px 0 #000,-1px -1px 0 #000'; }
+    if (sub) { const tplN = (TPLS2.find((t) => t[0] === tplMode) || [])[1] || '자동';
+      sub.textContent = `${tplN} · ${FONT_NAME[font] || '자동'}${hookStyle === 'none' ? ' · 글자만' : (hookBg ? ' · ' + ((BG_PRESETS.find((p) => p.id === hookBg) || {}).name || '') : '')}`; }
+  }
+  window.deUpdateOpenBtn = updateOpenBtn; // 영상 선택·복원 후 미니 프리뷰 갱신용
+  $('de-open')?.addEventListener('click', openEditor);
+  $('de-close')?.addEventListener('click', closeEditor);
+  $('de-save')?.addEventListener('click', saveDesign);
+  $('de-overlay')?.addEventListener('click', (e) => { if (e.target.id === 'de-overlay') closeEditor(); });
   // 🔍 템플릿 미리보기 크게 보기 — 버튼 선택과 분리(stopPropagation), 샘플 이미지를 모달로 크게.
   document.querySelectorAll('.tpl-zoom').forEach((z) => z.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1517,8 +1598,10 @@
     addLog(`• 무음 제거: ${removeSilence ? '✂️ 켜짐(템포 UP)' : '끄기'}`);
     addLog(`• AI B-roll: ${broll ? '🖼 켜짐(이미지 생성 — 비용 발생)' : '끄기'}`);
     if (commentary) addLog(`• 영어 자막: ${captionEn ? '🌐 한국어+English 함께' : '한국어만'}`);
-    addLog(`• 디자인: ${document.querySelector('.hl-tpl.active')?.dataset.name || tplMode}`);
-    addLog(`• 후킹 띠: ${document.querySelector('.hl-hstyle.active')?.textContent || '자동'}${hookStyle !== 'none' && hookBg ? ' · ' + (document.querySelector('.hl-hbg.active')?.textContent || '') : ''} / 폰트 ${document.querySelector('#hl-font-picker .font-chip.active')?.textContent || '자동'}`);
+    addLog(`• 디자인: ${(TPLS2.find((t) => t[0] === tplMode) || [])[1] || '자동'}`);
+    const _hsN = {box: '박스', bar: '꽉찬 띠', bubble: '버블', none: '글자만', gradient: '그라데이션'}[hookStyle] || '자동';
+    const _bgN = (BG_PRESETS.find((p) => p.id === hookBg) || {}).name || '';
+    addLog(`• 후킹 띠: ${_hsN}${hookStyle !== 'none' && _bgN ? ' · ' + _bgN : ''} / 폰트 ${FONT_NAME[font] || '자동'}`);
     if (muteOriginal && !commentary) addLog('⚠️ 소리를 뺐는데 해설이 꺼져 있어요 — 영상이 무음이 됩니다. 해설을 켜는 걸 권장!', 'fail');
     // 예상 소요 — 편수·한 편 길이 기준 러프 추정(렌더가 대부분이라 길이·편수에 비례). 서버 상황 따라 달라짐.
     const estBase = 2 + count * (sec * 3.5 / 60 + 0.5) + (commentary ? count * 0.4 : 0);

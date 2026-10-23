@@ -11,6 +11,66 @@
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/style.css" />
+    <style>
+/* ===== 자막 디자인 스튜디오 (CapCut식 라이브 프리뷰 에디터) — 하이라이트 전용 ===== */
+.de-open-btn{display:flex;align-items:center;gap:14px;width:100%;padding:13px 15px;margin-top:8px;border-radius:16px;border:1px solid var(--line);background:var(--card);cursor:pointer;transition:transform .15s,box-shadow .15s;text-align:left}
+.de-open-btn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.12)}
+.de-open-thumb{width:50px;height:88px;border-radius:10px;background:#111 center/cover no-repeat;flex:none;position:relative;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.3);display:flex;align-items:flex-start;justify-content:center}
+.de-open-thumb .mini-hook{margin-top:7px;font-family:'Black Han Sans';font-size:9px;line-height:1.05;color:#fff;padding:2px 4px;border-radius:4px;max-width:90%;text-align:center;letter-spacing:-.5px}
+.de-open-meta{flex:1;min-width:0}
+.de-open-meta b{display:block;font-size:14.5px;letter-spacing:-.2px}
+.de-open-meta span{font-size:12px;color:var(--muted)}
+.de-open-go{color:var(--accent);font-weight:800;font-size:20px}
+
+.de-overlay{position:fixed;inset:0;z-index:300;display:none;flex-direction:column;
+  background:radial-gradient(130% 100% at 50% -8%,#231d33 0%,#0b0912 62%);color:#efecf7;overscroll-behavior:contain}
+.de-overlay.open{display:flex;animation:deIn .28s cubic-bezier(.2,.8,.2,1)}
+@keyframes deIn{from{opacity:0;transform:scale(.99)}to{opacity:1;transform:none}}
+.de-head{display:flex;align-items:center;justify-content:space-between;padding:15px 22px;border-bottom:1px solid rgba(255,255,255,.07);flex:none}
+.de-head h2{font-size:16px;font-weight:800;letter-spacing:-.3px;margin:0}
+.de-head h2 small{color:#ff8a5c;font-weight:700;margin-left:2px}
+.de-x{background:rgba(255,255,255,.06);border:none;color:#cfc8e0;width:38px;height:38px;border-radius:12px;font-size:17px;cursor:pointer;transition:background .15s}
+.de-x:hover{background:rgba(255,255,255,.14)}
+
+.de-body{flex:1;display:grid;grid-template-columns:1fr 388px;min-height:0}
+@media(max-width:860px){.de-body{grid-template-columns:1fr;grid-template-rows:minmax(42vh,1fr) auto}}
+
+.de-stage{display:flex;align-items:center;justify-content:center;padding:26px;min-height:0;position:relative}
+.de-phone{position:relative;aspect-ratio:9/16;height:min(70vh,600px);max-width:92%;border-radius:22px;overflow:hidden;background:#000 center/cover no-repeat;
+  box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.07),0 0 70px rgba(255,122,77,.07)}
+.de-phone.land{aspect-ratio:16/9;height:auto;width:min(92%,780px)}
+.de-vgrad{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.28),transparent 26%,transparent 72%,rgba(0,0,0,.3))}
+.de-hook{position:absolute;top:8.5%;left:0;right:0;display:flex;justify-content:center;padding:0 7%}
+.de-hook-box{display:inline-block;text-align:center;max-width:95%}
+.de-ht,.de-ha{margin:0;line-height:1.08;letter-spacing:-1px;word-break:keep-all;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.de-ha{margin-top:5px;line-height:1.12}
+.de-badge{position:absolute;left:13px;bottom:13px;font-size:10.5px;color:#ffffffcc;background:#0007;padding:4px 9px;border-radius:8px;backdrop-filter:blur(4px)}
+
+.de-panel{border-left:1px solid rgba(255,255,255,.07);padding:20px 18px 24px;overflow-y:auto;display:flex;flex-direction:column;gap:20px;background:rgba(255,255,255,.012)}
+@media(max-width:860px){.de-panel{border-left:none;border-top:1px solid rgba(255,255,255,.07)}}
+.de-sec>h3{font-size:10.5px;text-transform:uppercase;letter-spacing:1.5px;color:#8b84a0;margin:0 0 9px;font-weight:700}
+.de-row{display:flex;gap:7px;flex-wrap:wrap}
+.de-scroll{display:flex;gap:8px;overflow-x:auto;padding-bottom:5px}
+.de-chip{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#e8e3f3;border-radius:11px;padding:8px 12px;font-size:13px;cursor:pointer;transition:all .14s;white-space:nowrap;font-weight:600}
+.de-chip:hover{background:rgba(255,255,255,.09)}
+.de-chip.on{border-color:#ff8a5c;background:rgba(255,122,77,.16);color:#fff;box-shadow:0 0 0 1px #ff8a5c}
+.de-tpl{flex:none;width:66px;border-radius:12px;overflow:hidden;border:2px solid transparent;cursor:pointer;background:none;padding:0;transition:border-color .14s}
+.de-tpl img{width:66px;height:116px;object-fit:cover;display:block;background:#222}
+.de-tpl .auto{width:66px;height:116px;display:flex;align-items:center;justify-content:center;font-size:23px;background:linear-gradient(135deg,#2c2645,#191527)}
+.de-tpl .nm{display:block;font-size:10px;text-align:center;padding:4px 2px;color:#b8b1cc}
+.de-tpl.on{border-color:#ff8a5c}
+.de-font{min-width:50px;height:48px;display:flex;align-items:center;justify-content:center;font-size:20px;line-height:1}
+.de-hs{display:flex;flex-direction:column;align-items:center;gap:4px;width:64px;padding:9px 4px}
+.de-hs .ic{font-size:16px}.de-hs .tx{font-size:10px;font-weight:600}
+.de-sw{width:40px;height:40px;border-radius:50%;border:2px solid rgba(255,255,255,.16);cursor:pointer;transition:transform .14s,box-shadow .14s}
+.de-sw:hover{transform:scale(1.09)}
+.de-sw.on{box-shadow:0 0 0 2px #0b0912,0 0 0 4px #ff8a5c;transform:scale(1.09)}
+.de-sw.auto{display:flex;align-items:center;justify-content:center;font-size:10px;color:#cfc8e0;background:rgba(255,255,255,.06);font-weight:700;border-style:dashed}
+.de-foot{padding:14px 22px;border-top:1px solid rgba(255,255,255,.07);display:flex;gap:12px;align-items:center;flex:none}
+.de-foot .hint{flex:1;font-size:12px;color:#8b84a0;line-height:1.3}
+.de-save{border:none;border-radius:14px;padding:13px 28px;font-size:15px;font-weight:800;color:#2a1206;cursor:pointer;background:linear-gradient(135deg,#ffc27a,#ff7a4d);box-shadow:0 12px 30px rgba(255,122,77,.38);transition:transform .14s}
+.de-save:hover{transform:translateY(-2px)}
+    </style>
     <script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});</script>
   </head>
   <body>
@@ -360,82 +420,53 @@
           </div>
           <p class="hint" style="margin-top:4px">핵심 순간에 주제와 어울리는 AI 이미지를 화면 중앙에 잠깐 띄웠다 사라지게 해 영상이 지루하지 않게 해요(OpusClip식 b-roll). <b>⚠️ 편당 이미지 1~2장을 생성하므로 비용이 들어요</b>(짧은 클립 1장·긴 클립 2장). 원본 영상은 계속 재생돼요.</p>
 
-          <!-- 디자인 템플릿 — 후킹 글자·배경·자막 스타일 묶음. '자동'은 편마다 주제에 맞게 매칭 -->
-          <label class="field-label" style="margin-top:14px">🎨 디자인 템플릿 <span class="hint">— 미리보기를 보고 골라요 (🔍 누르면 크게)</span></label>
-          <div id="hl-tpl-seg" class="tpl-grid">
-            <button type="button" class="tpl-card hl-tpl active" data-t="auto" data-name="자동(주제별)">
-              <span class="tpl-auto">✨</span>
-              <span class="tpl-name">자동<small>주제별 자동매칭</small></span>
-            </button>
-            <button type="button" class="tpl-card hl-tpl" data-t="variety" data-name="예능 자막">
-              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/variety.png" alt="예능 자막 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="variety" data-zname="예능 자막" title="크게 보기">🔍</span></span>
-              <span class="tpl-name">예능 자막</span>
-            </button>
-            <button type="button" class="tpl-card hl-tpl" data-t="impact" data-name="임팩트 레드">
-              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/impact.png" alt="임팩트 레드 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="impact" data-zname="임팩트 레드" title="크게 보기">🔍</span></span>
-              <span class="tpl-name">임팩트 레드</span>
-            </button>
-            <button type="button" class="tpl-card hl-tpl" data-t="cinema" data-name="감성 시네마">
-              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/cinema.png" alt="감성 시네마 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="cinema" data-zname="감성 시네마" title="크게 보기">🔍</span></span>
-              <span class="tpl-name">감성 시네마</span>
-            </button>
-            <button type="button" class="tpl-card hl-tpl" data-t="neon" data-name="네온 힙">
-              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/neon.png" alt="네온 힙 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="neon" data-zname="네온 힙" title="크게 보기">🔍</span></span>
-              <span class="tpl-name">네온 힙</span>
-            </button>
-            <button type="button" class="tpl-card hl-tpl" data-t="magazine" data-name="매거진 다큐">
-              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/magazine.png" alt="매거진 다큐 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="magazine" data-zname="매거진 다큐" title="크게 보기">🔍</span></span>
-              <span class="tpl-name">매거진 다큐</span>
-            </button>
-            <button type="button" class="tpl-card hl-tpl" data-t="pop" data-name="버블 팝">
-              <span class="tpl-thumb-wrap"><img class="tpl-thumb" src="/tpl-preview/pop.png" alt="버블 팝 미리보기" loading="lazy"><span class="tpl-zoom" data-zoom="pop" data-zname="버블 팝" title="크게 보기">🔍</span></span>
-              <span class="tpl-name">버블 팝</span>
-            </button>
-          </div>
-          </div><!-- /hl-clip-only (원본소리~디자인) -->
+          </div><!-- /hl-clip-only (원본소리~b-roll) -->
 
-          <!-- 🔤 제목 폰트 — 영상 만들기·카드뉴스와 동일한 선택(모든 탭 공통). '자동'이면 템플릿 폰트. -->
-          <label class="field-label" style="margin-top:14px">🔤 제목 폰트 <button type="button" class="ghost-btn small" style="float:right;padding:4px 10px;font-size:12px" onclick="openFontPreview('#hl-font-picker')">🔍 느낌 미리보기</button> <span class="hint">— 후킹 글씨체 (자동=디자인 템플릿 폰트)</span></label>
-          <div id="hl-font-picker" class="font-picker">
-            <button type="button" class="font-chip active" data-font="">자동</button>
-            <button type="button" class="font-chip" data-font="Black Han Sans" style="font-family:'Black Han Sans'">임팩트</button>
-            <button type="button" class="font-chip" data-font="Do Hyeon" style="font-family:'Do Hyeon'">도현</button>
-            <button type="button" class="font-chip" data-font="Jua" style="font-family:'Jua'">주아</button>
-            <button type="button" class="font-chip" data-font="Gothic A1" style="font-family:'Gothic A1'">고딕</button>
-            <button type="button" class="font-chip" data-font="Noto Sans KR" style="font-family:'Noto Sans KR'">본고딕</button>
-            <button type="button" class="font-chip" data-font="Gaegu" style="font-family:'Gaegu'">손글씨</button>
-            <button type="button" class="font-chip" data-font="Noto Serif KR" style="font-family:'Noto Serif KR'">명조</button>
-            <button type="button" class="font-chip" data-font="Gowun Batang" style="font-family:'Gowun Batang'">고운바탕</button>
-            <button type="button" class="font-chip" data-font="Song Myung" style="font-family:'Song Myung'">송명</button>
-          </div>
-
-          <label class="field-label" style="margin-top:14px">🎀 후킹 띠 스타일 <span class="hint">— 띠 없이 글자만도 가능</span></label>
-          <div id="hl-hookstyle-picker" class="font-picker">
-            <button type="button" class="font-chip hl-hstyle active" data-hs="">자동</button>
-            <button type="button" class="font-chip hl-hstyle" data-hs="box">박스</button>
-            <button type="button" class="font-chip hl-hstyle" data-hs="bar">꽉찬 띠</button>
-            <button type="button" class="font-chip hl-hstyle" data-hs="bubble">버블</button>
-            <button type="button" class="font-chip hl-hstyle" data-hs="none">글자만(띠 없음)</button>
-          </div>
-
-          <label class="field-label" style="margin-top:14px" id="hl-hookbg-label">🎨 띠 바탕색 <span class="hint">— 띠가 있을 때만 적용</span></label>
-          <div id="hl-hookbg-picker" class="font-picker">
-            <button type="button" class="font-chip hl-hbg active" data-bg="">자동</button>
-            <button type="button" class="font-chip hl-hbg" data-bg="ink" style="background:rgba(12,12,16,0.88);color:#fff">먹색</button>
-            <button type="button" class="font-chip hl-hbg" data-bg="red" style="background:linear-gradient(90deg,#e11d1d,#ff4d4d);color:#fff">레드</button>
-            <button type="button" class="font-chip hl-hbg" data-bg="blue" style="background:linear-gradient(90deg,#1d4ed8,#3b82f6);color:#fff">블루</button>
-            <button type="button" class="font-chip hl-hbg" data-bg="purple" style="background:linear-gradient(120deg,#7c4cff,#ff4d8d);color:#fff">퍼플</button>
-            <button type="button" class="font-chip hl-hbg" data-bg="teal" style="background:linear-gradient(90deg,#0d9488,#14b8a6);color:#fff">틸</button>
-            <button type="button" class="font-chip hl-hbg" data-bg="amber" style="background:linear-gradient(90deg,#d97706,#f59e0b);color:#1a1200">앰버</button>
-            <button type="button" class="font-chip hl-hbg" data-bg="white" style="background:rgba(255,255,255,0.94);color:#20222b">화이트</button>
-            <button type="button" class="font-chip hl-hbg" data-bg="pink" style="background:rgba(255,224,236,0.96);color:#8a1f52">파스텔핑크</button>
-          </div>
+          <!-- 🎨 자막 디자인 — 캡컷식 라이브 프리뷰 에디터(템플릿·폰트·띠·색을 미리보기 보며 한 번에) -->
+          <label class="field-label" style="margin-top:14px">🎨 자막 디자인</label>
+          <button type="button" id="de-open" class="de-open-btn" aria-label="자막 디자인 꾸미기 열기">
+            <span class="de-open-thumb" id="de-open-thumb"><span class="mini-hook" id="de-open-mini">후킹</span></span>
+            <span class="de-open-meta"><b id="de-open-title">자막 디자인 꾸미기</b><span id="de-open-sub">완성 모습 미리보며 템플릿·폰트·띠·색 고르기</span></span>
+            <span class="de-open-go">›</span>
+          </button>
 
           <p class="mini-state" id="hl-picked"></p>
           <button id="hl-generate" class="primary-btn" type="button" style="margin-top:12px">🎬 하이라이트 숏폼 만들기</button>
           <p class="mini-state">AI가 영상에서 터질 만한 순간을 골라 세로 숏폼으로 자릅니다. 상단 후킹 자막이 자동으로 얹혀요. 완성되면 유튜브·인스타로 바로 올릴 수 있어요. <b>원작자 출처는 자동 표기됩니다(CC BY).</b></p>
         </div>
       </section>
+
+      <!-- 🎬 자막 디자인 스튜디오 (캡컷식 라이브 프리뷰 에디터) -->
+      <div class="de-overlay" id="de-overlay" role="dialog" aria-modal="true" aria-label="자막 디자인 스튜디오">
+        <div class="de-head">
+          <h2>자막 디자인 <small>· 실시간 미리보기</small></h2>
+          <button class="de-x" id="de-close" type="button" aria-label="닫기">✕</button>
+        </div>
+        <div class="de-body">
+          <div class="de-stage">
+            <div class="de-phone" id="de-phone">
+              <div class="de-vgrad"></div>
+              <div class="de-hook" id="de-hook">
+                <div class="de-hook-box" id="de-hook-box">
+                  <p class="de-ht" id="de-ht">여기에 후킹 한 줄</p>
+                  <p class="de-ha" id="de-ha">소제목이 이렇게 들어가요</p>
+                </div>
+              </div>
+              <div class="de-badge">미리보기 · 실제 문구는 AI가 영상마다 자동 생성</div>
+            </div>
+          </div>
+          <div class="de-panel">
+            <div class="de-sec"><h3>템플릿</h3><div class="de-scroll" id="de-tpls"></div></div>
+            <div class="de-sec"><h3>폰트</h3><div class="de-scroll" id="de-fonts"></div></div>
+            <div class="de-sec"><h3>띠 스타일</h3><div class="de-row" id="de-styles"></div></div>
+            <div class="de-sec" id="de-colorsec"><h3>띠 바탕색</h3><div class="de-row" id="de-colors"></div></div>
+          </div>
+        </div>
+        <div class="de-foot">
+          <span class="hint">고른 디자인이 모든 편에 똑같이 적용돼요. 후킹 글자는 영상마다 AI가 새로 만들어요.</span>
+          <button class="de-save" id="de-save" type="button">이 디자인으로 저장 →</button>
+        </div>
+      </div>
 
       <!-- 완성 결과 -->
       <section id="hl-result-block" class="card hidden"></section>
