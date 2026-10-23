@@ -1060,8 +1060,11 @@ JSON만: {"comment":"..."}`;
 
   // ── 정적 ──
   // 루트(/) = 마케팅 랜딩페이지. 앱(대시보드)은 /app 으로. "시작하기"가 /app 으로 보낸다.
+  // ★뿌리오 전용 주소(ppurio.온종일.com)로 오면 '/'는 뿌리오 랜딩. 그 외(video.온종일.com)는 OnVideo 랜딩.
+  //   서브도메인=별개 origin이라 PWA도 각각 독립 설치된다(OnVideo와 충돌 없음).
+  const isPpurioHost = String(req.headers.host || '').toLowerCase().startsWith('ppurio.');
   if (p === '/' || p === '/landing' || p === '/landing.html')
-    return serveFile(res, path.join(ROOT, 'web', 'landing.html'), 'text/html; charset=utf-8');
+    return serveFile(res, path.join(ROOT, 'web', (isPpurioHost && p === '/') ? 'ppurio-v.html' : 'landing.html'), 'text/html; charset=utf-8');
   if (p === '/app' || p === '/app.html' || p === '/index.html')
     return serveFile(res, path.join(ROOT, 'web', 'index.html'), 'text/html; charset=utf-8');
   // 서비스워커(PWA) — 항상 최신을 받도록 no-store(옛 SW 고착 방지).
