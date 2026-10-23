@@ -5,7 +5,7 @@ import React from 'react';
 import {z} from 'zod';
 import {AbsoluteFill, staticFile} from 'remotion';
 import {loadFont} from '@remotion/fonts';
-import {getHlTemplate} from './highlight-templates';
+import {resolveHook} from './highlight-templates';
 
 const blackFont = 'Black Han Sans';
 loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')});
@@ -24,6 +24,11 @@ export const hookStillSchema = z.object({
   hookAccent: z.string(),
   template: z.string().optional(),
   font: z.string().optional(), // 사용자가 고른 제목 폰트(모든 탭 공통). 없으면 템플릿 폰트.
+  // ★사용자가 '처음 제작부터' 직접 고르는 띠 디자인(모든 탭 공통). 없으면 템플릿 기본값.
+  hookStyle: z.enum(['box', 'bar', 'none', 'bubble', 'gradient']).optional(),
+  hookBg: z.string().optional(),     // 띠 바탕색(팔레트 id 또는 CSS)
+  textColor: z.string().optional(),
+  accentColor: z.string().optional(),
   orientation: z.enum(['portrait', 'landscape']).optional(),
 });
 export type HookStillData = z.infer<typeof hookStillSchema>;
@@ -31,42 +36,48 @@ export type HookStillData = z.infer<typeof hookStillSchema>;
 const outline = (px: number) =>
   `${px}px ${px}px 0 #000, -${px}px ${px}px 0 #000, ${px}px -${px}px 0 #000, -${px}px -${px}px 0 #000, 0 ${px}px 0 #000, 0 -${px}px 0 #000, ${px}px 0 0 #000, -${px}px 0 0 #000`;
 
-export const HookStill: React.FC<HookStillData> = ({hookTop, hookAccent, template, font, orientation}) => {
+export const HookStill: React.FC<HookStillData> = ({hookTop, hookAccent, template, font, hookStyle, hookBg, textColor, accentColor, orientation}) => {
   const land = orientation === 'landscape';
-  const T = getHlTemplate(template);
-  const head = font || T.headFont; // 사용자가 폰트를 골랐으면 그걸로, 자동이면 템플릿 폰트.
-  // Scene.tsx fullBleed와 동일 상수(세로/가로).
+  // ★Scene.tsx fullBleed와 '똑같은' 공통 레이어(resolveHook)로 계산 — 두 렌더 경로 디자인 일치(반쪽 패치 방지).
+  const R = resolveHook(template, {hookStyle, hookBg, textColor, accentColor, headFont: font});
+  const head = R.headFont;
   const L = land
-    ? {top: 40, pad: '0 90px', fsTop: 80, fsAcc: 96, boxPad: '18px 46px'}
-    : {top: 110, pad: '0 70px', fsTop: 88, fsAcc: 104, boxPad: '22px 42px'};
+    ? {top: 40, pad: '0 90px', fsTop: 80, fsAcc: 96, boxPad: '18px 46px', thTop: 24, thAcc: 20}
+    : {top: 110, pad: '0 70px', fsTop: 88, fsAcc: 104, boxPad: '22px 42px', thTop: 16, thAcc: 14};
 
-  const hookGlow = T.glow ? `, 0 0 40px ${T.accentColor}66` : '';
+  // ★글자 많아지면 크기 축소(테리) — 그래도 2줄 넘으면 clamp로 자른다. "작아지더라도 두 줄로 끝".
+  const fit = (text: string, base: number, thresh: number) => {
+    const n = (text || '').replace(/\s+/g, '').length;
+    return Math.round(base * (n > thresh ? Math.max(0.5, thresh / n) : 1));
+  };
+  const clamp2: React.CSSProperties = {display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden'};
+
+  const hookGlow = R.glow ? `, 0 0 40px ${R.accentColor}66` : '';
   const boxCommon: React.CSSProperties = {
     display: 'inline-block', textAlign: 'center', maxWidth: '94%',
-    borderRadius: T.hookRadius, padding: L.boxPad,
+    borderRadius: R.hookRadius, padding: L.boxPad,
     boxShadow: `0 12px 44px rgba(0,0,0,0.55)${hookGlow}`,
   };
   const container: React.CSSProperties =
-    T.hookStyle === 'none'
+    R.hookStyle === 'none'
       ? {display: 'inline-block', textAlign: 'center', maxWidth: '94%'}
-      : T.hookStyle === 'bar'
-        ? {...boxCommon, background: T.hookBg, padding: '14px 40px', maxWidth: '100%', width: '100%'}
-        : {...boxCommon, background: T.hookBg, backdropFilter: 'blur(6px)',
-           border: T.hookBorder === 'none' ? undefined : `3px solid ${T.hookBorder}`};
-  const lightBg = T.hookStyle === 'bubble';
-  const ol = lightBg ? 0 : 3;
+      : R.hookStyle === 'bar'
+        ? {...boxCommon, background: R.hookBg, padding: '14px 40px', maxWidth: '100%', width: '100%'}
+        : {...boxCommon, background: R.hookBg, backdropFilter: 'blur(6px)',
+           border: R.hookBorder === 'none' ? undefined : `3px solid ${R.hookBorder}`};
+  const ol = R.light ? 0 : 3;
 
   return (
     <AbsoluteFill style={{backgroundColor: 'transparent'}}>
       <div style={{position: 'absolute', top: L.top, left: 0, right: 0, padding: L.pad, display: 'flex', justifyContent: 'center'}}>
         <div style={container}>
-          {hookTop && <div style={{fontFamily: head + EMOJI, fontSize: L.fsTop, color: T.textColor,
+          {hookTop && <div style={{fontFamily: head + EMOJI, fontSize: fit(hookTop, L.fsTop, L.thTop), color: R.textColor,
             lineHeight: 1.08, textShadow: ol ? outline(ol) : 'none', letterSpacing: -1,
-            wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookTop}</div>}
-          {hookAccent && <div style={{fontFamily: head + EMOJI, fontSize: L.fsAcc, color: T.accentColor,
+            wordBreak: 'keep-all', overflowWrap: 'anywhere', ...clamp2}}>{hookTop}</div>}
+          {hookAccent && <div style={{fontFamily: head + EMOJI, fontSize: fit(hookAccent, L.fsAcc, L.thAcc), color: R.accentColor,
             lineHeight: 1.12, marginTop: 4,
-            textShadow: lightBg ? 'none' : `0 3px 14px ${T.accentColor}66, ${outline(ol)}`,
-            letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'anywhere'}}>{hookAccent}</div>}
+            textShadow: R.light ? 'none' : `0 3px 14px ${R.accentColor}66, ${outline(ol)}`,
+            letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'anywhere', ...clamp2}}>{hookAccent}</div>}
         </div>
       </div>
     </AbsoluteFill>

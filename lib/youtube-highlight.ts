@@ -259,7 +259,7 @@ export type HighlightJobResult = {projectId: string; file: string; title: string
 export async function makeHighlights(
   videoId: string,
   meta: {title: string; channel: string; isCc?: boolean},
-  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; narrationCoverage?: number; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; font?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; source?: 'search' | 'url' | 'upload' | 'archive'; onClip?: (c: {projectId: string; file: string; title: string; score: number; reason?: string}) => void} = {},
+  opts: {count?: number; clipSec?: number; log?: (m: string) => void; isCancelled?: () => boolean; orientation?: 'portrait' | 'landscape'; commentary?: boolean; narrationCoverage?: number; voice?: string; reframe?: 'track' | 'letterbox'; muteOriginal?: boolean; localFile?: string; template?: string; font?: string; hookStyle?: string; hookBg?: string; textColor?: string; removeSilence?: boolean; broll?: boolean; captionEn?: boolean; source?: 'search' | 'url' | 'upload' | 'archive'; onClip?: (c: {projectId: string; file: string; title: string; score: number; reason?: string}) => void} = {},
 ): Promise<HighlightJobResult> {
   const log = opts.log || (() => {});
   const cancelled = opts.isCancelled || (() => false);
@@ -396,6 +396,9 @@ export async function makeHighlights(
       fullBleed: true, // 이미 비율 맞춤 → 꽉 채우고 상단 후킹 + (해설 시)카라오케 자막
       template: tpl.id,
       font: opts.font || undefined, // 사용자가 고른 제목 폰트(모든 탭 공통). 자동이면 템플릿 폰트.
+      hookStyle: (opts.hookStyle as SceneData['hookStyle']) || undefined, // 사용자가 고른 띠 스타일(없으면 템플릿)
+      hookBg: opts.hookBg || undefined,                                   // 띠 바탕색(팔레트 id/CSS)
+      textColor: opts.textColor || undefined,
       hookTop: hookTopFinal,
       hookAccent: hookAccentFinal,
       accentColor: tpl.accentColor,
@@ -451,6 +454,7 @@ export async function makeHighlights(
       // ★빠른 렌더(프레임별 재렌더 없이 ffmpeg 합성) 우선 → 실패 시 기존 Remotion으로 폴백(무회귀).
       const fast = await renderHighlightFast({
         clipAbs: c.file, outPath: outAbs, hookTop: scene.hookTop, hookAccent: scene.hookAccent, template: tpl.id, font: opts.font,
+        hookStyle: opts.hookStyle, hookBg: opts.hookBg, textColor: opts.textColor,
         words, narrationAbs: voiceRel ? path.join(pubClipDir, 'narration.mp3') : undefined,
         muteOriginal: !!opts.muteOriginal, duckAudio: !!voiceRel,
         durationSec: scene.durationInFrames / FPS, orientation, broll: brollCuts, subLines: enLines, log, isCancelled: cancelled,
@@ -761,7 +765,7 @@ export async function suggestNarration(projectId: string, log: (m: string) => vo
 //   보존해뒀다가 후킹 문구·강조·디자인 템플릿만 바꿔 새로 렌더→output·썸네일 교체→project.json 갱신.
 export async function reRenderHighlight(
   projectId: string,
-  overrides: {hookTop?: string; hookAccent?: string; template?: string; narration?: string; voice?: string; thumbBig?: string; thumbBadge?: string; narrationOff?: boolean},
+  overrides: {hookTop?: string; hookAccent?: string; template?: string; font?: string; hookStyle?: string; hookBg?: string; textColor?: string; narration?: string; voice?: string; thumbBig?: string; thumbBadge?: string; narrationOff?: boolean},
   log: (m: string) => void = () => {},
 ): Promise<{output: string}> {
   const studioDir = path.join(DATA_DIR, 'studio', projectId);
@@ -824,6 +828,11 @@ export async function reRenderHighlight(
   const scene: SceneData = {
     image: `${jobRel}/clip.mp4`, video: `${jobRel}/clip.mp4`, fullBleed: true,
     template: tpl.id, hookTop, hookAccent, accentColor: tpl.accentColor,
+    // 사용자가 수정창에서 바꾼 띠 디자인(없으면 저장된 값 e, 그것도 없으면 템플릿 기본).
+    font: overrides.font || (e as any).font || undefined,
+    hookStyle: (overrides.hookStyle || (e as any).hookStyle) as SceneData['hookStyle'] || undefined,
+    hookBg: overrides.hookBg || (e as any).hookBg || undefined,
+    textColor: overrides.textColor || (e as any).textColor || undefined,
     words, duckAudio: !!voiceRel, muteOriginal: narrationOff ? false : !!e.muteOriginal,
     durationInFrames: durFrames,
   };
@@ -841,6 +850,7 @@ export async function reRenderHighlight(
     log('[편집] 새 디자인으로 다시 렌더…');
     const fast = await renderHighlightFast({
       clipAbs, outPath: outAbs, hookTop, hookAccent, template: tpl.id,
+      font: scene.font, hookStyle: scene.hookStyle, hookBg: scene.hookBg, textColor: scene.textColor,
       words: scene.words, narrationAbs: voiceRel ? path.join(pubClipDir, 'narration.mp3') : undefined,
       muteOriginal: !!e.muteOriginal, duckAudio: !!voiceRel,
       durationSec: scene.durationInFrames / FPS, orientation, log,
@@ -877,6 +887,8 @@ export async function reRenderHighlight(
   const newBase = (hookTop || (proj.title || '').replace(/\s\d+편\s*$/, '') || e.baseTitle || '하이라이트').slice(0, 74);
   proj.title = (newBase + epSuffix).slice(0, 80);
   proj.hlEdit = {...e, hookTop, hookAccent, template: tpl.id, muteOriginal: scene.muteOriginal,
+    font: scene.font, hookStyle: scene.hookStyle, hookBg: scene.hookBg, textColor: scene.textColor, // 수정창서 고른 띠 디자인 보존
+
     ...(overrides.thumbBig !== undefined ? {thumbBig: overrides.thumbBig.slice(0, 40)} : {}),
     ...(overrides.thumbBadge !== undefined ? {thumbBadge: overrides.thumbBadge.slice(0, 20)} : {}),
     ...(narrationOff ? {words: [], hasNarration: false, durFrames} : (newWords ? {words: newWords, hasNarration: true, durFrames} : {}))};

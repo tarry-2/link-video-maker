@@ -122,6 +122,7 @@ export async function renderHighlightFast(opts: {
   clipAbs: string;            // 후킹 없는 깨끗한 세로/가로 클립
   outPath: string;
   hookTop: string; hookAccent: string; template: string; font?: string; // font=사용자가 고른 제목 폰트(모든 탭 공통)
+  hookStyle?: string; hookBg?: string; textColor?: string; accentColor?: string; // 사용자가 고른 띠 디자인(없으면 템플릿 기본)
   words: Word[];              // 해설 카라오케(없으면 [])
   narrationAbs?: string;      // 나레이션 mp3(있으면 믹스)
   muteOriginal?: boolean; duckAudio?: boolean;
@@ -144,7 +145,8 @@ export async function renderHighlightFast(opts: {
     if (hookTop || hookAccent) {
       log('[빠른렌더] 후킹 디자인 생성…');
       // HookStill은 영상 없이 폰트만 쓰므로(public/fonts) 캐시된 기본 번들 사용 — 별도 번들 비용 0.
-      await renderHookStill({hookTop, hookAccent, template, font: opts.font, orientation}, hookPng, log);
+      await renderHookStill({hookTop, hookAccent, template, font: opts.font,
+        hookStyle: opts.hookStyle, hookBg: opts.hookBg, textColor: opts.textColor, accentColor: opts.accentColor, orientation}, hookPng, log);
     }
     if (cancelled?.()) throw new Error('사용자가 중단했습니다.');
     // 2) 자막 ASS(해설 있을 때만).

@@ -608,6 +608,7 @@
   let commentary = 1, voice = ''; // 해설 넣기(0/1) · 해설 목소리 — 기본 ON(재업로드 강등 탈출·수익화 유리)
   let narrationCoverage = 1; // 해설 길이(1=끝까지 / 0.8 / 0.6) — 짧게 하면 뒷부분 원곡·현장음 감상
   let font = ''; // 제목 폰트(모든 탭 공통). 빈값=자동(템플릿 폰트)
+  let hookStyle = '', hookBg = ''; // 후킹 띠 스타일(box/bar/bubble/none)·바탕색(팔레트 id). 빈값=자동(템플릿). 모든 탭 공통.
   let captionEn = 0; // 영어 번역 자막 함께(0/1, 해설 켤 때만)
   let license = 'cc'; // 영상 범위: cc(안전·재사용 허가만) / all(전체)
   let mode = 'search'; // 소재 가져오는 방법: search(주제로 찾기) / url(영상 URL 붙여넣기)
@@ -632,7 +633,7 @@
   function saveState() {
     try {
       localStorage.setItem(STATE_KEY, JSON.stringify({
-        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, narrationCoverage, captionEn, voice, font, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
+        region, order, cat, count, sec, orient, reframeMode, muteOriginal, tplMode, removeSilence, broll, commentary, narrationCoverage, captionEn, voice, font, hookStyle, hookBg, query, pageToken, loadedCount, picked, license, mode, cmV2: 1,
         makeMode, rmOut, rmClips, rmStyle, rmCount, rmEth, // 재창작 설정도 저장(탭 나갔다 와도 유지 — 테리 지시)
         resultsHtml: ($('hl-results')?.innerHTML || '').replace(/ data-w="1"/g, ''), // data-w 빼고 저장(복원시 재바인딩되게)
         moreVisible: !!$('hl-more'),
@@ -667,6 +668,11 @@
     narrationCoverage = [1, 0.8, 0.6].includes(Number(s.narrationCoverage)) ? Number(s.narrationCoverage) : 1;
     font = s.font || '';
     document.querySelectorAll('#hl-font-picker .font-chip').forEach((b) => b.classList.toggle('active', (b.dataset.font || '') === font));
+    hookStyle = s.hookStyle || '';
+    document.querySelectorAll('.hl-hstyle').forEach((b) => b.classList.toggle('active', (b.dataset.hs || '') === hookStyle));
+    hookBg = s.hookBg || '';
+    document.querySelectorAll('.hl-hbg').forEach((b) => b.classList.toggle('active', (b.dataset.bg || '') === hookBg));
+    if ($('hl-hookbg-label')) $('hl-hookbg-label').style.opacity = hookStyle === 'none' ? '0.4' : '1';
     captionEn = s.captionEn ? 1 : 0;
     picked = s.picked || null;
     document.querySelectorAll('.hl-cm').forEach((b) => b.classList.toggle('active', Number(b.dataset.c) === commentary));
@@ -1281,6 +1287,17 @@
   document.querySelectorAll('#hl-font-picker .font-chip').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('#hl-font-picker .font-chip').forEach((x) => x.classList.remove('active')); b.classList.add('active'); font = b.dataset.font || ''; saveState();
   }));
+  // 🎀 후킹 띠 스타일(박스/바/버블/글자만) — 'none'이면 바탕색 선택을 흐리게(의미 없으니).
+  document.querySelectorAll('.hl-hstyle').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-hstyle').forEach((x) => x.classList.remove('active')); b.classList.add('active');
+    hookStyle = b.dataset.hs || '';
+    if ($('hl-hookbg-label')) $('hl-hookbg-label').style.opacity = hookStyle === 'none' ? '0.4' : '1';
+    saveState();
+  }));
+  // 🎨 띠 바탕색 팔레트
+  document.querySelectorAll('.hl-hbg').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.hl-hbg').forEach((x) => x.classList.remove('active')); b.classList.add('active'); hookBg = b.dataset.bg || ''; saveState();
+  }));
   // 🔍 템플릿 미리보기 크게 보기 — 버튼 선택과 분리(stopPropagation), 샘플 이미지를 모달로 크게.
   document.querySelectorAll('.tpl-zoom').forEach((z) => z.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1501,6 +1518,7 @@
     addLog(`• AI B-roll: ${broll ? '🖼 켜짐(이미지 생성 — 비용 발생)' : '끄기'}`);
     if (commentary) addLog(`• 영어 자막: ${captionEn ? '🌐 한국어+English 함께' : '한국어만'}`);
     addLog(`• 디자인: ${document.querySelector('.hl-tpl.active')?.dataset.name || tplMode}`);
+    addLog(`• 후킹 띠: ${document.querySelector('.hl-hstyle.active')?.textContent || '자동'}${hookStyle !== 'none' && hookBg ? ' · ' + (document.querySelector('.hl-hbg.active')?.textContent || '') : ''} / 폰트 ${document.querySelector('#hl-font-picker .font-chip.active')?.textContent || '자동'}`);
     if (muteOriginal && !commentary) addLog('⚠️ 소리를 뺐는데 해설이 꺼져 있어요 — 영상이 무음이 됩니다. 해설을 켜는 걸 권장!', 'fail');
     // 예상 소요 — 편수·한 편 길이 기준 러프 추정(렌더가 대부분이라 길이·편수에 비례). 서버 상황 따라 달라짐.
     const estBase = 2 + count * (sec * 3.5 / 60 + 0.5) + (commentary ? count * 0.4 : 0);
@@ -1513,7 +1531,7 @@
     try { localStorage.setItem('onvideo-hljob-meta', JSON.stringify({startTs, estTotalText})); } catch {}
     // 소재 출처(작업내역 탭별 이원화) — 내 영상 업로드면 upload, 그 외는 현재 모드(search/url/archive).
     const src = picked.mine ? 'upload' : (['url', 'archive'].includes(mode) ? mode : 'search');
-    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, font, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, narrationCoverage, captionEn: !!captionEn, source: src, voice, isCc: picked.isCc !== false};
+    lastBody = {videoId: picked.videoId, uploadId: picked.uploadId, title: picked.title, channel: picked.channel, count, clipSec: sec, orientation: orient, reframe: reframeMode, muteOriginal: !!muteOriginal, template: tplMode, font, hookStyle, hookBg, removeSilence: !!removeSilence, broll: !!broll, commentary: !!commentary, narrationCoverage, captionEn: !!captionEn, source: src, voice, isCc: picked.isCc !== false};
     lastEndpoint = '/api/generate-highlights';
     generate(lastBody, lastEndpoint);
   });

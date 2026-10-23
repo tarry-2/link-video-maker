@@ -211,7 +211,7 @@ export async function renderCardVideo(
 
 // 하이라이트 빠른 렌더용 — 후킹만 투명 PNG로(ffmpeg 합성에 오버레이). Scene 후킹과 동일 디자인.
 export async function renderHookStill(
-  data: {hookTop: string; hookAccent: string; template?: string; font?: string; orientation?: 'portrait' | 'landscape'},
+  data: {hookTop: string; hookAccent: string; template?: string; font?: string; hookStyle?: string; hookBg?: string; textColor?: string; accentColor?: string; orientation?: 'portrait' | 'landscape'},
   outPath: string,
   log?: (m: string) => void,
   publicDir?: string,
@@ -220,7 +220,10 @@ export async function renderHookStill(
     ? await bundle({entryPoint: path.join(process.cwd(), 'src/index.ts'), publicDir})
     : await getServeUrl(log);
   try {
-    const inputProps = {hookTop: data.hookTop, hookAccent: data.hookAccent, template: data.template, font: data.font, orientation: data.orientation || 'portrait'};
+    const inputProps = {hookTop: data.hookTop, hookAccent: data.hookAccent, template: data.template, font: data.font,
+      // ★사용자가 고른 띠 디자인 오버라이드(없으면 템플릿 기본) — HookStill이 resolveHook로 반영.
+      hookStyle: data.hookStyle, hookBg: data.hookBg, textColor: data.textColor, accentColor: data.accentColor,
+      orientation: data.orientation || 'portrait'};
     const composition = await selectComposition({serveUrl, id: 'HookStill', inputProps});
     await renderStill({
       composition, serveUrl, output: outPath, inputProps,

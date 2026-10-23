@@ -82,6 +82,49 @@ export function getHlTemplate(id?: string): HighlightTemplate {
   return HL_TEMPLATES.find((t) => t.id === id) || HL_TEMPLATES[0];
 }
 
+// ★사용자가 '처음 제작부터' 직접 고르는 후킹 디자인 오버라이드(띠 바탕색·폰트·띠 스타일).
+//   템플릿(프리셋)은 기본값일 뿐 — 이 값이 있으면 그걸 우선한다. 모든 탭·모든 렌더 경로(Scene fullBleed·HookStill) 공용.
+export interface HookOverride {
+  hookStyle?: HookStyle;  // 'none'=띠 없이 글자만 / 'bar'=꽉찬 띠 / 'box'·'bubble'·'gradient'
+  hookBg?: string;        // 띠 바탕색(CSS color 또는 gradient). hookStyle!=='none'일 때만 보임.
+  textColor?: string;     // 제목(hookTop) 글자색
+  accentColor?: string;   // 소제목(hookAccent) 글자색
+  headFont?: string;      // 후킹 폰트(9종 중)
+}
+
+// 띠 바탕 팔레트(모던 톤 — 촌스럽지 않게). UI 색 선택과 렌더가 공유하는 단일 출처.
+//   밝은 바탕(light:true)은 글자색을 자동으로 어둡게 잡아 가독성 확보.
+export const HOOK_BG_PRESETS: {id: string; name: string; bg: string; text: string; light?: boolean}[] = [
+  {id: 'ink',    name: '먹색',     bg: 'rgba(12,12,16,0.62)',                       text: '#ffffff'},
+  {id: 'red',    name: '레드',     bg: 'linear-gradient(90deg,#e11d1d,#ff4d4d)',    text: '#ffffff'},
+  {id: 'blue',   name: '블루',     bg: 'linear-gradient(90deg,#1d4ed8,#3b82f6)',    text: '#ffffff'},
+  {id: 'purple', name: '퍼플',     bg: 'linear-gradient(120deg,#7c4cff,#ff4d8d)',   text: '#ffffff'},
+  {id: 'teal',   name: '틸',       bg: 'linear-gradient(90deg,#0d9488,#14b8a6)',    text: '#ffffff'},
+  {id: 'amber',  name: '앰버',     bg: 'linear-gradient(90deg,#d97706,#f59e0b)',    text: '#1a1200'},
+  {id: 'white',  name: '화이트',   bg: 'rgba(255,255,255,0.94)',                    text: '#20222b', light: true},
+  {id: 'pink',   name: '파스텔핑크', bg: 'rgba(255,224,236,0.95)',                   text: '#8a1f52', light: true},
+];
+
+// 템플릿 + 사용자 오버라이드 → 최종 후킹 스타일. 두 렌더 경로가 동일 결과를 내도록 '한 곳'에서 계산(반쪽 패치 방지).
+export interface ResolvedHook {
+  headFont: string; hookStyle: HookStyle; hookBg: string; hookBorder: string; hookRadius: number;
+  textColor: string; accentColor: string; glow: boolean; light: boolean;
+}
+export function resolveHook(templateId?: string, ov?: HookOverride): ResolvedHook {
+  const T = getHlTemplate(templateId);
+  const hookStyle = ov?.hookStyle || T.hookStyle;
+  const preset = ov?.hookBg ? HOOK_BG_PRESETS.find((p) => p.id === ov.hookBg || p.bg === ov.hookBg) : undefined;
+  const hookBg = preset ? preset.bg : (ov?.hookBg || T.hookBg);
+  // 밝은 바탕을 고르면 글자색을 자동으로 어둡게(사용자가 textColor를 명시 안 했을 때).
+  const light = preset?.light ?? (hookStyle === 'bubble');
+  const textColor = ov?.textColor || (preset?.light ? preset.text : T.textColor);
+  return {
+    headFont: ov?.headFont || T.headFont,
+    hookStyle, hookBg, hookBorder: T.hookBorder, hookRadius: T.hookRadius,
+    textColor, accentColor: ov?.accentColor || T.accentColor, glow: T.glow, light,
+  };
+}
+
 function hashStr(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }

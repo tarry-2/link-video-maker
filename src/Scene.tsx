@@ -13,7 +13,7 @@ import {
   spring,
 } from 'remotion';
 import {loadFont} from '@remotion/fonts';
-import {getHlTemplate} from './highlight-templates';
+import {getHlTemplate, resolveHook} from './highlight-templates';
 
 // ★렌더 속도: 로컬 폰트 파일 직접 로드(네트워크 요청 0번). google-fonts는 한글 subset이 수백 chunk라 느림.
 const blackFont = 'Black Han Sans';
@@ -48,6 +48,10 @@ export const sceneSchema = z.object({
   hookTop: z.string(),
   hookAccent: z.string(),
   accentColor: z.string(),
+  // ★사용자가 '처음 제작부터' 직접 고르는 띠 디자인(모든 탭 공통). 없으면 템플릿 기본값. HookStill.tsx와 동일.
+  hookStyle: z.enum(['box', 'bar', 'none', 'bubble', 'gradient']).optional(),
+  hookBg: z.string().optional(),   // 띠 바탕색(팔레트 id 또는 CSS)
+  textColor: z.string().optional(),
   font: z.string().optional(), // 제목·후킹 폰트(사용자 선택). 없으면 기본 Black Han Sans.
   words: z.array(z.object({t: z.string(), s: z.number(), e: z.number()})),
   durationInFrames: z.number(),
@@ -76,6 +80,9 @@ export const Scene: React.FC<SceneData> = ({
   hookTop,
   hookAccent,
   accentColor,
+  hookStyle,
+  hookBg,
+  textColor,
   font,
   words,
   punch,
@@ -152,30 +159,30 @@ export const Scene: React.FC<SceneData> = ({
 
   // ★유튜브 하이라이트(fullBleed): 이미 9:16로 크롭된 클립을 화면 꽉 채우고 원본 소리 재생 + 상단 후킹띠만.
   if (fullBleed && video) {
-    const T = getHlTemplate(template); // 디자인 템플릿(폰트·후킹스타일·자막·색). 없으면 기본(예능).
-    // 사용자가 제목 폰트를 골랐으면(모든 탭 공통) 후킹에 그 폰트를, '자동'이면 템플릿 폰트를 쓴다.
-    const hookFont = (font && TITLE_FONTS.has(font)) ? font : T.headFont;
-    // 후킹 컨테이너 스타일 — hookStyle별로 다르게. 'none'=글자만(시네마), 'bar'=꽉찬 띠, 그 외=박스/버블/그라데이션.
-    const hookGlow = T.glow ? `, 0 0 40px ${T.accentColor}66` : '';
+    const T = getHlTemplate(template); // 자막(subStyle/subActive)용 — 후킹은 아래 R(사용자 오버라이드 반영)로.
+    // ★후킹 디자인 = 공통 레이어(HookStill.tsx와 '똑같이'). 사용자가 처음부터 고른 띠색·폰트·스타일을 반영.
+    const R = resolveHook(template, {hookStyle, hookBg, textColor, accentColor, headFont: (font && TITLE_FONTS.has(font)) ? font : undefined});
+    const hookFont = R.headFont;
+    // 후킹 컨테이너 스타일 — hookStyle별로 다르게. 'none'=띠 없이 글자만, 'bar'=꽉찬 띠, 그 외=박스/버블/그라데이션.
+    const hookGlow = R.glow ? `, 0 0 40px ${R.accentColor}66` : '';
     const boxCommon: React.CSSProperties = {
       display: 'inline-block', textAlign: 'center', maxWidth: '94%',
-      borderRadius: T.hookRadius, padding: L.hookBoxPad,
+      borderRadius: R.hookRadius, padding: L.hookBoxPad,
       boxShadow: `0 12px 44px rgba(0,0,0,0.55)${hookGlow}`,
     };
     const hookContainerStyle: React.CSSProperties =
-      T.hookStyle === 'none'
+      R.hookStyle === 'none'
         ? {display: 'inline-block', textAlign: 'center', maxWidth: '94%'}
-        : T.hookStyle === 'bar'
-          ? {...boxCommon, background: T.hookBg, padding: '14px 40px', borderRadius: T.hookRadius, maxWidth: '100%', width: '100%'}
-          : {...boxCommon, background: T.hookBg, backdropFilter: 'blur(6px)',
-             border: T.hookBorder === 'none' ? undefined : `3px solid ${T.hookBorder}`};
-    // 글자 외곽선 — 밝은 배경(버블)이면 가늘게(검은 테두리 과하지 않게).
-    const lightBg = T.hookStyle === 'bubble';
+        : R.hookStyle === 'bar'
+          ? {...boxCommon, background: R.hookBg, padding: '14px 40px', borderRadius: R.hookRadius, maxWidth: '100%', width: '100%'}
+          : {...boxCommon, background: R.hookBg, backdropFilter: 'blur(6px)',
+             border: R.hookBorder === 'none' ? undefined : `3px solid ${R.hookBorder}`};
+    // 글자 외곽선 — 밝은 배경(버블/화이트)이면 가늘게(검은 테두리 과하지 않게).
+    const lightBg = R.light;
     const olTop = lightBg ? 0 : 3;
-    // ★후킹 글자 잘림 방지(테리): 긴 후킹이 한 줄 폭을 넘어 끝이 프레임 밖으로 밀려 짤리던 문제.
-    //   글자 수에 따라 폰트 자동 축소(두 줄까지 허용 기준). 윗줄 세로20·가로24, 아랫줄 세로16·가로20.
-    const htSize = fitSize(hookTop, L.fsHookTop, land ? 24 : 20);
-    const haSize = fitSize(hookAccent, L.fsHookAccent, land ? 20 : 16);
+    // ★글자 많아지면 크기 축소(테리) — 그래도 2줄 넘으면 아래 clamp로 자른다. "작아지더라도 두 줄로 끝".
+    const htSize = fitSize(hookTop, L.fsHookTop, land ? 24 : 16);
+    const haSize = fitSize(hookAccent, L.fsHookAccent, land ? 20 : 14);
     return (
       <AbsoluteFill style={{backgroundColor: '#000'}}>
         {/* 원본 소리: muteOriginal=완전 제거 / duckAudio=해설 때 0.2로 줄임 / 기본=원음.
@@ -206,13 +213,15 @@ export const Scene: React.FC<SceneData> = ({
             opacity: hookIn,
           }}>
             <div style={hookContainerStyle}>
-              {hookTop && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: htSize, color: T.textColor,
+              {hookTop && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: htSize, color: R.textColor,
                 lineHeight: 1.08, textShadow: olTop ? outline(olTop) : 'none', letterSpacing: -1,
-                whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{hookTop}</div>}
-              {hookAccent && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: haSize, color: T.accentColor,
+                wordBreak: 'keep-all', overflowWrap: 'break-word',
+                display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden'}}>{hookTop}</div>}
+              {hookAccent && <div style={{fontFamily: hookFont + ', "Noto Color Emoji"', fontSize: haSize, color: R.accentColor,
                 lineHeight: 1.12, marginTop: 4,
-                textShadow: lightBg ? 'none' : `0 3px 14px ${T.accentColor}66, ${outline(olTop)}`,
-                letterSpacing: -1, whiteSpace: 'normal', wordBreak: 'keep-all', overflowWrap: 'break-word'}}>{hookAccent}</div>}
+                textShadow: lightBg ? 'none' : `0 3px 14px ${R.accentColor}66, ${outline(olTop)}`,
+                letterSpacing: -1, wordBreak: 'keep-all', overflowWrap: 'break-word',
+                display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden'}}>{hookAccent}</div>}
             </div>
           </div>
         )}

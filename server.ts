@@ -3401,6 +3401,10 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const muteOriginal = !!b.muteOriginal; // 원본 소리 완전 제거(저작권 소리지문 회피)
     const template = typeof b.template === 'string' ? b.template : 'auto'; // 디자인 템플릿(auto=편마다 자동)
     const font = pickFont(b.font); // 제목 폰트(모든 탭 공통). 자동이면 undefined→템플릿 폰트.
+    // 사용자가 '처음 제작부터' 고른 띠 디자인(없으면 템플릿 기본). 모든 탭 공통.
+    const hookStyle = ['box', 'bar', 'none', 'bubble', 'gradient'].includes(b.hookStyle) ? b.hookStyle : undefined;
+    const hookBg = typeof b.hookBg === 'string' && b.hookBg ? b.hookBg : undefined;
+    const textColor = typeof b.textColor === 'string' && b.textColor ? b.textColor : undefined;
     const removeSilence = !!b.removeSilence; // 무음 구간 자동 제거(템포 UP)
     const broll = !!b.broll; // AI b-roll 팝업(이미지 생성 비용 발생)
     const captionEn = !!b.captionEn; // 영어 번역 자막(한국어 아래 함께) — 해설 켤 때만 의미
@@ -3414,7 +3418,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       try {
         job.kind = 'highlight';
         job.clips = []; // 완성되는 편마다 누적(먼저 끝난 편을 SSE로 바로 흘림)
-        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, narrationCoverage, voice, reframe, muteOriginal, localFile, template, font, removeSilence, broll, captionEn, source, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
+        const clips = await makeHighlights(videoId, {title, channel, isCc}, {count, clipSec, orientation, commentary, narrationCoverage, voice, reframe, muteOriginal, localFile, template, font, hookStyle, hookBg, textColor, removeSilence, broll, captionEn, source, log: (m) => jlog(job, m), isCancelled: () => !!job.cancelled,
           onClip: (c) => { if (!job.clips!.some((x) => x.projectId === c.projectId)) job.clips!.push(c); }});
         if (localFile) { try { fs.rmSync(localFile, {force: true}); } catch {} } // 업로드 원본은 작업 끝나면 정리
         if (clips[0]) { job.file = clips[0].file; job.title = clips[0].title; job.projectId = clips[0].projectId; }
@@ -3497,6 +3501,10 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
       hookTop: typeof b.hookTop === 'string' ? b.hookTop : undefined,
       hookAccent: typeof b.hookAccent === 'string' ? b.hookAccent : undefined,
       template: typeof b.template === 'string' ? b.template : undefined,
+      font: typeof b.font === 'string' ? b.font : undefined, // 수정창서 고른 폰트
+      hookStyle: ['box', 'bar', 'none', 'bubble', 'gradient'].includes(b.hookStyle) ? b.hookStyle : undefined, // 띠 스타일
+      hookBg: typeof b.hookBg === 'string' && b.hookBg ? b.hookBg : undefined, // 띠 바탕색
+      textColor: typeof b.textColor === 'string' && b.textColor ? b.textColor : undefined,
       narration: typeof b.narration === 'string' ? b.narration : undefined, // ★나레이션 직접 수정(TTS 재생성)
       voice: typeof b.voice === 'string' ? b.voice : undefined,
       thumbBig: typeof b.thumbBig === 'string' ? b.thumbBig : undefined, // ★썸네일 큰 글자 직접 수정

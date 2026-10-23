@@ -409,6 +409,28 @@
             <button type="button" class="font-chip" data-font="Song Myung" style="font-family:'Song Myung'">송명</button>
           </div>
 
+          <label class="field-label" style="margin-top:14px">🎀 후킹 띠 스타일 <span class="hint">— 띠 없이 글자만도 가능</span></label>
+          <div id="hl-hookstyle-picker" class="font-picker">
+            <button type="button" class="font-chip hl-hstyle active" data-hs="">자동</button>
+            <button type="button" class="font-chip hl-hstyle" data-hs="box">박스</button>
+            <button type="button" class="font-chip hl-hstyle" data-hs="bar">꽉찬 띠</button>
+            <button type="button" class="font-chip hl-hstyle" data-hs="bubble">버블</button>
+            <button type="button" class="font-chip hl-hstyle" data-hs="none">글자만(띠 없음)</button>
+          </div>
+
+          <label class="field-label" style="margin-top:14px" id="hl-hookbg-label">🎨 띠 바탕색 <span class="hint">— 띠가 있을 때만 적용</span></label>
+          <div id="hl-hookbg-picker" class="font-picker">
+            <button type="button" class="font-chip hl-hbg active" data-bg="">자동</button>
+            <button type="button" class="font-chip hl-hbg" data-bg="ink" style="background:rgba(12,12,16,0.88);color:#fff">먹색</button>
+            <button type="button" class="font-chip hl-hbg" data-bg="red" style="background:linear-gradient(90deg,#e11d1d,#ff4d4d);color:#fff">레드</button>
+            <button type="button" class="font-chip hl-hbg" data-bg="blue" style="background:linear-gradient(90deg,#1d4ed8,#3b82f6);color:#fff">블루</button>
+            <button type="button" class="font-chip hl-hbg" data-bg="purple" style="background:linear-gradient(120deg,#7c4cff,#ff4d8d);color:#fff">퍼플</button>
+            <button type="button" class="font-chip hl-hbg" data-bg="teal" style="background:linear-gradient(90deg,#0d9488,#14b8a6);color:#fff">틸</button>
+            <button type="button" class="font-chip hl-hbg" data-bg="amber" style="background:linear-gradient(90deg,#d97706,#f59e0b);color:#1a1200">앰버</button>
+            <button type="button" class="font-chip hl-hbg" data-bg="white" style="background:rgba(255,255,255,0.94);color:#20222b">화이트</button>
+            <button type="button" class="font-chip hl-hbg" data-bg="pink" style="background:rgba(255,224,236,0.96);color:#8a1f52">파스텔핑크</button>
+          </div>
+
           <p class="mini-state" id="hl-picked"></p>
           <button id="hl-generate" class="primary-btn" type="button" style="margin-top:12px">🎬 하이라이트 숏폼 만들기</button>
           <p class="mini-state">AI가 영상에서 터질 만한 순간을 골라 세로 숏폼으로 자릅니다. 상단 후킹 자막이 자동으로 얹혀요. 완성되면 유튜브·인스타로 바로 올릴 수 있어요. <b>원작자 출처는 자동 표기됩니다(CC BY).</b></p>
