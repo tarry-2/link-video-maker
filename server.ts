@@ -3509,7 +3509,7 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
           const it = items[i] || {};
           const projectId = String(it.projectId || '').trim();
           if (!projectId) continue;
-          jlog(job, `[제작] ${i + 1}/${items.length}편 렌더 중…`);
+          jlog(job, `[제작] ${i + 1}/${items.length}편 렌더 중… (제목: "${String(it.hookTop || '').slice(0, 40)}")`); // 진단 — 받은 제목
           const overrides = {
             hookTop: typeof it.hookTop === 'string' ? it.hookTop : undefined,
             hookAccent: typeof it.hookAccent === 'string' ? it.hookAccent : undefined,

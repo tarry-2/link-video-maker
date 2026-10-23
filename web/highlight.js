@@ -311,17 +311,23 @@
     } catch (e) { alert('AI 작성 실패: ' + e.message); } finally { b.disabled = false; b.textContent = o; }
   }
   function startRender() {
+    const box = $('hl-blueprint-block');
     const picks = blueprint.filter((x) => x._pick !== false);
     if (!picks.length) { alert('만들 편을 하나 이상 선택하세요.'); return; }
     if (curJobId) { alert('이미 작업이 진행 중이에요. 끝난 뒤에 만드세요.'); return; }
+    // ★'화면에 지금 보이는 입력값'을 DOM에서 직접 읽는다 — 배열 반영 타이밍과 무관하게 사용자가 본 그대로 렌더(테리: 수정한 제목이 안 들어가고 엉뚱한 게 들어감).
+    const readFld = (id, f) => { const el = box?.querySelector(`.bp-in[data-id="${id}"][data-f="${f}"]`); return el ? el.value : undefined; };
     const items = picks.map((a) => {
-      const it = {projectId: a.projectId, hookTop: a.hookTop, hookAccent: a.hookAccent, thumbBadge: a.thumbBadge,
-        template: tplMode, font, hookStyle, hookBg, voice};
-      const body = (a.commentary || '').trim();
+      const hookTop = (readFld(a.projectId, 'hookTop') ?? a.hookTop ?? '').trim();
+      const hookAccent = (readFld(a.projectId, 'hookAccent') ?? a.hookAccent ?? '').trim();
+      const thumbBadge = (readFld(a.projectId, 'thumbBadge') ?? a.thumbBadge ?? '').trim();
+      const body = (readFld(a.projectId, 'commentary') ?? a.commentary ?? '').trim();
+      const it = {projectId: a.projectId, hookTop, hookAccent, thumbBadge, template: tplMode, font, hookStyle, hookBg, voice};
       if (body) it.narration = body; else it.narrationOff = true; // 본문 비우면 해설 없이 원본 소리만
       return it;
     });
     addLog(`──────── 🎬 선택한 ${items.length}편 제작 시작 ────────`, 'done');
+    addLog(`• 제목: ${items.map((i) => i.hookTop || '(빈값)').join(' / ')}`); // 진단 — 실제 렌더로 넘어가는 제목
     addLog(`• 디자인: ${(TPLS2.find((t) => t[0] === tplMode) || [])[1] || '자동'} / 폰트 ${FONT_NAME[font] || '자동'}`);
     startTs = Date.now(); setEnergy(8, '선택한 편을 만드는 중…');
     const estBase = 2 + items.length * (sec * 3.5 / 60 + 0.5);
