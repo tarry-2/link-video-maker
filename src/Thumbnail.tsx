@@ -140,7 +140,7 @@ export const Thumbnail: React.FC<ThumbnailData> = ({image, big, small, badge, ac
               fontFamily: notoFont,
               fontWeight: 700,
               fontSize: smallSize,
-              color: '#fff',
+              color: '#FFE24B', // ★소제목 = 노란색(테리) — 제목은 흰색 메인, 소제목은 노랑으로 위계. 검은 외곽선으로 어느 배경에서든 가독.
               textShadow: outline(Math.max(3, Math.round(smallSize * 0.1))),
               WebkitTextStroke: `${Math.max(1, Math.round(smallSize * 0.03))}px #000`,
               lineHeight: 1.1,
