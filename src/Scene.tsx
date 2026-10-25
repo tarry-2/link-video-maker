@@ -11,6 +11,7 @@ import {
   useVideoConfig,
   interpolate,
   spring,
+  delayRender, continueRender,
 } from 'remotion';
 import {loadFont} from '@remotion/fonts';
 import {getHlTemplate, resolveHook} from './highlight-templates';
@@ -18,16 +19,20 @@ import {getHlTemplate, resolveHook} from './highlight-templates';
 // ★렌더 속도: 로컬 폰트 파일 직접 로드(네트워크 요청 0번). google-fonts는 한글 subset이 수백 chunk라 느림.
 const blackFont = 'Black Han Sans';
 const notoFont = 'Noto Sans KR';
-loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')});
-loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'});
-loadFont({family: 'Noto Color Emoji', url: staticFile('fonts/NotoColorEmoji.ttf')}); // 후킹 이모지 컬러 렌더
-// 하이라이트 템플릿용 나머지 폰트(Card.tsx와 동일 9종). 템플릿이 고른 것만 실제 쓰임.
-loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'});
-loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')});
-loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'});
-loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')});
-loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')});
-loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'});
+// ★폰트 로딩을 렌더가 '기다리게' 한다(delayRender) — 안 기다리면 폰트 로드 전에 프레임이 그려져 글자가
+//   폴백/미표시로 깨진다(테리: 후킹이 나왔다 안 나왔다). 템플릿용 9종 전부 로드 완료까지 블록.
+const fontHandle = delayRender('장면 폰트 로딩');
+Promise.all([
+  loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')}),
+  loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'}),
+  loadFont({family: 'Noto Color Emoji', url: staticFile('fonts/NotoColorEmoji.ttf')}), // 후킹 이모지 컬러 렌더
+  loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'}),
+  loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')}),
+  loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'}),
+  loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')}),
+  loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')}),
+  loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'}),
+]).then(() => continueRender(fontHandle)).catch(() => continueRender(fontHandle));
 loadFont({family: 'Gaegu', url: staticFile('fonts/Gaegu-Bold.ttf'), weight: '700'});
 
 // 사용자가 고를 수 있는 제목 폰트 화이트리스트(위에서 loadFont로 다 등록됨). UI·server·여기 3곳 동일 유지.

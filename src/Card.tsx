@@ -2,21 +2,27 @@ import React from 'react';
 import {z} from 'zod';
 import {
   AbsoluteFill, Img, staticFile, useCurrentFrame, useVideoConfig, interpolate, spring,
+  delayRender, continueRender,
 } from 'remotion';
 import {loadFont} from '@remotion/fonts';
 import {getSkin, type Skin, type Entrance, type BgType, type DecoType} from './skins';
 
 // ── 폰트 전체 등록(헤드라인 다양성) ──
+// ★폰트 로딩을 렌더가 '기다리게' 한다(delayRender) — 카드 게시물 PNG는 renderStill로 단일 프레임을 즉시 찍어
+//   폰트 로드 전에 캡처되면 글자가 폴백/미표시로 깨진다(썸네일·후킹과 동일 레이스). 로딩 완료까지 블록.
 const notoFont = 'Noto Sans KR';
-loadFont({family: 'Black Han Sans', url: staticFile('fonts/BlackHanSans.ttf')});
-loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'});
-loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')});
-loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')});
-loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'});
-loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'});
-loadFont({family: 'Gaegu', url: staticFile('fonts/Gaegu-Bold.ttf'), weight: '700'});
-loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')});
-loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'});
+const fontHandle = delayRender('카드 폰트 로딩');
+Promise.all([
+  loadFont({family: 'Black Han Sans', url: staticFile('fonts/BlackHanSans.ttf')}),
+  loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'}),
+  loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')}),
+  loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')}),
+  loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'}),
+  loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'}),
+  loadFont({family: 'Gaegu', url: staticFile('fonts/Gaegu-Bold.ttf'), weight: '700'}),
+  loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')}),
+  loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'}),
+]).then(() => continueRender(fontHandle)).catch(() => continueRender(fontHandle));
 
 // 헤드 폰트별 적정 weight(해당 파일이 가진 굵기와 맞춤).
 const HEAD_WEIGHT: Record<string, number | undefined> = {

@@ -4,18 +4,23 @@
 // '똑같은 디자인'으로 얹어 뽑는다. 템플릿은 고정 6종이라 개발 때 한 번 뽑아 web/tpl-preview/에 커밋한다.
 import React from 'react';
 import {z} from 'zod';
-import {AbsoluteFill, Img, staticFile} from 'remotion';
+import {AbsoluteFill, Img, staticFile, delayRender, continueRender} from 'remotion';
 import {loadFont} from '@remotion/fonts';
 import {getHlTemplate} from './highlight-templates';
 
-loadFont({family: 'Black Han Sans', url: staticFile('fonts/BlackHanSans.ttf')});
-loadFont({family: 'Noto Sans KR', url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'});
-loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'});
-loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')});
-loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'});
-loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')});
-loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')});
-loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'});
+// ★폰트 로딩을 렌더가 '기다리게' 한다(delayRender) — 미리보기는 renderStill 단일 프레임이라 폰트 로드 전에
+//   찍히면 글자가 깨진다(썸네일·후킹과 동일 레이스). 로딩 완료까지 블록.
+const fontHandle = delayRender('미리보기 폰트 로딩');
+Promise.all([
+  loadFont({family: 'Black Han Sans', url: staticFile('fonts/BlackHanSans.ttf')}),
+  loadFont({family: 'Noto Sans KR', url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'}),
+  loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'}),
+  loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')}),
+  loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'}),
+  loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')}),
+  loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')}),
+  loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'}),
+]).then(() => continueRender(fontHandle)).catch(() => continueRender(fontHandle));
 
 export const templatePreviewSchema = z.object({
   template: z.string(),

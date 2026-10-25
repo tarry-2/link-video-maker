@@ -1,14 +1,20 @@
 import React from 'react';
 import {z} from 'zod';
-import {AbsoluteFill, Img, staticFile, useVideoConfig} from 'remotion';
+import {AbsoluteFill, Img, staticFile, useVideoConfig, delayRender, continueRender} from 'remotion';
 import {loadFont} from '@remotion/fonts';
 
 // 전용 썸네일(커버) — "시선폭탄" 스타일. 영상 프레임 재활용 X.
 // 충격 뱃지 + 초대형 3단어 + 두꺼운 외곽선 + 삐딱한 각도 + 강조링 + 채도 폭발로 "우와 뭐야" 유발.
 const blackFont = 'Black Han Sans';
 const notoFont = 'Noto Sans KR';
-loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')});
-loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'});
+// ★폰트 로딩을 렌더가 '기다리게' 한다 — 썸네일은 renderStill로 단일 프레임(frame:0)을 즉시 캡처하므로,
+//   폰트 로드가 끝나기 전에 찍히면 글자가 폴백 폰트로 깨지거나 아예 안 보인다(테리 실측: 썸네일 글자/배지가
+//   "나왔다 안 나왔다"·"글자 전체가 안 나올 때도"). delayRender로 로딩 완료까지 블록해 레이스를 제거.
+const fontHandle = delayRender('썸네일 폰트 로딩');
+Promise.all([
+  loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')}),
+  loadFont({family: notoFont, url: staticFile('fonts/NotoSansKR-Bold.otf'), weight: '700'}),
+]).then(() => continueRender(fontHandle)).catch(() => continueRender(fontHandle));
 
 export const thumbnailSchema = z.object({
   image: z.string(),

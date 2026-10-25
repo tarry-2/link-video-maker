@@ -3,21 +3,26 @@
 // Scene.tsx fullBleed 후킹과 '똑같은 디자인'(템플릿별 박스·색·외곽선)을 그대로 재현 — 화질/디자인 무손실.
 import React from 'react';
 import {z} from 'zod';
-import {AbsoluteFill, staticFile} from 'remotion';
+import {AbsoluteFill, staticFile, delayRender, continueRender} from 'remotion';
 import {loadFont} from '@remotion/fonts';
 import {resolveHook} from './highlight-templates';
 
 const blackFont = 'Black Han Sans';
-loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')});
-// 이모지 폰트(컬러) — 한글 폰트엔 이모지 글리프가 없어 □□로 깨지므로 폴백으로 같이 로드.
-loadFont({family: 'Noto Color Emoji', url: staticFile('fonts/NotoColorEmoji.ttf')});
 const EMOJI = ', "Noto Color Emoji"'; // 모든 후킹 글자 fontFamily 끝에 붙여 이모지 폴백
-loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'});
-loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')});
-loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'});
-loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')});
-loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')});
-loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'});
+// ★폰트 로딩을 렌더가 '기다리게' 한다 — 이 스틸은 renderStill로 단일 프레임을 즉시 캡처해 ffmpeg로 영상에
+//   얹는다(영상 본편의 후킹 띠=제목/소제목). 폰트 로드 전에 찍히면 글자가 폴백/미표시로 깨진다(테리 실측:
+//   후킹이 "나왔다 안 나왔다"). delayRender로 로딩 완료까지 블록해 레이스를 제거. 이모지 폴백 포함.
+const fontHandle = delayRender('후킹 스틸 폰트 로딩');
+Promise.all([
+  loadFont({family: blackFont, url: staticFile('fonts/BlackHanSans.ttf')}),
+  loadFont({family: 'Noto Color Emoji', url: staticFile('fonts/NotoColorEmoji.ttf')}),
+  loadFont({family: 'Gothic A1', url: staticFile('fonts/GothicA1-Black.ttf'), weight: '900'}),
+  loadFont({family: 'Song Myung', url: staticFile('fonts/SongMyung.ttf')}),
+  loadFont({family: 'Gowun Batang', url: staticFile('fonts/GowunBatang-Bold.ttf'), weight: '700'}),
+  loadFont({family: 'Jua', url: staticFile('fonts/Jua.ttf')}),
+  loadFont({family: 'Do Hyeon', url: staticFile('fonts/DoHyeon.ttf')}),
+  loadFont({family: 'Noto Serif KR', url: staticFile('fonts/NotoSerifKR.ttf'), weight: '900'}),
+]).then(() => continueRender(fontHandle)).catch(() => continueRender(fontHandle));
 
 export const hookStillSchema = z.object({
   hookTop: z.string(),
