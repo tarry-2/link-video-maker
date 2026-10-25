@@ -1058,12 +1058,15 @@ export async function reRenderHighlight(
     if (!fast) await renderVideo([scene], 0, outAbs, log, undefined, voiceRel, publicDir, orientation);
     if (bgOk) {
       try {
-        // 썸네일 문구 — 사용자가 썸네일칸을 직접 고쳤으면 그걸, 아니면 후킹으로 자동.
+        // 썸네일 문구 — 제목(big)·소제목(small)·배지(badge) 세 자리를 '각각' 채운다.
         const thBig = (overrides.thumbBig !== undefined && overrides.thumbBig.trim() ? overrides.thumbBig : (hookTop || e.baseTitle || '')).slice(0, 28);
-        // ★배지(소제목)도 thBig과 동일하게 '빈 문자열이면 폴백' — 빈 overrides.thumbBadge가 들어오면
-        //   배지가 통째로 사라지던 버그(테리: 영상엔 소제목 나오는데 썸네일엔 안 나옴). 비면 소제목(hookAccent)·저장값 폴백.
-        const thBadge = (overrides.thumbBadge !== undefined && overrides.thumbBadge.trim() ? overrides.thumbBadge : (hookAccent || e.hookAccent || e.thumbBadge || '')).slice(0, 8);
-        await renderThumbnail({image: `${jobRel}/${bgName}`, big: thBig, small: '', badge: thBadge, accentColor: tpl.accentColor}, thumbAbs, log, publicDir, orientation);
+        // ★소제목 = Thumbnail의 'small'(윗줄) 자리. 예전엔 small=''이라 소제목이 썸네일에서 아예 빠지고
+        //   badge 폴백으로만 보였다 → 테리가 배지칸을 직접 채우자 badge를 배지가 차지해 소제목이 사라짐
+        //   (테리: "제목·소제목·배지 3개 다 나오다 갑자기 소제목만 안 나옴"). 소제목은 small, 배지는 badge로 분리.
+        const thSub = (hookAccent || e.hookAccent || '').slice(0, 20);
+        // 배지 = 배지칸 전용(소제목 폴백 제거 — 소제목은 이제 small이 담당). 비면 저장값(e.thumbBadge)으로 무회귀.
+        const thBadge = (overrides.thumbBadge !== undefined && overrides.thumbBadge.trim() ? overrides.thumbBadge : (e.thumbBadge || '')).slice(0, 8);
+        await renderThumbnail({image: `${jobRel}/${bgName}`, big: thBig, small: thSub, badge: thBadge, accentColor: tpl.accentColor}, thumbAbs, log, publicDir, orientation);
         thumbOk = fs.existsSync(thumbAbs);
       } catch {}
     }
