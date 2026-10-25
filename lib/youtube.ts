@@ -11,22 +11,55 @@ import {loadEnv} from './keys';
 // ★근본: 유튜브 API 키가 있으면 그걸로 호출한다 = 업로드용 계정 OAuth 토큰이 만료·해지돼도 검색이 안 죽는다.
 //   (검색·영상메타·공개통계는 전부 '공개 데이터'라 API 키만으로 충분하다.) API 키가 없으면 기존 OAuth로 폴백(하위호환).
 //   유튜브 업로드/본인채널 Analytics 같은 '비공개' 작업만 OAuth가 꼭 필요하고, 그건 이 헬퍼를 안 쓴다.
+//
+// 🔴 할당량(2026-10-25 터짐): search.list = 호출당 100 units, 하루 기본 10,000 units = 하루 100번 검색이면 끝.
+//   정렬 토글/최신가져오기 때마다 search를 또 쏴서 금방 소진('Search Queries per day' 초과). 두 가지로 근본 대응:
+//   ① 멀티키 로테이션 — YOUTUBE_API_KEY에 콤마/줄바꿈으로 키를 여러 개 넣으면 돌려 쓴다. 한 키가 quota 소진
+//      (403 quotaExceeded/dailyLimit)되면 자동으로 다음 키로 넘어가 재시도 → 할당량이 키 수만큼 늘어난다.
+//   ② 응답 캐시 — 같은 요청(path+params)은 TTL(10분) 동안 재사용. 정렬 토글/페이지 왕복/재방문이 search(100)를
+//      또 먹지 않게 한다. (key 파라미터는 캐시키에서 뺀다 — 어느 키로 받았든 결과는 같다.)
+function ytKeys(): string[] {
+  return (loadEnv().YOUTUBE_API_KEY || '').split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
+}
+const ytCache = new Map<string, {at: number; data: any}>();
+const YT_CACHE_TTL = 10 * 60 * 1000; // 10분
+function isQuotaError(status: number, d: any): boolean {
+  if (status !== 403) return false;
+  const reason = String(d?.error?.errors?.[0]?.reason || '');
+  const msg = String(d?.error?.message || '');
+  return /quota|dailyLimit|rateLimit/i.test(reason + ' ' + msg);
+}
 async function ytGet(apiPath: string, params: URLSearchParams): Promise<any> {
-  const key = (loadEnv().YOUTUBE_API_KEY || '').trim();
-  let r: Response;
-  if (key) {
-    params.set('key', key);
-    r = await fetch(`https://www.googleapis.com/youtube/v3/${apiPath}?${params.toString()}`, {cache: 'no-store'});
-  } else {
-    const token = await accessToken(); // 폴백: 유튜브 계정 OAuth 토큰
-    r = await fetch(`https://www.googleapis.com/youtube/v3/${apiPath}?${params.toString()}`, {headers: {Authorization: `Bearer ${token}`}, cache: 'no-store'});
+  const cacheKey = apiPath + '?' + params.toString();
+  const hit = ytCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < YT_CACHE_TTL) return hit.data;
+
+  const keys = ytKeys();
+  if (keys.length) {
+    let lastQuotaMsg = '';
+    for (let i = 0; i < keys.length; i++) {
+      const p = new URLSearchParams(params);
+      p.set('key', keys[i]);
+      const r = await fetch(`https://www.googleapis.com/youtube/v3/${apiPath}?${p.toString()}`, {cache: 'no-store'});
+      const d: any = await r.json();
+      if (r.ok) { ytCache.set(cacheKey, {at: Date.now(), data: d}); return d; }
+      // quota 소진/일일한도면 다음 키로 넘어간다. 그 외 에러(검색어 오류 등)는 즉시 던짐(키 바꿔도 소용없음).
+      if (isQuotaError(r.status, d) && i < keys.length - 1) { lastQuotaMsg = String(d?.error?.message || ''); continue; }
+      if (isQuotaError(r.status, d)) {
+        throw new Error(`유튜브 API 일일 검색 할당량을 전부 소진했어요(키 ${keys.length}개 모두). 미 태평양시간 자정(한국 오후 4~5시)에 리셋돼요. 더 쓰려면 ⚙ 키 설정의 'YouTube API 키'에 콤마로 키를 더 추가하세요. (${lastQuotaMsg || d?.error?.message || ''})`);
+      }
+      throw new Error(String(d?.error?.message || r.status));
+    }
   }
+  // 폴백: 유튜브 계정 OAuth 토큰(키가 아예 없을 때만)
+  const token = await accessToken();
+  const r = await fetch(`https://www.googleapis.com/youtube/v3/${apiPath}?${params.toString()}`, {headers: {Authorization: `Bearer ${token}`}, cache: 'no-store'});
   const d: any = await r.json();
   if (!r.ok) {
     const msg = d?.error?.message || r.status;
-    if (!key) throw new Error(`${msg} — 유튜브 계정 토큰이 만료됐어요. ⚙ 키 설정에서 'YouTube API 키'를 넣으면 계정과 무관하게 검색이 됩니다(또는 유튜브 재연결).`);
-    throw new Error(String(msg));
+    throw new Error(`${msg} — 유튜브 계정 토큰이 만료됐어요. ⚙ 키 설정에서 'YouTube API 키'를 넣으면 계정과 무관하게 검색이 됩니다(또는 유튜브 재연결).`);
   }
+  ytCache.set(cacheKey, {at: Date.now(), data: d});
   return d;
 }
 
