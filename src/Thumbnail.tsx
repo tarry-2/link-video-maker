@@ -106,27 +106,7 @@ export const Thumbnail: React.FC<ThumbnailData> = ({image, big, small, badge, ac
           textAlign: 'center',
         }}
       >
-        {small ? (
-          <div
-            style={{
-              fontFamily: notoFont,
-              fontWeight: 700,
-              fontSize: smallSize,
-              color: '#fff',
-              background: 'rgba(0,0,0,.6)',
-              padding: `${smallSize * 0.12}px ${smallSize * 0.5}px`,
-              borderRadius: smallSize * 0.35,
-              textShadow: outline(Math.max(2, Math.round(smallSize * 0.06))),
-              lineHeight: 1.1,
-              whiteSpace: 'nowrap', // 윗줄은 한 줄 유지(어정쩡하게 안 잘리게)
-              maxWidth: '96%',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {small}
-          </div>
-        ) : null}
+        {/* ★제목(big)이 위, 소제목(small)이 아래 — 테리: 소제목은 제목 밑에 와야 한다. */}
         <div
           style={{
             fontFamily: blackFont,
@@ -153,6 +133,26 @@ export const Thumbnail: React.FC<ThumbnailData> = ({image, big, small, badge, ac
             </span>
           ))}
         </div>
+        {small ? (
+          // ★소제목 — 검은 배경 박스 없이 글자만(테리). 밝은 배경에서도 읽히게 외곽선만 두껍게.
+          <div
+            style={{
+              fontFamily: notoFont,
+              fontWeight: 700,
+              fontSize: smallSize,
+              color: '#fff',
+              textShadow: outline(Math.max(3, Math.round(smallSize * 0.1))),
+              WebkitTextStroke: `${Math.max(1, Math.round(smallSize * 0.03))}px #000`,
+              lineHeight: 1.1,
+              whiteSpace: 'nowrap', // 한 줄 유지(어정쩡하게 안 잘리게)
+              maxWidth: '96%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {small}
+          </div>
+        ) : null}
       </div>
     </AbsoluteFill>
   );
