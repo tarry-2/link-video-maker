@@ -3539,18 +3539,23 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
           const projectId = String(it.projectId || '').trim();
           if (!projectId) continue;
           jlog(job, `[제작] ${i + 1}/${items.length}편 렌더 중… (제목: "${String(it.hookTop || '').slice(0, 40)}")`); // 진단 — 받은 제목
+          // ★제목·소제목·썸네일 글자/배지는 빈 문자열('')이면 undefined로 정규화한다.
+          //   클라이언트가 수정 안 한 필드를 ''로 실어보내면(설계도값 미채움) 그게 그대로 들어가
+          //   reRenderHighlight가 설계도 저장값(e.*) 폴백을 못 쓴다 → 썸네일 배지(소제목)가 통째로
+          //   사라지던 버그(테리 실측: "영상엔 소제목 나오는데 썸네일엔 안 나옴"). 빈 값=미수정으로 본다.
+          const str = (v: any) => (typeof v === 'string' && v.trim() ? v : undefined);
           const overrides = {
-            hookTop: typeof it.hookTop === 'string' ? it.hookTop : undefined,
-            hookAccent: typeof it.hookAccent === 'string' ? it.hookAccent : undefined,
+            hookTop: str(it.hookTop),
+            hookAccent: str(it.hookAccent),
             template: typeof it.template === 'string' ? it.template : undefined,
             font: typeof it.font === 'string' ? it.font : undefined,
             hookStyle: ['box', 'bar', 'none', 'bubble', 'gradient'].includes(it.hookStyle) ? it.hookStyle : undefined,
             hookBg: typeof it.hookBg === 'string' && it.hookBg ? it.hookBg : undefined,
             textColor: typeof it.textColor === 'string' && it.textColor ? it.textColor : undefined,
-            narration: typeof it.narration === 'string' ? it.narration : undefined, // 에디터 '본문' 값 → TTS
+            narration: typeof it.narration === 'string' ? it.narration : undefined, // 에디터 '본문' 값 → TTS(빈 문자열=기존 유지)
             voice: typeof it.voice === 'string' ? it.voice : undefined,
-            thumbBig: typeof it.thumbBig === 'string' ? it.thumbBig : undefined,
-            thumbBadge: typeof it.thumbBadge === 'string' ? it.thumbBadge : undefined,
+            thumbBig: str(it.thumbBig),
+            thumbBadge: str(it.thumbBadge),
             narrationOff: it.narrationOff === true,
           };
           try {
@@ -3631,18 +3636,21 @@ cast는 3~5명, episodes는 정확히 ${episodes}개(n=1..${episodes}). 전체�
     const b = await readBody(req);
     const projectId = String(b.projectId || '').trim();
     if (!projectId) return json(res, 400, {error: '편집할 영상을 찾을 수 없어요.'});
+    // ★제목·소제목·썸네일 글자/배지는 빈 문자열('')이면 undefined로 — 빈 값을 넘기면 저장값(e.*) 폴백을
+    //   못 써 썸네일 배지(소제목)가 통째로 사라진다(선택제작 경로와 동일 통일). 빈 값=미수정으로 취급.
+    const str = (v: any) => (typeof v === 'string' && v.trim() ? v : undefined);
     const overrides = {
-      hookTop: typeof b.hookTop === 'string' ? b.hookTop : undefined,
-      hookAccent: typeof b.hookAccent === 'string' ? b.hookAccent : undefined,
+      hookTop: str(b.hookTop),
+      hookAccent: str(b.hookAccent),
       template: typeof b.template === 'string' ? b.template : undefined,
       font: typeof b.font === 'string' ? b.font : undefined, // 수정창서 고른 폰트
       hookStyle: ['box', 'bar', 'none', 'bubble', 'gradient'].includes(b.hookStyle) ? b.hookStyle : undefined, // 띠 스타일
       hookBg: typeof b.hookBg === 'string' && b.hookBg ? b.hookBg : undefined, // 띠 바탕색
       textColor: typeof b.textColor === 'string' && b.textColor ? b.textColor : undefined,
-      narration: typeof b.narration === 'string' ? b.narration : undefined, // ★나레이션 직접 수정(TTS 재생성)
+      narration: typeof b.narration === 'string' ? b.narration : undefined, // ★나레이션 직접 수정(TTS 재생성, 빈 문자열=기존 유지)
       voice: typeof b.voice === 'string' ? b.voice : undefined,
-      thumbBig: typeof b.thumbBig === 'string' ? b.thumbBig : undefined, // ★썸네일 큰 글자 직접 수정
-      thumbBadge: typeof b.thumbBadge === 'string' ? b.thumbBadge : undefined, // ★썸네일 뱃지
+      thumbBig: str(b.thumbBig), // ★썸네일 큰 글자 직접 수정
+      thumbBadge: str(b.thumbBadge), // ★썸네일 뱃지
       narrationOff: b.narrationOff === true, // ★나레이션 끄기(해설 없이 원본 소리만)
     };
     const id = randomUUID().slice(0, 8);

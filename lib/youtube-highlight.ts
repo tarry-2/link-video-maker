@@ -1060,7 +1060,9 @@ export async function reRenderHighlight(
       try {
         // 썸네일 문구 — 사용자가 썸네일칸을 직접 고쳤으면 그걸, 아니면 후킹으로 자동.
         const thBig = (overrides.thumbBig !== undefined && overrides.thumbBig.trim() ? overrides.thumbBig : (hookTop || e.baseTitle || '')).slice(0, 28);
-        const thBadge = (overrides.thumbBadge !== undefined ? overrides.thumbBadge : (hookAccent || '')).slice(0, 8);
+        // ★배지(소제목)도 thBig과 동일하게 '빈 문자열이면 폴백' — 빈 overrides.thumbBadge가 들어오면
+        //   배지가 통째로 사라지던 버그(테리: 영상엔 소제목 나오는데 썸네일엔 안 나옴). 비면 소제목(hookAccent)·저장값 폴백.
+        const thBadge = (overrides.thumbBadge !== undefined && overrides.thumbBadge.trim() ? overrides.thumbBadge : (hookAccent || e.hookAccent || e.thumbBadge || '')).slice(0, 8);
         await renderThumbnail({image: `${jobRel}/${bgName}`, big: thBig, small: '', badge: thBadge, accentColor: tpl.accentColor}, thumbAbs, log, publicDir, orientation);
         thumbOk = fs.existsSync(thumbAbs);
       } catch {}
