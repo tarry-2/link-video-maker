@@ -32,7 +32,7 @@ import {facebookStatus, addFacebook, removeFacebook, renameFacebook, listFaceboo
 import {threadsStatus, removeThreads, renameThreads, publishVideo as thPublishVideo, publishText as thPublishText, publishImage as thPublishImage, getThreadsStats, getUploadActivity as getThActivity, maybeRefreshThreads, saveThreadsClient, threadsAuthUrl, exchangeThreadsCode} from './lib/threads';
 import {generateImageSmart} from './lib/image';
 import {resolveProduct} from './lib/partner';
-import {pngToJpeg} from './lib/img-util';
+import {pngToJpeg, videoFrameToJpeg} from './lib/img-util';
 
 const PORT = Number(process.env.PORT) || 4000;
 const ROOT = process.cwd();
@@ -434,37 +434,65 @@ async function ensureCarouselJpegUrls(id: string, log: (m: string) => void): Pro
 }
 function jgSafeUnlink(p: string) { try { fs.rmSync(p, {force: true}); } catch {} }
 // 썸네일(커버)을 JPEG 공개 URL로 — 인스타 릴스 cover_url용. 우리 썸네일 PNG를 JPEG 변환·R2·presign(캐시).
-async function ensureThumbJpegUrl(id: string): Promise<string> {
-  if (!r2Enabled() || !/^[0-9a-f-]{36}$/.test(id)) return '';
+//   ★커버가 비면 인스타가 '영상 0프레임'(공연 영상의 깜깜한 첫 장면)을 표지로 집어가 미리보기가 검게 뜬다
+//     (테리 실측: 썸네일이 '나왔다 안나왔다'의 원인). 그래서 어떤 경우든 '검은 0프레임'만은 피하도록:
+//       ①우리 디자인 썸네일(thumb.png) → ②없거나 실패하면 '영상 중간 밝은 프레임'으로 폴백.
+//   ★실패 사유는 log로 남긴다 — 예전엔 호출부가 catch{}로 조용히 삼켜 왜 커버가 비는지 추적이 안 됐다.
+async function ensureThumbJpegUrl(id: string, log?: (m: string) => void): Promise<string> {
+  const say = (m: string) => { try { (log || (() => {}))(m); } catch {} };
+  if (!r2Enabled() || !/^[0-9a-f-]{36}$/.test(id)) { say('[커버] R2 비활성/잘못된 id — 커버 없이 진행'); return ''; }
   const dir = path.join(STUDIO_DATA_DIR, 'studio', id);
   const pjPath = path.join(dir, 'project.json');
   let proj: any = {};
   try { proj = JSON.parse(fs.readFileSync(pjPath, 'utf8')); } catch {}
-  // ★project.json이 깨졌어도(ENOSPC 등) 결정적 R2 키로 우리 커버를 찾는다.
-  //   이게 없으면 인스타가 영상 중간의 흐릿한 레터박스 프레임을 자동 표지로 잡아 미리보기가 뿌옇게 나온다(테리 실측).
-  // ★cover.jpg 캐시를 재사용하지 않는다 — 썸네일을 수정(재렌더)했는데 인스타에 옛 커버가 나오던 버그(테리 H.O.T→구피).
-  //   인스타 업로드는 빈도가 낮으므로 매번 '현재 thumb.png'에서 새로 만들어 항상 최신 커버가 나가게 한다.
-  // PNG 썸네일(로컬 or R2 결정적)에서 JPEG 생성.
   const tmpPng = path.join(os.tmpdir(), `cover-${id}.png`);
-  const localPng = proj.thumb ? path.join(dir, proj.thumb) : '';
-  let pngR2 = proj.thumbR2 || '';
-  if (!pngR2 && !(localPng && fs.existsSync(localPng))) {
-    const cand = videoKey(id, 'thumb.png');
-    if (await r2Head(cand)) pngR2 = cand;
-  }
-  if (localPng && fs.existsSync(localPng)) fs.copyFileSync(localPng, tmpPng);
-  else if (pngR2) {
-    const got = await getStream(pngR2);
-    if (!got) return '';
-    await new Promise<void>((resolve, reject) => { const w = fs.createWriteStream(tmpPng); got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject); });
-  } else return '';
   const tmpJpg = path.join(os.tmpdir(), `cover-${id}.jpg`);
-  await pngToJpeg(tmpPng, tmpJpg);
   const key = videoKey(id, 'cover.jpg');
-  if (!(await uploadFile(key, tmpJpg, 'image/jpeg'))) { jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg); return ''; }
+  let jpgReady = false;
+
+  // ── ① 우리 디자인 썸네일(thumb.png, 노란 후킹 커버)에서 JPEG 생성 ──
+  //   ★project.json이 깨졌어도(ENOSPC 등) 결정적 R2 키로 우리 커버를 찾는다.
+  //   ★cover.jpg 캐시를 재사용하지 않는다 — 썸네일을 수정(재렌더)했는데 옛 커버가 나오던 버그(H.O.T→구피).
+  try {
+    const localPng = proj.thumb ? path.join(dir, proj.thumb) : '';
+    let pngR2 = proj.thumbR2 || '';
+    if (!pngR2 && !(localPng && fs.existsSync(localPng))) {
+      const cand = videoKey(id, 'thumb.png');
+      if (await r2Head(cand)) pngR2 = cand;
+    }
+    if (localPng && fs.existsSync(localPng)) { fs.copyFileSync(localPng, tmpPng); }
+    else if (pngR2) {
+      const got = await getStream(pngR2);
+      if (got) await new Promise<void>((resolve, reject) => { const w = fs.createWriteStream(tmpPng); got.stream.pipe(w); w.on('finish', () => resolve()); w.on('error', reject); got.stream.on('error', reject); });
+    }
+    if (fs.existsSync(tmpPng)) { await pngToJpeg(tmpPng, tmpJpg); jpgReady = fs.existsSync(tmpJpg); }
+    else say('[커버] 디자인 썸네일(thumb.png) 없음 — 영상 프레임으로 폴백');
+  } catch (e: any) { say('[커버] 디자인 썸네일 처리 실패(' + (e?.message || '').slice(0, 80) + ') — 영상 프레임으로 폴백'); }
+
+  // ── ② 폴백: 완성 영상의 '중간 밝은 프레임'을 커버로(검은 0프레임 방지) ──
+  if (!jpgReady) {
+    try {
+      const src = resolveVideo(id);
+      if (!src) { say('[커버] 폴백용 영상을 찾지 못함 — 커버 없이 진행'); }
+      else {
+        const input = (src.file && fs.existsSync(src.file)) ? src.file : (src.r2key ? (await presignGet(src.r2key, 3600)) || '' : '');
+        if (!input) { say('[커버] 폴백 영상 링크 생성 실패 — 커버 없이 진행'); }
+        else {
+          await videoFrameToJpeg(input, tmpJpg, Math.max(1, (src.durSec || 30) / 2));
+          jpgReady = fs.existsSync(tmpJpg);
+          if (jpgReady) say('[커버] 영상 중간 프레임을 커버로 사용(디자인 썸네일 없음)');
+        }
+      }
+    } catch (e: any) { say('[커버] 영상 프레임 폴백 실패(' + (e?.message || '').slice(0, 80) + ') — 커버 없이 진행'); }
+  }
+
+  if (!jpgReady) { jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg); return ''; }
+  if (!(await uploadFile(key, tmpJpg, 'image/jpeg'))) { say('[커버] cover.jpg 업로드 실패 — 커버 없이 진행'); jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg); return ''; }
   jgSafeUnlink(tmpPng); jgSafeUnlink(tmpJpg);
   try { proj.thumbJpgR2 = key; fs.writeFileSync(pjPath, JSON.stringify(proj)); } catch {} // 캐시(실패해도 R2 키로 다음에 재사용)
-  return (await presignGet(key, 3600)) || '';
+  const signed = (await presignGet(key, 3600)) || '';
+  if (!signed) say('[커버] 커버 링크 서명 실패 — 커버 없이 진행');
+  return signed;
 }
 // R2 완성영상 스트리밍(Range 지원). 포트폴리오 전시용.
 async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse, key: string) {
@@ -584,7 +612,7 @@ async function runBroadcastJob(job: Job, videoIds: string[], tg: BTargets, skipK
         let r: {permalink: string; id: string};
         if (plan.platform === 'instagram') {
           let cover = coverCache.get(plan.vid);
-          if (cover === undefined) { try { cover = (await ensureThumbJpegUrl(plan.vid)) || undefined; } catch { cover = undefined; } coverCache.set(plan.vid, cover); }
+          if (cover === undefined) { try { cover = (await ensureThumbJpegUrl(plan.vid, (m) => jlog(job, m))) || undefined; } catch (e: any) { cover = undefined; jlog(job, '[커버] 생성 중 오류 — 커버 없이 진행: ' + (e?.message || '')); } coverCache.set(plan.vid, cover); }
           r = await publishVideo(url, caption, 'reels', undefined, cover, plan.aid);
           if (r.permalink) { setPortfolioInstagram(plan.vid, r.permalink); saveProjectInstagram(plan.vid, r.permalink); }
         } else if (plan.platform === 'facebook') {
@@ -1566,8 +1594,9 @@ JSON만: {"comment":"..."}`;
       const url = await presignGet(r2key, 3600);
       if (!url) return json(res, 502, {error: '영상 임시 링크 생성 실패.'});
       // ★커버 지정(내 완성작만) — 빈 썸네일 방지. 실패해도 업로드는 진행.
+      //   커버가 비면 인스타가 영상 0프레임(검은 화면)을 표지로 집어가므로, 실패 사유를 서버 로그에 남긴다.
       let coverUrl: string | undefined;
-      if (!isSample) { try { coverUrl = (await ensureThumbJpegUrl(id)) || undefined; } catch {} }
+      if (!isSample) { try { coverUrl = (await ensureThumbJpegUrl(id, (m) => console.log(`[instagram/upload ${id.slice(0, 8)}] ${m}`))) || undefined; } catch (e: any) { console.log(`[instagram/upload ${id.slice(0, 8)}] [커버] 생성 중 오류: ${e?.message || ''}`); } }
       const r = await publishVideo(url, caption, kind as 'reels' | 'feed', undefined, coverUrl, accountId);
       // ★배지: 게시 성공 시 permalink 기록(어느 경로든 IG 배지 뜨게). 샘플/내작품 분기.
       if (r.permalink) {

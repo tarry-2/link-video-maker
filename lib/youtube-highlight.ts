@@ -148,6 +148,17 @@ async function finalizeHooks(
     const [strong] = await intensifyHooks(k.gemini, [{hookTop: hookTopFinal, hookAccent: hookAccentFinal, context: (c.transcript || title || '').slice(0, 300)}], log, visionFrames);
     if (strong && strong.hookTop && hasKorean(strong.hookTop)) { hookTopFinal = strong.hookTop; hookAccentFinal = strong.hookAccent; }
   } catch (e: any) { log('[후킹강화] 건너뜀: ' + (e?.message || '').slice(0, 50)); }
+  // ★소제목(hookAccent) 보장 — 비어 있으면(중복 제거됐거나 analyze/강화가 안 줬음) 허전하게 나간다
+  //   (테리: 소제목이 안 적히는 게 많음). 내용 기반으로 '제목과 겹치지 않는' 소제목을 새로 뽑아 채운다.
+  if (!hasVisibleHook(hookAccentFinal)) {
+    try {
+      const kh = await koreanHook(k.gemini, title, c.transcript || '', log, visionFrames);
+      if (kh) {
+        const cand = dedupAccent(hookTopFinal, kh.hookAccent) || dedupAccent(hookTopFinal, kh.hookTop);
+        if (hasVisibleHook(cand)) { hookAccentFinal = cand; log(`[소제목] 비어 있어 새로 생성: "${hookAccentFinal}"`); }
+      }
+    } catch (e: any) { log('[소제목] 생성 건너뜀: ' + (e?.message || '').slice(0, 50)); }
+  }
   // ★음악 소재면 '제목(hookTop)'에 노래제목을 고정한다(테리: 제목에 노래제목이 나와야 함).
   //   형식 = `가수의 "노래제목"`(가수 있으면) / `"노래제목"`. 기존에 만든 내용 후킹은 '소제목(hookAccent)'으로 내린다.
   //   배지(thumbBadge)는 analyze에서 hookAccent(후킹)를 자동으로 쓰므로 "배지=자동 후킹"도 충족.
