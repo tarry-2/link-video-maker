@@ -494,6 +494,37 @@ async function ensureThumbJpegUrl(id: string, log?: (m: string) => void): Promis
   if (!signed) say('[커버] 커버 링크 서명 실패 — 커버 없이 진행');
   return signed;
 }
+// ★웹 포폴 썸네일 서빙 전용 폴백 — 디자인 썸네일(thumb.png)·커버(cover.jpg)가 R2에 전혀 없을 때,
+//   R2의 완성 영상에서 프레임을 뽑아 cover.jpg로 만들어 R2에 '캐시'하고 그 키를 돌려준다.
+//   ensureThumbJpegUrl(인스타 업로드용, 매번 재생성)과 달리 '서빙 전용'이라 cover.jpg가 이미 있으면 재사용한다
+//   (포폴 목록이 수백 개라 매 요청 ffmpeg를 돌리면 서버가 터진다 → 최초 1회만 생성, 이후 302 presign).
+//   영상 서빙(videoKey 재구성)과 '같은 결정적 원칙' → '영상은 멀쩡한데 썸네일만 404(검정 카드)'를 구조적으로 차단.
+//   제작 때 썸네일 R2 업로드가 실패했거나, 과거에 만든 영상이어도 영상만 R2에 있으면 커버가 항상 뜬다.
+const thumbFromVideoInflight = new Map<string, Promise<string>>();
+function ensureThumbFromVideo(id: string): Promise<string> {
+  const existing = thumbFromVideoInflight.get(id);
+  if (existing) return existing; // 같은 영상에 동시 요청이 몰려도 ffmpeg는 1번만.
+  const key = videoKey(id, 'cover.jpg');
+  const p = (async (): Promise<string> => {
+    try {
+      if (await r2Head(key)) return key; // 이미 만들어져 있으면 재사용(재생성 안 함).
+      const src = resolveVideo(id); // project.json이 깨졌어도 결정적으로 영상 복원.
+      if (!src) return '';
+      const input = (src.file && fs.existsSync(src.file)) ? src.file : (src.r2key ? (await presignGet(src.r2key, 3600)) || '' : '');
+      if (!input) return '';
+      const tmpJpg = path.join(os.tmpdir(), `pfthumb-${id}-${Date.now()}.jpg`);
+      try {
+        // 앞 3초 이내의 밝은 프레임 — 완성 영상은 후킹 자막이 상단에 떠 있어 커버로 충분하고, http seek도 빠르다.
+        await videoFrameToJpeg(input, tmpJpg, Math.max(1, Math.min(3, (src.durSec || 30) / 2)));
+        if (!fs.existsSync(tmpJpg)) return '';
+        if (!(await uploadFile(key, tmpJpg, 'image/jpeg'))) return '';
+        return key;
+      } finally { try { fs.rmSync(tmpJpg, {force: true}); } catch {} }
+    } catch { return ''; }
+  })().finally(() => { thumbFromVideoInflight.delete(id); });
+  thumbFromVideoInflight.set(id, p);
+  return p;
+}
 // R2 완성영상 스트리밍(Range 지원). 포트폴리오 전시용.
 async function streamR2Video(req: http.IncomingMessage, res: http.ServerResponse, key: string) {
   const h = await getStream(key);
@@ -1241,6 +1272,12 @@ JSON만: {"comment":"..."}`;
         const k = videoKey(m[1], cand);
         if (await r2Head(k)) { thumbR2 = k; thumb = cand; break; }
       }
+    }
+    // ★썸네일 파일이 R2에 전혀 없으면 영상 프레임으로 커버를 만들어(+R2 캐시) 서빙 — 영상 서빙과 같은
+    //   결정적 원칙으로 '영상은 멀쩡한데 썸네일만 404 → 검정 카드'를 구조적으로 차단(과거·업로드 실패분 전부 복구).
+    if (!thumb && !thumbR2 && r2Enabled()) {
+      const k = await ensureThumbFromVideo(m[1]);
+      if (k) { thumbR2 = k; thumb = 'cover.jpg'; }
     }
     if (!thumb && !thumbR2) { res.writeHead(404); return res.end('not found'); }
     if (thumbR2) {
